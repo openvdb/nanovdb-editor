@@ -144,9 +144,6 @@ function build_python_module() {
 
     cd ./pymodule || exit 1
 
-    VERSION=$(<VERSION.txt)
-    export SETUPTOOLS_SCM_PRETEND_VERSION=$VERSION
-
     echo "-- Cleaning up old python module builds..."
     rm -rf build/ dist/ *.egg-info/ _skbuild/
 
