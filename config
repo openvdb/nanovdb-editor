@@ -1,0 +1,3 @@
+MSVS_VERSION="Visual Studio 17 2022"
+USE_VCPKG=OFF
+VCPKG_ROOT=path/to/vcpkg

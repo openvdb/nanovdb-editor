@@ -1,0 +1,10 @@
+{
+    "ShaderParams": [
+        "raster/gaussian_count_tiles.slang",
+        "raster/gaussian_projection.slang",
+        "raster/gaussian_rasterize_2d.slang",
+        "raster/gaussian_spherical_harmonics.slang",
+        "raster/gaussian_tile_intersections.slang",
+        "raster/gaussian_tile_offsets.slang"
+    ]
+}

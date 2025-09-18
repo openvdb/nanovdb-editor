@@ -1,0 +1,6 @@
+{
+    "ShaderParams": [
+        "editor/editor.slang",
+        "raster/wireframe.slang"
+    ]
+}
