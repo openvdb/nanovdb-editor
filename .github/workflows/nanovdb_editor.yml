@@ -9,6 +9,12 @@ on:
         - 'CODEOWNERS'
         - '**.md'
         - 'dev_utils/**'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to build"
+        required: true
+        default: "main"
 
 # Allow subsequent pushes to the same PR or REF to cancel any previous jobs.
 concurrency:
