@@ -1,0 +1,8 @@
+{
+  "name": "nanovdb-editor",
+  "version": "1.0.0",
+  "dependencies": [
+    "blosc",
+    "libe57format"
+  ]
+}

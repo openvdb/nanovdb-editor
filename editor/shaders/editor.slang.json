@@ -1,0 +1,33 @@
+{
+    "ShaderParams": {
+        "alpha_scale": {
+            "value": 0.1,
+            "min": 0,
+            "max": 1,
+            "step": 0.01
+        },
+        "narrow_band_only": {
+            "value": true
+        },
+        "highlight_bbox": {
+            "value": false
+        },
+        "slice_plane_thickness": {
+            "value": 0,
+            "min": 0,
+            "max": 100,
+            "step": 1
+        },
+        "slice_plane": {
+            "value": [
+                1,
+                0,
+                0,
+                0
+            ],
+            "min": 0,
+            "max": 1,
+            "step": 0.01
+        }
+    }
+}

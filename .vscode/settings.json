@@ -1,0 +1,9 @@
+{
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "C_Cpp.intelliSenseEngine": "disabled",
+    "C_Cpp.enhancedColorization": "enabled",
+    "C_Cpp.errorSquiggles": "enabledIfIncludesResolve",
+    "C_Cpp.autocomplete": "default",
+    "clangd.path": "/usr/bin/clangd",
+}

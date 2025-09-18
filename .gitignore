@@ -1,0 +1,18 @@
+.env*
+*.ini
+**/data/*
+.cache/
+.cpm_cache/
+pymodule/nanovdb_editor/lib
+pymodule/nanovdb_editor/shaders
+vcpkg_installed/
+
+# Python build artifacts
+__pycache__
+_skbuild/
+*.egg-info/
+dist/
+build/
+
+# Generated compile_commands.json symlink
+compile_commands.json
