@@ -6,4 +6,20 @@
     "C_Cpp.errorSquiggles": "enabledIfIncludesResolve",
     "C_Cpp.autocomplete": "default",
     "clangd.path": "/usr/bin/clangd",
+    "C_Cpp.formatting": "clangFormat",
+    "C_Cpp.clang_format_path": "/usr/bin/clang-format",
+    "C_Cpp.autoAddFileAssociations": false,
+
+    "[c]": {
+        "editor.defaultFormatter": "seaube.clangformat",
+        "editor.formatOnSave": true
+    },
+    "[cpp]": {
+        "editor.defaultFormatter": "seaube.clangformat",
+        "editor.formatOnSave": true
+    },
+    "[slang]": {
+        "editor.defaultFormatter": "seaube.clangformat",
+        "editor.formatOnSave": true
+    },
 }
