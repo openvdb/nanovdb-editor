@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from ctypes import *
+import sys
 
 from .utils import load_library
 
@@ -121,9 +122,9 @@ class pnanovdb_DeviceInterface(Structure):
 class DeviceInterface:
     """Python wrapper for pnanovdb_compute_device_interface_t."""
     def __init__(self, api: int):
-        lib = load_library(COMPUTE_LIB)
+        self._lib = load_library(COMPUTE_LIB)
 
-        get_device_interface = lib.pnanovdb_get_compute_device_interface
+        get_device_interface = self._lib.pnanovdb_get_compute_device_interface
         get_device_interface.restype = POINTER(pnanovdb_DeviceInterface)
         get_device_interface.argtypes = []
 
@@ -175,15 +176,20 @@ class DeviceInterface:
         return get_compute_queue(device)
 
     def __del__(self):
-        for device in self._devices:
-            destroy_func = self._device_interface.contents.destroy_device
-            destroy_func(self._device_manager, device)
+        try:
+            if getattr(sys, "is_finalizing", lambda: False)():
+                return
+            if self._device_interface and self._device_manager:
+                for device in self._devices:
+                    destroy_func = self._device_interface.contents.destroy_device
+                    destroy_func(self._device_manager, device)
 
-        if self._device_manager:
-            destroy_func = self._device_interface.contents.destroy_device_manager
-            destroy_func(self._device_manager)
+                destroy_manager = self._device_interface.contents.destroy_device_manager
+                destroy_manager(self._device_manager)
 
             self._device_manager = None
-
-        self._device_interface = None
+            self._device_interface = None
+            self._devices = []
+        except Exception:
+            pass
 

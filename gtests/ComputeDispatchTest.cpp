@@ -5,20 +5,13 @@
 
 #include <nanovdb_editor/putil/Compiler.h>
 #include <nanovdb_editor/putil/Compute.h>
+#include "LogPrint.h"
 
 #include <vector>
 #include <cstring>
 #include <filesystem>
 #include <cstdarg>
 #include <cstdio>
-
-struct constants_t
-{
-    int magic_number;
-    int pad1;
-    int pad2;
-    int pad3;
-};
 
 static void test_log_print(pnanovdb_compute_log_level_t level, const char* fmt, ...)
 {
@@ -27,11 +20,19 @@ static void test_log_print(pnanovdb_compute_log_level_t level, const char* fmt, 
                                                                           "INFO";
     va_list args;
     va_start(args, fmt);
-    fprintf(stderr, "[ComputeDispatchTest][%s] ", level_str);
+    fprintf(stderr, "[%s] ", level_str);
     vfprintf(stderr, fmt, args);
     fprintf(stderr, "\n");
     va_end(args);
 }
+
+struct constants_t
+{
+    int magic_number;
+    int pad1;
+    int pad2;
+    int pad3;
+};
 
 TEST(NanoVDBEditor, ComputeDispatchShaderAddsNumbers)
 {

@@ -867,10 +867,6 @@ int flush(pnanovdb_compute_queue_t* deviceQueue,
 void waitIdle(pnanovdb_compute_queue_t* deviceQueue)
 {
     auto ptr = cast(deviceQueue);
-    if (!ptr || ptr->queueVk == VK_NULL_HANDLE)
-    {
-        return;
-    }
     ptr->device->loader.vkQueueWaitIdle(ptr->queueVk);
 
     for (pnanovdb_uint32_t fenceIdx = 0u; fenceIdx < kMaxFramesInFlight; fenceIdx++)
