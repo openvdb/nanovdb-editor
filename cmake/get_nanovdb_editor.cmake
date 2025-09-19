@@ -20,7 +20,7 @@ endif()
 
 # Derive include and lib directories from the package
 set(NANOVDB_EDITOR_INCLUDE_DIR "${NANOVDB_EDITOR_PACKAGE_DIR}/include")
-set(NANOVDB_EDITOR_LIB_DIR     "${NANOVDB_EDITOR_PACKAGE_DIR}/lib")
+set(NANOVDB_EDITOR_LIB_DIR     "${NANOVDB_EDITOR_PACKAGE_DIR}")
 
 if(NOT EXISTS "${NANOVDB_EDITOR_INCLUDE_DIR}")
   message(FATAL_ERROR "nanovdb_editor include directory not found: ${NANOVDB_EDITOR_INCLUDE_DIR}")
