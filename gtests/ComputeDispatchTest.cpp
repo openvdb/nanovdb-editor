@@ -9,6 +9,8 @@
 #include <vector>
 #include <cstring>
 #include <filesystem>
+#include <cstdarg>
+#include <cstdio>
 
 struct constants_t
 {
