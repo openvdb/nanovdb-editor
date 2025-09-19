@@ -5,7 +5,6 @@
 
 #include <nanovdb_editor/putil/Compiler.h>
 #include <nanovdb_editor/putil/Compute.h>
-#include "LogPrint.h"
 
 #include <vector>
 #include <cstring>
