@@ -8,7 +8,6 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "nanovdb_editor"
 version = "0.0.1"
-version = "0.0.1"
 description = "NanoVDB Editor Python Module"
 authors = [
     {name = "The OpenVDB Project contributors"}
