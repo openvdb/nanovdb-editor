@@ -61,7 +61,7 @@ jobs:
         with:
           name: nanovdb-editor-build
           path: |
-            nanovdb_editor/build/
+            build/
             pymodule/dist/
           retention-days: 2
 
