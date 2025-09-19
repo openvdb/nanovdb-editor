@@ -102,12 +102,13 @@ TEST(NanoVDBEditor, ComputeDispatchShaderAddsNumbers)
         FAIL() << "Shader dispatch failed";
     }
 
-    // compute.destroy_array(data_in);
-    // compute.destroy_array(constants);
-    // compute.destroy_array(data_out);
+    compute.destroy_array(data_in);
+    compute.destroy_array(constants);
+    compute.destroy_array(data_out);
 
-    // compute.device_interface.destroy_device(device_manager, device);
-    // compute.device_interface.destroy_device_manager(device_manager);
+    compute.device_interface.destroy_device(device_manager, device);
+    compute.device_interface.destroy_device_manager(device_manager);
 
-    // pnanovdb_compiler_free(&compiler);
+    pnanovdb_compiler_free(&compiler);
+    pnanovdb_compute_free(&compute);
 }
