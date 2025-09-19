@@ -4,7 +4,7 @@
 #!/bin/bash
 
 format_files() {
-    find . -type f \(-o -name "*.c" -name "*.cpp" -o -name "*.h" -o -name "*.hpp" -o -name "*.slang" \) -exec clang-format -i {} +
+    find . -type f \( -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.hpp" -o -name "*.slang" \) -exec clang-format -i {} +
 }
 
 pushd ./

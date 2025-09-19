@@ -215,7 +215,9 @@ class Editor:
         return self._editor.contents.data_array.contents
 
     def __del__(self):
-        if self._editor:
-            self.shutdown()
-
-        self._editor = None
+        try:
+            if self._editor:
+                self.shutdown()
+            self._editor = None
+        except Exception:
+            pass
