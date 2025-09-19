@@ -19,7 +19,7 @@
         "editor.formatOnSave": true
     },
     "[slang]": {
-        "editor.defaultFormatter": "seaube.clangformat",
+        "editor.defaultFormatter": "shader-slang.slang-language-extension",
         "editor.formatOnSave": true
     },
 }

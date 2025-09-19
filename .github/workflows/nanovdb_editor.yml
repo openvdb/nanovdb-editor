@@ -79,6 +79,18 @@ jobs:
         run: |
           set -e
           export LD_LIBRARY_PATH=$PWD/build/Release/lib:$PWD/build/Release/bin:$LD_LIBRARY_PATH
+          echo "Link system libvulkan into build lib dir (for dynamic loader lookup)" || true
+          VULKAN_SO=$(ldconfig -p | awk '/libvulkan\.so\.1 \(/{print $4; exit}') || true
+          if [ -n "$VULKAN_SO" ]; then
+            ln -sf "$VULKAN_SO" build/Release/lib/libvulkan.so.1 || true
+          fi
+          echo "VULKAN_INFO:" || true
+          vulkaninfo | head -200 || true
+          echo "ldd on ComputeDispatchTest:" || true
+          ldd build/Release/gtests/ComputeDispatchTest || true
+          echo "List built libs:" || true
+          ls -l build/Release/lib || true
+          ls -l build/Release/bin || true
           ctest --test-dir build/Release/gtests -C Release --output-on-failure --verbose
 
       - name: Set up Python
