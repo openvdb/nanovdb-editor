@@ -40,11 +40,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Install Vulkan runtime (headless)
         run: |
           set -e
           sudo apt-get update
-          sudo apt-get install -y libvulkan1 mesa-vulkan-drivers vulkan-tools
+          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
+
       - name: Cache build dependencies
         uses: actions/cache@v4
         with:
@@ -54,11 +56,25 @@ jobs:
             nanovdb_editor/build/
           key: ${{ runner.os }}-nanovdb-editor-${{ hashFiles('**/environment.yml') }}
 
-      - name: Build NanoVDB Editor Standalone
+      - name: Build NanoVDB Editor
         run: |
           set -e
           chmod +x ./build.sh
           ./build.sh -rfv
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanovdb-editor-build
+          path: |
+            build/
+          retention-days: 2
+
+      - name: Run GTests
+        run: |
+          set -e
+          export LD_LIBRARY_PATH=$PWD/build/Release/lib:$PWD/build/Release/bin:$LD_LIBRARY_PATH
+          ctest --test-dir build/Release/gtests -C Release --output-on-failure --verbose
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -71,26 +87,20 @@ jobs:
           chmod +x ./build.sh
           ./build.sh -pv
 
-      - name: Upload build artifacts
+      - name: Upload python artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: nanovdb-editor-build
+          name: nanovdb-editor-python-build
           path: |
-            build/
             pymodule/dist/
           retention-days: 2
-
-      - name: Run tests
-        run: |
-          set -e
-          export LD_LIBRARY_PATH=$PWD/build/Release/lib:$PWD/build/Release/bin:$LD_LIBRARY_PATH
-          ctest --test-dir build/Release/gtests -C Release --output-on-failure --verbose
 
       - name: Install package
         run: |
           set -e
           cd pymodule
           python -m pip install ./dist/*.whl
+          python -m pip install numpy
 
       - name: Run Python tests
         run: |
