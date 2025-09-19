@@ -40,7 +40,7 @@
 static const pnanovdb_uint32_t s_default_width = 1440u;
 static const pnanovdb_uint32_t s_default_height = 720u;
 
-static const char* s_raster_file = "./data/splats.npz";
+static const char* s_raster_file = "";
 
 namespace pnanovdb_editor
 {

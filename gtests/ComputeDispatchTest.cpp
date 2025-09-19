@@ -9,6 +9,21 @@
 #include <vector>
 #include <cstring>
 #include <filesystem>
+#include <cstdarg>
+#include <cstdio>
+
+static void test_log_print(pnanovdb_compute_log_level_t level, const char* fmt, ...)
+{
+    const char* level_str = level == PNANOVDB_COMPUTE_LOG_LEVEL_ERROR   ? "ERROR" :
+                            level == PNANOVDB_COMPUTE_LOG_LEVEL_WARNING ? "WARN" :
+                                                                          "INFO";
+    va_list args;
+    va_start(args, fmt);
+    fprintf(stderr, "[%s] ", level_str);
+    vfprintf(stderr, fmt, args);
+    fprintf(stderr, "\n");
+    va_end(args);
+}
 
 struct constants_t
 {
@@ -17,12 +32,6 @@ struct constants_t
     int pad2;
     int pad3;
 };
-
-static void test_log_print(pnanovdb_compute_log_level_t level, const char* fmt, ...)
-{
-    (void)level;
-    (void)fmt;
-}
 
 TEST(NanoVDBEditor, ComputeDispatchShaderAddsNumbers)
 {
@@ -52,6 +61,13 @@ TEST(NanoVDBEditor, ComputeDispatchShaderAddsNumbers)
     if (!device_manager || !compute.device_interface.create_device)
     {
         FAIL() << "Failed to create compute device manager";
+    }
+
+    // Skip test gracefully if no device is available (e.g. headless CI without Vulkan ICD)
+    pnanovdb_compute_physical_device_desc_t phys_desc = {};
+    if (!compute.device_interface.enumerate_devices(device_manager, 0u, &phys_desc))
+    {
+        GTEST_SKIP() << "No Vulkan-compatible device available on this machine";
     }
 
     pnanovdb_compute_device_t* device = compute.device_interface.create_device(device_manager, &device_desc);
@@ -94,4 +110,5 @@ TEST(NanoVDBEditor, ComputeDispatchShaderAddsNumbers)
     compute.device_interface.destroy_device_manager(device_manager);
 
     pnanovdb_compiler_free(&compiler);
+    pnanovdb_compute_free(&compute);
 }

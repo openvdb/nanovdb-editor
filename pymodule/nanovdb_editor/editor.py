@@ -74,14 +74,25 @@ class pnanovdb_Editor(Structure):
         ("add_array", CFUNCTYPE(None,
                                c_void_p,
                                POINTER(pnanovdb_ComputeArray))),
+        ("add_gaussian_data", CFUNCTYPE(None, c_void_p, c_void_p, c_void_p, c_void_p)),  # pnanovdb_raster_t*, pnanovdb_compute_queue_t*, pnanovdb_raster_gaussian_data_t*
         ("add_camera", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Camera))),
+        ("setup_shader_params", CFUNCTYPE(None, c_void_p, c_void_p, c_void_p)),  # void* params, const pnanovdb_reflect_data_type_t* data_type
+        ("sync_shader_params", CFUNCTYPE(None, c_void_p, c_void_p, c_int32)),  # const pnanovdb_reflect_data_type_t* data_type, pnanovdb_bool_t set_data
+        ("wait_for_shader_params_sync", CFUNCTYPE(None, c_void_p, c_void_p)),  # const pnanovdb_reflect_data_type_t* data_type
         ("show", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Device),
                           POINTER(pnanovdb_EditorConfig))),
+        ("start", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Device),
+                           POINTER(pnanovdb_EditorConfig))),
+        ("stop", CFUNCTYPE(None, c_void_p)),
         ("module", c_void_p),
-        ("gaussian_data", c_void_p),  # pnanovdb_raster_gaussian_data_t*
         ("nanovdb_array", POINTER(pnanovdb_ComputeArray)),
         ("data_array", POINTER(pnanovdb_ComputeArray)),
+        ("gaussian_data", c_void_p),  # pnanovdb_raster_gaussian_data_t*
         ("camera", POINTER(pnanovdb_Camera)),
+        ("raster_ctx", c_void_p),  # pnanovdb_raster_context_t*
+        ("shader_params", c_void_p),
+        ("shader_params_data_type", c_void_p),  # const pnanovdb_reflect_data_type_t*
+        ("editor_worker", c_void_p),
     ]
 
 
@@ -108,6 +119,16 @@ class Editor:
         self._editor.contents.module = self._lib._handle
         self._editor.contents.compute.contents.module = compute._lib._handle
 
+        # Initialize all fields to NULL/None as in C implementation
+        self._editor.contents.gaussian_data = None
+        self._editor.contents.nanovdb_array = None
+        self._editor.contents.data_array = None
+        self._editor.contents.camera = None
+        self._editor.contents.raster_ctx = None
+        self._editor.contents.shader_params = None
+        self._editor.contents.shader_params_data_type = None
+        self._editor.contents.editor_worker = None
+
         init_func = self._editor.contents.init
         init_func(self._editor)
 
@@ -127,6 +148,26 @@ class Editor:
         add_array_func = self._editor.contents.add_array
         add_array_func(self._editor, pointer(array))
 
+    def add_gaussian_data(self, raster, queue, data) -> None:
+        """Add gaussian data to the editor."""
+        add_gaussian_data_func = self._editor.contents.add_gaussian_data
+        add_gaussian_data_func(self._editor, raster, queue, data)
+
+    def setup_shader_params(self, params, data_type) -> None:
+        """Setup shader parameters."""
+        setup_shader_params_func = self._editor.contents.setup_shader_params
+        setup_shader_params_func(self._editor, params, data_type)
+
+    def sync_shader_params(self, data_type, set_data: bool) -> None:
+        """Sync shader parameters."""
+        sync_shader_params_func = self._editor.contents.sync_shader_params
+        sync_shader_params_func(self._editor, data_type, 1 if set_data else 0)
+
+    def wait_for_shader_params_sync(self, data_type) -> None:
+        """Wait for shader parameters sync to complete."""
+        wait_for_shader_params_sync_func = self._editor.contents.wait_for_shader_params_sync
+        wait_for_shader_params_sync_func(self._editor, data_type)
+
     def show(self, config=None) -> None:
         show_func = self._editor.contents.show
 
@@ -144,6 +185,29 @@ class Editor:
         except Exception as e:
             print(f"Error: Editor runtime error ({e})")
 
+    def start(self, config=None) -> None:
+        """Start the editor."""
+        start_func = self._editor.contents.start
+
+        try:
+            if config is None:
+                # Create default config
+                config = pnanovdb_EditorConfig()
+                config.ip_address = b"127.0.0.1"
+                config.port = 8080
+                config.headless = 0  # pnanovdb_bool_t
+                config.streaming = 0  # pnanovdb_bool_t
+            start_func(self._editor,
+                      self._compute.device_interface().get_device(),
+                      byref(config))
+        except Exception as e:
+            print(f"Error: Editor start error ({e})")
+
+    def stop(self) -> None:
+        """Stop the editor."""
+        stop_func = self._editor.contents.stop
+        stop_func(self._editor)
+
     def get_nanovdb(self) -> pnanovdb_ComputeArray:
         return self._editor.contents.nanovdb_array.contents
 
@@ -151,7 +215,9 @@ class Editor:
         return self._editor.contents.data_array.contents
 
     def __del__(self):
-        if self._editor:
-            self.shutdown()
-
-        self._editor = None
+        try:
+            if self._editor:
+                self.shutdown()
+            self._editor = None
+        except Exception:
+            pass

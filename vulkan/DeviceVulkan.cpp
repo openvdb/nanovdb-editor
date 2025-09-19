@@ -473,6 +473,12 @@ pnanovdb_compute_device_t* createDevice(pnanovdb_compute_device_manager_t* devic
     deviceLoader->vkGetDeviceQueue(
         ptr->vulkanDevice, ptr->computeQueueFamilyIdx, compute_queue_idx, &ptr->computeQueueVk);
 
+    // Fallback if compute queue handle wasn't provided (e.g., only one queue available)
+    if (ptr->computeQueueVk == VK_NULL_HANDLE)
+    {
+        ptr->computeQueueVk = ptr->graphicsQueueVk;
+    }
+
     // get encode queue
     if (ptr->encodeQueueFamilyIdx != ~0u)
     {
@@ -861,7 +867,6 @@ int flush(pnanovdb_compute_queue_t* deviceQueue,
 void waitIdle(pnanovdb_compute_queue_t* deviceQueue)
 {
     auto ptr = cast(deviceQueue);
-
     ptr->device->loader.vkQueueWaitIdle(ptr->queueVk);
 
     for (pnanovdb_uint32_t fenceIdx = 0u; fenceIdx < kMaxFramesInFlight; fenceIdx++)

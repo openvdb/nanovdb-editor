@@ -231,6 +231,9 @@ class Compute:
         return array and array.data is not None
 
     def __del__(self):
-        self._compute = None
-        self._compiler = None
-        self._device_interface = None
+        try:
+            self._compute = None
+            self._compiler = None
+            self._device_interface = None
+        except Exception:
+            pass
