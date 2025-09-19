@@ -298,7 +298,7 @@ if(SKBUILD)
         pnanovdbcompute
         pnanovdbfileformat
         pnanovdbeditor
-        DESTINATION nanovdb_editor/lib
+        DESTINATION nanovdb_editor
         COMPONENT python_libs
     )
 
@@ -313,14 +313,14 @@ if(SKBUILD)
             install(FILES
                 "${CMAKE_BINARY_DIR}/$<CONFIG>/slang.dll"
                 "${CMAKE_BINARY_DIR}/$<CONFIG>/slang-glslang.dll"
-                DESTINATION nanovdb_editor/lib
+                DESTINATION nanovdb_editor
                 COMPONENT python_libs
             )
             # Install slang-llvm only if it exists in the Slang package
             if(SLANG_LLVM_EXISTS)
                 install(FILES
                     "${CMAKE_BINARY_DIR}/$<CONFIG>/slang-llvm.dll"
-                    DESTINATION nanovdb_editor/lib
+                    DESTINATION nanovdb_editor
                     COMPONENT python_libs
                 )
             endif()
@@ -328,14 +328,14 @@ if(SKBUILD)
             install(FILES
                 "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
                 "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
-                DESTINATION nanovdb_editor/lib
+                DESTINATION nanovdb_editor
                 COMPONENT python_libs
             )
             # Install slang-llvm only if it exists in the Slang package
             if(SLANG_LLVM_EXISTS)
                 install(FILES
                     "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}"
-                    DESTINATION nanovdb_editor/lib
+                    DESTINATION nanovdb_editor
                     COMPONENT python_libs
                 )
             endif()
@@ -374,7 +374,7 @@ if(SKBUILD)
     # Install GLFW DLL files that were previously copied
     if(WIN32 AND TARGET glfw)
         install(FILES "${CMAKE_BINARY_DIR}/$<CONFIG>/glfw3.dll"
-            DESTINATION nanovdb_editor/lib
+            DESTINATION nanovdb_editor
             COMPONENT python_libs
         )
     endif()
@@ -382,17 +382,17 @@ if(SKBUILD)
     if(TARGET vulkan)
         install(FILES
             $<TARGET_FILE:vulkan>
-            DESTINATION nanovdb_editor/lib
+            DESTINATION nanovdb_editor
             COMPONENT python_libs
         )
         if(UNIX AND NOT APPLE)
             # Also install Linux-friendly names alongside the versioned loader
             install(FILES $<TARGET_FILE:vulkan>
-                DESTINATION nanovdb_editor/lib
+                DESTINATION nanovdb_editor
                 COMPONENT python_libs
                 RENAME libvulkan.so.1)
             install(FILES $<TARGET_FILE:vulkan>
-                DESTINATION nanovdb_editor/lib
+                DESTINATION nanovdb_editor
                 COMPONENT python_libs
                 RENAME libvulkan.so)
         endif()

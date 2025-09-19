@@ -35,8 +35,7 @@ def add_dll_search_directory(path):
 def load_library(lib_name) -> ctypes.CDLL:
     system = platform.system()
 
-    package_dir = os.path.dirname(os.path.abspath(__file__))
-    lib_dir = os.path.join(package_dir, "lib")
+    lib_dir = os.path.dirname(os.path.abspath(__file__))
 
     if system == "Windows":
         path = os.path.join(lib_dir, f"{lib_name}.dll")

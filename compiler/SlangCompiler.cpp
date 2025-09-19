@@ -576,16 +576,17 @@ ShaderDataPtr compileShader(SlangCompiler& compiler,
         {
             code = std::string((std::istreambuf_iterator<char>(inFile)), std::istreambuf_iterator<char>());
             inFile.close();
+
+            if (code.empty())
+            {
+                printf("Error: Shader source is empty: '%s'\n", source->source_filename);
+                return nullptr;
+            }
         }
         else
         {
             printf("Error: Failed to open file with shader source: '%s'\n", shaderPath.c_str());
         }
-    }
-    if (code.empty())
-    {
-        printf("Error: Shader source is empty: '%s'\n", source->source_filename ? source->source_filename : "N/A");
-        return nullptr;
     }
 
     std::string includesPath = pnanovdb_shader::getIncludePath((const char*)source->get_source_include_userdata);
