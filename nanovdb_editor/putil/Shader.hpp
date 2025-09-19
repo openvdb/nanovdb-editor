@@ -134,7 +134,19 @@ static std::filesystem::path getDirectoryNextToCurrent(const std::string& folder
 
 static std::string getShaderDir()
 {
-    return getDirectoryNextToCurrent(NANOVDB_EDITOR_SHADER_DIR).string();
+    std::filesystem::path shaderDir = getDirectoryNextToCurrent(NANOVDB_EDITOR_SHADER_DIR);
+
+    // Check if we're in a Python module installation where shaders are in nanovdb_editor/shaders/
+    if (!std::filesystem::exists(shaderDir))
+    {
+        std::filesystem::path nanovdbEditorShaderDir = getDirectoryNextToCurrent("nanovdb_editor") / NANOVDB_EDITOR_SHADER_DIR;
+        if (std::filesystem::exists(nanovdbEditorShaderDir))
+        {
+            return nanovdbEditorShaderDir.string();
+        }
+    }
+
+    return shaderDir.string();
 }
 
 // returns relative file path of the shader
