@@ -22,7 +22,7 @@ namespace fs = std::filesystem;
 
 namespace pnanovdb_editor
 {
-static const std::string shaderExtensions = ".*\\.(slang)$";
+static const std::string shaderExtensions = ".*\\.(slang|slang\\.tmp)$";
 
 void ShaderMonitor::addPath(const std::string& path, ShaderCallback callback)
 {
@@ -38,6 +38,15 @@ void ShaderMonitor::addPath(const std::string& path, ShaderCallback callback)
                 fs::path filePath = fs::path(path) / fs::path(filename);
                 std::string filePathStr = filePath.string();
 
+#ifdef WIN32
+                // filewatch::Event::renamed_new not working same as on Linux - monitors the old file
+                if (changeType == filewatch::Event::modified && filePath.extension() == ".tmp" &&
+                    filePath.stem().extension() == ".slang") {
+                    // Remove .tmp extension
+                    filePath.replace_extension(""); // removes .tmp, leaves .slang
+                    filePathStr = filePath.string();
+                }
+#endif
                 if (changeType == filewatch::Event::modified || changeType == filewatch::Event::renamed_new ||
                     changeType == filewatch::Event::added)
                 {
@@ -54,31 +63,7 @@ void ShaderMonitor::addPath(const std::string& path, ShaderCallback callback)
                     }
                     lastEventTime[filePathStr] = now;
 
-                    // For rename_new events, don't rely on mtime; many filesystems don't update it on rename
-                    if (changeType != filewatch::Event::renamed_new)
-                    {
-                        auto lastWriteTime = fs::last_write_time(filePathStr);
-                        auto systemNow = std::chrono::system_clock::now();
-                        auto fileNow = fs::file_time_type::clock::now();
-
-                        // Calculate the offset between file clock and system clock
-                        auto clockOffset = std::chrono::duration_cast<std::chrono::system_clock::duration>(
-                            systemNow.time_since_epoch() - fileNow.time_since_epoch());
-
-                        auto fileSystemTime = std::chrono::system_clock::time_point(
-                            std::chrono::duration_cast<std::chrono::system_clock::duration>(
-                                lastWriteTime.time_since_epoch() + clockOffset));
-
-                        auto timeDiff =
-                            std::chrono::duration_cast<std::chrono::milliseconds>(systemNow - fileSystemTime).count();
-                        if (timeDiff > 500)
-                        {
-                            // ignore events which haven't modified the file in the last 500 ms
-                            return;
-                        }
-                    }
-
-                    std::cout << "Shader to recoompile: " << filePathStr << std::endl;
+                    std::cout << "Shader to recompile: " << filePathStr << std::endl;
                     if (callback)
                     {
                         std::thread workerThread(callback, filePathStr);
