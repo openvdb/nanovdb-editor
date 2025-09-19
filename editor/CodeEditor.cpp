@@ -505,7 +505,11 @@ void CodeEditor::saveSelectedTabText()
         outFile << text;
         outFile.flush();
         outFile.close();
-        std::rename(tmpFilepath.c_str(), filepath.c_str());
+
+        if (std::rename(tmpFilepath.c_str(), filepath.c_str()) == 0)
+        {
+            std::remove(tmpFilepath.c_str());
+        }
         printf("Info: File '%s' saved\n", filepath.c_str());
 
         int visibleLine = tabs_[selectedTab_].editor.GetFirstVisibleLine();

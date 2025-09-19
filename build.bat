@@ -90,10 +90,9 @@ for /f "tokens=1,2 delims==" %%i in (%PROJECT_DIR%%CONFIG_FILE%) do (
   set %%i=%%j
 )
 
-::: check the required variables has been set
 if not defined MSVS_VERSION (
-    echo MSVS_VERSION not set, please set Visual Studio CMake generator name
-    goto Error
+    echo MSVS_VERSION not set, using default CMake generator
+    set MSVS_VERSION=
 )
 
 if %USE_VCPKG%==ON (
@@ -179,7 +178,7 @@ if defined SLANG_PROFILE (
     set SLANG_PROFILE_ARG=-DNANOVDB_EDITOR_SLANG_PROFILE=%SLANG_PROFILE%
 )
 
-cmake -G %MSVS_VERSION% %PROJECT_DIR% -B %BUILD_DIR% ^
+set CMAKE_ARGS=%PROJECT_DIR% -B %BUILD_DIR% ^
     -DCMAKE_TOOLCHAIN_FILE=%VCPKG_CMAKE% ^
     -DCMAKE_PREFIX_PATH=%VCPKG_PREFIX_PATH% ^
     -DNANOVDB_EDITOR_USE_VCPKG=%USE_VCPKG% ^
@@ -188,6 +187,12 @@ cmake -G %MSVS_VERSION% %PROJECT_DIR% -B %BUILD_DIR% ^
     -DNANOVDB_EDITOR_BUILD_TESTS=ON ^
     -DNANOVDB_EDITOR_USE_GLFW=%GLFW_ON% ^
     %SLANG_PROFILE_ARG%
+
+if defined MSVS_VERSION (
+    cmake -G %MSVS_VERSION% %CMAKE_ARGS%
+) else (
+    cmake %CMAKE_ARGS%
+)
 
 if %release%==1 (
     call :BuildConfig Release

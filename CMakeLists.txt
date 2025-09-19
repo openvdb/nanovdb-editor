@@ -470,9 +470,11 @@ if (NOT SKBUILD)
     add_dependencies(pnanovdbeditortestapp pnanovdbeditor_prebuild)
 endif()
 
-# Symlink the latest compile_commands.json from the build dir to the source dir for clangd
-execute_process(
-    COMMAND ${CMAKE_COMMAND} -E create_symlink
-        ${CMAKE_BINARY_DIR}/compile_commands.json
-        ${CMAKE_SOURCE_DIR}/compile_commands.json
-)
+if (NOT WIN32)
+    # Symlink the latest compile_commands.json from the build dir to the source dir for clangd
+    execute_process(
+        COMMAND ${CMAKE_COMMAND} -E create_symlink
+            ${CMAKE_BINARY_DIR}/compile_commands.json
+            ${CMAKE_SOURCE_DIR}/compile_commands.json
+    )
+endif()
