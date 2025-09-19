@@ -99,9 +99,9 @@ struct WindowState
     bool show_console = true;
     bool show_viewport_settings = true;
     bool show_render_settings = true;
-    bool show_compiler_settings = true;
+    bool show_compiler_settings = false;
     bool show_shader_params = true;
-    bool show_benchmark = true;
+    bool show_benchmark = false;
     bool show_file_header = false;
 };
 

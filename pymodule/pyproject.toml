@@ -7,7 +7,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "nanovdb_editor"
-dynamic = ["version"]
+version = "0.0.1"
 description = "NanoVDB Editor Python Module"
 authors = [
     {name = "The OpenVDB Project contributors"}
@@ -16,13 +16,12 @@ license = {text = "Apache-2.0"}
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
-    "numpy<2.3.0,>=2",  # compatibility with opencv-python 4.12.0.88
 ]
 
 [project.urls]
-Homepage = "https://github.com/AcademySoftwareFoundation/openvdb"
-Repository = "https://github.com/AcademySoftwareFoundation/openvdb"
-Documentation = "https://openvdb.org/documentation/"
+Homepage = "https://github.com/nanovdb-editor"
+Repository = "https://github.com/nanovdb-editor"
+Documentation = "https://github.com/nanovdb-editor/tree/main/pymodule"
 
 [tool.scikit-build]
 build-dir = "build/{wheel_tag}-{build_type}"

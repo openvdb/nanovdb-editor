@@ -1,7 +1,9 @@
-
 name: NanoVDB Editor Build and Test
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
@@ -31,127 +33,84 @@ jobs:
   nanovdb-editor-build-and-test:
     if: ${{ !startsWith(github.event.pull_request.title, 'Draft:') }}
     name: NanoVDB Editor Build
-    runs-on:
-      - self-hosted
-    container:
-      image: aswf/ci-openvdb:2024
-      env:
-        PYTHONPATH: ""
-        CPM_SOURCE_CACHE: "/__w/cpm_cache"
-      options: --rm
+    runs-on: ubuntu-latest
     defaults:
       run:
         shell: bash -el {0}
     steps:
-      ### Get the PR branch and apply changes to the target branch
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Vulkan runtime (headless)
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
+
+      - name: Cache build dependencies
+        uses: actions/cache@v4
         with:
-          fetch-depth: 0 # Fetch all history for all branches
-      - name: Determine the target branch of the PR
-        run: |
-          echo "Fetching pull request metadata..."
-          # Install GitHub CLI and jq
-          dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
-          yum install -y gh
-          which jq || yum install -y jq
-          # Extract PR number from branch name if it follows pattern "pull-request/123"
-          BRANCH_NAME=${GITHUB_REF#refs/heads/}
-          echo "Branch name: $BRANCH_NAME"
-
-          # Setup GitHub CLI authentication
-          echo "${{ github.token }}" | gh auth login --with-token
-
-          # Get default branch from repository
-          echo "Getting default branch from repository..."
-          DEFAULT_BRANCH=$(gh repo view ${{ github.repository }} --json defaultBranchRef --jq '.defaultBranchRef.name' 2>/dev/null || echo 'develop')
-          echo "Repository default branch is: $DEFAULT_BRANCH"
-
-          if [[ $BRANCH_NAME =~ pull-request/([0-9]+) ]]; then
-            PR_NUMBER=${BASH_REMATCH[1]}
-            echo "Found PR number from branch name: $PR_NUMBER"
-
-            echo "Using gh CLI to get PR details..."
-            # Get PR info using GitHub CLI and extract the base branch
-            PR_INFO=$(gh pr view $PR_NUMBER --json baseRefName --repo ${{ github.repository }} 2>/dev/null || echo '{"baseRefName":"'$DEFAULT_BRANCH'"}')
-            TARGET_BRANCH=$(echo "$PR_INFO" | jq -r '.baseRefName')
-
-            echo "Target branch is $TARGET_BRANCH"
-
-            if [ -z "$TARGET_BRANCH" ] || [ "$TARGET_BRANCH" = "null" ]; then
-              echo "Could not determine target branch, using default branch"
-              TARGET_BRANCH="$DEFAULT_BRANCH"
-            fi
-          else
-            echo "Branch doesn't match the expected pattern, using default branch"
-            TARGET_BRANCH="$DEFAULT_BRANCH"
-          fi
-
-          echo "Final TARGET_BRANCH=$TARGET_BRANCH"
-          echo "TARGET_BRANCH=$TARGET_BRANCH" >> $GITHUB_ENV
-      - name: Set up Git user
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-      - name: Merge pushed branch into target branch
-        run: |
-          if [ -z "$TARGET_BRANCH" ]; then
-            echo "No pull request metadata found. Skipping merge."
-            exit 0
-          fi
-          git config --global --add safe.directory "$(pwd)"
-          git fetch origin $TARGET_BRANCH
-          git checkout $TARGET_BRANCH
-          git merge $GITHUB_REF --no-ff --message "Merging $GITHUB_REF into $TARGET_BRANCH"
-        env:
-          GITHUB_REF: ${{ github.ref }}
-      #### End of git merge
-
-      - name: Install system dependencies
-        run: |
-          # Install required system packages
-          dnf update -y
-          dnf install -y glfw glfw-devel vulkan-headers vulkan-loader vulkan-tools
+          path: |
+            ~/.cache/pip
+            ~/.conda
+            nanovdb_editor/build/
+          key: ${{ runner.os }}-nanovdb-editor-${{ hashFiles('**/environment.yml') }}
 
       - name: Build NanoVDB Editor
         run: |
+          set -e
           chmod +x ./build.sh
           ./build.sh -rfv
-          ./build.sh -pv
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-            name: nanovdb-editor-build
-            path: |
-              nanovdb_editor/build/
-              pymodule/dist/
-              test_c/build/
-            retention-days: 2
+          name: nanovdb-editor-build
+          path: |
+            build/
+          retention-days: 2
 
-      - name: Run tests
+      - name: Run GTests
         run: |
+          set -e
+          export LD_LIBRARY_PATH=$PWD/build/Release/lib:$PWD/build/Release/bin:$LD_LIBRARY_PATH
           ctest --test-dir build/Release/gtests -C Release --output-on-failure --verbose
 
-      - name: Set up nanovdb_editor Conda env
-        uses: conda-incubator/setup-miniconda@v3
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          miniforge-version: latest
-          conda-remove-defaults: "true"
-          activate-environment: nanovdb_editor
-          environment-file: nanovdb_editor/pymodule/environment.yml
+          python-version: '3.10'
+        run: |
+          python -m pip install numpy
+
+      - name: Build NanoVDB Editor Python module
+        run: |
+          set -e
+          chmod +x ./build.sh
+          ./build.sh -pv
+
+      - name: Upload python artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanovdb-editor-python-build
+          path: |
+            pymodule/dist/
+          retention-days: 2
 
       - name: Install package
         run: |
-            conda activate nanovdb_editor
-            cd pymodule
-            pip install ./dist/*.whl
+          set -e
+          cd pymodule
+          python -m pip install ./dist/*.whl
 
       - name: Run Python tests
         run: |
+          set -e
           python3 test/test_shader.py
 
       - name: Build and run NanoVDB Editor C tests
         run: |
+          set -e
           cd pymodule/test_c
           chmod +x ./build.sh
           ./build.sh
@@ -165,13 +124,7 @@ jobs:
 
       - name: Build C++ Python module test (no run)
         run: |
+          set -e
           cd pymodule/test_cpp
           chmod +x ./build.sh
           ./build.sh
-
-      - name: Cleanup
-        if: always()
-        run: |
-          echo "Cleaning up /__w/_temp directory"
-          sudo rm -rf /__w/_temp/*
-          echo "Cleanup completed"
