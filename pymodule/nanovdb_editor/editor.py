@@ -13,6 +13,7 @@ EDITOR_LIB = "pnanovdbeditor"
 
 class pnanovdb_EditorConfig(Structure):
     """Definition equivalent to pnanovdb_editor_config_t."""
+
     _fields_ = [
         ("ip_address", c_char_p),
         ("port", c_int),
@@ -23,6 +24,7 @@ class pnanovdb_EditorConfig(Structure):
 
 class pnanovdb_Vec3(Structure):
     """Definition equivalent to pnanovdb_vec3_t."""
+
     _fields_ = [
         ("x", c_float),
         ("y", c_float),
@@ -32,6 +34,7 @@ class pnanovdb_Vec3(Structure):
 
 class pnanovdb_CameraConfig(Structure):
     """Definition equivalent to pnanovdb_camera_config_t."""
+
     _fields_ = [
         ("position", pnanovdb_Vec3),
         ("eye_direction", pnanovdb_Vec3),
@@ -43,6 +46,7 @@ class pnanovdb_CameraConfig(Structure):
 
 class pnanovdb_CameraState(Structure):
     """Definition equivalent to pnanovdb_camera_state_t."""
+
     _fields_ = [
         ("position", pnanovdb_Vec3),
         ("eye_direction", pnanovdb_Vec3),
@@ -54,6 +58,7 @@ class pnanovdb_CameraState(Structure):
 
 class pnanovdb_Camera(Structure):
     """Definition equivalent to pnanovdb_camera_t."""
+
     _fields_ = [
         ("config", pnanovdb_CameraConfig),
         ("state", pnanovdb_CameraState),
@@ -62,27 +67,34 @@ class pnanovdb_Camera(Structure):
 
 class pnanovdb_Editor(Structure):
     """Definition equivalent to pnanovdb_editor_t."""
+
     _fields_ = [
         ("interface_pnanovdb_reflect_data_type", c_void_p),  # PNANOVDB_REFLECT_INTERFACE()
         ("compiler", POINTER(pnanovdb_Compiler)),
         ("compute", POINTER(pnanovdb_Compute)),
         ("init", CFUNCTYPE(None, c_void_p)),
         ("shutdown", CFUNCTYPE(None, c_void_p)),
-        ("add_nanovdb", CFUNCTYPE(None,
-                                 c_void_p,
-                                 POINTER(pnanovdb_ComputeArray))),
-        ("add_array", CFUNCTYPE(None,
-                               c_void_p,
-                               POINTER(pnanovdb_ComputeArray))),
-        ("add_gaussian_data", CFUNCTYPE(None, c_void_p, c_void_p, c_void_p, c_void_p)),  # pnanovdb_raster_t*, pnanovdb_compute_queue_t*, pnanovdb_raster_gaussian_data_t*
+        ("add_nanovdb", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_ComputeArray))),
+        ("add_array", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_ComputeArray))),
+        (
+            "add_gaussian_data",
+            CFUNCTYPE(None, c_void_p, c_void_p, c_void_p, c_void_p),
+        ),  # pnanovdb_raster_t*, pnanovdb_compute_queue_t*, pnanovdb_raster_gaussian_data_t*
         ("add_camera", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Camera))),
-        ("setup_shader_params", CFUNCTYPE(None, c_void_p, c_void_p, c_void_p)),  # void* params, const pnanovdb_reflect_data_type_t* data_type
-        ("sync_shader_params", CFUNCTYPE(None, c_void_p, c_void_p, c_int32)),  # const pnanovdb_reflect_data_type_t* data_type, pnanovdb_bool_t set_data
-        ("wait_for_shader_params_sync", CFUNCTYPE(None, c_void_p, c_void_p)),  # const pnanovdb_reflect_data_type_t* data_type
-        ("show", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Device),
-                          POINTER(pnanovdb_EditorConfig))),
-        ("start", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Device),
-                           POINTER(pnanovdb_EditorConfig))),
+        (
+            "setup_shader_params",
+            CFUNCTYPE(None, c_void_p, c_void_p, c_void_p),
+        ),  # void* params, const pnanovdb_reflect_data_type_t* data_type
+        (
+            "sync_shader_params",
+            CFUNCTYPE(None, c_void_p, c_void_p, c_int32),
+        ),  # const pnanovdb_reflect_data_type_t* data_type, pnanovdb_bool_t set_data
+        (
+            "wait_for_shader_params_sync",
+            CFUNCTYPE(None, c_void_p, c_void_p),
+        ),  # const pnanovdb_reflect_data_type_t* data_type
+        ("show", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Device), POINTER(pnanovdb_EditorConfig))),
+        ("start", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Device), POINTER(pnanovdb_EditorConfig))),
         ("stop", CFUNCTYPE(None, c_void_p)),
         ("module", c_void_p),
         ("nanovdb_array", POINTER(pnanovdb_ComputeArray)),
@@ -98,6 +110,7 @@ class pnanovdb_Editor(Structure):
 
 class Editor:
     """Python wrapper for pnanovdb_editor_t."""
+
     def __init__(self, compute: Compute, compiler: Compiler):
         self._lib = load_library(EDITOR_LIB)
 
@@ -179,9 +192,7 @@ class Editor:
                 config.port = 8080
                 config.headless = 0  # pnanovdb_bool_t
                 config.streaming = 0  # pnanovdb_bool_t
-            show_func(self._editor,
-                     self._compute.device_interface().get_device(),
-                     byref(config))
+            show_func(self._editor, self._compute.device_interface().get_device(), byref(config))
         except Exception as e:
             print(f"Error: Editor runtime error ({e})")
 
@@ -197,9 +208,7 @@ class Editor:
                 config.port = 8080
                 config.headless = 0  # pnanovdb_bool_t
                 config.streaming = 0  # pnanovdb_bool_t
-            start_func(self._editor,
-                      self._compute.device_interface().get_device(),
-                      byref(config))
+            start_func(self._editor, self._compute.device_interface().get_device(), byref(config))
         except Exception as e:
             print(f"Error: Editor start error ({e})")
 

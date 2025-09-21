@@ -128,9 +128,8 @@ float inverse(float2x2 M, inout float2x2 Minv)
     return det;
 }
 
-[shader("compute")][numthreads(256, 1, 1)] void main(uint3 group_idx
-                                                     : SV_GroupID, uint3 thread_idx
-                                                     : SV_GroupThreadID)
+[shader("compute")][numthreads(256, 1, 1)]
+void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
     uint global_prim_idx = group_idx.x * 256u + thread_idx.x;
 

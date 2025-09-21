@@ -26,16 +26,16 @@
 
 #include <argparse/argparse.hpp>
 
-//#define TEST_COMPILER
-//#define TEST_CPU_COMPILER         // TODO: test needs to check if slang-llvm is in the slang package
-//#define TEST_EMPTY_COMPILER
-//#define TEST_COMPUTE
+// #define TEST_COMPILER
+// #define TEST_CPU_COMPILER         // TODO: test needs to check if slang-llvm is in the slang package
+// #define TEST_EMPTY_COMPILER
+// #define TEST_COMPUTE
 #define TEST_EDITOR
-//#define TEST_EDITOR_START_STOP
-//#define TEST_RASTER
-//#define TEST_RASTER_2D
-//#define TEST_SVRASTER
-//#define TEST_E57
+// #define TEST_EDITOR_START_STOP
+// #define TEST_RASTER
+// #define TEST_RASTER_2D
+// #define TEST_SVRASTER
+// #define TEST_E57
 
 struct constants_t
 {

@@ -25,9 +25,8 @@ StructuredBuffer<uint> prim_bboxs_in;
 
 RWStructuredBuffer<uint> ijks_out;
 
-[shader("compute")][numthreads(256, 1, 1)] void main(uint3 group_idx
-                                                     : SV_GroupID, uint3 thread_idx
-                                                     : SV_GroupThreadID)
+[shader("compute")][numthreads(256, 1, 1)]
+void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
     uint ijk_idx = group_idx.x * 256u + thread_idx.x;
 

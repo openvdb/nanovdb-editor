@@ -134,9 +134,8 @@ void volume_render_tile(uint3 group_idx,
     }
 }
 
-[shader("compute")][numthreads(16, 16, 1)] void main(uint3 group_idx
-                                                     : SV_GroupID, uint3 thread_idx
-                                                     : SV_GroupThreadID)
+[shader("compute")][numthreads(16, 16, 1)]
+void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
     int tile_id =
         (group_idx.x + constants.tile_origin_h) * constants.tile_width + (group_idx.y + constants.tile_origin_w);

@@ -17,9 +17,8 @@ RWStructuredBuffer<uint> key_low_copy_out;
 RWStructuredBuffer<uint> key_high_copy_out;
 RWStructuredBuffer<uint> val_copy_out;
 
-[shader("compute")][numthreads(1024u, 1, 1)] void main(uint3 group_idx
-                                                       : SV_GroupID, uint3 thread_idx
-                                                       : SV_GroupThreadID)
+[shader("compute")][numthreads(1024u, 1, 1)]
+void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
     uint idx = 1024u * group_idx.x + thread_idx.x;
 

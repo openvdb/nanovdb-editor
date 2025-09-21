@@ -26,8 +26,8 @@
 #endif
 
 // currently obsolete options
-//#define SLANG_OBFUSCATE
-//#define BINARY_OUTPUT
+// #define SLANG_OBFUSCATE
+// #define BINARY_OUTPUT
 
 #if defined(USE_SLANG_DEBUG_OUTPUT)
 #    define ASM_DEBUG_OUTPUT // Compiles and saves the assembly code, won't be possible to create a compute pipeline

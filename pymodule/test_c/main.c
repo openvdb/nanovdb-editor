@@ -13,7 +13,7 @@
 #    include <nanovdb_editor/putil/Compute.h>
 #endif
 
-//#define TEST_EMPTY_COMPILER
+// #define TEST_EMPTY_COMPILER
 
 typedef struct
 {

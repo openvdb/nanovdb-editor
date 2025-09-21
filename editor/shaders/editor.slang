@@ -942,8 +942,8 @@ float4 mat_mul(float4 v, float4 x, float4 y, float4 z, float4 w)
     return float4(dot(v, x), dot(v, y), dot(v, z), dot(v, w));
 }
 
-[shader("compute")][numthreads(32, 4, 1)] void main(uint3 dispatchThreadID
-                                                    : SV_DispatchThreadID)
+[shader("compute")][numthreads(32, 4, 1)]
+void main(uint3 dispatchThreadID : SV_DispatchThreadID)
 {
     int2 tidx = int2(dispatchThreadID.xy);
 

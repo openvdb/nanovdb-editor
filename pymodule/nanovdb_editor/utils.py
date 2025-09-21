@@ -17,7 +17,7 @@ def add_dll_search_directory(path):
 
     # Enable extended DLL search
     LOAD_LIBRARY_SEARCH_DEFAULT_DIRS = 0x00001000
-    kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel32.SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS)
 
     abs_path = os.path.abspath(path)

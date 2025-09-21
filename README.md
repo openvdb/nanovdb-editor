@@ -43,7 +43,7 @@ pip install scikit-build wheel build
 By default, editor is built with enabled `NANOVDB_EDITOR_USE_GLFW` which requires in Conda environment:
 - mesalib
 
-The `NANOVDB_EDITOR_USE_GLFW` option can be disabled when using the editor in haedless and streaming mode only. In that case, `libvulkan.so.1` is built locally to ensure compatibility/
+The `NANOVDB_EDITOR_USE_GLFW` option can be disabled when using the editor in haedless and streaming mode only. In that case, `libvulkan.so.1` is built locally to ensure compatibility.
 
 #### macOS
 ```sh

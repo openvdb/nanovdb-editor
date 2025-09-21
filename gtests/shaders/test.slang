@@ -12,8 +12,8 @@ ConstantBuffer<constants_t> constants;
 RWStructuredBuffer<int> data_out;
 RWStructuredBuffer<uint> scratch;
 
-[shader("compute")][numthreads(8, 1, 1)] void computeMain(uint3 dispatchThreadID
-                                                          : SV_DispatchThreadID)
+[shader("compute")][numthreads(8, 1, 1)]
+void computeMain(uint3 dispatchThreadID : SV_DispatchThreadID)
 {
     uint idx = dispatchThreadID.x;
 

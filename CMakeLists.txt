@@ -28,8 +28,6 @@ project(NanoVDBEditor LANGUAGES CXX)
 
 ### Directory Setup
 
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
-
 set(SHADERS_DIR_NAME shaders)
 set(INCLUDES_FILE includes)
 set(COMPILED_SHADERS_DIR_NAME _generated)
@@ -470,9 +468,11 @@ if (NOT SKBUILD)
     add_dependencies(pnanovdbeditortestapp pnanovdbeditor_prebuild)
 endif()
 
-# Symlink the latest compile_commands.json from the build dir to the source dir for clangd
-execute_process(
-    COMMAND ${CMAKE_COMMAND} -E create_symlink
-        ${CMAKE_BINARY_DIR}/compile_commands.json
-        ${CMAKE_SOURCE_DIR}/compile_commands.json
-)
+if (NOT WIN32)
+    # Symlink the latest compile_commands.json from the build dir to the source dir for clangd
+    execute_process(
+        COMMAND ${CMAKE_COMMAND} -E create_symlink
+            ${CMAKE_BINARY_DIR}/compile_commands.json
+            ${CMAKE_SOURCE_DIR}/compile_commands.json
+    )
+endif()
