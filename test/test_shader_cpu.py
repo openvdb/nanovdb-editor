@@ -5,6 +5,7 @@ from nanovdb_editor import Compiler, Compute, pnanovdb_CompileTarget, MemoryBuff
 from ctypes import *
 
 import os
+import sys
 import numpy as np
 
 
@@ -72,3 +73,8 @@ if __name__ == "__main__":
             print("CPU shader test was successful")
     else:
         print("Error: Failed to execute CPU shader")
+        sys.exit(1)
+
+    # Prevent destructor from calling into native lib during shutdown
+    compiler._instance = None
+    compiler._compiler = None

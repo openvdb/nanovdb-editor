@@ -5,6 +5,7 @@ from nanovdb_editor import Compiler, Compute, pnanovdb_CompileTarget, MemoryBuff
 from ctypes import *
 
 import os
+import sys
 import numpy as np
 
 
@@ -57,6 +58,7 @@ if __name__ == "__main__":
             print("Vulkan shader test was successful")
     else:
         print("Error: Failed to dispatch Vulkan shader")
+        sys.exit(1)
 
     compute.unmap_array(output_array)
 
