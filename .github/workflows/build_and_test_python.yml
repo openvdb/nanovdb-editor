@@ -1,0 +1,104 @@
+name: NanoVDB Editor Build and Test Python
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+        - 'CODEOWNERS'
+        - '**.md'
+        - 'dev_utils/**'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to build"
+        required: true
+        default: "main"
+
+# Allow subsequent pushes to the same PR or REF to cancel any previous jobs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  deployments: write
+  pull-requests: read
+  issues: read
+
+jobs:
+  nanovdb-editor-build-and-test:
+    # if: ${{ !startsWith(github.event.pull_request.title, 'Draft:') }}
+    name: NanoVDB Editor Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Vulkan runtime (headless)
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Set up Python environment
+        run: |
+          python -m pip install numpy
+
+      - name: Build NanoVDB Editor Python module
+        run: |
+          set -e
+          chmod +x ./build.sh
+          ./build.sh -pv
+
+      - name: Upload python artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanovdb-editor-python-build
+          path: |
+            pymodule/dist/
+          retention-days: 2
+
+      - name: Install package
+        run: |
+          set -e
+          cd pymodule
+          python -m pip install ./dist/*.whl
+
+      - name: Run Python tests
+        run: |
+          set -e
+          python test/test_shader.py
+          python test/test_shader_cpu.py
+
+      - name: Build and run NanoVDB Editor C tests
+        run: |
+          set -e
+          cd pymodule/test_c
+          chmod +x ./build.sh
+          ./build.sh
+          if [ -f "build/pnanovdbeditortestcapp" ]; then
+            echo "Running C tests..."
+            chmod +x ./build/pnanovdbeditortestcapp
+            ./build/pnanovdbeditortestcapp
+          else
+            echo "No C test application found"
+          fi
+
+      - name: Build C++ Python module test (no run)
+        run: |
+          set -e
+          cd pymodule/test_cpp
+          chmod +x ./build.sh
+          ./build.sh
