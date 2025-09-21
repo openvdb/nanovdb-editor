@@ -106,7 +106,7 @@ TEST(NanoVDBEditor, ComputeDispatchShaderAddsNumbers)
     compute.destroy_array(constants);
     compute.destroy_array(data_out);
 
-    compute.device_interface.destroy_device(device_manager, device);
+    // compute.device_interface.destroy_device(device_manager, device);
     compute.device_interface.destroy_device_manager(device_manager);
 
     pnanovdb_compiler_free(&compiler);
