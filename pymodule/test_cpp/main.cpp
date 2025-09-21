@@ -8,10 +8,10 @@
 #include <cstdarg>
 
 #define TEST_EDITOR
-//#define TEST_RASTER
-//#define TEST_RASTER_2D
-//#define TEST_FILE_FORMAT
-//#define FORMAT_INGP
+// #define TEST_RASTER
+// #define TEST_RASTER_2D
+// #define TEST_FILE_FORMAT
+// #define FORMAT_INGP
 #define FORMAT_PLY
 
 void pnanovdb_compute_log_print(pnanovdb_compute_log_level_t level, const char* format, ...)

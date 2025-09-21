@@ -31,11 +31,8 @@ def pnanovdb_compute_log_print(level, format_str):
 
 class pnanovdb_DeviceDesc(Structure):
     """Definition equivalent to pnanovdb_compute_device_desc_t."""
-    _fields_ = [
-        ("device_index", c_uint32),
-        ("enable_external_usage", c_bool),
-        ("log_print", LOG_FUNC)
-    ]
+
+    _fields_ = [("device_index", c_uint32), ("enable_external_usage", c_bool), ("log_print", LOG_FUNC)]
 
 
 class pnanovdb_Device(Structure):
@@ -52,75 +49,58 @@ class pnanovdb_ComputeQueue(Structure):
 
 class pnanovdb_DeviceInterface(Structure):
     """Definition equivalent to pnanovdb_compute_device_interface_t."""
+
     _fields_ = [
         ("interface_pnanovdb_reflect_data_type", c_void_p),  # PNANOVDB_REFLECT_INTERFACE()
         ("create_device_manager", CFUNCTYPE(POINTER(pnanovdb_DeviceManager), c_bool)),
-        ("destroy_device_manager",
-            CFUNCTYPE(None, POINTER(pnanovdb_DeviceManager))),
-        ("enumerate_devices",
-            CFUNCTYPE(c_bool, POINTER(pnanovdb_DeviceManager), c_uint32,
-                     POINTER(c_void_p))),
-        ("create_device",
-            CFUNCTYPE(POINTER(pnanovdb_Device), POINTER(pnanovdb_DeviceManager),
-                     POINTER(pnanovdb_DeviceDesc))),
-        ("destroy_device",
-            CFUNCTYPE(None, POINTER(pnanovdb_DeviceManager),
-                     POINTER(pnanovdb_Device))),
-        ("get_memory_stats",
-            CFUNCTYPE(None, POINTER(pnanovdb_Device), POINTER(c_void_p))),
-        ("create_semaphore",
-            CFUNCTYPE(POINTER(c_void_p), POINTER(pnanovdb_Device))),
+        ("destroy_device_manager", CFUNCTYPE(None, POINTER(pnanovdb_DeviceManager))),
+        ("enumerate_devices", CFUNCTYPE(c_bool, POINTER(pnanovdb_DeviceManager), c_uint32, POINTER(c_void_p))),
+        (
+            "create_device",
+            CFUNCTYPE(POINTER(pnanovdb_Device), POINTER(pnanovdb_DeviceManager), POINTER(pnanovdb_DeviceDesc)),
+        ),
+        ("destroy_device", CFUNCTYPE(None, POINTER(pnanovdb_DeviceManager), POINTER(pnanovdb_Device))),
+        ("get_memory_stats", CFUNCTYPE(None, POINTER(pnanovdb_Device), POINTER(c_void_p))),
+        ("create_semaphore", CFUNCTYPE(POINTER(c_void_p), POINTER(pnanovdb_Device))),
         ("destroy_semaphore", CFUNCTYPE(None, POINTER(c_void_p))),
-        ("get_semaphore_external_handle",
-            CFUNCTYPE(None, POINTER(pnanovdb_Device), POINTER(c_void_p),
-                     c_uint64)),
-        ("close_semaphore_external_handle",
-            CFUNCTYPE(None, POINTER(pnanovdb_Device), POINTER(c_void_p),
-                     c_uint64)),
+        ("get_semaphore_external_handle", CFUNCTYPE(None, POINTER(pnanovdb_Device), POINTER(c_void_p), c_uint64)),
+        ("close_semaphore_external_handle", CFUNCTYPE(None, POINTER(pnanovdb_Device), POINTER(c_void_p), c_uint64)),
         ("get_device_queue", CFUNCTYPE(POINTER(pnanovdb_ComputeQueue), POINTER(pnanovdb_Device))),
         ("get_compute_queue", CFUNCTYPE(POINTER(pnanovdb_ComputeQueue), POINTER(pnanovdb_Device))),
-        ("flush",
-            CFUNCTYPE(c_int, POINTER(pnanovdb_Device), POINTER(c_uint64),
-                     POINTER(c_void_p), POINTER(c_void_p))),
-        ("get_frame_global_completed",
-            CFUNCTYPE(c_uint64, POINTER(pnanovdb_Device))),
-        ("wait_for_frame",
-            CFUNCTYPE(None, POINTER(pnanovdb_Device), c_uint64)),
+        ("flush", CFUNCTYPE(c_int, POINTER(pnanovdb_Device), POINTER(c_uint64), POINTER(c_void_p), POINTER(c_void_p))),
+        ("get_frame_global_completed", CFUNCTYPE(c_uint64, POINTER(pnanovdb_Device))),
+        ("wait_for_frame", CFUNCTYPE(None, POINTER(pnanovdb_Device), c_uint64)),
         ("wait_idle", CFUNCTYPE(None, POINTER(pnanovdb_Device))),
         ("get_compute_interface", CFUNCTYPE(c_void_p, c_void_p)),
         ("get_compute_context", CFUNCTYPE(c_void_p, c_void_p)),
-        ("create_swapchain",
-            CFUNCTYPE(c_void_p, POINTER(pnanovdb_Device), POINTER(c_void_p))),
+        ("create_swapchain", CFUNCTYPE(c_void_p, POINTER(pnanovdb_Device), POINTER(c_void_p))),
         ("destroy_swapchain", CFUNCTYPE(None, POINTER(pnanovdb_Device))),
-        ("resize_swapchain",
-            CFUNCTYPE(None, POINTER(pnanovdb_Device), c_uint32, c_uint32)),
-        ("present_swapchain",
-            CFUNCTYPE(c_int, POINTER(pnanovdb_Device), c_bool,
-                     POINTER(c_uint64))),
-        ("get_swapchain_front_texture",
-            CFUNCTYPE(c_void_p, POINTER(pnanovdb_Device))),
-        ("create_encoder",
-            CFUNCTYPE(POINTER(c_void_p), POINTER(pnanovdb_Device), POINTER(c_void_p))),
+        ("resize_swapchain", CFUNCTYPE(None, POINTER(pnanovdb_Device), c_uint32, c_uint32)),
+        ("present_swapchain", CFUNCTYPE(c_int, POINTER(pnanovdb_Device), c_bool, POINTER(c_uint64))),
+        ("get_swapchain_front_texture", CFUNCTYPE(c_void_p, POINTER(pnanovdb_Device))),
+        ("create_encoder", CFUNCTYPE(POINTER(c_void_p), POINTER(pnanovdb_Device), POINTER(c_void_p))),
         ("destroy_encoder", CFUNCTYPE(None, POINTER(pnanovdb_Device))),
-        ("present_encoder",
-            CFUNCTYPE(c_int, POINTER(pnanovdb_Device), c_bool, POINTER(c_uint64))),
-        ("get_encoder_front_texture",
-            CFUNCTYPE(c_void_p, POINTER(pnanovdb_Device))),
-        ("map_encoder_data",
-            CFUNCTYPE(c_void_p, POINTER(pnanovdb_Device), POINTER(c_uint64))),
+        ("present_encoder", CFUNCTYPE(c_int, POINTER(pnanovdb_Device), c_bool, POINTER(c_uint64))),
+        ("get_encoder_front_texture", CFUNCTYPE(c_void_p, POINTER(pnanovdb_Device))),
+        ("map_encoder_data", CFUNCTYPE(c_void_p, POINTER(pnanovdb_Device), POINTER(c_uint64))),
         ("unmap_encoder_data", CFUNCTYPE(None, POINTER(pnanovdb_Device))),
-        ("enable_profiler",
-            CFUNCTYPE(None, POINTER(pnanovdb_Device), POINTER(c_void_p),
-                     CFUNCTYPE(None, POINTER(pnanovdb_Device), c_uint64,
-                              c_uint32, POINTER(c_void_p)))),
+        (
+            "enable_profiler",
+            CFUNCTYPE(
+                None,
+                POINTER(pnanovdb_Device),
+                POINTER(c_void_p),
+                CFUNCTYPE(None, POINTER(pnanovdb_Device), c_uint64, c_uint32, POINTER(c_void_p)),
+            ),
+        ),
         ("disable_profiler", CFUNCTYPE(None, POINTER(pnanovdb_Device))),
-        ("set_resource_min_lifetime",
-            CFUNCTYPE(None, POINTER(pnanovdb_Device), c_uint64))
+        ("set_resource_min_lifetime", CFUNCTYPE(None, POINTER(pnanovdb_Device), c_uint64)),
     ]
 
 
 class DeviceInterface:
     """Python wrapper for pnanovdb_compute_device_interface_t."""
+
     def __init__(self, api: int):
         self._lib = load_library(COMPUTE_LIB)
 
@@ -156,9 +136,9 @@ class DeviceInterface:
         if not self._device_manager:
             raise RuntimeError("Device manager not created")
 
-        desc = pnanovdb_DeviceDesc(device_index=device_index,
-                                   enable_external_usage=enable_external_usage,
-                                   log_print=self._callback_func)
+        desc = pnanovdb_DeviceDesc(
+            device_index=device_index, enable_external_usage=enable_external_usage, log_print=self._callback_func
+        )
 
         create_func = self._device_interface.contents.create_device
         device = create_func(self._device_manager, byref(desc))
@@ -192,4 +172,3 @@ class DeviceInterface:
             self._devices = []
         except Exception:
             pass
-

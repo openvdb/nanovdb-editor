@@ -2,7 +2,7 @@
 #define PNANOVDB_HLSL
 #define PNANOVDB_ADDRESS_64
 #define PNANOVDB_BUF_HLSL_64
-//#define PNANOVDB_BUF_HLSL_RW
+// #define PNANOVDB_BUF_HLSL_RW
 #include "PNanoVDB.h"
 #include "PNanoVDBExt.h"
 
@@ -26,9 +26,8 @@ RWStructuredBuffer<uint> node_types;
 
 #include <workgroup_scan.slang>
 
-[shader("compute")][numthreads(256, 1, 1)] void main(uint3 group_idx
-                                                     : SV_GroupID, uint3 thread_idx
-                                                     : SV_GroupThreadID)
+[shader("compute")][numthreads(256, 1, 1)]
+void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
     uint node_idx = group_idx.x * 256u + thread_idx.x;
 

@@ -20,9 +20,8 @@ StructuredBuffer<uint> prim_idxs_in;
 
 RWStructuredBuffer<uint> prim_raster_idxs_out;
 
-[shader("compute")][numthreads(256, 1, 1)] void main(uint3 group_idx
-                                                     : SV_GroupID, uint3 thread_idx
-                                                     : SV_GroupThreadID)
+[shader("compute")][numthreads(256, 1, 1)]
+void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
     uint ijk_idx = group_idx.x * 256u + thread_idx.x;
 

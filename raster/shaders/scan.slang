@@ -25,10 +25,8 @@ RWStructuredBuffer<uint> scratch;
 #define smem_buf scratch
 #define status_buf scratch
 
-[shader("compute")][numthreads(256, 1, 1)] void main(uint3 dispatchThreadID
-                                                     : SV_DispatchThreadID, uint3 groupThreadID
-                                                     : SV_GroupThreadID, uint3 groupID
-                                                     : SV_GroupID)
+[shader("compute")][numthreads(256, 1, 1)]
+void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 groupThreadID : SV_GroupThreadID, uint3 groupID : SV_GroupID)
 {
 #if 0
     uint tidx = dispatchThreadID.x;

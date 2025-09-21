@@ -106,6 +106,18 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
+# If switching from headless (GLFW OFF) to GLFW ON, remove the built Vulkan loader to use system one
+if(NANOVDB_EDITOR_USE_GLFW)
+  file(GLOB VULKAN_LOADER_FILES
+       "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libvulkan*"
+       "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/vulkan*"
+  )
+  if(VULKAN_LOADER_FILES)
+    message(STATUS "Removing previously built Vulkan loader: ${VULKAN_LOADER_FILES}")
+    file(REMOVE ${VULKAN_LOADER_FILES})
+  endif()
+endif()
+
 # Print configuration summary
 message(STATUS "Build Configuration:")
 message(STATUS "  Build Type: ${CMAKE_BUILD_TYPE}")

@@ -453,8 +453,8 @@ void tidx_to_ray(int2 tidx, out float3 rayOrigin, out float3 rayDir, out float3 
     rayOrigin = rayOrigin4.xyz / rayOrigin4.w;
 }
 
-[shader("compute")][numthreads(32, 4, 1)] void main(uint3 dispatchThreadID
-                                                    : SV_DispatchThreadID)
+[shader("compute")][numthreads(32, 4, 1)]
+void main(uint3 dispatchThreadID : SV_DispatchThreadID)
 {
     int2 tidx = int2(dispatchThreadID.xy);
 

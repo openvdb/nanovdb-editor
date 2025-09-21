@@ -100,7 +100,6 @@ CPMAddPackage(
 )
 
 if(NOT NANOVDB_EDITOR_USE_GLFW)
-    message(STATUS "Using VulkanLoader")
     CPMAddPackage(
         NAME VulkanLoader
         GITHUB_REPOSITORY KhronosGroup/Vulkan-Loader

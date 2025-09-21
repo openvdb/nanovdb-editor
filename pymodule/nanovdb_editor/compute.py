@@ -17,6 +17,7 @@ PNANOVDB_TRUE = 1
 
 class pnanovdb_ShaderInterface(Structure):
     """Definition equivalent to pnanovdb_compute_shader_interface_t."""
+
     _fields_ = [
         ("interface_pnanovdb_reflect_data_type", c_void_p),  # PNANOVDB_REFLECT_INTERFACE()
         ("create_shader", CFUNCTYPE(c_void_p, POINTER(c_void_p))),
@@ -27,23 +28,20 @@ class pnanovdb_ShaderInterface(Structure):
 
 class pnanovdb_ComputeArray(Structure):
     """Definition equivalent to pnanovdb_compute_array_t."""
-    _fields_ = [
-        ("data", c_void_p),
-        ("element_size", c_uint64),
-        ("element_count", c_uint64),
-        ("filepath", c_char_p)
-    ]
+
+    _fields_ = [("data", c_void_p), ("element_size", c_uint64), ("element_count", c_uint64), ("filepath", c_char_p)]
 
     def __init__(self, data=None, element_size=0, element_count=0, filepath=None):
         super().__init__()
         self.data = data
         self.element_size = element_size
         self.element_count = element_count
-        self.filepath = filepath.encode('utf-8') if isinstance(filepath, str) else filepath
+        self.filepath = filepath.encode("utf-8") if isinstance(filepath, str) else filepath
 
 
 class pnanovdb_Compute(Structure):
     """Definition equivalent to pnanovdb_compute_t."""
+
     _fields_ = [
         ("interface_pnanovdb_reflect_data_type", c_void_p),  # PNANOVDB_REFLECT_INTERFACE()
         ("compiler", POINTER(pnanovdb_Compiler)),
@@ -53,69 +51,97 @@ class pnanovdb_Compute(Structure):
         ("save_nanovdb", CFUNCTYPE(c_bool, POINTER(pnanovdb_ComputeArray), c_char_p)),
         ("create_shader_context", CFUNCTYPE(c_void_p, c_char_p)),
         ("destroy_shader_context", CFUNCTYPE(None, c_void_p)),
-        ("init_shader", CFUNCTYPE(c_int,
-                                c_void_p,  # POINTER(pnanovdb_Compute)
-                                c_void_p,  # pnanovdb_compute_queue_t*
-                                c_void_p,  # pnanovdb_shader_context_t*
-                                c_void_p)), # pnanovdb_compiler_settings_t*
-        ("destroy_shader", CFUNCTYPE(None,
-                                   c_void_p,  # POINTER(pnanovdb_Compute)
-                                   POINTER(pnanovdb_ShaderInterface),
-                                   c_void_p,  # pnanovdb_compute_context_t*
-                                   c_void_p)), # pnanovdb_shader_context_t*
-        ("dispatch_shader", CFUNCTYPE(None,
-                                    c_void_p,  # POINTER(pnanovdb_Compute)
-                                    c_void_p,  # pnanovdb_compute_context_t*
-                                    c_void_p,  # const pnanovdb_shader_context_t*
-                                    c_void_p,  # pnanovdb_compute_resource_t*
-                                    c_uint32,  # grid_dim_x
-                                    c_uint32,  # grid_dim_y
-                                    c_uint32,  # grid_dim_z
-                                    c_char_p)), # debug_label
-        ("dispatch_shader_on_array", CFUNCTYPE(c_int,
-                                             c_void_p,  # POINTER(pnanovdb_Compute)
-                                             POINTER(pnanovdb_Device),
-                                             c_char_p,
-                                             c_uint32,
-                                             c_uint32,
-                                             c_uint32,
-                                             POINTER(pnanovdb_ComputeArray),
-                                             POINTER(pnanovdb_ComputeArray),
-                                             POINTER(pnanovdb_ComputeArray),
-                                             c_uint32,
-                                             c_uint64,
-                                             c_uint64)),
-        ("dispatch_shader_on_nanovdb_array", CFUNCTYPE(c_int,
-                                                     c_void_p,  # POINTER(pnanovdb_Compute)
-                                                     c_void_p,  # const pnanovdb_compute_device_t*
-                                                     c_void_p,  # const pnanovdb_shader_context_t*
-                                                     POINTER(pnanovdb_ComputeArray),  # nanovdb_array
-                                                     c_int32,   # image_width
-                                                     c_int32,   # image_height
-                                                     c_void_p,  # background_image
-                                                     c_void_p,  # upload_buffer
-                                                     c_void_p,  # user_upload_buffer
-                                                     POINTER(c_void_p),  # nanovdb_buffer
-                                                     POINTER(c_void_p))), # readback_buffer
-        ("create_array", CFUNCTYPE(POINTER(pnanovdb_ComputeArray),
-                                 c_size_t,
-                                 c_uint64,
-                                 c_void_p)),
+        (
+            "init_shader",
+            CFUNCTYPE(
+                c_int,
+                c_void_p,  # POINTER(pnanovdb_Compute)
+                c_void_p,  # pnanovdb_compute_queue_t*
+                c_void_p,  # pnanovdb_shader_context_t*
+                c_void_p,
+            ),
+        ),  # pnanovdb_compiler_settings_t*
+        (
+            "destroy_shader",
+            CFUNCTYPE(
+                None,
+                c_void_p,  # POINTER(pnanovdb_Compute)
+                POINTER(pnanovdb_ShaderInterface),
+                c_void_p,  # pnanovdb_compute_context_t*
+                c_void_p,
+            ),
+        ),  # pnanovdb_shader_context_t*
+        (
+            "dispatch_shader",
+            CFUNCTYPE(
+                None,
+                c_void_p,  # POINTER(pnanovdb_Compute)
+                c_void_p,  # pnanovdb_compute_context_t*
+                c_void_p,  # const pnanovdb_shader_context_t*
+                c_void_p,  # pnanovdb_compute_resource_t*
+                c_uint32,  # grid_dim_x
+                c_uint32,  # grid_dim_y
+                c_uint32,  # grid_dim_z
+                c_char_p,
+            ),
+        ),  # debug_label
+        (
+            "dispatch_shader_on_array",
+            CFUNCTYPE(
+                c_int,
+                c_void_p,  # POINTER(pnanovdb_Compute)
+                POINTER(pnanovdb_Device),
+                c_char_p,
+                c_uint32,
+                c_uint32,
+                c_uint32,
+                POINTER(pnanovdb_ComputeArray),
+                POINTER(pnanovdb_ComputeArray),
+                POINTER(pnanovdb_ComputeArray),
+                c_uint32,
+                c_uint64,
+                c_uint64,
+            ),
+        ),
+        (
+            "dispatch_shader_on_nanovdb_array",
+            CFUNCTYPE(
+                c_int,
+                c_void_p,  # POINTER(pnanovdb_Compute)
+                c_void_p,  # const pnanovdb_compute_device_t*
+                c_void_p,  # const pnanovdb_shader_context_t*
+                POINTER(pnanovdb_ComputeArray),  # nanovdb_array
+                c_int32,  # image_width
+                c_int32,  # image_height
+                c_void_p,  # background_image
+                c_void_p,  # upload_buffer
+                c_void_p,  # user_upload_buffer
+                POINTER(c_void_p),  # nanovdb_buffer
+                POINTER(c_void_p),
+            ),
+        ),  # readback_buffer
+        ("create_array", CFUNCTYPE(POINTER(pnanovdb_ComputeArray), c_size_t, c_uint64, c_void_p)),
         ("destroy_array", CFUNCTYPE(None, POINTER(pnanovdb_ComputeArray))),
         ("map_array", CFUNCTYPE(c_void_p, POINTER(pnanovdb_ComputeArray))),
         ("unmap_array", CFUNCTYPE(None, POINTER(pnanovdb_ComputeArray))),
-        ("compute_array_print_range", CFUNCTYPE(None,
-                                              c_void_p,  # POINTER(pnanovdb_Compute)
-                                              c_void_p,  # pnanovdb_compute_log_print_t
-                                              c_char_p,  # name
-                                              POINTER(pnanovdb_ComputeArray),  # arr
-                                              c_uint32)),  # channel_count
-        ("module", c_void_p)
+        (
+            "compute_array_print_range",
+            CFUNCTYPE(
+                None,
+                c_void_p,  # POINTER(pnanovdb_Compute)
+                c_void_p,  # pnanovdb_compute_log_print_t
+                c_char_p,  # name
+                POINTER(pnanovdb_ComputeArray),  # arr
+                c_uint32,
+            ),
+        ),  # channel_count
+        ("module", c_void_p),
     ]
 
 
 class Compute:
     """Python wrapper for pnanovdb_compute_t."""
+
     def __init__(self, compiler: Compiler):
         """Mirrors what is in pnanovdb_compute_load"""
         self._compiler = compiler
@@ -158,22 +184,18 @@ class Compute:
 
     def load_nanovdb(self, filepath: str) -> pnanovdb_ComputeArray:
         load_func = self._compute.contents.load_nanovdb
-        array = load_func(filepath.encode('utf-8'))
+        array = load_func(filepath.encode("utf-8"))
         if not array:
             raise RuntimeError(f"Failed to load NanoVDB file: {filepath}")
         return array.contents
 
     def save_nanovdb(self, array: pnanovdb_ComputeArray, filepath: str) -> None:
         save_func = self._compute.contents.save_nanovdb
-        save_func(pointer(array), filepath.encode('utf-8'))
+        save_func(pointer(array), filepath.encode("utf-8"))
 
     def create_array(self, data: np.ndarray) -> pnanovdb_ComputeArray:
         create_func = self._compute.contents.create_array
-        array = create_func(
-            data.itemsize,
-            data.size,
-            data.ctypes.data_as(c_void_p)
-        )
+        array = create_func(data.itemsize, data.size, data.ctypes.data_as(c_void_p))
         if not array:
             raise RuntimeError("Failed to create compute array")
         return array.contents
@@ -182,15 +204,17 @@ class Compute:
         destroy_func = self._compute.contents.destroy_array
         destroy_func(pointer(array))
 
-    def dispatch_shader_on_array(self,
-                               shader_path: str,
-                               grid_dims: Tuple[int, int, int],
-                               data_in: pnanovdb_ComputeArray,
-                               constants: pnanovdb_ComputeArray,
-                               data_out: pnanovdb_ComputeArray,
-                               dispatch_count: int = 1,
-                               scratch_size: int = 0,
-                               scratch_clear_size: int = 0) -> bool:
+    def dispatch_shader_on_array(
+        self,
+        shader_path: str,
+        grid_dims: Tuple[int, int, int],
+        data_in: pnanovdb_ComputeArray,
+        constants: pnanovdb_ComputeArray,
+        data_out: pnanovdb_ComputeArray,
+        dispatch_count: int = 1,
+        scratch_size: int = 0,
+        scratch_clear_size: int = 0,
+    ) -> bool:
         if not data_in or not constants or not data_out:
             raise ValueError("ComputeArray parameters cannot be None")
 
@@ -198,7 +222,7 @@ class Compute:
         result = dispatch_func(
             self._compute,
             self._device_interface.get_device(),
-            shader_path.encode('utf-8'),
+            shader_path.encode("utf-8"),
             c_uint32(grid_dims[0]),
             c_uint32(grid_dims[1]),
             c_uint32(grid_dims[2]),
@@ -207,7 +231,7 @@ class Compute:
             pointer(data_out),
             c_uint32(dispatch_count),
             c_uint64(scratch_size),
-            c_uint64(scratch_clear_size)
+            c_uint64(scratch_clear_size),
         )
 
         return result == PNANOVDB_TRUE

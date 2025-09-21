@@ -155,7 +155,8 @@ static std::string getShaderFilePath(const char* relFilePath)
     }
 
     // resolve relative path
-    return (std::filesystem::path(getShaderDir()) / fsPath).string();
+    std::string shaderPath = (std::filesystem::path(getShaderDir()) / fsPath).string();
+    return resolveSymlink(shaderPath).string();
 }
 
 static std::string getShaderCacheDir()

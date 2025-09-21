@@ -13,6 +13,7 @@ COMPILER_LIB = "pnanovdbcompiler"
 class pnanovdb_CompileTarget(Enum):
     UNDEFINED = 0
 
+
 class pnanovdb_CompileTarget(Enum):
     UNDEFINED = 0
     VULKAN = 1
@@ -21,6 +22,7 @@ class pnanovdb_CompileTarget(Enum):
 
 class pnanovdb_CompilerSettings(Structure):
     """Definition equivalent to pnanovdb_compiler_settings_t."""
+
     _fields_ = [
         ("is_row_major", c_int32),
         ("use_glslang", c_int32),
@@ -36,34 +38,35 @@ class pnanovdb_CompilerInstance(Structure):
 
 class pnanovdb_Compiler(Structure):
     """Definition equivalent to pnanovdb_compiler_t."""
+
     _fields_ = [
         ("interface_pnanovdb_reflect_data_type", c_void_p),  # PNANOVDB_REFLECT_INTERFACE()
         ("create_instance", CFUNCTYPE(POINTER(pnanovdb_CompilerInstance))),
-        ("set_diagnostic_callback", CFUNCTYPE(None,
-                                             POINTER(pnanovdb_CompilerInstance),
-                                             CFUNCTYPE(None, c_char_p))),
-        ("compile_shader_from_file",
-            CFUNCTYPE(c_bool,
-                     POINTER(pnanovdb_CompilerInstance),
-                     c_char_p,
-                     POINTER(pnanovdb_CompilerSettings),
-                     POINTER(c_bool))),
-        ("execute_cpu",
-            CFUNCTYPE(c_bool,
-                      POINTER(pnanovdb_CompilerInstance),
-                      c_char_p,
-                      c_uint32,
-                      c_uint32,
-                      c_uint32,
-                      c_void_p,
-                      c_void_p)),
+        ("set_diagnostic_callback", CFUNCTYPE(None, POINTER(pnanovdb_CompilerInstance), CFUNCTYPE(None, c_char_p))),
+        (
+            "compile_shader_from_file",
+            CFUNCTYPE(
+                c_bool,
+                POINTER(pnanovdb_CompilerInstance),
+                c_char_p,
+                POINTER(pnanovdb_CompilerSettings),
+                POINTER(c_bool),
+            ),
+        ),
+        (
+            "execute_cpu",
+            CFUNCTYPE(
+                c_bool, POINTER(pnanovdb_CompilerInstance), c_char_p, c_uint32, c_uint32, c_uint32, c_void_p, c_void_p
+            ),
+        ),
         ("destroy_instance", CFUNCTYPE(None, POINTER(pnanovdb_CompilerInstance))),
-        ("module", c_void_p)
+        ("module", c_void_p),
     ]
 
 
 class MemoryBuffer(Structure):
     """Python wrapper for memory buffer passed to the shader function run on CPU."""
+
     _fields_ = [
         ("data", c_void_p),
         ("size", c_uint64),
@@ -80,14 +83,12 @@ class MemoryBuffer(Structure):
             return np.array([], dtype=dtype)
 
         # Create array from buffer without copying
-        return np.frombuffer(
-            (c_byte * (self.size * np.dtype(dtype).itemsize)).from_address(self.data),
-            dtype=dtype
-        )
+        return np.frombuffer((c_byte * (self.size * np.dtype(dtype).itemsize)).from_address(self.data), dtype=dtype)
 
 
 class Compiler:
     """Python wrapper for pnanovdb_compiler_t."""
+
     def __init__(self):
         """Mirrors what is in pnanovdb_compiler_load"""
         self._lib = load_library(COMPILER_LIB)
@@ -115,37 +116,42 @@ class Compiler:
         if not self._instance:
             raise RuntimeError("Failed to create compiler instance")
 
-    def compile_shader(self, filename: str, entry_point_name="main", is_row_major=False, compile_target=pnanovdb_CompileTarget.VULKAN) -> bool:
+    def compile_shader(
+        self, filename: str, entry_point_name="main", is_row_major=False, compile_target=pnanovdb_CompileTarget.VULKAN
+    ) -> bool:
         if not self._instance:
             raise RuntimeError("No compiler instance exists")
 
-        settings = pnanovdb_CompilerSettings(entry_point_name=entry_point_name.encode('utf-8'),
-                                             is_row_major=is_row_major,
-                                             use_glslang=False,
-                                             hlsl_output=False,
-                                             compile_target=(c_uint32)(compile_target.value))
-
-        compile_func = self._compiler.contents.compile_shader_from_file
-        return compile_func(
-            self._instance,
-            filename.encode('utf-8'),
-            byref(settings),
-            None
+        settings = pnanovdb_CompilerSettings(
+            entry_point_name=entry_point_name.encode("utf-8"),
+            is_row_major=is_row_major,
+            use_glslang=False,
+            hlsl_output=False,
+            compile_target=(c_uint32)(compile_target.value),
         )
 
-    def execute_cpu(self, filename: str, grid_dims: Tuple[int, int, int], uniform_params: POINTER(c_void_p), uniform_state: POINTER(c_void_p)) -> bool:
+        compile_func = self._compiler.contents.compile_shader_from_file
+        return compile_func(self._instance, filename.encode("utf-8"), byref(settings), None)
+
+    def execute_cpu(
+        self,
+        filename: str,
+        grid_dims: Tuple[int, int, int],
+        uniform_params: POINTER(c_void_p),
+        uniform_state: POINTER(c_void_p),
+    ) -> bool:
         if not self._instance:
             raise RuntimeError("No compiler instance exists")
 
         execute_func = self._compiler.contents.execute_cpu
         return execute_func(
             self._instance,
-            filename.encode('utf-8'),
+            filename.encode("utf-8"),
             c_uint32(grid_dims[0]),
             c_uint32(grid_dims[1]),
             c_uint32(grid_dims[2]),
             uniform_params,
-            uniform_state
+            uniform_state,
         )
 
     def destroy_instance(self) -> None:

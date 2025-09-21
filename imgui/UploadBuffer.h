@@ -15,7 +15,7 @@
 #include <vector>
 
 #define PNANOVDB_DISPATCH_BATCH_SIZE 32768u
-//#define PNANOVDB_DISPATCH_BATCH_SIZE 256
+// #define PNANOVDB_DISPATCH_BATCH_SIZE 256
 
 struct pnanovdb_compute_dispatch_batch_t
 {

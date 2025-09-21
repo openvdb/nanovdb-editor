@@ -8,6 +8,7 @@ from nanovdb_editor import Compiler, Compute, Editor, Raster, pnanovdb_EditorCon
 if __name__ == "__main__":
 
     import os
+
     print(os.getpid())
 
     compiler = Compiler()

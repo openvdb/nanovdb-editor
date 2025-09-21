@@ -21,8 +21,8 @@ RWStructuredBuffer<uint> scratch;
 // makes pnanovdb code more copy paste friendly
 #define buf data_in
 
-[shader("compute")][numthreads(16, 16, 1)] void main(uint3 dispatchThreadID
-                                                     : SV_DispatchThreadID)
+[shader("compute")][numthreads(16, 16, 1)]
+void main(uint3 dispatchThreadID : SV_DispatchThreadID)
 {
     int2 tidx = int2(dispatchThreadID.xy);
 
