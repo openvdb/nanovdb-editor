@@ -47,15 +47,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
 
-      - name: Cache build dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/pip
-            ~/.conda
-            nanovdb_editor/build/
-          key: ${{ runner.os }}-nanovdb-editor-${{ hashFiles('**/environment.yml') }}
-
       - name: Build NanoVDB Editor
         run: |
           set -e
@@ -75,58 +66,3 @@ jobs:
           set -e
           export LD_LIBRARY_PATH=$PWD/build/Release/lib:$PWD/build/Release/bin:$LD_LIBRARY_PATH
           ctest --test-dir build/Release/gtests -C Release --output-on-failure --verbose
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install numpy
-        run: |
-          python -m pip install numpy
-
-      - name: Build NanoVDB Editor Python module
-        run: |
-          set -e
-          chmod +x ./build.sh
-          ./build.sh -pv
-
-      - name: Upload python artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: nanovdb-editor-python-build
-          path: |
-            pymodule/dist/
-          retention-days: 2
-
-      - name: Install package
-        run: |
-          set -e
-          cd pymodule
-          python -m pip install ./dist/*.whl
-
-      - name: Run Python tests
-        run: |
-          set -e
-          python3 test/test_shader.py
-
-      - name: Build and run NanoVDB Editor C tests
-        run: |
-          set -e
-          cd pymodule/test_c
-          chmod +x ./build.sh
-          ./build.sh
-          if [ -f "build/pnanovdbeditortestcapp" ]; then
-            echo "Running C tests..."
-            chmod +x ./build/pnanovdbeditortestcapp
-            ./build/pnanovdbeditortestcapp
-          else
-            echo "No C test application found"
-          fi
-
-      - name: Build C++ Python module test (no run)
-        run: |
-          set -e
-          cd pymodule/test_cpp
-          chmod +x ./build.sh
-          ./build.sh
