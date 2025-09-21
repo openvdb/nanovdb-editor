@@ -12,6 +12,7 @@ from .compiler import Compiler, pnanovdb_Compiler
 COMPUTE_LIB = "pnanovdbcompute"
 
 VULKAN_API = 1
+PNANOVDB_TRUE = 1
 
 
 class pnanovdb_ShaderInterface(Structure):
@@ -209,7 +210,7 @@ class Compute:
             c_uint64(scratch_clear_size)
         )
 
-        return result == 0
+        return result == PNANOVDB_TRUE
 
     def map_array(self, array: pnanovdb_ComputeArray, np_dtype: np.dtype) -> np.ndarray:
         if array.element_size != np_dtype.itemsize:
