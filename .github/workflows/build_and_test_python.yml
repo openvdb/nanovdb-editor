@@ -1,4 +1,4 @@
-name: NanoVDB Editor Build and Test Python
+name: Build and Test Python
 
 on:
   push:
