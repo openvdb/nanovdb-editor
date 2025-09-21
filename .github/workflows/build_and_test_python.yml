@@ -79,7 +79,6 @@ jobs:
       - name: Run Python tests
         run: |
           set -e
-          cd pytests
           pytest -vvv
 
       - name: Build and run NanoVDB Editor C tests

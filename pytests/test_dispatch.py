@@ -14,7 +14,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 TEST_SHADER = os.path.join(SCRIPT_DIR, "shaders/test.slang")
 
 
-class TestCompiler(unittest.TestCase):
+class TestDispatch(unittest.TestCase):
     def setUp(self):
         self.element_count = 8
         self.array_dtype = np.dtype(np.int32)
