@@ -28,8 +28,6 @@ project(NanoVDBEditor LANGUAGES CXX)
 
 ### Directory Setup
 
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
-
 set(SHADERS_DIR_NAME shaders)
 set(INCLUDES_FILE includes)
 set(COMPILED_SHADERS_DIR_NAME _generated)
