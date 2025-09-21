@@ -78,7 +78,7 @@ pnanovdb_compute_swapchain_t* windowGlfwGetSwapchain(WindowGlfw* ptr)
 
 #    define GLFW_PTR(X) decltype(&X) p_##X = nullptr
 
-#    define GLFW_PTR_LOAD(X) ptr->p_##X = (decltype(&X))pnanovdb_get_proc_address(ptr->glfw_module, #    X)
+#    define GLFW_PTR_LOAD(X) ptr->p_##X = (decltype(&X))pnanovdb_get_proc_address(ptr->glfw_module, #X)
 
 namespace pnanovdb_imgui_window_default
 {

@@ -547,7 +547,7 @@ void destroy_array(pnanovdb_compute_array_t* array)
 {
     if (array && array->data)
     {
-        delete[](char*) array->data;
+        delete[] (char*)array->data;
         array->data = nullptr;
         delete array;
         array = nullptr;

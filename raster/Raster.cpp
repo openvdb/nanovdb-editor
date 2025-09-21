@@ -19,9 +19,9 @@
 #include <math.h>
 #include <vector>
 
-//#include "Node2Cpp.h"
+// #include "Node2Cpp.h"
 
-//#define PNANOVDB_RASTER_VALIDATE 1
+// #define PNANOVDB_RASTER_VALIDATE 1
 
 namespace pnanovdb_raster
 {

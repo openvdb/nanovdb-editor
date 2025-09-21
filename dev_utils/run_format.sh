@@ -8,8 +8,7 @@ find . -type f \
 	\( -name "*.c" \
 	-o -name "*.cpp" \
 	-o -name "*.h" \
-	-o -name "*.hpp" \
-	-o -name "*.slang" \) \
+	-o -name "*.hpp" \) \
     -not -path "*/build/*" \
 	-print0 | xargs -0 clang-format -i --verbose
 
