@@ -236,7 +236,7 @@ void destroyDeviceManager(pnanovdb_compute_device_manager_t* deviceManager)
 
     ptr->loader.vkDestroyInstance(ptr->vulkanInstance, nullptr);
 
-    // pnanovdb_free_library(ptr->vulkan_module);
+    pnanovdb_free_library(ptr->vulkan_module);
     ptr->vulkan_module = nullptr;
 
     delete ptr;
