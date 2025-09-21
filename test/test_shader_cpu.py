@@ -14,7 +14,7 @@ TEST_SHADER = os.path.join(SCRIPT_DIR, "../test/shaders/test.slang")
 
 if __name__ == "__main__":
 
-    print(f"Current Process ID (PID): {os.getpid()}")
+    print("Running CPU shader test...")
 
     # Test data
     ELEMENT_COUNT = 8
@@ -71,4 +71,4 @@ if __name__ == "__main__":
         else:
             print("CPU shader test was successful")
     else:
-        print("CPU shader test failed!")
+        print("Error: Failed to execute CPU shader")

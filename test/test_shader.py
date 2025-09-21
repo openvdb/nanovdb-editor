@@ -14,7 +14,7 @@ TEST_SHADER = os.path.join(SCRIPT_DIR, "../test/shaders/test.slang")
 
 if __name__ == "__main__":
 
-    print(f"Current Process ID (PID): {os.getpid()}")
+    print("Running Vulkan shader test...")
 
     # Test data
     ELEMENT_COUNT = 8
@@ -55,6 +55,8 @@ if __name__ == "__main__":
                 break
         else:
             print("Vulkan shader test was successful")
+    else:
+        print("Error: Failed to dispatch Vulkan shader")
 
     compute.unmap_array(output_array)
 
