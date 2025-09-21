@@ -54,7 +54,7 @@ jobs:
 
       - name: Set up Python environment
         run: |
-          python -m pip install numpy
+          python -m pip install numpy pytest
 
       - name: Build NanoVDB Editor Python module
         run: |
@@ -79,8 +79,8 @@ jobs:
       - name: Run Python tests
         run: |
           set -e
-          python test/test_shader.py
-          python test/test_shader_cpu.py
+          cd pytests
+          pytest -vvv
 
       - name: Build and run NanoVDB Editor C tests
         run: |

@@ -6,3 +6,5 @@ dependencies:
   - python=3.11
   - pip
   - numpy<2.3.0,>=2
+  - scikit-build-core
+  - pytest
