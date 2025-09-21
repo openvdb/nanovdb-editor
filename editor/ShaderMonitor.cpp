@@ -22,7 +22,12 @@ namespace fs = std::filesystem;
 
 namespace pnanovdb_editor
 {
+#ifdef WIN32
+// filewatch::Event::renamed_new is not working same as on Linux - monitors the tmp file
 static const std::string shaderExtensions = ".*\\.(slang|slang\\.tmp)$";
+#else
+static const std::string shaderExtensions = ".*\\.(slang)$";
+#endif
 
 void ShaderMonitor::addPath(const std::string& path, ShaderCallback callback)
 {
@@ -39,9 +44,9 @@ void ShaderMonitor::addPath(const std::string& path, ShaderCallback callback)
                 std::string filePathStr = filePath.string();
 
 #ifdef WIN32
-                // filewatch::Event::renamed_new not working same as on Linux - monitors the old file
                 if (changeType == filewatch::Event::modified && filePath.extension() == ".tmp" &&
-                    filePath.stem().extension() == ".slang") {
+                    filePath.stem().extension() == ".slang")
+                {
                     // Remove .tmp extension
                     filePath.replace_extension(""); // removes .tmp, leaves .slang
                     filePathStr = filePath.string();
