@@ -17,9 +17,8 @@ StructuredBuffer<uint> upload;
 
 RWStructuredBuffer<uint> buf;
 
-[shader("compute")][numthreads(256, 1, 1)] void main(uint3 group_idx
-                                                     : SV_GroupID, uint3 thread_idx
-                                                     : SV_GroupThreadID)
+[shader("compute")][numthreads(256, 1, 1)]
+void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
     uint group_begin_idx = group_idx.x;
     uint group_count = (constants.buf_word_count + 255u) / 256u;

@@ -85,9 +85,8 @@ uint4 expand8to16h(uint4 counter)
     return counterH;
 }
 
-[shader("compute")][numthreads(256, 1, 1)] void main(uint3 group_idx
-                                                     : SV_GroupID, uint3 thread_idx
-                                                     : SV_GroupThreadID)
+[shader("compute")][numthreads(256, 1, 1)]
+void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
     uint idx = 256u * group_idx.x + thread_idx.x;
 

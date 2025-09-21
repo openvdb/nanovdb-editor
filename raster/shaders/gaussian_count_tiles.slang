@@ -10,9 +10,8 @@ StructuredBuffer<int> radii_in;
 
 RWStructuredBuffer<uint> num_tiles_per_gaussian_out;
 
-[shader("compute")][numthreads(256, 1)] void main(uint3 group_idx
-                                                  : SV_GroupID, uint3 thread_idx
-                                                  : SV_GroupThreadID)
+[shader("compute")][numthreads(256, 1)]
+void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
     uint idx = group_idx.x * 256u + thread_idx.x;
 

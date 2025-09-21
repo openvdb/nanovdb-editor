@@ -28,9 +28,8 @@ RWStructuredBuffer<uint> node_types;
 
 #include <workgroup_scan.slang>
 
-[shader("compute")][numthreads(256, 1, 1)] void main(uint3 group_idx
-                                                     : SV_GroupID, uint3 thread_idx
-                                                     : SV_GroupThreadID)
+[shader("compute")][numthreads(256, 1, 1)]
+void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
     uint node_begin_idx = group_idx.x;
 
