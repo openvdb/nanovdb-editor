@@ -306,6 +306,16 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         {
             ptr->server =
                 pnanovdb_get_server()->create_instance(user_settings->server_address, user_settings->server_port);
+            if (!ptr->server)
+            {
+                if (log_print)
+                {
+                    log_print(PNANOVDB_COMPUTE_LOG_LEVEL_ERROR, "Failed to create server");
+                }
+                ptr->device_interface.destroy_encoder(ptr->encoder);
+                ptr->encoder = nullptr;
+                return PNANOVDB_FALSE;
+            }
         }
 #endif
     }
