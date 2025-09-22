@@ -13,4 +13,4 @@ find . -type f \
 	-print0 | xargs -0 clang-format -i --verbose
 
 echo "Running black on Python files..."
-python -m black ./pymodule --verbose --target-version=py311 --line-length=120
+python -m black ./pymodule ./pytests --verbose --target-version=py311 --line-length=120
