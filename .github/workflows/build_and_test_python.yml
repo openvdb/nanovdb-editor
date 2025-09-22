@@ -67,12 +67,19 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
 
-      - name: Build and run NanoVDB Editor C tests
+      - name: Build NanoVDB Editor C tests
         run: |
           cd pymodule/test_c
           set -e
           chmod +x ./build.sh
           ./build.sh
+
+      # Integration tests for the python module
+
+      - name: Run NanoVDB Editor C tests
+        run: |
+          set -e
+          # export LD_LIBRARY_PATH="$(python -c 'import nanovdb_editor,os;print(os.path.join(os.path.dirname(nanovdb_editor.__file__),"lib"))'):${LD_LIBRARY_PATH}"
           if [ -f "build/pnanovdbeditortestcapp" ]; then
             echo "Running C tests..."
             chmod +x ./build/pnanovdbeditortestcapp
@@ -81,7 +88,7 @@ jobs:
             echo "No C test application found"
           fi
 
-      - name: Build C++ Python module test (no run)
+      - name: Build C++ Python module test
         run: |
           cd pymodule/test_cpp
           set -e
@@ -90,13 +97,16 @@ jobs:
 
   nanovdb-editor-test:
     # if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
-    name: NanoVDB Editor Build
+    name: NanoVDB Editor Test
     needs: nanovdb-editor-build
     runs-on: ubuntu-latest
     defaults:
       run:
         shell: bash -el {0}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Set up Conda env
         uses: conda-incubator/setup-miniconda@v3
         with:
