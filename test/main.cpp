@@ -33,7 +33,7 @@
 #define TEST_EDITOR
 // #define TEST_EDITOR_START_STOP
 // #define TEST_RASTER
-// #define TEST_RASTER_2D
+#define TEST_RASTER_2D
 // #define TEST_SVRASTER
 // #define TEST_E57
 
@@ -246,6 +246,7 @@ int main(int argc, char* argv[])
     editor.setup_shader_params(&editor, &raster_params, data_type);
 
     raster_params.eps2d = 0.5f;
+    raster_params.near_plane_override = 1.f;
 
 #        ifdef TEST_RASTER_SHADER_PARAMS
     compute.destroy_array(params_array);

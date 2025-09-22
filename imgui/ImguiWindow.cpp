@@ -21,6 +21,19 @@
 
 namespace pnanovdb_imgui_window_default
 {
+
+static inline void applyReverseZFarPlane(pnanovdb_camera_config_t* config)
+{
+    if (config->is_reverse_z && !config->is_orthographic)
+    {
+        config->far_plane = INFINITY;
+    }
+    else
+    {
+        config->far_plane = 10000.f;
+    }
+}
+
 static pnanovdb_imgui_instance_interface_t* get_default_imgui_instance_interface();
 
 void setStyle_NvidiaDark(ImGuiStyle& s);
@@ -66,6 +79,9 @@ struct Window
     pnanovdb_uint32_t height = 0;
 
     pnanovdb_camera_t camera = {};
+
+    pnanovdb_bool_t prev_is_y_up = PNANOVDB_FALSE;
+    pnanovdb_bool_t prev_is_upside_down = PNANOVDB_FALSE;
 };
 
 PNANOVDB_CAST_PAIR(pnanovdb_imgui_window_t, Window)
@@ -306,6 +322,16 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         {
             ptr->server =
                 pnanovdb_get_server()->create_instance(user_settings->server_address, user_settings->server_port);
+            if (!ptr->server)
+            {
+                if (log_print)
+                {
+                    log_print(PNANOVDB_COMPUTE_LOG_LEVEL_ERROR, "Failed to create server");
+                }
+                ptr->device_interface.destroy_encoder(ptr->encoder);
+                ptr->encoder = nullptr;
+                return PNANOVDB_FALSE;
+            }
         }
 #endif
     }
@@ -537,48 +563,51 @@ void update_camera(pnanovdb_imgui_window_t* window, pnanovdb_imgui_settings_rend
 {
     auto ptr = cast(window);
 
+    if (user_settings->sync_camera)
+    {
+        // apply imgui settings
+        ptr->camera.state = user_settings->camera_state;
+        ptr->camera.config = user_settings->camera_config;
+        user_settings->sync_camera = PNANOVDB_FALSE;
+
+        ptr->prev_is_y_up = user_settings->is_y_up;
+        ptr->prev_is_upside_down = user_settings->is_upside_down;
+    }
+
     if (user_settings->is_projection_rh != ptr->camera.config.is_projection_rh)
     {
         ptr->camera.config.is_projection_rh = user_settings->is_projection_rh;
     }
     if (user_settings->is_reverse_z != ptr->camera.config.is_reverse_z)
     {
+        applyReverseZFarPlane(&ptr->camera.config);
         ptr->camera.config.is_reverse_z = user_settings->is_reverse_z;
-        if (ptr->camera.config.is_reverse_z && !ptr->camera.config.is_orthographic)
-        {
-            ptr->camera.config.far_plane = INFINITY;
-        }
-        else
-        {
-            ptr->camera.config.far_plane = 10000.f;
-        }
     }
     if (user_settings->is_orthographic != ptr->camera.config.is_orthographic)
     {
+        applyReverseZFarPlane(&ptr->camera.config);
         ptr->camera.config.is_orthographic = user_settings->is_orthographic;
-        if (ptr->camera.config.is_reverse_z && !ptr->camera.config.is_orthographic)
-        {
-            ptr->camera.config.far_plane = INFINITY;
-        }
-        else
-        {
-            ptr->camera.config.far_plane = 10000.f;
-        }
     }
-    if (user_settings->is_y_up != fabsf(ptr->camera.state.eye_up.y) > 0.5f)
+
+    if (user_settings->is_y_up != ptr->prev_is_y_up)
     {
-        pnanovdb_camera_state_default(&ptr->camera.state, user_settings->is_y_up);
+        const float sign = ptr->prev_is_upside_down ? -1.f : 1.f;
+
+        ptr->camera.state.eye_direction.x = 0.f;
+        ptr->camera.state.eye_direction.y = user_settings->is_y_up ? 0.f : 1.f;
+        ptr->camera.state.eye_direction.z = user_settings->is_y_up ? 1.f : 0.f;
+        ptr->camera.state.eye_up.x = 0.f;
+        ptr->camera.state.eye_up.y = user_settings->is_y_up ? sign : 0.f;
+        ptr->camera.state.eye_up.z = user_settings->is_y_up ? 0.f : sign;
+
+        ptr->prev_is_y_up = user_settings->is_y_up;
     }
-    if (user_settings->is_upside_down == (ptr->camera.state.eye_up.y + ptr->camera.state.eye_up.z) > 0.f)
+    if (user_settings->is_upside_down != ptr->prev_is_upside_down)
     {
         ptr->camera.state.eye_up.y = -ptr->camera.state.eye_up.y;
         ptr->camera.state.eye_up.z = -ptr->camera.state.eye_up.z;
-    }
-    if (user_settings->sync_camera)
-    {
-        ptr->camera.state = user_settings->camera_state;
-        ptr->camera.config = user_settings->camera_config;
-        user_settings->sync_camera = PNANOVDB_FALSE;
+
+        ptr->prev_is_upside_down = user_settings->is_upside_down;
     }
 }
 
@@ -628,40 +657,17 @@ void imgui_update(pnanovdb_imgui_instance_t* instance)
 
     if (inst->settings->is_projection_rh != ptr->camera.config.is_projection_rh)
     {
-        ptr->camera.config.is_projection_rh = ~ptr->camera.config.is_projection_rh;
+        ptr->camera.config.is_projection_rh = inst->settings->is_projection_rh;
     }
     if (inst->settings->is_orthographic != ptr->camera.config.is_orthographic)
     {
-        ptr->camera.config.is_orthographic = ~ptr->camera.config.is_orthographic;
-        if (ptr->camera.config.is_reverse_z && !ptr->camera.config.is_orthographic)
-        {
-            ptr->camera.config.far_plane = INFINITY;
-        }
-        else
-        {
-            ptr->camera.config.far_plane = 10000.f;
-        }
+        ptr->camera.config.is_orthographic = inst->settings->is_orthographic;
+        applyReverseZFarPlane(&ptr->camera.config);
     }
     if (inst->settings->is_reverse_z != ptr->camera.config.is_reverse_z)
     {
-        ptr->camera.config.is_reverse_z = ~ptr->camera.config.is_reverse_z;
-        if (ptr->camera.config.is_reverse_z && !ptr->camera.config.is_orthographic)
-        {
-            ptr->camera.config.far_plane = INFINITY;
-        }
-        else
-        {
-            ptr->camera.config.far_plane = 10000.f;
-        }
-    }
-    if (inst->settings->is_y_up != fabsf(ptr->camera.state.eye_up.y) > 0.5f)
-    {
-        pnanovdb_camera_state_default(&ptr->camera.state, inst->settings->is_y_up);
-    }
-    if (inst->settings->is_upside_down == (ptr->camera.state.eye_up.y + ptr->camera.state.eye_up.z) > 0.f)
-    {
-        ptr->camera.state.eye_up.y = -ptr->camera.state.eye_up.y;
-        ptr->camera.state.eye_up.z = -ptr->camera.state.eye_up.z;
+        ptr->camera.config.is_reverse_z = inst->settings->is_reverse_z;
+        applyReverseZFarPlane(&ptr->camera.config);
     }
 
     ImGui::Render();

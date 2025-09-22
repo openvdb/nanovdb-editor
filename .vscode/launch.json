@@ -8,8 +8,9 @@
             "program": "${workspaceFolder}/build/Debug/pnanovdbeditorapp",
             "args": [
                 // "--headless",
-                // "--stream"
-                // "--verbose"
+                // "--stream",
+                // "--verbose",
+                // "--address", "127.0.0.1"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
@@ -63,10 +64,10 @@
             "name": "Debug NanoVDB Editor C Test App",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/test_c/build/pnanovdbeditortestcapp",
+            "program": "${workspaceFolder}/pymodule/test_c/build/pnanovdbeditortestcapp",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/test_c",
+            "cwd": "${workspaceFolder}/pymodule/test_c",
             "environment": [],
             "externalConsole": false,
             "MIMode": "gdb",
