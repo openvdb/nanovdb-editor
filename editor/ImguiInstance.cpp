@@ -593,8 +593,16 @@ static void showWindows(Instance* ptr, float delta_time)
             IMGUI_CHECKBOX_SYNC("Projection RH", settings->is_projection_rh);
             IMGUI_CHECKBOX_SYNC("Orthographic", settings->is_orthographic);
             IMGUI_CHECKBOX_SYNC("Reverse Z", settings->is_reverse_z);
-            IMGUI_CHECKBOX_SYNC("Y up", settings->is_y_up);
-            IMGUI_CHECKBOX_SYNC("Upside down", settings->is_upside_down);
+            {
+                int up_axis = settings->is_y_up ? 0 : 1;
+                const char* up_axis_items[] = { "Y", "Z" };
+                if (ImGui::Combo("Up Axis", &up_axis, up_axis_items, IM_ARRAYSIZE(up_axis_items)))
+                {
+                    settings->is_y_up = (up_axis == 0);
+                }
+
+                IMGUI_CHECKBOX_SYNC("Upside down", settings->is_upside_down);
+            }
             IMGUI_CHECKBOX_SYNC("Video Encode", settings->enable_encoder);
             if (ImGui::BeginCombo("Resolution", "Select..."))
             {

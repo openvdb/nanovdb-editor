@@ -10,6 +10,7 @@ from nanovdb_editor import (
 from ctypes import Structure, c_float, c_void_p, addressof
 
 import os
+import gc
 import numpy as np
 import unittest
 from parameterized import parameterized
@@ -63,7 +64,6 @@ class TestMatrix(unittest.TestCase):
     def tearDown(self):
         self.compute = None
         self.compiler = None
-        import gc
         gc.collect()
 
     def _assert_matrix_result(self, test_shader, is_row_major, result):

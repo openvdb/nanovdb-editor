@@ -320,8 +320,8 @@ void wait_for_shader_params_sync(pnanovdb_editor_t* editor, const pnanovdb_refle
     // TODO don't have set_params and get_params per data_type now
 
     // wait until the params are synced
-    while (static_cast<EditorWorker*>(editor->editor_worker)->set_params.load() != 0 ||
-           static_cast<EditorWorker*>(editor->editor_worker)->get_params.load() != 0)
+    EditorWorker* worker = static_cast<EditorWorker*>(editor->editor_worker);
+    while (worker->set_params.load() > 0 || worker->get_params.load() > 0)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
