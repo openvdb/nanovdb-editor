@@ -41,6 +41,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Set up Python environment
+        run: |
+          python -m pip install numpy
+
       - name: Build NanoVDB Editor Python module
         run: |
           chmod +x ./build.sh
@@ -56,6 +65,7 @@ jobs:
 
       - name: Build and run NanoVDB Editor C tests
         run: |
+          set -e
           cd pymodule/test_c
           chmod +x ./build.sh
           ./build.sh
@@ -69,6 +79,8 @@ jobs:
 
       - name: Build C++ Python module test (no run)
         run: |
+          set -e
+          export LD_LIBRARY_PATH=$PWD/build/Release/lib:$PWD/build/Release/bin:$LD_LIBRARY_PATH
           cd pymodule/test_cpp
           chmod +x ./build.sh
           ./build.sh
