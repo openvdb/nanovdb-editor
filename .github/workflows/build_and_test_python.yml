@@ -44,7 +44,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Build NanoVDB Editor Python module
         run: |
@@ -69,8 +69,8 @@ jobs:
 
       - name: Build NanoVDB Editor C tests
         run: |
-          cd pymodule/test_c
           set -e
+          cd pymodule/test_c
           chmod +x ./build.sh
           ./build.sh
 
@@ -79,7 +79,7 @@ jobs:
       - name: Run NanoVDB Editor C tests
         run: |
           set -e
-          # export LD_LIBRARY_PATH="$(python -c 'import nanovdb_editor,os;print(os.path.join(os.path.dirname(nanovdb_editor.__file__),"lib"))'):${LD_LIBRARY_PATH}"
+          cd pymodule/test_c
           if [ -f "build/pnanovdbeditortestcapp" ]; then
             echo "Running C tests..."
             chmod +x ./build/pnanovdbeditortestcapp
@@ -90,8 +90,8 @@ jobs:
 
       - name: Build C++ Python module test
         run: |
-          cd pymodule/test_cpp
           set -e
+          cd pymodule/test_cpp
           chmod +x ./build.sh
           ./build.sh
 
