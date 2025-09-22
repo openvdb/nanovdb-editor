@@ -5,6 +5,7 @@ import ctypes
 import os
 import platform
 import sys
+import glob
 from ctypes import wintypes
 
 
@@ -32,6 +33,41 @@ def add_dll_search_directory(path):
         raise ctypes.WinError(error)
 
 
+def _preload_shared_dependencies(lib_dir: str) -> None:
+    """Best-effort preload of dependent shared libraries with RTLD_GLOBAL.
+
+    This helps when transitive dependencies need to resolve symbols across
+    multiple modules at runtime (e.g., Slang/Vulkan plugins on Linux).
+    """
+    system = platform.system()
+
+    if system == "Windows":
+        # Windows is handled via add_dll_search_directory in __init__.py
+        return
+
+    patterns = []
+    if system == "Linux":
+        patterns = [
+            "libslang*.so*",
+            "libvulkan.so*",
+        ]
+    elif system == "Darwin":
+        patterns = [
+            "libslang*.dylib",
+            "libvulkan*.dylib",
+        ]
+
+    for pattern in patterns:
+        for candidate in sorted(
+            glob.glob(os.path.join(lib_dir, pattern))
+        ):
+            try:
+                ctypes.CDLL(candidate, mode=ctypes.RTLD_GLOBAL)
+            except OSError:
+                # Ignore missing/failed loads; continue with best-effort
+                pass
+
+
 def load_library(lib_name) -> ctypes.CDLL:
     system = platform.system()
 
@@ -47,4 +83,9 @@ def load_library(lib_name) -> ctypes.CDLL:
     else:
         raise OSError(f"Unsupported operating system: {system}")
 
-    return ctypes.CDLL(path)
+    # Preload transitive dependencies and use RTLD_GLOBAL for symbol visibility
+    if system in ("Linux", "Darwin"):
+        _preload_shared_dependencies(lib_dir)
+        return ctypes.CDLL(path, mode=ctypes.RTLD_GLOBAL)
+    else:
+        return ctypes.CDLL(path)

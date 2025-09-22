@@ -135,5 +135,4 @@ jobs:
       - name: Run Python tests
         run: |
           conda activate nanovdb_editor
-          export LD_LIBRARY_PATH="$(python -c 'import nanovdb_editor,os;print(os.path.join(os.path.dirname(nanovdb_editor.__file__),"lib"))'):${LD_LIBRARY_PATH}"
           pytest -vvv
