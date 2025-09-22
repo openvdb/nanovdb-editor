@@ -41,13 +41,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - uses: actions/checkout@v4
       - name: Set up Conda env
         uses: conda-incubator/setup-miniconda@v3
         with:
           miniforge-version: latest
           conda-remove-defaults: "true"
-          activate-environment: fvdb_test
+          activate-environment: nanovdb_editor
           environment-file: pymodule/environment.yml
 
       - name: Install Vulkan runtime (headless)
