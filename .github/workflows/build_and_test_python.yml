@@ -30,7 +30,7 @@ permissions:
   issues: read
 
 jobs:
-  nanovdb-editor-build-and-test:
+  nanovdb-editor-build:
     # if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: NanoVDB Editor Build
     runs-on: ubuntu-latest
@@ -41,6 +41,47 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Build NanoVDB Editor Python module
+        run: |
+          chmod +x ./build.sh
+          ./build.sh -pv
+
+      - name: Upload python artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanovdb-editor-wheel
+          path: |
+            pymodule/dist/
+          retention-days: 2
+
+      - name: Build and run NanoVDB Editor C tests
+        run: |
+          cd pymodule/test_c
+          chmod +x ./build.sh
+          ./build.sh
+          if [ -f "build/pnanovdbeditortestcapp" ]; then
+            echo "Running C tests..."
+            chmod +x ./build/pnanovdbeditortestcapp
+            ./build/pnanovdbeditortestcapp
+          else
+            echo "No C test application found"
+          fi
+
+      - name: Build C++ Python module test (no run)
+        run: |
+          cd pymodule/test_cpp
+          chmod +x ./build.sh
+          ./build.sh
+
+  nanovdb-editor-test:
+    # if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    name: NanoVDB Editor Build
+    needs: nanovdb-editor-build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
       - name: Set up Conda env
         uses: conda-incubator/setup-miniconda@v3
         with:
@@ -55,42 +96,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
 
-      - name: Build NanoVDB Editor Python module
+      - name: Download package with nanovdb_editor
+        uses: actions/download-artifact@v4
+        with:
+          name: nanovdb-editor-wheel
+          path: ./dist
+
+      - name: Install nanovdb_editor
         run: |
           conda activate nanovdb_editor
-          chmod +x ./build.sh
-          ./build.sh -pv
-
-      - name: Upload python artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: nanovdb-editor-python-build
-          path: |
-            pymodule/dist/
-          retention-days: 2
+          pip install ./dist/nanovdb_editor*.whl
 
       - name: Run Python tests
         run: |
           conda activate nanovdb_editor
           pytest -vvv
-
-      - name: Build and run NanoVDB Editor C tests
-        run: |
-          conda activate nanovdb_editor
-          cd pymodule/test_c
-          chmod +x ./build.sh
-          ./build.sh
-          if [ -f "build/pnanovdbeditortestcapp" ]; then
-            echo "Running C tests..."
-            chmod +x ./build/pnanovdbeditortestcapp
-            ./build/pnanovdbeditortestcapp
-          else
-            echo "No C test application found"
-          fi
-
-      - name: Build C++ Python module test (no run)
-        run: |
-          conda activate nanovdb_editor
-          cd pymodule/test_cpp
-          chmod +x ./build.sh
-          ./build.sh
