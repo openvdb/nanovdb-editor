@@ -53,7 +53,14 @@ add_custom_command(TARGET pnanovdbeditortestcapp POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E create_symlink "${NANOVDB_EDITOR_PACKAGE_DIR}/shaders" "${PROJECT_BINARY_DIR}/shaders"
 )
 
+# Ensure runtime can find shared libraries shipped in the Python wheel
+# 1) Set RPATH to $ORIGIN/lib so it can discover the colocated lib dir
 set_target_properties(pnanovdbeditortestcapp PROPERTIES
     INSTALL_RPATH "$ORIGIN/lib"
     BUILD_WITH_INSTALL_RPATH TRUE
+)
+
+# 2) Create a local lib/ symlink beside the executable that points to the wheel's lib dir
+add_custom_command(TARGET pnanovdbeditortestcapp POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E create_symlink "${NANOVDB_EDITOR_LIB_DIR}" "${PROJECT_BINARY_DIR}/lib"
 )
