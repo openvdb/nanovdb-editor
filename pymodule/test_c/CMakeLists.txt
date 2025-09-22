@@ -53,12 +53,6 @@ add_custom_command(TARGET pnanovdbeditortestcapp POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E create_symlink "${NANOVDB_EDITOR_PACKAGE_DIR}/shaders" "${PROJECT_BINARY_DIR}/shaders"
 )
 
-# Copy nanovdb_editor runtime libraries next to the executable for dlopen()
-add_custom_command(TARGET pnanovdbeditortestcapp POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_BINARY_DIR}/lib"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory "${NANOVDB_EDITOR_LIB_DIR}" "${PROJECT_BINARY_DIR}/lib"
-)
-
 set_target_properties(pnanovdbeditortestcapp PROPERTIES
     INSTALL_RPATH "$ORIGIN/lib"
     BUILD_WITH_INSTALL_RPATH TRUE

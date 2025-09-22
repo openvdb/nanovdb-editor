@@ -48,6 +48,7 @@ jobs:
 
       - name: Build NanoVDB Editor Python module
         run: |
+          set -e
           chmod +x ./build.sh
           ./build.sh -pv
 
@@ -65,8 +66,8 @@ jobs:
 
       - name: Build and run NanoVDB Editor C tests
         run: |
-          set -e
           cd pymodule/test_c
+          set -e
           chmod +x ./build.sh
           ./build.sh
           if [ -f "build/pnanovdbeditortestcapp" ]; then
@@ -79,8 +80,8 @@ jobs:
 
       - name: Build C++ Python module test (no run)
         run: |
-          set -e
           cd pymodule/test_cpp
+          set -e
           chmod +x ./build.sh
           ./build.sh
 
