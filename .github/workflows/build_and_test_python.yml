@@ -30,8 +30,8 @@ permissions:
   issues: read
 
 jobs:
-  nanovdb-editor-build-and-test:
-    # if: ${{ !startsWith(github.event.pull_request.title, 'Draft:') }}
+  nanovdb-editor-build:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: NanoVDB Editor Build
     runs-on: ubuntu-latest
     defaults:
@@ -41,20 +41,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Vulkan runtime (headless)
-        run: |
-          set -e
-          sudo apt-get update
-          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-
-      - name: Set up Python environment
-        run: |
-          python -m pip install numpy
+          python-version: '3.11'
 
       - name: Build NanoVDB Editor Python module
         run: |
@@ -65,29 +55,31 @@ jobs:
       - name: Upload python artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: nanovdb-editor-python-build
+          name: nanovdb-editor-wheel
           path: |
             pymodule/dist/
           retention-days: 2
 
-      - name: Install package
+      - name: Set up Python environment
         run: |
           set -e
-          cd pymodule
-          python -m pip install ./dist/*.whl
+          python -m pip install numpy
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
 
-      - name: Run Python tests
-        run: |
-          set -e
-          python test/test_shader.py
-          python test/test_shader_cpu.py
-
-      - name: Build and run NanoVDB Editor C tests
+      - name: Build NanoVDB Editor C tests
         run: |
           set -e
           cd pymodule/test_c
           chmod +x ./build.sh
           ./build.sh
+
+      # Integration tests for the python module
+
+      - name: Run NanoVDB Editor C tests
+        run: |
+          set -e
+          cd pymodule/test_c
           if [ -f "build/pnanovdbeditortestcapp" ]; then
             echo "Running C tests..."
             chmod +x ./build/pnanovdbeditortestcapp
@@ -96,9 +88,51 @@ jobs:
             echo "No C test application found"
           fi
 
-      - name: Build C++ Python module test (no run)
+      - name: Build C++ Python module test
         run: |
           set -e
           cd pymodule/test_cpp
           chmod +x ./build.sh
           ./build.sh
+
+  nanovdb-editor-test:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    name: NanoVDB Editor Test
+    needs: nanovdb-editor-build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Conda env
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          conda-remove-defaults: "true"
+          activate-environment: nanovdb_editor
+          environment-file: pymodule/dev_environment.yml
+
+      - name: Install Vulkan runtime (headless)
+        run: |
+          conda activate nanovdb_editor
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
+
+      - name: Download package with nanovdb_editor
+        uses: actions/download-artifact@v4
+        with:
+          name: nanovdb-editor-wheel
+          path: ./dist
+
+      - name: Install nanovdb_editor
+        run: |
+          conda activate nanovdb_editor
+          pip install ./dist/nanovdb_editor*.whl
+
+      - name: Run Python tests
+        run: |
+          conda activate nanovdb_editor
+          pytest -vvv
