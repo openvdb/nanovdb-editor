@@ -48,7 +48,7 @@ void pnanovdb_compute_log_print(pnanovdb_compute_log_level_t level, const char* 
 
 int main()
 {
-    const char* shader_name = "./build/shaders/test/test.slang";
+    const char* shader_name = "shaders/test.slang";
 
     printf("Running test with shader: %s\n", shader_name);
 

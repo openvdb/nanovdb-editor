@@ -48,11 +48,6 @@ target_link_libraries(pnanovdbeditortestcapp PRIVATE
     nanovdb_editor::nanovdb_editor
 )
 
-# Symlink shaders from python package
-add_custom_command(TARGET pnanovdbeditortestcapp POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E create_symlink "${NANOVDB_EDITOR_PACKAGE_DIR}/shaders" "${PROJECT_BINARY_DIR}/shaders"
-)
-
 # Copy nanovdb_editor runtime libraries next to the executable for dlopen()
 add_custom_command(TARGET pnanovdbeditortestcapp POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_BINARY_DIR}/lib"
