@@ -12,10 +12,6 @@ COMPILER_LIB = "pnanovdbcompiler"
 
 class pnanovdb_CompileTarget(Enum):
     UNDEFINED = 0
-
-
-class pnanovdb_CompileTarget(Enum):
-    UNDEFINED = 0
     VULKAN = 1
     CPU = 2
 
@@ -164,7 +160,9 @@ class Compiler:
         self._instance = None
 
     def __del__(self):
-        if self._instance:
-            self.destroy_instance()
-
-        self._compiler = None
+        # Do not call into native library from Python finalizer; just drop refs
+        try:
+            self._instance = None
+            self._compiler = None
+        except Exception:
+            pass

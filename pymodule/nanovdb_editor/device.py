@@ -156,17 +156,8 @@ class DeviceInterface:
         return get_compute_queue(device)
 
     def __del__(self):
+        # Avoid any native calls during GC/finalization
         try:
-            if getattr(sys, "is_finalizing", lambda: False)():
-                return
-            if self._device_interface and self._device_manager:
-                for device in self._devices:
-                    destroy_func = self._device_interface.contents.destroy_device
-                    destroy_func(self._device_manager, device)
-
-                destroy_manager = self._device_interface.contents.destroy_device_manager
-                destroy_manager(self._device_manager)
-
             self._device_manager = None
             self._device_interface = None
             self._devices = []

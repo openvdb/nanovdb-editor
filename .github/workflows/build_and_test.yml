@@ -31,7 +31,7 @@ permissions:
 
 jobs:
   nanovdb-editor-build-and-test:
-    if: ${{ !startsWith(github.event.pull_request.title, 'Draft:') }}
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: NanoVDB Editor Build
     runs-on: ubuntu-latest
     defaults:
