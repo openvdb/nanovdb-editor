@@ -17,10 +17,11 @@ release=false
 debug=false
 verbose=false
 python_only=false
+editable_mode=false
 test_only=false
 
 usage() {
-    echo "Usage: $0 [-x] [-r] [-d] [-v] [-s] [-a] [-p] [-t] [-f]"
+    echo "Usage: $0 [-x] [-r] [-d] [-v] [-s] [-a] [-p] [-e] [-t] [-f]"
     echo "  -x    Perform a clean build"
     echo "  -r    Build in release"
     echo "  -d    Build in debug"
@@ -28,11 +29,12 @@ usage() {
     echo "  -s    Compile slang into ASM"
     echo "  -a    Build in debug with sanitizers"
     echo "  -p    Build and install python module (requires Python 3.8+, auto-installs scikit-build & wheel)"
+    echo "  -e    Build and install python module in editable mode"
     echo "  -t    Run tests using ctest"
     echo "  -f    Disable GLFW (headless build)"
 }
 
-while getopts ":xrdvsapthf" opt; do
+while getopts ":xrdvsapetfh" opt; do
     case ${opt} in
         x) clean_build=true ;;
         r) release=true ;;
@@ -41,6 +43,7 @@ while getopts ":xrdvsapthf" opt; do
         s) SLANG_DEBUG_OUTPUT=ON; CLEAN_SHADERS=ON;;
         a) ENABLE_SANITIZERS=ON; debug=true ;;
         p) python_only=true ;;
+        e) editable_mode=true ;;
         t) test_only=true ;;
         f) GLFW_OFF=ON ;;
         h) usage; exit 1 ;;
@@ -147,22 +150,30 @@ function build_python_module() {
     echo "-- Cleaning up old python module builds..."
     rm -rf build/ dist/ *.egg-info/ _skbuild/
 
-    echo "-- Building NanoVDB editor wheel..."
-    if $PYTHON_CMD -m build --wheel "${CONFIG_SETTINGS[@]}"; then
-        echo "-- NanoVDB editor wheel built successfully"
+    if $editable_mode; then
+        echo "-- Installing NanoVDB editor editable mode..."
+        if $PYTHON_CMD -m pip install -e dist/*.whl; then
+            echo "-- NanoVDB editor wheel installed successfully"
+        else
+            echo "Error: Failed to install NanoVDB editor wheel" >&2
+            exit 1
+        fi
     else
-        echo "Error: Failed to build NanoVDB editor wheel" >&2
-        exit 1
+        echo "-- Building NanoVDB editor wheel..."
+        if $PYTHON_CMD -m build --wheel "${CONFIG_SETTINGS[@]}"; then
+            echo "-- NanoVDB editor wheel built successfully"
+        else
+            echo "Error: Failed to build NanoVDB editor wheel" >&2
+            exit 1
+        fi
+        echo "-- Installing NanoVDB editor wheel..."
+        if $PYTHON_CMD -m pip install --force-reinstall dist/*.whl; then
+            echo "-- NanoVDB editor wheel installed successfully"
+        else
+            echo "Error: Failed to install NanoVDB editor wheel" >&2
+            exit 1
+        fi
     fi
-
-    echo "-- Installing NanoVDB editor wheel..."
-    if $PYTHON_CMD -m pip install --force-reinstall dist/*.whl; then
-        echo "-- NanoVDB editor wheel installed successfully"
-    else
-        echo "Error: Failed to install NanoVDB editor wheel" >&2
-        exit 1
-    fi
-
     cd ..
 }
 

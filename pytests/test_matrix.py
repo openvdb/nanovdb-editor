@@ -51,7 +51,7 @@ TEST_CASES = [
 
 
 class TestMatrix(unittest.TestCase):
-    @classmethod
+
     def setUp(self):
         self.compiler = Compiler()
         self.compute = Compute(self.compiler)
@@ -59,6 +59,12 @@ class TestMatrix(unittest.TestCase):
         self.compiler.create_instance()
         self.compute.device_interface().create_device_manager()
         self.compute.device_interface().create_device()
+
+    def tearDown(self):
+        self.compute = None
+        self.compiler = None
+        import gc
+        gc.collect()
 
     def _assert_matrix_result(self, test_shader, is_row_major, result):
         for idx, val in enumerate(constants_data):
@@ -141,7 +147,7 @@ class TestMatrix(unittest.TestCase):
 
             success = self.compiler.execute_cpu(
                 test_shader,
-                (1, 1, 1),
+                (MATRIX_SIZE, MATRIX_SIZE, 1),
                 None,
                 c_void_p(addressof(uniform_state)),
             )
