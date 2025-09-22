@@ -25,20 +25,19 @@ typedef struct pnanovdb_raster_gaussian_data_t pnanovdb_raster_gaussian_data_t;
 
 typedef struct pnanovdb_raster_shader_params_t
 {
-    // 0 means use camera-derived values
     float near_plane_override;
     float far_plane_override;
     float eps2d;
     float min_radius_2d;
     pnanovdb_uint32_t tile_size;
-    pnanovdb_uint32_t sh_degree_override; // 0 means loaded SH degree
+    pnanovdb_uint32_t sh_degree_override;
 
     const pnanovdb_reflect_data_type_t* data_type;
 } pnanovdb_raster_shader_params_t;
 
 static const pnanovdb_raster_shader_params_t default_shader_params = {
-    0.f, // near_plane override, 0 means use camera-derived values
-    0.f, // far_plane override, 0 means use camera-derived values
+    0.f, // near_plane override, should be initialized from current camera
+    0.f, // far_plane override, should be initialized from current camera
     0.3f, // eps2d
     0.f, // min_radius_2d
     16u, // tile_size

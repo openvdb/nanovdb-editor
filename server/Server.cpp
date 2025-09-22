@@ -307,16 +307,25 @@ pnanovdb_server_instance_t* create_instance(const char* serveraddress, int port)
     ptr->port = port;
 
     g_ioctx = ptr->ioctx.get();
-    ptr->server = restinio::run_async<traits_t>(ptr->ioctx,
-                                                restinio::server_settings_t<traits_t>{}
-                                                    .port(ptr->port)
-                                                    .address("0.0.0.0")
-                                                    .request_handler(server_handler(*(ptr->ioctx.get())))
-                                                    //.read_next_http_message_timelimit(10s)
-                                                    //.write_http_response_timelimit(1s)
-                                                    //.handle_request_timeout(1s)
-                                                    .cleanup_func([&]() { ws_registry.clear(); }),
-                                                1u);
+    try
+    {
+        ptr->server = restinio::run_async<traits_t>(ptr->ioctx,
+                                                    restinio::server_settings_t<traits_t>{}
+                                                        .port(ptr->port)
+                                                        .address("0.0.0.0")
+                                                        .request_handler(server_handler(*(ptr->ioctx.get())))
+                                                        //.read_next_http_message_timelimit(10s)
+                                                        //.write_http_response_timelimit(1s)
+                                                        //.handle_request_timeout(1s)
+                                                        .cleanup_func([&]() { ws_registry.clear(); }),
+                                                    1u);
+    }
+    catch (const std::system_error& e)
+    {
+        printf("Error starting server - %s\n", e.what());
+        delete ptr;
+        return nullptr;
+    }
 
     g_server_instance = ptr;
 
