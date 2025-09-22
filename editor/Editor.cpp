@@ -320,7 +320,7 @@ void wait_for_shader_params_sync(pnanovdb_editor_t* editor, const pnanovdb_refle
     // TODO don't have set_params and get_params per data_type now
 
     // wait until the params are synced
-    while (static_cast<EditorWorker*>(editor->editor_worker)->set_params.load() != 0 &&
+    while (static_cast<EditorWorker*>(editor->editor_worker)->set_params.load() != 0 ||
            static_cast<EditorWorker*>(editor->editor_worker)->get_params.load() != 0)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -444,8 +444,13 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t);
     const pnanovdb_raster_shader_params_t* default_raster_shader_params =
         (const pnanovdb_raster_shader_params_t*)raster_shader_params_data_type->default_value;
+    pnanovdb_raster_shader_params_t init_raster_shader_params = *default_raster_shader_params;
+    init_raster_shader_params.near_plane_override = imgui_user_settings->camera_config.near_plane;
+    init_raster_shader_params.far_plane_override = imgui_user_settings->camera_config.far_plane;
+
+    // init with imgui values
     pnanovdb_compute_array_t* raster2d_shader_params_array =
-        editor->compute->create_array(raster_shader_params_data_type->element_size, 1u, default_raster_shader_params);
+        editor->compute->create_array(raster_shader_params_data_type->element_size, 1u, &init_raster_shader_params);
     imgui_user_instance->shader_params.set_compute_array_for_shader(raster2d_shader_name, raster2d_shader_params_array);
 
     editor->compute->device_interface.enable_profiler(
@@ -568,8 +573,27 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             void* old_shader_params = nullptr;
             worker->pending_shader_params.process_pending(editor->shader_params, old_shader_params);
             const pnanovdb_reflect_data_type_t* old_shader_params_data_type = nullptr;
-            worker->pending_shader_params_data_type.process_pending(
+            updated = worker->pending_shader_params_data_type.process_pending(
                 editor->shader_params_data_type, old_shader_params_data_type);
+            if (updated)
+            {
+                if (editor->shader_params &&
+                    pnanovdb_reflect_layout_compare(
+                        editor->shader_params_data_type, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t)))
+                {
+                    // init raster shader param's camera from imgui camera
+                    pnanovdb_raster_shader_params_t* raster_params =
+                        (pnanovdb_raster_shader_params_t*)editor->shader_params;
+                    if (raster_params->near_plane_override == 0.f)
+                    {
+                        raster_params->near_plane_override = imgui_user_settings->camera_config.near_plane;
+                    }
+                    if (raster_params->far_plane_override == 0.f)
+                    {
+                        raster_params->far_plane_override = imgui_user_settings->camera_config.far_plane;
+                    }
+                }
+            }
         }
 
         if (editor->editor_worker && static_cast<EditorWorker*>(editor->editor_worker)->should_stop.load())
@@ -875,30 +899,67 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                     pnanovdb_reflect_layout_compare(editor->shader_params_data_type, raster_shader_params_data_type) ==
                         PNANOVDB_TRUE)
                 {
-                    if (editor->editor_worker)
+                    if (editor->editor_worker && editor->shader_params)
                     {
+                        // syncing shader params
                         if (static_cast<EditorWorker*>(editor->editor_worker)->set_params.load() > 0)
                         {
+                            pnanovdb_raster_shader_params_t* raster_params =
+                                (pnanovdb_raster_shader_params_t*)editor->shader_params;
+                            if (raster_params->near_plane_override == 0.f)
+                            {
+                                raster_params->near_plane_override = imgui_user_settings->camera_config.near_plane;
+                            }
+                            if (raster_params->far_plane_override == 0.f)
+                            {
+                                raster_params->far_plane_override = imgui_user_settings->camera_config.far_plane;
+                            }
+
                             // copy the editor shader params to imgui values
                             raster2d_shader_params_array = editor->compute->create_array(
                                 raster_shader_params_data_type->element_size, 1u, editor->shader_params);
                             imgui_user_instance->shader_params.set_compute_array_for_shader(
                                 raster2d_shader_name, raster2d_shader_params_array);
 
+                            // update camera from editor shader params
+                            if (raster_params->near_plane_override != imgui_user_settings->camera_config.near_plane)
+                            {
+                                imgui_user_settings->camera_config.near_plane = raster_params->near_plane_override;
+                                imgui_user_settings->sync_camera = PNANOVDB_TRUE;
+                            }
+                            if (raster_params->far_plane_override != imgui_user_settings->camera_config.far_plane)
+                            {
+                                imgui_user_settings->camera_config.far_plane = raster_params->far_plane_override;
+                                imgui_user_settings->sync_camera = PNANOVDB_TRUE;
+                            }
+
                             static_cast<EditorWorker*>(editor->editor_worker)->set_params.fetch_sub(1);
                         }
+                        else
+                        {
+                            // update editor shader params from imgui values
+                            raster2d_shader_params_array =
+                                imgui_user_instance->shader_params
+                                    .get_compute_array_for_shader<pnanovdb_raster_shader_params_t>(
+                                        raster2d_shader_name, editor->compute);
 
-                        editor->compute->destroy_array(raster2d_shader_params_array);
-
-                        // update editor shader params from imgui values
-                        raster2d_shader_params_array =
-                            imgui_user_instance->shader_params.get_compute_array_for_shader<pnanovdb_raster_shader_params_t>(
-                                raster2d_shader_name, editor->compute);
-
+                            // update imgui camera to imgui values
+                            pnanovdb_raster_shader_params_t* raster_params =
+                                (pnanovdb_raster_shader_params_t*)raster2d_shader_params_array->data;
+                            if (raster_params->near_plane_override != imgui_user_settings->camera_config.near_plane)
+                            {
+                                imgui_user_settings->camera_config.near_plane = raster_params->near_plane_override;
+                                imgui_user_settings->sync_camera = PNANOVDB_TRUE;
+                            }
+                            if (raster_params->far_plane_override != imgui_user_settings->camera_config.far_plane)
+                            {
+                                imgui_user_settings->camera_config.far_plane = raster_params->far_plane_override;
+                                imgui_user_settings->sync_camera = PNANOVDB_TRUE;
+                            }
+                        }
                         if (static_cast<EditorWorker*>(editor->editor_worker)->get_params.load() > 0)
                         {
-                            if (editor->shader_params && raster2d_shader_params_array &&
-                                raster2d_shader_params_array->data)
+                            if (raster2d_shader_params_array && raster2d_shader_params_array->data)
                             {
                                 size_t data_size = raster2d_shader_params_array->element_count *
                                                    raster2d_shader_params_array->element_size;
@@ -910,6 +971,17 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                     }
                     else if (editor->shader_params)
                     {
+                        pnanovdb_raster_shader_params_t* raster_params =
+                            (pnanovdb_raster_shader_params_t*)editor->shader_params;
+                        if (raster_params->near_plane_override == 0.f)
+                        {
+                            raster_params->near_plane_override = imgui_user_settings->camera_config.near_plane;
+                        }
+                        if (raster_params->far_plane_override == 0.f)
+                        {
+                            raster_params->far_plane_override = imgui_user_settings->camera_config.far_plane;
+                        }
+
                         // copy the editor params to imgui values
                         raster2d_shader_params_array = editor->compute->create_array(
                             raster_shader_params_data_type->element_size, 1u, editor->shader_params);
@@ -921,12 +993,27 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 }
                 if (editor->shader_params == nullptr)
                 {
+                    // destroy array created from imgui default values
                     editor->compute->destroy_array(raster2d_shader_params_array);
 
                     // update editor shader params from imgui values
                     raster2d_shader_params_array =
                         imgui_user_instance->shader_params.get_compute_array_for_shader<pnanovdb_raster_shader_params_t>(
                             raster2d_shader_name, editor->compute);
+
+                    // update imgui camera to imgui values
+                    pnanovdb_raster_shader_params_t* raster_params =
+                        (pnanovdb_raster_shader_params_t*)raster2d_shader_params_array->data;
+                    if (raster_params->near_plane_override != imgui_user_settings->camera_config.near_plane)
+                    {
+                        imgui_user_settings->camera_config.near_plane = raster_params->near_plane_override;
+                        imgui_user_settings->sync_camera = PNANOVDB_TRUE;
+                    }
+                    if (raster_params->far_plane_override != imgui_user_settings->camera_config.far_plane)
+                    {
+                        imgui_user_settings->camera_config.far_plane = raster_params->far_plane_override;
+                        imgui_user_settings->sync_camera = PNANOVDB_TRUE;
+                    }
                 }
                 pnanovdb_raster_shader_params_t* raster_shader_params =
                     (pnanovdb_raster_shader_params_t*)raster2d_shader_params_array->data;
@@ -934,17 +1021,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                                           background_image, image_width, image_height, &view, &projection,
                                           raster_shader_params);
 
-                // TODO: camera overrides are not synced back to the editor camera, not even after setting back to 0
-                if (raster_shader_params->near_plane_override > 0.f)
-                {
-                    imgui_user_settings->camera_config.near_plane = raster_shader_params->near_plane_override;
-                    imgui_user_settings->sync_camera = PNANOVDB_TRUE;
-                }
-                if (raster_shader_params->far_plane_override > 0.f)
-                {
-                    imgui_user_settings->camera_config.far_plane = raster_shader_params->far_plane_override;
-                    imgui_user_settings->sync_camera = PNANOVDB_TRUE;
-                }
+                editor->compute->destroy_array(raster2d_shader_params_array);
+                raster2d_shader_params_array = nullptr;
             }
             else
             {

@@ -9,7 +9,7 @@
 
 #define TEST_EDITOR
 // #define TEST_RASTER
-// #define TEST_RASTER_2D
+#define TEST_RASTER_2D
 // #define TEST_FILE_FORMAT
 // #define FORMAT_INGP
 #define FORMAT_PLY
@@ -183,7 +183,10 @@ int main(int argc, char* argv[])
     editor.sync_shader_params(&editor, data_type, PNANOVDB_FALSE);
     editor.wait_for_shader_params_sync(&editor, data_type);
 
-    printf("Updated shader param eps2d to %f\n", raster_params.eps2d);
+    printf("Updated shader params:\n");
+    printf("eps2d: %f\n", raster_params.eps2d);
+    printf("near_plane: %f\n", raster_params.near_plane_override);
+    printf("far_plane: %f\n", raster_params.far_plane_override);
 #    endif
 
     runEditorLoop(1000);
