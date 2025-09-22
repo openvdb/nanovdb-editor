@@ -31,7 +31,7 @@ permissions:
 
 jobs:
   nanovdb-editor-build-and-test:
-    # if: ${{ !startsWith(github.event.pull_request.title, 'Draft:') }}
+    # if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: NanoVDB Editor Build
     runs-on: ubuntu-latest
     defaults:
@@ -41,24 +41,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - uses: actions/checkout@v4
+      - name: Set up Conda env
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          conda-remove-defaults: "true"
+          activate-environment: fvdb_test
+          environment-file: pymodule/environment.yml
+
       - name: Install Vulkan runtime (headless)
         run: |
-          set -e
+          conda activate nanovdb_editor
           sudo apt-get update
           sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Set up Python environment
-        run: |
-          python -m pip install numpy pytest
-
       - name: Build NanoVDB Editor Python module
         run: |
-          set -e
+          conda activate nanovdb_editor
           chmod +x ./build.sh
           ./build.sh -pv
 
@@ -70,20 +70,14 @@ jobs:
             pymodule/dist/
           retention-days: 2
 
-      - name: Install package
-        run: |
-          set -e
-          cd pymodule
-          python -m pip install ./dist/*.whl
-
       - name: Run Python tests
         run: |
-          set -e
+          conda activate nanovdb_editor
           pytest -vvv
 
       - name: Build and run NanoVDB Editor C tests
         run: |
-          set -e
+          conda activate nanovdb_editor
           cd pymodule/test_c
           chmod +x ./build.sh
           ./build.sh
@@ -97,7 +91,7 @@ jobs:
 
       - name: Build C++ Python module test (no run)
         run: |
-          set -e
+          conda activate nanovdb_editor
           cd pymodule/test_cpp
           chmod +x ./build.sh
           ./build.sh

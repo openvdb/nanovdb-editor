@@ -42,11 +42,7 @@ class TestDispatch(unittest.TestCase):
         output_array = self.compute.create_array(self.output_data)
 
         success = self.compute.dispatch_shader_on_array(
-            TEST_SHADER,
-            (1, 1, 1),
-            input_array,
-            constants_array,
-            output_array
+            TEST_SHADER, (1, 1, 1), input_array, constants_array, output_array
         )
         self.assertTrue(success)
 
@@ -63,13 +59,12 @@ class TestDispatch(unittest.TestCase):
     def test_cpu_dispatch(self):
 
         self.compiler.compile_shader(
-            TEST_SHADER,
-            entry_point_name="computeMain",
-            compile_target=pnanovdb_CompileTarget.CPU
+            TEST_SHADER, entry_point_name="computeMain", compile_target=pnanovdb_CompileTarget.CPU
         )
 
         class Constants(Structure):
             """Definition equivalent to constants_t in the shader."""
+
             _fields_ = [
                 ("magic_number", c_int32),
             ]
@@ -80,7 +75,7 @@ class TestDispatch(unittest.TestCase):
         class UniformState(Structure):
             _fields_ = [
                 ("data_in", MemoryBuffer),
-                ("constants", c_void_p),        # Constant buffer must be passed as a pointer
+                ("constants", c_void_p),  # Constant buffer must be passed as a pointer
                 ("data_out", MemoryBuffer),
             ]
 
@@ -89,12 +84,7 @@ class TestDispatch(unittest.TestCase):
         uniform_state.constants = c_void_p(addressof(constants))
         uniform_state.data_out = MemoryBuffer(self.output_data)
 
-        success = self.compiler.execute_cpu(
-            TEST_SHADER,
-            (1, 1, 1),
-            None,
-            c_void_p(addressof(uniform_state))
-        )
+        success = self.compiler.execute_cpu(TEST_SHADER, (1, 1, 1), None, c_void_p(addressof(uniform_state)))
         self.assertTrue(success)
 
         data_out = uniform_state.data_out.to_ndarray(self.array_dtype)
@@ -103,6 +93,7 @@ class TestDispatch(unittest.TestCase):
         # Prevent destructor from calling into native lib during shutdown
         self.compiler._instance = None
         self.compiler._compiler = None
+
 
 if __name__ == "__main__":
     unittest.main()
