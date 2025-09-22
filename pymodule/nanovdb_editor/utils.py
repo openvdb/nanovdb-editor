@@ -5,7 +5,6 @@ import ctypes
 import os
 import platform
 import sys
-import glob
 from ctypes import wintypes
 
 
@@ -33,46 +32,21 @@ def add_dll_search_directory(path):
         raise ctypes.WinError(error)
 
 
-def _preload_shared_dependencies(lib_dir: str) -> None:
-    """Best-effort preload of dependent shared libraries with RTLD_GLOBAL.
-
-    This helps when transitive dependencies need to resolve symbols across
-    multiple modules at runtime (e.g., Slang/Vulkan plugins on Linux).
-    """
-    system = platform.system()
-
-    if system == "Windows":
-        # Windows is handled via add_dll_search_directory in __init__.py
-        return
-
-    patterns = []
-    if system == "Linux":
-        patterns = [
-            "libslang*.so*",
-            "libvulkan.so*",
-        ]
-    elif system == "Darwin":
-        patterns = [
-            "libslang*.dylib",
-            "libvulkan*.dylib",
-        ]
-
-    for pattern in patterns:
-        for candidate in sorted(
-            glob.glob(os.path.join(lib_dir, pattern))
-        ):
-            try:
-                ctypes.CDLL(candidate, mode=ctypes.RTLD_GLOBAL)
-            except OSError:
-                # Ignore missing/failed loads; continue with best-effort
-                pass
-
-
 def load_library(lib_name) -> ctypes.CDLL:
     system = platform.system()
 
     package_dir = os.path.dirname(os.path.abspath(__file__))
     lib_dir = os.path.join(package_dir, "lib")
+
+    if sys.platform != "win32" and not os.path.exists(lib_dir):
+        # Try to load the libraries from the installed nanovdb_editor/lib
+        try:
+            import nanovdb_editor
+        except ImportError:
+            raise OSError(f"Installed nanovdb_editor not found, coudl not load {lib_name}")
+        lib_dir = os.path.join(os.path.dirname(nanovdb_editor.__file__), "lib")
+        if not os.path.exists(lib_dir):
+            raise OSError(f"Library directory not found: {lib_dir}, could not load {lib_name}")
 
     if system == "Windows":
         path = os.path.join(lib_dir, f"{lib_name}.dll")
@@ -83,9 +57,4 @@ def load_library(lib_name) -> ctypes.CDLL:
     else:
         raise OSError(f"Unsupported operating system: {system}")
 
-    # Preload transitive dependencies and use RTLD_GLOBAL for symbol visibility
-    if system in ("Linux", "Darwin"):
-        _preload_shared_dependencies(lib_dir)
-        return ctypes.CDLL(path, mode=ctypes.RTLD_GLOBAL)
-    else:
-        return ctypes.CDLL(path)
+    return ctypes.CDLL(path)
