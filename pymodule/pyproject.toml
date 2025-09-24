@@ -27,6 +27,9 @@ Documentation = "https://github.com/nanovdb-editor/tree/main/pymodule"
 build-dir = "build/{wheel_tag}-{build_type}"
 sdist.include = ["VERSION.txt"]
 
+[tool.scikit-build.install]
+components = ["python_headers", "python_libs", "python_shaders"]
+
 [tool.scikit-build.cmake]
 source-dir = ".."
 args = [
