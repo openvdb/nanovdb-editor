@@ -107,17 +107,6 @@ function run_build() {
 function build_python_module() {
     echo "-- Building python module..."
 
-    CONFIG_SETTINGS=()
-
-    if $debug; then
-        CONFIG_SETTINGS+=(-C cmake.build-type=Debug)
-    else
-        CONFIG_SETTINGS+=(-C cmake.build-type=Release)
-    fi
-    if $verbose; then
-        CONFIG_SETTINGS+=(-C cmake.verbose=true)
-    fi
-
     if ! command -v python &> /dev/null && ! command -v python3 &> /dev/null; then
         echo "Error: Python not found. Please install Python 3.8 or later." >&2
         exit 1
@@ -132,7 +121,7 @@ function build_python_module() {
 
     echo "   -- Installing scikit-build-core and wheel..."
     $PYTHON_CMD -m pip install --upgrade pip
-    $PYTHON_CMD -m pip install --upgrade scikit-build-core wheel build
+    $PYTHON_CMD -m pip install --upgrade scikit-build-core wheel
     if ! $PYTHON_CMD -c "import scikit_build_core" 2>/dev/null; then
         echo "Error: Failed to install scikit-build-core. Please install manually:" >&2
         echo "  $PYTHON_CMD -m pip install scikit-build-core" >&2
@@ -147,30 +136,52 @@ function build_python_module() {
 
     cd ./pymodule || exit 1
 
-    echo "-- Cleaning up old python module builds..."
-    rm -rf build/ dist/ *.egg-info/ _skbuild/
+    if $clean_build; then
+        echo "-- Cleaning up old python module builds..."
+        rm -rf build/ _skbuild/ dist/ *.egg-info/
+        echo "   -- Removed build directories"
+    fi
+
+    if $debug; then
+        PIP_ARGS+=(--config-settings=cmake.build-type=Debug)
+    else
+        PIP_ARGS+=(--config-settings=cmake.build-type=Release)
+    fi
+
+    if [ "$GLFW_OFF" = "ON" ]; then
+        PIP_ARGS+=(--config-settings=cmake.define.NANOVDB_EDITOR_USE_GLFW=OFF)
+    fi
+
+    if $verbose; then
+        PIP_ARGS+=(--config-settings=cmake.verbose=true)
+        PIP_ARGS+=(-v)
+    fi
+
+    # This is needed for the incremental builds to work without reinstalling the dependencies
+    PIP_ARGS+=(--no-build-isolation)
 
     if $editable_mode; then
-        echo "-- Installing NanoVDB editor editable mode..."
-        if $PYTHON_CMD -m pip install -e dist/*.whl; then
-            echo "-- NanoVDB editor wheel installed successfully"
+        echo "-- Installing NanoVDB editor in editable mode..."
+        if $PYTHON_CMD -m pip install -e . "${PIP_ARGS[@]}"; then
+            echo "-- NanoVDB editor installed in editable mode successfully"
         else
-            echo "Error: Failed to install NanoVDB editor wheel" >&2
+            echo "Error: Failed to install NanoVDB editor in editable mode" >&2
             exit 1
         fi
     else
-        echo "-- Building NanoVDB editor wheel..."
-        if $PYTHON_CMD -m build --wheel "${CONFIG_SETTINGS[@]}"; then
-            echo "-- NanoVDB editor wheel built successfully"
+        echo "-- Building and installing NanoVDB editor..."
+
+        if $PYTHON_CMD -m pip wheel . --wheel-dir dist "${PIP_ARGS[@]}"; then
+            echo "-- NanoVDB editor built successfully"
         else
-            echo "Error: Failed to build NanoVDB editor wheel" >&2
+            echo "Error: Failed to build NanoVDB editor" >&2
             exit 1
         fi
-        echo "-- Installing NanoVDB editor wheel..."
-        if $PYTHON_CMD -m pip install --force-reinstall dist/*.whl; then
-            echo "-- NanoVDB editor wheel installed successfully"
+
+        if $PYTHON_CMD -m pip install dist/*.whl --force-reinstall; then
+            echo "-- NanoVDB editor installed successfully from wheel"
         else
-            echo "Error: Failed to install NanoVDB editor wheel" >&2
+            echo "Error: Failed to install NanoVDB editor" >&2
             exit 1
         fi
     fi
@@ -189,6 +200,7 @@ function run_tests() {
 
     echo "-- Running tests..."
     ctest --test-dir $BUILD_DIR_CONFIG/gtests -C $CONFIG --output-on-failure $VERBOSE
+    pytest -vvv
 }
 
 if $python_only; then

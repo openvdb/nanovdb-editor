@@ -11,11 +11,6 @@ if(NANOVDB_EDITOR_FORCE_REBUILD_DEPS AND EXISTS "$ENV{CPM_SOURCE_CACHE}")
     set(NANOVDB_EDITOR_FORCE_REBUILD_DEPS OFF CACHE BOOL "Force rebuild all dependencies (clears cache)" FORCE)
 endif()
 
-
-# Enable local packages to use cache
-set(CPM_USE_LOCAL_PACKAGES ON)
-set(CPM_LOCAL_PACKAGES_ONLY OFF)
-
 # Set global static build preference - all dependencies should be static
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries" FORCE)
 set(BUILD_STATIC_LIBS ON CACHE BOOL "Build static libraries" FORCE)
@@ -470,50 +465,51 @@ if(Slang_ADDED)
         endif()
     endif()
 
-    add_custom_target(copy_slang_libs ALL
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
-        COMMENT "Copying Slang libraries to main lib directory"
-    )
+    # SKBUILD installs the library directly via install() rules.
+    if(NOT SKBUILD)
+        add_custom_target(copy_slang_libs
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+            COMMENT "Copying Slang libraries to main lib directory"
+        )
 
-    if(WIN32)
-        add_custom_command(TARGET copy_slang_libs POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${Slang_SOURCE_DIR}/bin/slang${CMAKE_SHARED_LIBRARY_SUFFIX}
-                ${CMAKE_BINARY_DIR}/$<CONFIG>/slang${CMAKE_SHARED_LIBRARY_SUFFIX}
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${Slang_SOURCE_DIR}/bin/slang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}
-                ${CMAKE_BINARY_DIR}/$<CONFIG>/slang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}
-        )
-        # Copy slang-llvm only if it exists
-        if(SLANG_LLVM_EXISTS)
+        if(WIN32)
             add_custom_command(TARGET copy_slang_libs POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    ${Slang_SOURCE_DIR}/bin/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}
-                    ${CMAKE_BINARY_DIR}/$<CONFIG>/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}
+                    ${Slang_SOURCE_DIR}/bin/slang${CMAKE_SHARED_LIBRARY_SUFFIX}
+                    ${CMAKE_BINARY_DIR}/$<CONFIG>/slang${CMAKE_SHARED_LIBRARY_SUFFIX}
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    ${Slang_SOURCE_DIR}/bin/slang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}
+                    ${CMAKE_BINARY_DIR}/$<CONFIG>/slang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}
             )
-            message(STATUS "Found slang-llvm library, will copy it")
+            # Copy slang-llvm only if it exists
+            if(SLANG_LLVM_EXISTS)
+                add_custom_command(TARGET copy_slang_libs POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        ${Slang_SOURCE_DIR}/bin/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}
+                        ${CMAKE_BINARY_DIR}/$<CONFIG>/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}
+                )
+            else()
+                message(STATUS "slang-llvm library not found, skipping copy")
+            endif()
         else()
-            message(STATUS "slang-llvm library not found, skipping copy")
-        endif()
-    else()
-        add_custom_command(TARGET copy_slang_libs POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}
-                ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${Slang_SOURCE_DIR}/lib/libslang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}
-                ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}
-        )
-        # Copy slang-llvm only if it exists
-        if(SLANG_LLVM_EXISTS)
             add_custom_command(TARGET copy_slang_libs POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    ${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}
-                    ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}
+                    ${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}
+                    ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    ${Slang_SOURCE_DIR}/lib/libslang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}
+                    ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}
             )
-            message(STATUS "Found libslang-llvm library, will copy it")
-        else()
-            message(STATUS "libslang-llvm library not found, skipping copy")
+            # Copy slang-llvm only if it exists
+            if(SLANG_LLVM_EXISTS)
+                add_custom_command(TARGET copy_slang_libs POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        ${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}
+                        ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}
+                )
+            else()
+                message(STATUS "libslang-llvm library not found, skipping copy")
+            endif()
         endif()
     endif()
 endif()
@@ -542,14 +538,20 @@ if(VulkanLoader_ADDED)
         add_library(Vulkan::Vulkan ALIAS vulkan)
     endif()
 
-    # Copy the produced Vulkan loader to the main lib directory for runtime loading
-    add_custom_target(copy_vulkan_loader_libs ALL
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_FILE:vulkan>
-            ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:vulkan>
-    )
-    add_dependencies(copy_vulkan_loader_libs vulkan)
+    # SKBUILD installs the library directly via install() rules.
+    if(NOT SKBUILD)
+        if(TARGET vulkan)
+            # Copy the produced Vulkan loader to the main lib directory for runtime loading
+            add_custom_command(
+                COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    $<TARGET_FILE:vulkan>
+                    ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:vulkan>
+                DEPENDS vulkan
+                COMMENT "Copy Vulkan loader to ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
+            )
+        endif()
+    endif()
 endif()
 
 if(cnpy_ADDED)

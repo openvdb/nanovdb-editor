@@ -31,7 +31,6 @@ sdist.include = ["VERSION.txt"]
 source-dir = ".."
 args = [
     "-DSKBUILD=ON",
-    "-DNANOVDB_EDITOR_USE_GLFW=OFF",
 ]
 
 [tool.scikit-build.metadata.version]

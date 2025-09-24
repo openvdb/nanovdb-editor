@@ -64,6 +64,11 @@ set(SHADER_DIRECTORIES compute imgui editor raster test)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/get_cpm.cmake)
 
+# Stabilize VulkanLoader sysconfdir during SKBUILD to avoid temp wheel paths in defines
+if(SKBUILD)
+    set(SYSCONFDIR "/etc" CACHE STRING "System-wide search directory for Vulkan loader" FORCE)
+endif()
+
 if(NANOVDB_EDITOR_USE_VCPKG)
   find_package(ZLIB REQUIRED)
   find_package(Blosc REQUIRED)
@@ -106,8 +111,10 @@ if(APPLE)
   )
 endif()
 
-if(TARGET copy_slang_libs)
-    add_dependencies(pnanovdbcompiler copy_slang_libs)
+if(NOT SKBUILD)
+    if(TARGET copy_slang_libs)
+        add_dependencies(pnanovdbcompiler copy_slang_libs)
+    endif()
 endif()
 
 ### PNanoVDB Compute
@@ -150,9 +157,11 @@ endif()
 #     set_target_properties(pnanovdbcompute PROPERTIES LINK_FLAGS "-Wl,--disable-new-dtags")
 # endif()
 
-# Ensure the Vulkan loader is built and copied, but do not link against it
-if(TARGET copy_vulkan_loader_libs)
-    add_dependencies(pnanovdbcompute copy_vulkan_loader_libs)
+# Ensure the Vulkan loader is built and copied for non-scikit-build builds only
+if(NOT SKBUILD)
+    if(TARGET copy_vulkan_loader)
+        add_dependencies(pnanovdbcompute copy_vulkan_loader)
+    endif()
 endif()
 
 ### PNanoVDB FileFormat
@@ -300,39 +309,32 @@ if(SKBUILD)
         COMPONENT python_libs
     )
 
-    # Ensure Slang libraries are copied before installation
-    if(TARGET copy_slang_libs)
-        add_dependencies(pnanovdbcompiler copy_slang_libs)
-    endif()
-
-    # Install Slang library files that were previously copied
-    if(TARGET copy_slang_libs)
+    # Install Slang libraries
+    if(Slang_ADDED)
         if(WIN32)
             install(FILES
-                "${CMAKE_BINARY_DIR}/$<CONFIG>/slang.dll"
-                "${CMAKE_BINARY_DIR}/$<CONFIG>/slang-glslang.dll"
+                "${Slang_SOURCE_DIR}/bin/slang${CMAKE_SHARED_LIBRARY_SUFFIX}"
+                "${Slang_SOURCE_DIR}/bin/slang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
                 DESTINATION nanovdb_editor/lib
                 COMPONENT python_libs
             )
-            # Install slang-llvm only if it exists in the Slang package
             if(SLANG_LLVM_EXISTS)
                 install(FILES
-                    "${CMAKE_BINARY_DIR}/$<CONFIG>/slang-llvm.dll"
+                    "${Slang_SOURCE_DIR}/bin/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}"
                     DESTINATION nanovdb_editor/lib
                     COMPONENT python_libs
                 )
             endif()
         else()
             install(FILES
-                "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
-                "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
+                "${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
+                "${Slang_SOURCE_DIR}/lib/libslang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
                 DESTINATION nanovdb_editor/lib
                 COMPONENT python_libs
             )
-            # Install slang-llvm only if it exists in the Slang package
             if(SLANG_LLVM_EXISTS)
                 install(FILES
-                    "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}"
+                    "${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}"
                     DESTINATION nanovdb_editor/lib
                     COMPONENT python_libs
                 )
@@ -405,6 +407,14 @@ if (NOT SKBUILD)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/${INCLUDES_FILE}" "${PROJECT_BINARY_DIR}/${SHADERS_DIR_NAME}/${INCLUDES_FILE}"
     )
+
+    if(TARGET copy_vulkan_loader)
+        add_dependencies(pnanovdbeditor_prebuild copy_vulkan_loader)
+    endif()
+
+    if(TARGET copy_slang_libs)
+        add_dependencies(pnanovdbeditor_prebuild copy_slang_libs)
+    endif()
 
     foreach(SHADER_DIR ${SHADER_DIRECTORIES})
         build_time_link_shader(pnanovdbeditor_prebuild "${SHADER_DIR}")
