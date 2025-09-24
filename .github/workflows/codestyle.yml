@@ -1,0 +1,50 @@
+name: VDB Code Style
+on:
+    pull_request:
+      branches:
+        - '**'
+      paths-ignore:
+          - 'CODEOWNERS'
+          - '**.md'
+
+# Allow subsequent pushes to the same PR or REF to cancel any previous jobs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-spdx-identifiers:
+    name: SPDX identifiers
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: enarx/spdx@master
+      with:
+        licenses: |-
+          Apache-2.0
+
+  # Search the git repository for any trailing spaces excluding auto-generated wlt files
+  # NOTE: Migrated from openvdb whitespace.yml
+  trailingspaces:
+    name: Trailing spaces
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: test
+      run: |
+          set +e
+          git grep -n -I -E '^.+[ ]+$' -- ':!*.wlt'
+          test $? -eq 1
+
+  # Search for any tabs excluding meeting notes, image files and a few others
+  # NOTE: Migrated from openvdb whitespace.yml
+  spacesnottabs:
+    name: Spaces not tabs
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: test
+      run: |
+          set +e
+          git grep -n "	" -- ':!*/codestyle.yml' ':!*.svg' ':!*.cmd' ':!*.png' ':!*.wlt' ':!*.jpg' ':!*.gif' ':!*.mp4' ':!*.pt' ':!*.pth' ':!*.nvdb' ':!*.npz' ':!*.gitmodules'
+          test $? -eq 1
