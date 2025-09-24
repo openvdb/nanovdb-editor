@@ -155,10 +155,10 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
     constants.view_rot2 = view->z;
     constants.near_plane = near_plane;
     constants.far_plane = far_plane;
-    constants.fx = (float)image_width * projection->x.x;
-    constants.fy = (float)image_height * projection->y.y;
-    constants.cx = (float)image_width / 2.f; // TODO: this could be extracted from proj matrix
-    constants.cy = (float)image_height / 2.f;
+    constants.fx = (float)image_width * 0.5f * projection->x.x;
+    constants.fy = (float)image_height * 0.5f * projection->y.y;
+    constants.cx = (float)image_width * 0.5f; // TODO: this could be extracted from proj matrix
+    constants.cy = (float)image_height * 0.5f;
     constants.image_width = image_width;
     constants.image_height = image_height;
     constants.prim_count = data->point_count;
