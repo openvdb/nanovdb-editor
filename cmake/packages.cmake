@@ -547,8 +547,6 @@ if(VulkanLoader_ADDED)
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     $<TARGET_FILE:vulkan>
                     ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:vulkan>
-                DEPENDS vulkan
-                COMMENT "Copy Vulkan loader to ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
             )
         endif()
     endif()
