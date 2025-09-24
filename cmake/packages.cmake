@@ -3,20 +3,6 @@
 
 # CPM Package Management for NanoVDB Editor
 
-# CPM cache directory setup
-if(NOT CPM_SOURCE_CACHE OR NOT IS_DIRECTORY "${CPM_SOURCE_CACHE}")
-    if(DEFINED ENV{CPM_SOURCE_CACHE})
-        message(STATUS "CPM_SOURCE_CACHE defined in environment, using $ENV{CPM_SOURCE_CACHE}")
-        set(CPM_SOURCE_CACHE $ENV{CPM_SOURCE_CACHE} CACHE PATH "CPM cache directory" FORCE)
-    else()
-        message(STATUS "CPM_SOURCE_CACHE not defined, setting to ${CMAKE_SOURCE_DIR}/.cpm_cache")
-        set(CPM_SOURCE_CACHE "${CMAKE_SOURCE_DIR}/.cpm_cache" CACHE PATH "Default CPM cache directory" FORCE)
-    endif()
-    if(NOT IS_DIRECTORY "${CPM_SOURCE_CACHE}")
-        file(MAKE_DIRECTORY "${CPM_SOURCE_CACHE}")
-    endif()
-endif()
-
 if(NANOVDB_EDITOR_FORCE_REBUILD_DEPS AND EXISTS "$ENV{CPM_SOURCE_CACHE}")
     message(STATUS "Forcing rebuild: Cleaning CPM cache at $ENV{CPM_SOURCE_CACHE}")
     file(REMOVE_RECURSE "$ENV{CPM_SOURCE_CACHE}")
@@ -25,7 +11,6 @@ if(NANOVDB_EDITOR_FORCE_REBUILD_DEPS AND EXISTS "$ENV{CPM_SOURCE_CACHE}")
     set(NANOVDB_EDITOR_FORCE_REBUILD_DEPS OFF CACHE BOOL "Force rebuild all dependencies (clears cache)" FORCE)
 endif()
 
-message(STATUS "CPM cache directory: ${CPM_SOURCE_CACHE}")
 
 # Enable local packages to use cache
 set(CPM_USE_LOCAL_PACKAGES ON)
@@ -96,7 +81,6 @@ CPMAddPackage(
     GIT_TAG v${VULKAN_VERSION}
     GIT_SHALLOW TRUE
     VERSION ${VULKAN_VERSION}
-    FORCE YES
 )
 
 if(NOT NANOVDB_EDITOR_USE_GLFW)
@@ -106,7 +90,6 @@ if(NOT NANOVDB_EDITOR_USE_GLFW)
         GIT_TAG v${VULKAN_VERSION}
         GIT_SHALLOW TRUE
         VERSION ${VULKAN_VERSION}
-        FORCE YES
         OPTIONS
             "BUILD_LOADER ON"
             "BUILD_TESTS OFF"
@@ -144,7 +127,6 @@ if(NANOVDB_EDITOR_USE_GLFW)
         NAME glfw
         VERSION ${GLFW_RELEASE}
         DOWNLOAD_ONLY YES
-        FORCE YES
         ${GLFW_PLATFORM_OPTIONS}
     )
 endif()
@@ -192,7 +174,7 @@ CPMAddPackage(
 CPMAddPackage(
     NAME ImGuiColorTextEdit
     GITHUB_REPOSITORY goossens/ImGuiColorTextEdit
-    GIT_TAG master
+    GIT_TAG eb891897d0c2a086bfb6e974b1564d4cd7543e73    # master
     GIT_SHALLOW TRUE
     VERSION 1.0.0
     DOWNLOAD_ONLY YES
@@ -246,7 +228,7 @@ CPMAddPackage(
 CPMAddPackage(
     NAME FileWatch
     GITHUB_REPOSITORY ThomasMonkman/filewatch
-    GIT_TAG master
+    GIT_TAG a59891baf375b73ff28144973a6fafd3fe40aa21    # master
     GIT_SHALLOW TRUE
     VERSION 1.0.0
     PATCH_COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_LIST_DIR}/patch_filewatch.cmake
@@ -265,7 +247,7 @@ CPMAddPackage(
 CPMAddPackage(
     NAME cnpy
     GITHUB_REPOSITORY rogersce/cnpy
-    GIT_TAG master
+    GIT_TAG 4e8810b1a8637695171ed346ce68f6984e585ef4    # master
     GIT_SHALLOW TRUE
     VERSION 1.0.0
     PATCH_COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_LIST_DIR}/patch_cnpy.cmake
@@ -358,7 +340,7 @@ endif()
 CPMAddPackage(
     NAME argparse
     GITHUB_REPOSITORY morrisfranken/argparse
-    GIT_TAG master
+    GIT_TAG 58fcb68a409c182163b4784070a8eb083d76a82b    # master
     GIT_SHALLOW TRUE
     VERSION 1.0.0
     DOWNLOAD_ONLY YES
