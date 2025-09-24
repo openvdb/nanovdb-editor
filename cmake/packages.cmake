@@ -542,7 +542,7 @@ if(VulkanLoader_ADDED)
     if(NOT SKBUILD)
         if(TARGET vulkan)
             # Copy the produced Vulkan loader to the main lib directory for runtime loading
-            add_custom_command(
+            add_custom_command(TARGET vulkan POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     $<TARGET_FILE:vulkan>
