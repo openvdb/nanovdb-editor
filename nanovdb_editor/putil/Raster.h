@@ -183,6 +183,7 @@ enum shader
     gaussian_count_tiles_slang,
     gaussian_projection_slang,
     gaussian_rasterize_2d_slang,
+    gaussian_rasterize_2d_null_slang,
     gaussian_spherical_harmonics_slang,
     gaussian_tile_intersections_slang,
     gaussian_tile_offsets_slang,
