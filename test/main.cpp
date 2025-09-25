@@ -195,6 +195,26 @@ int main(int argc, char* argv[])
     pnanovdb_editor_t editor = {};
     pnanovdb_editor_load(&editor, &compute, &compiler);
 
+    pnanovdb_camera_state_t debug_state = {};
+    pnanovdb_camera_state_default(&debug_state, PNANOVDB_FALSE);
+    debug_state.position = { 0.632428, 0.930241, -0.005193 };
+    debug_state.eye_direction = { -0.012344, 0.959868, -0.280182 };
+    debug_state.eye_up = { 0.000000, 1.000000, 0.000000 };
+    debug_state.eye_distance_from_position = -41.431084;
+
+    pnanovdb_camera_config_t debug_config = {};
+    pnanovdb_camera_config_default(&debug_config);
+    debug_config.near_plane = 0.1f;
+    debug_config.far_plane = 100.0f;
+    debug_config.is_reverse_z = PNANOVDB_TRUE;
+
+    pnanovdb_debug_camera_t debug_camera;
+    pnanovdb_debug_camera_default(&debug_camera);
+    debug_camera.name = "test";
+    debug_camera.state = debug_state;
+    debug_camera.config = debug_config;
+    editor.add_debug_camera(&editor, &debug_camera);
+
 #    ifdef TEST_RASTER
     pnanovdb_camera_t camera;
     pnanovdb_camera_init(&camera);
@@ -209,13 +229,14 @@ int main(int argc, char* argv[])
 #    ifdef TEST_RASTER_2D
     pnanovdb_camera_t camera;
     pnanovdb_camera_init(&camera);
+
     camera.state.position = { 0.358805, 0.725740, -0.693701 };
     camera.state.eye_direction = { -0.012344, 0.959868, -0.280182 };
     camera.state.eye_up = { 0.000000, 1.000000, 0.000000 };
     camera.state.eye_distance_from_position = -2.111028;
     editor.add_camera(&editor, &camera);
 
-    const char* raster_file = "./data/ficus.ply";
+    const char* raster_file = "./data/splats.npz";
     pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
 
     pnanovdb_raster_t raster = {};
@@ -259,8 +280,8 @@ int main(int argc, char* argv[])
 #    endif
 
     pnanovdb_editor_config_t config = {};
-    config.headless = PNANOVDB_TRUE;
-    config.streaming = PNANOVDB_TRUE;
+    config.headless = PNANOVDB_FALSE;
+    config.streaming = PNANOVDB_FALSE;
     config.ip_address = "127.0.0.1";
     config.port = 8080;
     editor.show(&editor, device, &config);

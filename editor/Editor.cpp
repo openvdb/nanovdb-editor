@@ -103,8 +103,16 @@ struct EditorWorker
     PendingData<pnanovdb_compute_array_t> pending_data_array;
     PendingData<pnanovdb_raster_gaussian_data_t> pending_gaussian_data;
     PendingData<pnanovdb_camera_t> pending_camera;
+    PendingData<pnanovdb_debug_camera_t> pending_debug_camera;
     PendingData<void> pending_shader_params;
     ConstPendingData<pnanovdb_reflect_data_type_t> pending_shader_params_data_type;
+};
+
+typedef std::map<std::string, pnanovdb_debug_camera_t*> DebugCamerasT;
+
+struct EditorDebug
+{
+    DebugCamerasT cameras;
 };
 
 enum class ViewportShader : int
@@ -190,6 +198,7 @@ static void save_image(const char* filename, float* mapped_data, uint32_t image_
 
 void init(pnanovdb_editor_t* editor)
 {
+    editor->debug_draw = new EditorDebug();
 }
 
 void shutdown(pnanovdb_editor_t* editor)
@@ -203,6 +212,10 @@ void shutdown(pnanovdb_editor_t* editor)
     {
         editor->compute->destroy_array(editor->nanovdb_array);
         editor->nanovdb_array = nullptr;
+    }
+    if (editor->debug_draw)
+    {
+        delete static_cast<EditorDebug*>(editor->debug_draw);
     }
 }
 
@@ -273,6 +286,18 @@ void add_camera(pnanovdb_editor_t* editor, pnanovdb_camera_t* camera)
     else
     {
         editor->camera = camera;
+    }
+}
+
+void add_debug_camera(pnanovdb_editor_t* editor, pnanovdb_debug_camera_t* camera)
+{
+    if (editor->editor_worker)
+    {
+        static_cast<EditorWorker*>(editor->editor_worker)->pending_debug_camera.set_pending(camera);
+    }
+    else
+    {
+        static_cast<EditorDebug*>(editor->debug_draw)->cameras[camera->name] = camera;
     }
 }
 
@@ -457,6 +482,9 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         compute_context, (void*)"editor", pnanovdb_editor::Profiler::report_callback);
     editor->compute->device_interface.get_memory_stats(device, Profiler::getInstance().getMemoryStats());
 
+    // debug draw
+    imgui_user_instance->debug_cameras = &(static_cast<EditorDebug*>(editor->debug_draw)->cameras);
+
 #ifdef USE_IMGUI_INSTANCE
     ShaderCallback callback =
         pnanovdb_editor::get_shader_recompile_callback(imgui_user_instance, editor->compiler, compiler_inst);
@@ -569,6 +597,13 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 imgui_user_settings->camera_state = editor->camera->state;
                 imgui_user_settings->camera_config = editor->camera->config;
                 imgui_user_settings->sync_camera = PNANOVDB_TRUE;
+            }
+            pnanovdb_debug_camera_t* old_debug_cameras = nullptr;
+            pnanovdb_debug_camera_t* debug_camera = nullptr;
+            updated = worker->pending_debug_camera.process_pending(debug_camera, old_debug_cameras);
+            if (updated)
+            {
+                static_cast<EditorDebug*>(editor->debug_draw)->cameras[debug_camera->name] = debug_camera;
             }
             void* old_shader_params = nullptr;
             worker->pending_shader_params.process_pending(editor->shader_params, old_shader_params);
@@ -1173,6 +1208,7 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
     editor.wait_for_shader_params_sync = wait_for_shader_params_sync;
     editor.add_gaussian_data = add_gaussian_data;
     editor.add_camera = add_camera;
+    editor.add_debug_camera = add_debug_camera;
     editor.show = show;
     editor.start = start;
     editor.stop = stop;
