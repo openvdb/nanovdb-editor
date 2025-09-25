@@ -35,6 +35,7 @@ static const char* s_shader_names[shader_count] = { "raster/gaussian_frag_alloc.
                                                     "raster/gaussian_count_tiles.slang",
                                                     "raster/gaussian_projection.slang",
                                                     "raster/gaussian_rasterize_2d.slang",
+                                                    "raster/gaussian_rasterize_2d_null.slang",
                                                     "raster/gaussian_spherical_harmonics.slang",
                                                     "raster/gaussian_tile_intersections.slang",
                                                     "raster/gaussian_tile_offsets.slang" };

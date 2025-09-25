@@ -396,105 +396,131 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
     scan_tiles_per_gaussian_transient =
         compute_interface->register_buffer_as_transient(context, scan_tiles_per_gaussian_buffer);
 
-    // create sort keys/vals
-    buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED;
-    buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
-    buf_desc.structure_stride = 4u;
-    buf_desc.size_in_bytes = 65536u;
-    while (buf_desc.size_in_bytes < 4u * constants.n_isects)
+    if (total_count != 0u)
     {
-        buf_desc.size_in_bytes *= 2u;
-    }
-    pnanovdb_compute_buffer_t* intersection_keys_low_buffer =
-        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
-    pnanovdb_compute_buffer_t* intersection_keys_high_buffer =
-        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
-    pnanovdb_compute_buffer_t* intersection_vals_buffer =
-        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
-
-    pnanovdb_compute_buffer_transient_t* intersection_keys_low_transient =
-        compute_interface->register_buffer_as_transient(context, intersection_keys_low_buffer);
-    pnanovdb_compute_buffer_transient_t* intersection_keys_high_transient =
-        compute_interface->register_buffer_as_transient(context, intersection_keys_high_buffer);
-    pnanovdb_compute_buffer_transient_t* intersection_vals_transient =
-        compute_interface->register_buffer_as_transient(context, intersection_vals_buffer);
-
-    // tile intersections
-    {
-        pnanovdb_compute_resource_t resources[9u] = {};
-        resources[0u].buffer_transient = constant_transient;
-        resources[1u].buffer_transient = shader_params_transient;
-        resources[2u].buffer_transient = means2d_transient;
-        resources[3u].buffer_transient = radii_transient;
-        resources[4u].buffer_transient = depths_transient;
-        resources[5u].buffer_transient = scan_tiles_per_gaussian_transient;
-        resources[6u].buffer_transient = intersection_keys_low_transient;
-        resources[7u].buffer_transient = intersection_keys_high_transient;
-        resources[8u].buffer_transient = intersection_vals_transient;
-
-        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_tile_intersections_slang],
-                                 resources, (constants.prim_count + 255u) / 256u, 1u, 1u, "gaussian_tile_intersections");
-    }
-
-    // radix sort
-    {
-        pnanovdb_uint32_t num_tile_id_bits = 0u;
-        while ((1u << num_tile_id_bits) < constants.num_tiles)
+        // create sort keys/vals
+        buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED;
+        buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+        buf_desc.structure_stride = 4u;
+        buf_desc.size_in_bytes = 65536u;
+        while (buf_desc.size_in_bytes < 4u * constants.n_isects)
         {
-            num_tile_id_bits++;
+            buf_desc.size_in_bytes *= 2u;
+        }
+        pnanovdb_compute_buffer_t* intersection_keys_low_buffer =
+            compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+        pnanovdb_compute_buffer_t* intersection_keys_high_buffer =
+            compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+        pnanovdb_compute_buffer_t* intersection_vals_buffer =
+            compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+
+        pnanovdb_compute_buffer_transient_t* intersection_keys_low_transient =
+            compute_interface->register_buffer_as_transient(context, intersection_keys_low_buffer);
+        pnanovdb_compute_buffer_transient_t* intersection_keys_high_transient =
+            compute_interface->register_buffer_as_transient(context, intersection_keys_high_buffer);
+        pnanovdb_compute_buffer_transient_t* intersection_vals_transient =
+            compute_interface->register_buffer_as_transient(context, intersection_vals_buffer);
+
+        // tile intersections
+        {
+            pnanovdb_compute_resource_t resources[9u] = {};
+            resources[0u].buffer_transient = constant_transient;
+            resources[1u].buffer_transient = shader_params_transient;
+            resources[2u].buffer_transient = means2d_transient;
+            resources[3u].buffer_transient = radii_transient;
+            resources[4u].buffer_transient = depths_transient;
+            resources[5u].buffer_transient = scan_tiles_per_gaussian_transient;
+            resources[6u].buffer_transient = intersection_keys_low_transient;
+            resources[7u].buffer_transient = intersection_keys_high_transient;
+            resources[8u].buffer_transient = intersection_vals_transient;
+
+            compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_tile_intersections_slang],
+                                    resources, (constants.prim_count + 255u) / 256u, 1u, 1u, "gaussian_tile_intersections");
         }
 
-        ctx->parallel_primitives.radix_sort_dual_key(
-            compute, queue, ctx->parallel_primitives_ctx, intersection_keys_low_buffer, intersection_keys_high_buffer,
-            intersection_vals_buffer, constants.n_isects, 32u, num_tile_id_bits);
+        // radix sort
+        {
+            pnanovdb_uint32_t num_tile_id_bits = 0u;
+            while ((1u << num_tile_id_bits) < constants.num_tiles)
+            {
+                num_tile_id_bits++;
+            }
+
+            ctx->parallel_primitives.radix_sort_dual_key(
+                compute, queue, ctx->parallel_primitives_ctx, intersection_keys_low_buffer, intersection_keys_high_buffer,
+                intersection_vals_buffer, constants.n_isects, 32u, num_tile_id_bits);
+        }
+
+        buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED;
+        buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+        buf_desc.structure_stride = 4u;
+        buf_desc.size_in_bytes = 4u * constants.num_tiles;
+        if (buf_desc.size_in_bytes < 65536u)
+        {
+            buf_desc.size_in_bytes = 65536u;
+        }
+        pnanovdb_compute_buffer_t* tile_offsets_buffer =
+            compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+
+        pnanovdb_compute_buffer_transient_t* tile_offsets_transient =
+            compute_interface->register_buffer_as_transient(context, tile_offsets_buffer);
+
+        // compute tile offsets
+        {
+            pnanovdb_compute_resource_t resources[4u] = {};
+            resources[0u].buffer_transient = constant_transient;
+            resources[1u].buffer_transient = shader_params_transient;
+            resources[2u].buffer_transient = intersection_keys_high_transient;
+            resources[3u].buffer_transient = tile_offsets_transient;
+
+            compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_tile_offsets_slang], resources,
+                                    (constants.n_isects + 255u) / 256u, 1u, 1u, "gaussian_tile_offsets");
+        }
+
+        pnanovdb_compute_texture_transient_t* color_2d_transient =
+            compute_interface->register_texture_as_transient(context, color_2d);
+
+        // raster
+        {
+            pnanovdb_compute_resource_t resources[9u] = {};
+            resources[0u].buffer_transient = constant_transient;
+            resources[1u].buffer_transient = shader_params_transient;
+            resources[2u].buffer_transient = means2d_transient;
+            resources[3u].buffer_transient = conics_transient;
+            resources[4u].buffer_transient = resolved_color_transient;
+            resources[5u].buffer_transient = opacities_transient;
+            resources[6u].buffer_transient = tile_offsets_transient;
+            resources[7u].buffer_transient = intersection_vals_transient;
+            resources[8u].texture_transient = color_2d_transient;
+
+            compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_rasterize_2d_slang], resources,
+                                    (constants.image_height + gpu_params.tile_size - 1u) / gpu_params.tile_size,
+                                    (constants.image_width + gpu_params.tile_size - 1u) / gpu_params.tile_size, 1u,
+                                    "gaussian_rasterize_2d");
+        }
+
+        compute_interface->destroy_buffer(context, tile_offsets_buffer);
+        compute_interface->destroy_buffer(context, intersection_keys_low_buffer);
+        compute_interface->destroy_buffer(context, intersection_keys_high_buffer);
+        compute_interface->destroy_buffer(context, intersection_vals_buffer);
     }
-
-    buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED;
-    buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
-    buf_desc.structure_stride = 4u;
-    buf_desc.size_in_bytes = 4u * constants.num_tiles;
-    if (buf_desc.size_in_bytes < 65536u)
+    else
     {
-        buf_desc.size_in_bytes = 65536u;
-    }
-    pnanovdb_compute_buffer_t* tile_offsets_buffer =
-        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+        pnanovdb_compute_texture_transient_t* color_2d_transient =
+            compute_interface->register_texture_as_transient(context, color_2d);
 
-    pnanovdb_compute_buffer_transient_t* tile_offsets_transient =
-        compute_interface->register_buffer_as_transient(context, tile_offsets_buffer);
+        // raster null
+        {
+            pnanovdb_compute_resource_t resources[3u] = {};
+            resources[0u].buffer_transient = constant_transient;
+            resources[1u].buffer_transient = shader_params_transient;
+            resources[2u].texture_transient = color_2d_transient;
 
-    // compute tile offsets
-    {
-        pnanovdb_compute_resource_t resources[4u] = {};
-        resources[0u].buffer_transient = constant_transient;
-        resources[1u].buffer_transient = shader_params_transient;
-        resources[2u].buffer_transient = intersection_keys_high_transient;
-        resources[3u].buffer_transient = tile_offsets_transient;
-
-        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_tile_offsets_slang], resources,
-                                 (constants.n_isects + 255u) / 256u, 1u, 1u, "gaussian_tile_offsets");
-    }
-
-    pnanovdb_compute_texture_transient_t* color_2d_transient =
-        compute_interface->register_texture_as_transient(context, color_2d);
-
-    // raster
-    {
-        pnanovdb_compute_resource_t resources[9u] = {};
-        resources[0u].buffer_transient = constant_transient;
-        resources[1u].buffer_transient = shader_params_transient;
-        resources[2u].buffer_transient = means2d_transient;
-        resources[3u].buffer_transient = conics_transient;
-        resources[4u].buffer_transient = resolved_color_transient;
-        resources[5u].buffer_transient = opacities_transient;
-        resources[6u].buffer_transient = tile_offsets_transient;
-        resources[7u].buffer_transient = intersection_vals_transient;
-        resources[8u].texture_transient = color_2d_transient;
-
-        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_rasterize_2d_slang], resources,
-                                 (constants.image_height + gpu_params.tile_size - 1u) / gpu_params.tile_size,
-                                 (constants.image_width + gpu_params.tile_size - 1u) / gpu_params.tile_size, 1u,
-                                 "gaussian_rasterize_2d");
+            compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_rasterize_2d_null_slang], resources,
+                                    (constants.image_height + gpu_params.tile_size - 1u) / gpu_params.tile_size,
+                                    (constants.image_width + gpu_params.tile_size - 1u) / gpu_params.tile_size, 1u,
+                                    "gaussian_rasterize_2d_null");
+        }
     }
 
 #if 0
@@ -528,12 +554,6 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
 
     compute_interface->destroy_buffer(context, constant_buffer);
     compute_interface->destroy_buffer(context, shader_params_buffer);
-
-    compute_interface->destroy_buffer(context, tile_offsets_buffer);
-
-    compute_interface->destroy_buffer(context, intersection_keys_low_buffer);
-    compute_interface->destroy_buffer(context, intersection_keys_high_buffer);
-    compute_interface->destroy_buffer(context, intersection_vals_buffer);
 
     compute_interface->destroy_buffer(context, radii_buffer);
     compute_interface->destroy_buffer(context, means2d_buffer);
