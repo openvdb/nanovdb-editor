@@ -760,12 +760,11 @@ void ray_march_nanovdb(StructuredBuffer<uint2> buf,
     int3 bbox_max = pnanovdb_root_get_bbox_max(buf, root);
 
     // auto centering
-    //int3 bbox_ave = ((bbox_max + bbox_min) >> 1u);
-    //int3 ijk_offset = (bbox_ave & ~4095);
-    //bbox_min = bbox_min - ijk_offset;
-    //bbox_max = bbox_max - ijk_offset;
-    //rayOrigin = rayOrigin + float3(bbox_ave - ijk_offset);
-    int3 ijk_offset = int3(0,0,0);
+    int3 bbox_ave = ((bbox_max + bbox_min) >> 1u);
+    int3 ijk_offset = (bbox_ave & ~4095);
+    bbox_min = bbox_min - ijk_offset;
+    bbox_max = bbox_max - ijk_offset;
+    rayOrigin = rayOrigin + float3(bbox_ave - ijk_offset);
 
     float3 bbox_minf = float3(bbox_min);
     float3 bbox_maxf = float3(bbox_max + int3(1, 1, 1));
