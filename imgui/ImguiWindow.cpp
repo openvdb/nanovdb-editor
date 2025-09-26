@@ -610,15 +610,6 @@ void update_camera(pnanovdb_imgui_window_t* window, pnanovdb_imgui_settings_rend
 
         ptr->prev_is_upside_down = user_settings->is_upside_down;
     }
-    if (user_settings->sync_camera)
-    {
-        user_settings->sync_camera = PNANOVDB_FALSE;
-    }
-    else
-    {
-        user_settings->camera_state = ptr->camera.state;
-        user_settings->camera_config = ptr->camera.config;
-    }
 }
 
 struct Instance
