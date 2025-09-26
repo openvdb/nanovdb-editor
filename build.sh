@@ -30,7 +30,7 @@ usage() {
     echo "  -a    Build in debug with sanitizers"
     echo "  -p    Build and install python module (requires Python 3.8+, auto-installs scikit-build & wheel)"
     echo "  -e    Build and install python module in editable mode"
-    echo "  -t    Run tests using ctest"
+    echo "  -t    Run tests using ctest and pytest"
     echo "  -f    Disable GLFW (headless build)"
 }
 

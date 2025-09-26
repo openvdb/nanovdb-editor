@@ -36,6 +36,8 @@
 
 #include <filesystem>
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 #define IMGUI_CHECKBOX_SYNC(label, var)                                                                                \
     {                                                                                                                  \
@@ -46,7 +48,7 @@
         }                                                                                                              \
     }
 
- const float EPSILON = 1e-6f;
+const float EPSILON = 1e-6f;
 
 PNANOVDB_INLINE void timestamp_capture(pnanovdb_uint64_t* ptr)
 {
@@ -124,6 +126,7 @@ static const char* CONSOLE = "Output";
 static const char* SHADER_PARAMS = "Params";
 static const char* BENCHMARK = "Benchmark";
 static const char* FILE_HEADER = "File Header";
+static const char* DEBUG_DRAW = "Debug Draw";
 
 static const char* getGridTypeName(uint32_t gridType)
 {
@@ -377,6 +380,7 @@ static void initializeDocking()
             ImGui::DockBuilderSplitNode(dock_id_left, ImGuiDir_Down, 0.f, nullptr, &dock_id_left);
         ImGui::DockBuilderSetNodeSize(dock_id_left_bottom, ImVec2(left_dock_width, window_height));
         ImGui::DockBuilderDockWindow(SHADER_PARAMS, dock_id_left_bottom);
+        ImGui::DockBuilderDockWindow(DEBUG_DRAW, dock_id_left_bottom);
         ImGui::DockBuilderDockWindow(BENCHMARK, dock_id_left_bottom);
 
         ImGui::DockBuilderFinish(dockspace_id);
@@ -400,6 +404,7 @@ static void createMenu(Instance* ptr)
             ImGui::MenuItem(FILE_HEADER, "", &ptr->window.show_file_header);
             ImGui::MenuItem(CONSOLE, "", &ptr->window.show_console);
             ImGui::MenuItem(SHADER_PARAMS, "", &ptr->window.show_shader_params);
+            ImGui::MenuItem(DEBUG_DRAW, "", &ptr->window.show_debug_draw);
             ImGui::MenuItem(BENCHMARK, "", &ptr->window.show_benchmark);
             ImGui::EndMenu();
         }
@@ -439,11 +444,9 @@ static void showWindows(Instance* ptr, float delta_time)
                 }
                 ImGui::EndGroup();
             }
-
-            ImGui::Text("Camera View");
             {
                 ImGui::BeginGroup();
-                if (ImGui::BeginCombo("##render_settings", "Select..."))
+                if (ImGui::BeginCombo("Viewport Camera", "Select..."))
                 {
                     for (const auto& pair : ptr->saved_render_settings)
                     {
@@ -454,6 +457,9 @@ static void showWindows(Instance* ptr, float delta_time)
                             ptr->viewport_settings[(int)ptr->viewport_option].render_settings_name =
                                 ptr->render_settings_name;
                             ptr->pending.load_camera = true;
+
+                            // clear selected debug camera when switching to saved camera
+                            ptr->selected_debug_camera.clear();
                         }
                         if (is_selected)
                         {
@@ -552,6 +558,76 @@ static void showWindows(Instance* ptr, float delta_time)
                     ImGui::EndGroup();
                 }
             }
+            ImGui::End();
+        }
+        else
+        {
+            ImGui::End();
+        }
+    }
+
+    if (ptr->window.show_debug_draw)
+    {
+        if (ImGui::Begin("Debug Draw", &ptr->window.show_debug_draw))
+        {
+            ImGui::Text("Debug Cameras");
+            if (ptr->debug_cameras && !ptr->debug_cameras->empty())
+            {
+                const char* preview =
+                    ptr->selected_debug_camera.empty() ? "Select..." : ptr->selected_debug_camera.c_str();
+                if (ImGui::BeginCombo("Viewport Camera", preview))
+                {
+                    for (const auto& cameraPair : *ptr->debug_cameras)
+                    {
+                        const std::string& name = cameraPair.first;
+                        bool is_selected = (ptr->selected_debug_camera == name);
+                        if (ImGui::Selectable(name.c_str(), is_selected))
+                        {
+                            ptr->selected_debug_camera = name;
+                            pnanovdb_debug_camera_t* cam = cameraPair.second;
+                            if (cam)
+                            {
+                                ptr->render_settings->camera_state = cam->state;
+                                ptr->render_settings->camera_config = cam->config;
+                                ptr->render_settings->is_projection_rh = cam->config.is_projection_rh;
+                                ptr->render_settings->is_orthographic = cam->config.is_orthographic;
+                                ptr->render_settings->is_reverse_z = cam->config.is_reverse_z;
+                                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                            }
+                        }
+                        if (is_selected)
+                        {
+                            ImGui::SetItemDefaultFocus();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+            }
+            if (!ptr->debug_cameras)
+            {
+                ImGui::TextDisabled("No debug cameras available");
+            }
+            else if (ptr->debug_cameras->empty())
+            {
+                ImGui::TextDisabled("No cameras added");
+            }
+            else
+            {
+                for (auto& cameraPair : *ptr->debug_cameras)
+                {
+                    pnanovdb_debug_camera_t* camera = cameraPair.second;
+                    if (!camera)
+                        continue;
+
+                    bool isVisible = (camera->is_visible != PNANOVDB_FALSE);
+                    const std::string& cameraName = cameraPair.first;
+                    if (ImGui::Checkbox(cameraName.c_str(), &isVisible))
+                    {
+                        camera->is_visible = isVisible ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+                    }
+                }
+            }
+
             ImGui::End();
         }
         else
@@ -1167,7 +1243,13 @@ struct CameraBasisVectors
     pnanovdb_vec3_t forward;
 };
 
-static void calculateFrustumCorners(pnanovdb_camera_state_t camera_state, pnanovdb_camera_config_t camera_config, float width, float height, pnanovdb_vec3_t corners[8], CameraBasisVectors* basisVectors = nullptr, float frustum_scale = 1.0f)
+static void calculateFrustumCorners(pnanovdb_camera_state_t camera_state,
+                                    pnanovdb_camera_config_t camera_config,
+                                    float width,
+                                    float height,
+                                    pnanovdb_vec3_t corners[8],
+                                    CameraBasisVectors* basisVectors = nullptr,
+                                    float frustum_scale = 1.f)
 {
     pnanovdb_vec3_t eyePosition = camera_state.position;
     eyePosition.x -= camera_state.eye_direction.x * camera_state.eye_distance_from_position;
@@ -1196,7 +1278,7 @@ static void calculateFrustumCorners(pnanovdb_camera_state_t camera_state, pnanov
     }
     else
     {
-        right = { 1.0f, 0.0f, 0.0f };
+        right = { 1.f, 0.f, 0.f };
     }
 
     up.x = right.y * forward.z - right.z * forward.y;
@@ -1213,7 +1295,7 @@ static void calculateFrustumCorners(pnanovdb_camera_state_t camera_state, pnanov
     }
     else
     {
-        up = { 0.0f, 1.0f, 0.0f };
+        up = { 0.f, 1.f, 0.f };
     }
 
     if (basisVectors)
@@ -1223,10 +1305,13 @@ static void calculateFrustumCorners(pnanovdb_camera_state_t camera_state, pnanov
         basisVectors->forward = forward;
     }
 
+    float nearPlaneClamped = std::max(camera_config.near_plane, EPSILON);
+    float farPlaneClamped = std::min(camera_config.far_plane, 10000000.f);
+
     // Calculate frustum dimensions
     float aspectRatio = width / height;
-    float nearPlane = camera_config.is_reverse_z ? camera_config.far_plane : camera_config.near_plane;
-    float farPlane = camera_config.is_reverse_z ? camera_config.near_plane : camera_config.far_plane;
+    float nearPlane = camera_config.is_reverse_z ? farPlaneClamped : nearPlaneClamped;
+    float farPlane = camera_config.is_reverse_z ? nearPlaneClamped : farPlaneClamped;
 
     float nearHeight, nearWidth, farHeight, farWidth;
 
@@ -1246,8 +1331,7 @@ static void calculateFrustumCorners(pnanovdb_camera_state_t camera_state, pnanov
     }
 
     // Calculate near plane corners
-    pnanovdb_vec3_t nearCenter = { eyePosition.x + forward.x * nearPlane,
-                                   eyePosition.y + forward.y * nearPlane,
+    pnanovdb_vec3_t nearCenter = { eyePosition.x + forward.x * nearPlane, eyePosition.y + forward.y * nearPlane,
                                    eyePosition.z + forward.z * nearPlane };
 
     corners[0] = { nearCenter.x - right.x * nearWidth * 0.5f - up.x * nearHeight * 0.5f,
@@ -1297,34 +1381,35 @@ static ImVec2 projectToScreen(const pnanovdb_vec3_t& worldPos,
     pnanovdb_camera_get_projection(viewingCamera, &proj, screenWidth, screenHeight);
     pnanovdb_camera_mat_t viewProj = pnanovdb_camera_mat_mul(view, proj);
 
-    pnanovdb_vec4_t worldPos4 = { worldPos.x, worldPos.y, worldPos.z, 1.0f };
+    pnanovdb_vec4_t worldPos4 = { worldPos.x, worldPos.y, worldPos.z, 1.f };
     pnanovdb_vec4_t clipPos = pnanovdb_camera_vec4_transform(worldPos4, viewProj);
 
-    if (fabsf(clipPos.w) > EPSILON)
+    if (clipPos.w > EPSILON)
     {
         float x = clipPos.x / clipPos.w;
         float y = clipPos.y / clipPos.w;
 
         // Convert from NDC to screen coordinates
-        float screenX = (x + 1.0f) * 0.5f * screenWidth;
-        float screenY = (1.0f - y) * 0.5f * screenHeight; // Flip Y coordinate
-
-        // Clamp to screen bounds to prevent drawing outside viewport
-        screenX = fmaxf(0.0f, fminf(screenWidth, screenX));
-        screenY = fmaxf(0.0f, fminf(screenHeight, screenY));
+        float screenX = (x + 1.f) * 0.5f * screenWidth;
+        float screenY = (1.f - y) * 0.5f * screenHeight; // Flip Y coordinate
 
         return ImVec2(screenX, screenY);
     }
 
-    return ImVec2(0, 0);
+    return ImVec2(std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::quiet_NaN());
 }
 
-static void drawCameraFrustumOverlay(Instance* ptr,
-                                     ImVec2 windowPos,
-                                     ImVec2 windowSize,
-                                     pnanovdb_debug_camera_t& debugCamera)
+static void drawCameraFrustumOverlay(Instance* ptr, ImVec2 windowPos, ImVec2 windowSize, pnanovdb_debug_camera_t& debugCamera)
 {
     ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+    auto isPointFinite = [](const ImVec2& p) { return std::isfinite(p.x) && std::isfinite(p.y); };
+    auto isPointInsideWindow = [&](const ImVec2& p)
+    {
+        return (p.x >= windowPos.x && p.x <= windowPos.x + windowSize.x && p.y >= windowPos.y &&
+                p.y <= windowPos.y + windowSize.y);
+    };
+    auto isValidScreenPoint = [&](const ImVec2& p) { return isPointFinite(p) && isPointInsideWindow(p); };
 
     pnanovdb_camera_t viewingCamera = {};
     viewingCamera.state = ptr->render_settings->camera_state;
@@ -1335,7 +1420,8 @@ static void drawCameraFrustumOverlay(Instance* ptr,
 
     pnanovdb_vec3_t frustumCorners[8];
     CameraBasisVectors basisVectors;
-    calculateFrustumCorners(target_state, target_config, windowSize.x, windowSize.y, frustumCorners, &basisVectors, debugCamera.frustum_scale);
+    calculateFrustumCorners(target_state, target_config, windowSize.x, windowSize.y, frustumCorners, &basisVectors,
+                            debugCamera.frustum_scale);
 
     ImVec2 screenCorners[8];
     for (int i = 0; i < 8; i++)
@@ -1345,25 +1431,35 @@ static void drawCameraFrustumOverlay(Instance* ptr,
         screenCorners[i].y += windowPos.y;
     }
 
-    ImU32 lineColor = IM_COL32(debugCamera.frustum_color.x, debugCamera.frustum_color.y, debugCamera.frustum_color.z, 255);
+    ImU32 lineColor =
+        IM_COL32(debugCamera.frustum_color.x, debugCamera.frustum_color.y, debugCamera.frustum_color.z, 255);
 
-    // Near plane (front face)
-    drawList->AddLine(screenCorners[0], screenCorners[1], lineColor, debugCamera.frustum_line_width);
-    drawList->AddLine(screenCorners[1], screenCorners[2], lineColor, debugCamera.frustum_line_width);
-    drawList->AddLine(screenCorners[2], screenCorners[3], lineColor, debugCamera.frustum_line_width);
-    drawList->AddLine(screenCorners[3], screenCorners[0], lineColor, debugCamera.frustum_line_width);
-
-    // Far plane (back face)
-    drawList->AddLine(screenCorners[4], screenCorners[5], lineColor, debugCamera.frustum_line_width);
-    drawList->AddLine(screenCorners[5], screenCorners[6], lineColor, debugCamera.frustum_line_width);
-    drawList->AddLine(screenCorners[6], screenCorners[7], lineColor, debugCamera.frustum_line_width);
-    drawList->AddLine(screenCorners[7], screenCorners[4], lineColor, debugCamera.frustum_line_width);
-
-    // Connecting lines between near and far planes
-    for (int i = 0; i < 4; i++)
+    auto drawEdge = [&](int a, int b)
     {
-        drawList->AddLine(screenCorners[i], screenCorners[i + 4], lineColor, debugCamera.frustum_line_width);
-    }
+        if (!isValidScreenPoint(screenCorners[a]) || !isValidScreenPoint(screenCorners[b]))
+        {
+            return;
+        }
+        drawList->AddLine(screenCorners[a], screenCorners[b], lineColor, debugCamera.frustum_line_width);
+    };
+
+    // Near plane
+    drawEdge(0, 1);
+    drawEdge(1, 2);
+    drawEdge(2, 3);
+    drawEdge(3, 0);
+
+    // Far plane
+    drawEdge(4, 5);
+    drawEdge(5, 6);
+    drawEdge(6, 7);
+    drawEdge(7, 4);
+
+    // Sides
+    drawEdge(0, 4);
+    drawEdge(1, 5);
+    drawEdge(2, 6);
+    drawEdge(3, 7);
 
     pnanovdb_vec3_t eyePosition = target_state.position;
     eyePosition.x -= target_state.eye_direction.x * target_state.eye_distance_from_position;
@@ -1399,10 +1495,22 @@ static void drawCameraFrustumOverlay(Instance* ptr,
     zAxisScreenPos.x += windowPos.x;
     zAxisScreenPos.y += windowPos.y;
 
-    drawList->AddLine(cameraScreenPos, xAxisScreenPos, IM_COL32(255, 0, 0, 255), debugCamera.axis_thickness); // right
-    drawList->AddLine(cameraScreenPos, yAxisScreenPos, IM_COL32(0, 255, 0, 255), debugCamera.axis_thickness); // up
-    drawList->AddLine(cameraScreenPos, zAxisScreenPos, IM_COL32(0, 0, 255, 255), debugCamera.axis_thickness); // forward
-    drawList->AddCircleFilled(cameraScreenPos, 1.5f * debugCamera.axis_thickness, IM_COL32(222, 220, 113, 255));
+    if (isValidScreenPoint(cameraScreenPos) && isValidScreenPoint(xAxisScreenPos))
+    {
+        drawList->AddLine(cameraScreenPos, xAxisScreenPos, IM_COL32(255, 0, 0, 255), debugCamera.axis_thickness); // right
+    }
+    if (isValidScreenPoint(cameraScreenPos) && isValidScreenPoint(yAxisScreenPos))
+    {
+        drawList->AddLine(cameraScreenPos, yAxisScreenPos, IM_COL32(0, 255, 0, 255), debugCamera.axis_thickness); // up
+    }
+    if (isValidScreenPoint(cameraScreenPos) && isValidScreenPoint(zAxisScreenPos))
+    {
+        drawList->AddLine(cameraScreenPos, zAxisScreenPos, IM_COL32(0, 0, 255, 255), debugCamera.axis_thickness); // forward
+    }
+    if (isValidScreenPoint(cameraScreenPos))
+    {
+        drawList->AddCircleFilled(cameraScreenPos, 1.5f * debugCamera.axis_thickness, IM_COL32(222, 220, 113, 255));
+    }
 }
 
 static void debugDrawCameras(Instance* ptr)
@@ -1431,9 +1539,8 @@ static void debugDrawCameras(Instance* ptr)
     {
         for (const auto& cameraPair : *ptr->debug_cameras)
         {
-            const std::string& cameraName = cameraPair.first;
             pnanovdb_debug_camera_t* camera = cameraPair.second;
-            if (camera)
+            if (camera && camera->is_visible && ptr->selected_debug_camera != cameraPair.first)
             {
                 ImVec2 windowPos = ImGui::GetWindowPos();
                 ImVec2 windowSize = ImGui::GetWindowSize();

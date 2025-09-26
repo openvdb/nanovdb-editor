@@ -206,7 +206,6 @@ int main(int argc, char* argv[])
     pnanovdb_camera_config_default(&debug_config);
     debug_config.near_plane = 0.1f;
     debug_config.far_plane = 100.0f;
-    debug_config.is_reverse_z = PNANOVDB_TRUE;
 
     pnanovdb_debug_camera_t debug_camera;
     pnanovdb_debug_camera_default(&debug_camera);
@@ -214,6 +213,21 @@ int main(int argc, char* argv[])
     debug_camera.state = debug_state;
     debug_camera.config = debug_config;
     editor.add_debug_camera(&editor, &debug_camera);
+
+    pnanovdb_camera_config_t default_config = {};
+    pnanovdb_camera_config_default(&default_config);
+    default_config.near_plane = 0.1f;
+    default_config.far_plane = 100.0f;
+
+    pnanovdb_camera_state_t default_state = {};
+    pnanovdb_camera_state_default(&default_state, PNANOVDB_FALSE);
+
+    pnanovdb_debug_camera_t default_camera;
+    pnanovdb_debug_camera_default(&default_camera);
+    default_camera.name = "default";
+    default_camera.state = default_state;
+    default_camera.config = default_config;
+    editor.add_debug_camera(&editor, &default_camera);
 
 #    ifdef TEST_RASTER
     pnanovdb_camera_t camera;
@@ -236,7 +250,7 @@ int main(int argc, char* argv[])
     camera.state.eye_distance_from_position = -2.111028;
     editor.add_camera(&editor, &camera);
 
-    const char* raster_file = "./data/splats.npz";
+    const char* raster_file = "./data/ficus.ply";
     pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
 
     pnanovdb_raster_t raster = {};
@@ -286,11 +300,11 @@ int main(int argc, char* argv[])
     config.port = 8080;
     editor.show(&editor, device, &config);
 
-    if (editor.camera)
-    {
-        pnanovdb_vec3_t position = editor.camera->state.position;
-        printf("Camera position: %f, %f, %f\n", position.x, position.y, position.z);
-    }
+    // if (editor.camera)
+    // {
+    //     pnanovdb_vec3_t position = editor.camera->state.position;
+    //     printf("Camera position: %f, %f, %f\n", position.x, position.y, position.z);
+    // }
 
 #    ifdef TEST_RASTER_2D
     pnanovdb_raster_free(&raster);
