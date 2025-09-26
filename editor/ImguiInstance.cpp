@@ -46,6 +46,8 @@
         }                                                                                                              \
     }
 
+ const float EPSILON = 1e-6f;
+
 PNANOVDB_INLINE void timestamp_capture(pnanovdb_uint64_t* ptr)
 {
 #if defined(_WIN32)
@@ -1158,6 +1160,291 @@ static void showWindows(Instance* ptr, float delta_time)
     }
 }
 
+struct CameraBasisVectors
+{
+    pnanovdb_vec3_t right;
+    pnanovdb_vec3_t up;
+    pnanovdb_vec3_t forward;
+};
+
+static void calculateFrustumCorners(pnanovdb_camera_state_t camera_state, pnanovdb_camera_config_t camera_config, float width, float height, pnanovdb_vec3_t corners[8], CameraBasisVectors* basisVectors = nullptr, float frustum_scale = 1.0f)
+{
+    pnanovdb_vec3_t eyePosition = camera_state.position;
+    eyePosition.x -= camera_state.eye_direction.x * camera_state.eye_distance_from_position;
+    eyePosition.y -= camera_state.eye_direction.y * camera_state.eye_distance_from_position;
+    eyePosition.z -= camera_state.eye_direction.z * camera_state.eye_distance_from_position;
+
+    // Calculate camera basis vectors
+    pnanovdb_vec3_t forward = camera_state.eye_direction;
+    if (camera_config.is_reverse_z)
+    {
+        forward.x = -forward.x;
+        forward.y = -forward.y;
+        forward.z = -forward.z;
+    }
+    pnanovdb_vec3_t up = camera_state.eye_up;
+    pnanovdb_vec3_t right = { forward.y * up.z - forward.z * up.y, forward.z * up.x - forward.x * up.z,
+                              forward.x * up.y - forward.y * up.x };
+
+    // Normalize right vector
+    float rightLength = sqrt(right.x * right.x + right.y * right.y + right.z * right.z);
+    if (rightLength > EPSILON)
+    {
+        right.x /= rightLength;
+        right.y /= rightLength;
+        right.z /= rightLength;
+    }
+    else
+    {
+        right = { 1.0f, 0.0f, 0.0f };
+    }
+
+    up.x = right.y * forward.z - right.z * forward.y;
+    up.y = right.z * forward.x - right.x * forward.z;
+    up.z = right.x * forward.y - right.y * forward.x;
+
+    // Normalize the recalculated up vector
+    float upLength = sqrt(up.x * up.x + up.y * up.y + up.z * up.z);
+    if (upLength > EPSILON)
+    {
+        up.x /= upLength;
+        up.y /= upLength;
+        up.z /= upLength;
+    }
+    else
+    {
+        up = { 0.0f, 1.0f, 0.0f };
+    }
+
+    if (basisVectors)
+    {
+        basisVectors->right = right;
+        basisVectors->up = up;
+        basisVectors->forward = forward;
+    }
+
+    // Calculate frustum dimensions
+    float aspectRatio = width / height;
+    float nearPlane = camera_config.is_reverse_z ? camera_config.far_plane : camera_config.near_plane;
+    float farPlane = camera_config.is_reverse_z ? camera_config.near_plane : camera_config.far_plane;
+
+    float nearHeight, nearWidth, farHeight, farWidth;
+
+    if (camera_config.is_orthographic)
+    {
+        float orthoScale = camera_state.orthographic_scale;
+        nearHeight = farHeight = orthoScale * frustum_scale;
+        nearWidth = farWidth = orthoScale * aspectRatio * frustum_scale;
+    }
+    else
+    {
+        float tanHalfFov = tan(camera_config.fov_angle_y * 0.5f);
+        nearHeight = nearPlane * tanHalfFov * frustum_scale;
+        nearWidth = nearHeight * aspectRatio;
+        farHeight = farPlane * tanHalfFov * frustum_scale;
+        farWidth = farHeight * aspectRatio;
+    }
+
+    // Calculate near plane corners
+    pnanovdb_vec3_t nearCenter = { eyePosition.x + forward.x * nearPlane,
+                                   eyePosition.y + forward.y * nearPlane,
+                                   eyePosition.z + forward.z * nearPlane };
+
+    corners[0] = { nearCenter.x - right.x * nearWidth * 0.5f - up.x * nearHeight * 0.5f,
+                   nearCenter.y - right.y * nearWidth * 0.5f - up.y * nearHeight * 0.5f,
+                   nearCenter.z - right.z * nearWidth * 0.5f - up.z * nearHeight * 0.5f };
+
+    corners[1] = { nearCenter.x + right.x * nearWidth * 0.5f - up.x * nearHeight * 0.5f,
+                   nearCenter.y + right.y * nearWidth * 0.5f - up.y * nearHeight * 0.5f,
+                   nearCenter.z + right.z * nearWidth * 0.5f - up.z * nearHeight * 0.5f };
+
+    corners[2] = { nearCenter.x + right.x * nearWidth * 0.5f + up.x * nearHeight * 0.5f,
+                   nearCenter.y + right.y * nearWidth * 0.5f + up.y * nearHeight * 0.5f,
+                   nearCenter.z + right.z * nearWidth * 0.5f + up.z * nearHeight * 0.5f };
+
+    corners[3] = { nearCenter.x - right.x * nearWidth * 0.5f + up.x * nearHeight * 0.5f,
+                   nearCenter.y - right.y * nearWidth * 0.5f + up.y * nearHeight * 0.5f,
+                   nearCenter.z - right.z * nearWidth * 0.5f + up.z * nearHeight * 0.5f };
+
+    // Calculate far plane corners
+    pnanovdb_vec3_t farCenter = { eyePosition.x + forward.x * farPlane, eyePosition.y + forward.y * farPlane,
+                                  eyePosition.z + forward.z * farPlane };
+
+    corners[4] = { farCenter.x - right.x * farWidth * 0.5f - up.x * farHeight * 0.5f,
+                   farCenter.y - right.y * farWidth * 0.5f - up.y * farHeight * 0.5f,
+                   farCenter.z - right.z * farWidth * 0.5f - up.z * farHeight * 0.5f };
+
+    corners[5] = { farCenter.x + right.x * farWidth * 0.5f - up.x * farHeight * 0.5f,
+                   farCenter.y + right.y * farWidth * 0.5f - up.y * farHeight * 0.5f,
+                   farCenter.z + right.z * farWidth * 0.5f - up.z * farHeight * 0.5f };
+
+    corners[6] = { farCenter.x + right.x * farWidth * 0.5f + up.x * farHeight * 0.5f,
+                   farCenter.y + right.y * farWidth * 0.5f + up.y * farHeight * 0.5f,
+                   farCenter.z + right.z * farWidth * 0.5f + up.z * farHeight * 0.5f };
+
+    corners[7] = { farCenter.x - right.x * farWidth * 0.5f + up.x * farHeight * 0.5f,
+                   farCenter.y - right.y * farWidth * 0.5f + up.y * farHeight * 0.5f,
+                   farCenter.z - right.z * farWidth * 0.5f + up.z * farHeight * 0.5f };
+}
+
+static ImVec2 projectToScreen(const pnanovdb_vec3_t& worldPos,
+                              pnanovdb_camera_t* viewingCamera,
+                              float screenWidth,
+                              float screenHeight)
+{
+    pnanovdb_camera_mat_t view, proj;
+    pnanovdb_camera_get_view(viewingCamera, &view);
+    pnanovdb_camera_get_projection(viewingCamera, &proj, screenWidth, screenHeight);
+    pnanovdb_camera_mat_t viewProj = pnanovdb_camera_mat_mul(view, proj);
+
+    pnanovdb_vec4_t worldPos4 = { worldPos.x, worldPos.y, worldPos.z, 1.0f };
+    pnanovdb_vec4_t clipPos = pnanovdb_camera_vec4_transform(worldPos4, viewProj);
+
+    if (fabsf(clipPos.w) > EPSILON)
+    {
+        float x = clipPos.x / clipPos.w;
+        float y = clipPos.y / clipPos.w;
+
+        // Convert from NDC to screen coordinates
+        float screenX = (x + 1.0f) * 0.5f * screenWidth;
+        float screenY = (1.0f - y) * 0.5f * screenHeight; // Flip Y coordinate
+
+        // Clamp to screen bounds to prevent drawing outside viewport
+        screenX = fmaxf(0.0f, fminf(screenWidth, screenX));
+        screenY = fmaxf(0.0f, fminf(screenHeight, screenY));
+
+        return ImVec2(screenX, screenY);
+    }
+
+    return ImVec2(0, 0);
+}
+
+static void drawCameraFrustumOverlay(Instance* ptr,
+                                     ImVec2 windowPos,
+                                     ImVec2 windowSize,
+                                     pnanovdb_debug_camera_t& debugCamera)
+{
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+    pnanovdb_camera_t viewingCamera = {};
+    viewingCamera.state = ptr->render_settings->camera_state;
+    viewingCamera.config = ptr->render_settings->camera_config;
+
+    pnanovdb_camera_state_t target_state = debugCamera.state;
+    pnanovdb_camera_config_t target_config = debugCamera.config;
+
+    pnanovdb_vec3_t frustumCorners[8];
+    CameraBasisVectors basisVectors;
+    calculateFrustumCorners(target_state, target_config, windowSize.x, windowSize.y, frustumCorners, &basisVectors, debugCamera.frustum_scale);
+
+    ImVec2 screenCorners[8];
+    for (int i = 0; i < 8; i++)
+    {
+        screenCorners[i] = projectToScreen(frustumCorners[i], &viewingCamera, windowSize.x, windowSize.y);
+        screenCorners[i].x += windowPos.x;
+        screenCorners[i].y += windowPos.y;
+    }
+
+    ImU32 lineColor = IM_COL32(debugCamera.frustum_color.x, debugCamera.frustum_color.y, debugCamera.frustum_color.z, 255);
+
+    // Near plane (front face)
+    drawList->AddLine(screenCorners[0], screenCorners[1], lineColor, debugCamera.frustum_line_width);
+    drawList->AddLine(screenCorners[1], screenCorners[2], lineColor, debugCamera.frustum_line_width);
+    drawList->AddLine(screenCorners[2], screenCorners[3], lineColor, debugCamera.frustum_line_width);
+    drawList->AddLine(screenCorners[3], screenCorners[0], lineColor, debugCamera.frustum_line_width);
+
+    // Far plane (back face)
+    drawList->AddLine(screenCorners[4], screenCorners[5], lineColor, debugCamera.frustum_line_width);
+    drawList->AddLine(screenCorners[5], screenCorners[6], lineColor, debugCamera.frustum_line_width);
+    drawList->AddLine(screenCorners[6], screenCorners[7], lineColor, debugCamera.frustum_line_width);
+    drawList->AddLine(screenCorners[7], screenCorners[4], lineColor, debugCamera.frustum_line_width);
+
+    // Connecting lines between near and far planes
+    for (int i = 0; i < 4; i++)
+    {
+        drawList->AddLine(screenCorners[i], screenCorners[i + 4], lineColor, debugCamera.frustum_line_width);
+    }
+
+    pnanovdb_vec3_t eyePosition = target_state.position;
+    eyePosition.x -= target_state.eye_direction.x * target_state.eye_distance_from_position;
+    eyePosition.y -= target_state.eye_direction.y * target_state.eye_distance_from_position;
+    eyePosition.z -= target_state.eye_direction.z * target_state.eye_distance_from_position;
+    ImVec2 cameraScreenPos = projectToScreen(eyePosition, &viewingCamera, windowSize.x, windowSize.y);
+    cameraScreenPos.x += windowPos.x;
+    cameraScreenPos.y += windowPos.y;
+
+    pnanovdb_vec3_t forward = basisVectors.forward;
+    pnanovdb_vec3_t up = basisVectors.up;
+    pnanovdb_vec3_t right = basisVectors.right;
+
+    // Calculate axis directions in screen space
+    pnanovdb_vec3_t xAxisEnd = { eyePosition.x + right.x * debugCamera.axis_length,
+                                 eyePosition.y + right.y * debugCamera.axis_length,
+                                 eyePosition.z + right.z * debugCamera.axis_length };
+    pnanovdb_vec3_t yAxisEnd = { eyePosition.x + up.x * debugCamera.axis_length,
+                                 eyePosition.y + up.y * debugCamera.axis_length,
+                                 eyePosition.z + up.z * debugCamera.axis_length };
+    pnanovdb_vec3_t zAxisEnd = { eyePosition.x + forward.x * debugCamera.axis_length,
+                                 eyePosition.y + forward.y * debugCamera.axis_length,
+                                 eyePosition.z + forward.z * debugCamera.axis_length };
+
+    ImVec2 xAxisScreenPos = projectToScreen(xAxisEnd, &viewingCamera, windowSize.x, windowSize.y);
+    ImVec2 yAxisScreenPos = projectToScreen(yAxisEnd, &viewingCamera, windowSize.x, windowSize.y);
+    ImVec2 zAxisScreenPos = projectToScreen(zAxisEnd, &viewingCamera, windowSize.x, windowSize.y);
+
+    xAxisScreenPos.x += windowPos.x;
+    xAxisScreenPos.y += windowPos.y;
+    yAxisScreenPos.x += windowPos.x;
+    yAxisScreenPos.y += windowPos.y;
+    zAxisScreenPos.x += windowPos.x;
+    zAxisScreenPos.y += windowPos.y;
+
+    drawList->AddLine(cameraScreenPos, xAxisScreenPos, IM_COL32(255, 0, 0, 255), debugCamera.axis_thickness); // right
+    drawList->AddLine(cameraScreenPos, yAxisScreenPos, IM_COL32(0, 255, 0, 255), debugCamera.axis_thickness); // up
+    drawList->AddLine(cameraScreenPos, zAxisScreenPos, IM_COL32(0, 0, 255, 255), debugCamera.axis_thickness); // forward
+    drawList->AddCircleFilled(cameraScreenPos, 1.5f * debugCamera.axis_thickness, IM_COL32(222, 220, 113, 255));
+}
+
+static void debugDrawCameras(Instance* ptr)
+{
+    if (!ptr->debug_cameras)
+    {
+        return;
+    }
+
+    // Get the main viewport (central docking area)
+    ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+    ImVec2 viewportPos = mainViewport->Pos;
+    ImVec2 viewportSize = mainViewport->Size;
+
+    // Create an overlay window to draw in the main viewport area
+    ImGui::SetNextWindowPos(viewportPos);
+    ImGui::SetNextWindowSize(viewportSize);
+    ImGui::SetNextWindowBgAlpha(0.f);
+
+    ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings |
+                                   ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoFocusOnAppearing |
+                                   ImGuiWindowFlags_NoBringToFrontOnFocus;
+
+    ImGui::Begin("Camera Frustum Overlay", nullptr, windowFlags);
+    {
+        for (const auto& cameraPair : *ptr->debug_cameras)
+        {
+            const std::string& cameraName = cameraPair.first;
+            pnanovdb_debug_camera_t* camera = cameraPair.second;
+            if (camera)
+            {
+                ImVec2 windowPos = ImGui::GetWindowPos();
+                ImVec2 windowSize = ImGui::GetWindowSize();
+
+                drawCameraFrustumOverlay(ptr, windowPos, windowSize, *camera);
+            }
+        }
+    }
+    ImGui::End();
+}
+
 void update(pnanovdb_imgui_instance_t* instance)
 {
     auto ptr = cast(instance);
@@ -1180,6 +1467,8 @@ void update(pnanovdb_imgui_instance_t* instance)
     ImGui::NewFrame();
 
     initializeDocking();
+
+    debugDrawCameras(ptr);
 
     createMenu(ptr);
 

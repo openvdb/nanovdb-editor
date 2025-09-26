@@ -147,6 +147,7 @@ struct Instance
     ProgressBar progress;
 
     std::shared_ptr<pnanovdb_compute_array_t> nanovdb_array = nullptr;
+    std::map<std::string, pnanovdb_debug_camera_t*>* debug_cameras = nullptr;
 
     void set_default_shader(const std::string& shaderName);
 

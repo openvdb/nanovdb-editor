@@ -147,6 +147,32 @@ PNANOVDB_FORCE_INLINE void pnanovdb_camera_init(PNANOVDB_INOUT(pnanovdb_camera_t
     PNANOVDB_DEREF(ptr).key_translate_active_mask = 0u;
 }
 
+typedef struct pnanovdb_debug_camera_t
+{
+    const char* name;
+    pnanovdb_camera_config_t config;
+    pnanovdb_camera_state_t state;
+    float axis_length;
+    float axis_thickness;
+    float frustum_line_width;
+    float frustum_scale;
+    pnanovdb_vec3_t frustum_color;
+    pnanovdb_bool_t is_visible;
+} pnanovdb_debug_camera_t;
+
+PNANOVDB_FORCE_INLINE void pnanovdb_debug_camera_default(PNANOVDB_INOUT(pnanovdb_debug_camera_t) ptr)
+{
+    pnanovdb_camera_config_default(PNANOVDB_REF(PNANOVDB_DEREF(ptr).config));
+    pnanovdb_camera_state_default(PNANOVDB_REF(PNANOVDB_DEREF(ptr).state), PNANOVDB_FALSE);
+    PNANOVDB_DEREF(ptr).name = NULL;
+    PNANOVDB_DEREF(ptr).axis_length = 10.f;
+    PNANOVDB_DEREF(ptr).axis_thickness = 4.f;
+    PNANOVDB_DEREF(ptr).frustum_line_width = 2.f;
+    PNANOVDB_DEREF(ptr).frustum_scale = 1.f;
+    PNANOVDB_DEREF(ptr).frustum_color = { 132.f, 204.f, 78.f };
+    PNANOVDB_DEREF(ptr).is_visible = PNANOVDB_TRUE;
+}
+
 PNANOVDB_FORCE_INLINE pnanovdb_vec3_t pnanovdb_camera_vec3_normalize(const pnanovdb_vec3_t v)
 {
     pnanovdb_vec3_t ret = v;
