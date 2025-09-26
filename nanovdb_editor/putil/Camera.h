@@ -131,7 +131,7 @@ PNANOVDB_FORCE_INLINE void pnanovdb_camera_state_default(PNANOVDB_INOUT(pnanovdb
         PNANOVDB_DEREF(ptr).eye_up.y = 0.f;
         PNANOVDB_DEREF(ptr).eye_up.z = 1.f;
     }
-    PNANOVDB_DEREF(ptr).eye_distance_from_position = -700.f;
+    PNANOVDB_DEREF(ptr).eye_distance_from_position = 700.f;
     PNANOVDB_DEREF(ptr).orthographic_scale = 1.f;
 }
 
@@ -345,15 +345,18 @@ PNANOVDB_FORCE_INLINE pnanovdb_camera_mat_t pnanovdb_camera_mat_inverse(const pn
 PNANOVDB_FORCE_INLINE void pnanovdb_camera_get_view(PNANOVDB_INOUT(pnanovdb_camera_t) ptr,
                                                     PNANOVDB_INOUT(pnanovdb_camera_mat_t) view)
 {
+    float eye_dist = PNANOVDB_DEREF(ptr).state.eye_distance_from_position;
+    eye_dist = eye_dist < 0.f ? -eye_dist : eye_dist;
+
     pnanovdb_vec3_t eye_position = PNANOVDB_DEREF(ptr).state.position;
-    eye_position.x -= PNANOVDB_DEREF(ptr).state.eye_direction.x * PNANOVDB_DEREF(ptr).state.eye_distance_from_position;
-    eye_position.y -= PNANOVDB_DEREF(ptr).state.eye_direction.y * PNANOVDB_DEREF(ptr).state.eye_distance_from_position;
-    eye_position.z -= PNANOVDB_DEREF(ptr).state.eye_direction.z * PNANOVDB_DEREF(ptr).state.eye_distance_from_position;
+    eye_position.x -= PNANOVDB_DEREF(ptr).state.eye_direction.x * eye_dist;
+    eye_position.y -= PNANOVDB_DEREF(ptr).state.eye_direction.y * eye_dist;
+    eye_position.z -= PNANOVDB_DEREF(ptr).state.eye_direction.z * eye_dist;
 
     pnanovdb_camera_mat_t translate = { { 1.f, 0.f, 0.f, 0.f },
                                         { 0.f, 1.f, 0.f, 0.f },
                                         { 0.f, 0.f, 1.f, 0.f },
-                                        { eye_position.x, eye_position.y, eye_position.z, 1.f } };
+                                        { -eye_position.x, -eye_position.y, -eye_position.z, 1.f } };
 
     // derive rotation from eye_direction, eye_up vectors
     pnanovdb_vec3_t x_axis = {};
@@ -616,8 +619,8 @@ PNANOVDB_FORCE_INLINE void pnanovdb_camera_mouse_update(PNANOVDB_INOUT(pnanovdb_
         }
 
         // offset using mouse data
-        position_ndc.x += translate_dx;
-        position_ndc.y += translate_dy;
+        position_ndc.x -= translate_dx;
+        position_ndc.y -= translate_dy;
 
         // move back to world space
         pnanovdb_camera_mat_t proj_view_inverse = pnanovdb_camera_mat_inverse(pnanovdb_camera_mat_mul(view, projection));
