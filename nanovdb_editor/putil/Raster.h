@@ -31,6 +31,7 @@ typedef struct pnanovdb_raster_shader_params_t
     float min_radius_2d;
     pnanovdb_uint32_t tile_size;
     pnanovdb_uint32_t sh_degree_override;
+    pnanovdb_uint32_t sh_stride_rgbrgbrgb_override;
 
     const pnanovdb_reflect_data_type_t* data_type;
 } pnanovdb_raster_shader_params_t;
@@ -42,6 +43,7 @@ static const pnanovdb_raster_shader_params_t default_shader_params = {
     0.f, // min_radius_2d
     16u, // tile_size
     0, // sh_degree override, 0 means loaded SH degree
+    0, // sh_stride_rgbrgbrgb override, 0 means SH are packed rrr...ggg...bbb
     NULL, // data_type
 };
 
@@ -53,6 +55,7 @@ PNANOVDB_REFLECT_VALUE(float, eps2d, 0, 0)
 PNANOVDB_REFLECT_VALUE(float, min_radius_2d, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_uint32_t, tile_size, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_uint32_t, sh_degree_override, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_uint32_t, sh_stride_rgbrgbrgb_override, 0, 0)
 PNANOVDB_REFLECT_END(&default_shader_params)
 #undef PNANOVDB_REFLECT_TYPE
 

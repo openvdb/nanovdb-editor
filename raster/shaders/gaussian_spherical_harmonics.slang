@@ -9,10 +9,22 @@ StructuredBuffer<float> spherical_harmonics_in;
 
 RWStructuredBuffer<float> colors_out;
 
-float3 read_sh(uint idx)
+float3 read_sh(uint sh_idx_begin, uint idx)
 {
-    return float3(spherical_harmonics_in[3u * idx + 0u], spherical_harmonics_in[3u * idx + 1u],
-                  spherical_harmonics_in[3u * idx + 2u]);
+    float3 rgb;
+    if (shader_params.sh_stride_rgbrgbrgb != 0u)
+    {
+        rgb = float3(spherical_harmonics_in[sh_idx_begin + 3u * idx + 0u],
+                     spherical_harmonics_in[sh_idx_begin + 3u * idx + 1u],
+                     spherical_harmonics_in[sh_idx_begin + 3u * idx + 2u]);
+    }
+    else
+    {
+        rgb = float3(spherical_harmonics_in[sh_idx_begin + idx],
+                     spherical_harmonics_in[sh_idx_begin + idx + 16u],
+                     spherical_harmonics_in[sh_idx_begin + idx + 32u]);
+    }
+    return rgb;
 }
 
 // Evaluate spherical harmonics bases at unit direction for high orders using
@@ -21,7 +33,7 @@ float3 read_sh(uint idx)
 // implementation
 float3 eval_sh_function(uint degree, uint sh_idx_begin, float3 viewDir)
 {
-    float3 cSH0 = read_sh(sh_idx_begin + 0u);
+    float3 cSH0 = read_sh(sh_idx_begin, 0u);
 
     float3 result = 0.2820947917738781f * cSH0;
 
@@ -32,9 +44,9 @@ float3 eval_sh_function(uint degree, uint sh_idx_begin, float3 viewDir)
         float y = viewDir.y * inorm;
         float z = viewDir.z * inorm;
 
-        float3 cSH1 = read_sh(sh_idx_begin + 1u);
-        float3 cSH2 = read_sh(sh_idx_begin + 2u);
-        float3 cSH3 = read_sh(sh_idx_begin + 3u);
+        float3 cSH1 = read_sh(sh_idx_begin, 1u);
+        float3 cSH2 = read_sh(sh_idx_begin, 2u);
+        float3 cSH3 = read_sh(sh_idx_begin, 3u);
 
         result += 0.48860251190292f * (-y * cSH1 + z * cSH2 - x * cSH3);
 
@@ -51,11 +63,11 @@ float3 eval_sh_function(uint degree, uint sh_idx_begin, float3 viewDir)
             float pSH8 = 0.5462742152960395f * fC1;
             float pSH4 = 0.5462742152960395f * fS1;
 
-            float3 cSH4 = read_sh(sh_idx_begin + 4u);
-            float3 cSH5 = read_sh(sh_idx_begin + 5u);
-            float3 cSH6 = read_sh(sh_idx_begin + 6u);
-            float3 cSH7 = read_sh(sh_idx_begin + 7u);
-            float3 cSH8 = read_sh(sh_idx_begin + 8u);
+            float3 cSH4 = read_sh(sh_idx_begin, 4u);
+            float3 cSH5 = read_sh(sh_idx_begin, 5u);
+            float3 cSH6 = read_sh(sh_idx_begin, 6u);
+            float3 cSH7 = read_sh(sh_idx_begin, 7u);
+            float3 cSH8 = read_sh(sh_idx_begin, 8u);
 
             result += (pSH4 * cSH4) + (pSH5 * cSH5) + (pSH6 * cSH6) + (pSH7 * cSH7) + (pSH8 * cSH8);
 
@@ -73,13 +85,13 @@ float3 eval_sh_function(uint degree, uint sh_idx_begin, float3 viewDir)
                 float pSH15 = -0.5900435899266435f * fC2;
                 float pSH9 = -0.5900435899266435f * fS2;
 
-                float3 cSH9 = read_sh(sh_idx_begin + 9u);
-                float3 cSH10 = read_sh(sh_idx_begin + 10u);
-                float3 cSH11 = read_sh(sh_idx_begin + 11u);
-                float3 cSH12 = read_sh(sh_idx_begin + 12u);
-                float3 cSH13 = read_sh(sh_idx_begin + 13u);
-                float3 cSH14 = read_sh(sh_idx_begin + 14u);
-                float3 cSH15 = read_sh(sh_idx_begin + 15u);
+                float3 cSH9 = read_sh(sh_idx_begin, 9u);
+                float3 cSH10 = read_sh(sh_idx_begin, 10u);
+                float3 cSH11 = read_sh(sh_idx_begin, 11u);
+                float3 cSH12 = read_sh(sh_idx_begin, 12u);
+                float3 cSH13 = read_sh(sh_idx_begin, 13u);
+                float3 cSH14 = read_sh(sh_idx_begin, 14u);
+                float3 cSH15 = read_sh(sh_idx_begin, 15u);
 
                 result += (pSH9 * cSH9) + (pSH10 * cSH10) + (pSH11 * cSH11) + (pSH12 * cSH12) + (pSH13 * cSH13) +
                           (pSH14 * cSH14) + (pSH15 * cSH15);
@@ -101,15 +113,15 @@ float3 eval_sh_function(uint degree, uint sh_idx_begin, float3 viewDir)
                     float pSH24 = 0.6258357354491763f * fC3;
                     float pSH16 = 0.6258357354491763f * fS3;
 
-                    float3 cSH16 = read_sh(sh_idx_begin + 16u);
-                    float3 cSH17 = read_sh(sh_idx_begin + 17u);
-                    float3 cSH18 = read_sh(sh_idx_begin + 18u);
-                    float3 cSH19 = read_sh(sh_idx_begin + 19u);
-                    float3 cSH20 = read_sh(sh_idx_begin + 20u);
-                    float3 cSH21 = read_sh(sh_idx_begin + 21u);
-                    float3 cSH22 = read_sh(sh_idx_begin + 22u);
-                    float3 cSH23 = read_sh(sh_idx_begin + 23u);
-                    float3 cSH24 = read_sh(sh_idx_begin + 24u);
+                    float3 cSH16 = read_sh(sh_idx_begin, 16u);
+                    float3 cSH17 = read_sh(sh_idx_begin, 17u);
+                    float3 cSH18 = read_sh(sh_idx_begin, 18u);
+                    float3 cSH19 = read_sh(sh_idx_begin, 19u);
+                    float3 cSH20 = read_sh(sh_idx_begin, 20u);
+                    float3 cSH21 = read_sh(sh_idx_begin, 21u);
+                    float3 cSH22 = read_sh(sh_idx_begin, 22u);
+                    float3 cSH23 = read_sh(sh_idx_begin, 23u);
+                    float3 cSH24 = read_sh(sh_idx_begin, 24u);
 
                     result += (pSH16 * cSH16) + (pSH17 * cSH17) + (pSH18 * cSH18) + (pSH19 * cSH19) + (pSH20 * cSH20) +
                               (pSH21 * cSH21) + (pSH22 * cSH22) + (pSH23 * cSH23) + (pSH24 * cSH24);
@@ -126,7 +138,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
     uint idx = group_idx.x * 256u + thread_idx.x;
 
-    float3 color = eval_sh_function(shader_params.sh_degree, 16u * idx, constants.view_dir);
+    float3 color = eval_sh_function(shader_params.sh_degree, 48u * idx, constants.view_dir);
 
     colors_out[3u * idx + 0u] = color.r;
     colors_out[3u * idx + 1u] = color.g;
