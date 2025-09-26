@@ -134,8 +134,9 @@ pnanovdb_imgui_window_t* create(const pnanovdb_compute_t* compute,
     pnanovdb_camera_state_default(&settings->camera_state, PNANOVDB_FALSE);
     *imgui_user_settings = settings;
 
+    ptr->prev_is_upside_down = settings->is_upside_down;
+    ptr->prev_is_y_up = settings->is_y_up;
     ptr->window_glfw = window_glfw;
-
     ptr->log_print = log_print;
 
     pnanovdb_compute_device_interface_t_duplicate(&ptr->device_interface, &compute->device_interface);
@@ -608,6 +609,15 @@ void update_camera(pnanovdb_imgui_window_t* window, pnanovdb_imgui_settings_rend
         ptr->camera.state.eye_up.z = -ptr->camera.state.eye_up.z;
 
         ptr->prev_is_upside_down = user_settings->is_upside_down;
+    }
+    if (user_settings->sync_camera)
+    {
+        user_settings->sync_camera = PNANOVDB_FALSE;
+    }
+    else
+    {
+        user_settings->camera_state = ptr->camera.state;
+        user_settings->camera_config = ptr->camera.config;
     }
 }
 
