@@ -580,13 +580,13 @@ void update_camera(pnanovdb_imgui_window_t* window, pnanovdb_imgui_settings_rend
     }
     if (user_settings->is_reverse_z != ptr->camera.config.is_reverse_z)
     {
-        applyReverseZFarPlane(&ptr->camera.config);
         ptr->camera.config.is_reverse_z = user_settings->is_reverse_z;
+        applyReverseZFarPlane(&ptr->camera.config);
     }
     if (user_settings->is_orthographic != ptr->camera.config.is_orthographic)
     {
-        applyReverseZFarPlane(&ptr->camera.config);
         ptr->camera.config.is_orthographic = user_settings->is_orthographic;
+        applyReverseZFarPlane(&ptr->camera.config);
     }
 
     if (user_settings->is_y_up != ptr->prev_is_y_up)
