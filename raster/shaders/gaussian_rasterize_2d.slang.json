@@ -35,6 +35,12 @@
             "min": 0,
             "max": 3,
             "step": 1
+        },
+        "sh_stride_rgbrgbrgb": {
+            "value": 0,
+            "min": 0,
+            "max": 1,
+            "step": 1
         }
     }
 }

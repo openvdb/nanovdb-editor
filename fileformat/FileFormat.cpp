@@ -217,7 +217,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
     // we use the presence of nx to guess sh stride convention
     uint32_t prop_nx = resolve_prop("property float nx\n");
     bool is_gs_with_normals = prop_nx < properties.size();
-    bool sh_rgb_seperate = is_fvdb_gs || is_gs_with_normals;
+    bool sh_rgb_separate = is_fvdb_gs || is_gs_with_normals;
 
     std::vector<float> element;
     element.resize(properties.size());
@@ -236,16 +236,13 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
         arr_scales.push_back(element[prop_scale_0]);
         arr_scales.push_back(element[prop_scale_1]);
         arr_scales.push_back(element[prop_scale_2]);
+        // put in rrrgggbbb convention
         arr_sh.push_back(element[prop_f_dc_0]);
-        arr_sh.push_back(element[prop_f_dc_1]);
-        arr_sh.push_back(element[prop_f_dc_2]);
-        if (sh_rgb_seperate)
+        if (sh_rgb_separate)
         {
             for (unsigned int idx = 0u; idx < 15u; idx++)
             {
                 arr_sh.push_back(element[prop_f_rest_0 + idx]);
-                arr_sh.push_back(element[prop_f_rest_0 + 15u + idx]);
-                arr_sh.push_back(element[prop_f_rest_0 + 30u + idx]);
             }
         }
         else
@@ -253,7 +250,35 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
             for (unsigned int idx = 0u; idx < 15u; idx++)
             {
                 arr_sh.push_back(element[prop_f_rest_0 + 3u * idx + 0u]);
+            }
+        }
+        arr_sh.push_back(element[prop_f_dc_1]);
+        if (sh_rgb_separate)
+        {
+            for (unsigned int idx = 0u; idx < 15u; idx++)
+            {
+                arr_sh.push_back(element[prop_f_rest_0 + 15u + idx]);
+            }
+        }
+        else
+        {
+            for (unsigned int idx = 0u; idx < 15u; idx++)
+            {
                 arr_sh.push_back(element[prop_f_rest_0 + 3u * idx + 1u]);
+            }
+        }
+        arr_sh.push_back(element[prop_f_dc_2]);
+        if (sh_rgb_separate)
+        {
+            for (unsigned int idx = 0u; idx < 15u; idx++)
+            {
+                arr_sh.push_back(element[prop_f_rest_0 + 30u + idx]);
+            }
+        }
+        else
+        {
+            for (unsigned int idx = 0u; idx < 15u; idx++)
+            {
                 arr_sh.push_back(element[prop_f_rest_0 + 3u * idx + 2u]);
             }
         }

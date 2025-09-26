@@ -50,6 +50,6 @@ struct shader_params_t
 
     uint tile_size;
     uint sh_degree;
-    uint _pad1;
+    uint sh_stride_rgbrgbrgb;
     uint _pad2;
 };
