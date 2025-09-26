@@ -33,7 +33,16 @@ CodeEditor::CodeEditor()
 bool CodeEditor::render()
 {
     bool isFocused = ImGui::IsWindowFocused();
-    const std::string shaderName = tabs_[selectedTab_].shaderName;
+    std::string shaderName;
+    auto it = tabs_.find(selectedTab_);
+    if (it != tabs_.end())
+    {
+        shaderName = it->second.shaderName;
+    }
+    if (shaderName.empty())
+    {
+        addNewFile();
+    }
     const uint32_t compileTarget = pnanovdb_shader::getCompileTarget(shaderName.c_str());
 
     if (ImGui::BeginMenuBar())
@@ -273,6 +282,17 @@ bool CodeEditor::render()
             else
             {
                 it = tabs_.erase(it);
+                if (!tabs_.empty())
+                {
+                    if (it == tabs_.end())
+                    {
+                        setSelectedShader(tabs_.begin()->second.shaderName);
+                    }
+                    else
+                    {
+                        setSelectedShader(it->second.shaderName);
+                    }
+                }
             }
         }
         ImGui::EndTabBar();

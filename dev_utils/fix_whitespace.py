@@ -51,6 +51,7 @@ def should_skip_file(file_path, git_files):
         ".nvdb",
         ".npz",
         ".wlt",
+        ".yml",
     }
 
     str_path = str(file_path)
