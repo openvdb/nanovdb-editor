@@ -355,7 +355,6 @@ pnanovdb_bool_t pop_event(pnanovdb_server_instance_t* instance, pnanovdb_server_
     {
         pnanovdb_server_event_t inactive_event = {};
         inactive_event.type = PNANOVDB_SERVER_EVENT_INACTIVE;
-        printf("Server stream going inactive.\n");
         *out_event = inactive_event;
         return PNANOVDB_TRUE;
     }
@@ -379,6 +378,7 @@ void wait_until_active(pnanovdb_server_instance_t* instance)
 {
     auto ptr = cast(instance);
 
+    printf("Server stream going inactive.\n");
     for (uint32_t idx = 0u; idx < 3600; idx++)
     {
         bool should_wait = false;
