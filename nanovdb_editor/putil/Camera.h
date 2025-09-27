@@ -101,11 +101,11 @@ PNANOVDB_FORCE_INLINE void pnanovdb_camera_config_default(PNANOVDB_INOUT(pnanovd
     PNANOVDB_DEREF(ptr).near_plane = 0.1f;
     PNANOVDB_DEREF(ptr).far_plane = PNANOVDB_CAMERA_INFINITY;
     PNANOVDB_DEREF(ptr).fov_angle_y = 3.14159f / 4.f;
-    PNANOVDB_DEREF(ptr).orthographic_y = 500.f;
+    PNANOVDB_DEREF(ptr).orthographic_y = 10.f;
     PNANOVDB_DEREF(ptr).pan_rate = 1.f;
     PNANOVDB_DEREF(ptr).tilt_rate = 1.f;
     PNANOVDB_DEREF(ptr).zoom_rate = 1.f;
-    PNANOVDB_DEREF(ptr).key_translation_rate = 800.f;
+    PNANOVDB_DEREF(ptr).key_translation_rate = 1.f;
 }
 
 PNANOVDB_FORCE_INLINE void pnanovdb_camera_state_default(PNANOVDB_INOUT(pnanovdb_camera_state_t) ptr, pnanovdb_bool_t y_up)
@@ -736,19 +736,19 @@ PNANOVDB_FORCE_INLINE void pnanovdb_camera_animation_tick(PNANOVDB_INOUT(pnanovd
 
     if (PNANOVDB_DEREF(ptr).key_translate_active_mask & 2u)
     {
-        z += -rate;
+        z += +rate;
     }
     if (PNANOVDB_DEREF(ptr).key_translate_active_mask & 4u)
     {
-        z += +rate;
+        z += -rate;
     }
     if (PNANOVDB_DEREF(ptr).key_translate_active_mask & 8)
     {
-        x += +rate;
+        x += -rate;
     }
     if (PNANOVDB_DEREF(ptr).key_translate_active_mask & 16)
     {
-        x += -rate;
+        x += +rate;
     }
 
     if (PNANOVDB_DEREF(ptr).key_translate_active_mask)
