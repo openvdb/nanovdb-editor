@@ -127,7 +127,7 @@ static const char* CONSOLE = "Output";
 static const char* SHADER_PARAMS = "Params";
 static const char* BENCHMARK = "Benchmark";
 static const char* FILE_HEADER = "File Header";
-static const char* CAMERA_VIEWS = "Camera Views";
+static const char* CAMERA_VIEWS = "Cameras Views";
 
 static const char* getGridTypeName(uint32_t gridType)
 {
@@ -879,48 +879,24 @@ static void showWindows(Instance* ptr, float delta_time)
     {
         if (ImGui::Begin(CAMERA_VIEWS, &ptr->window.show_views))
         {
-            if (ptr->camera_views && !ptr->camera_views->empty())
+            if (ptr->camera_views == nullptr)
             {
-                const char* preview = ptr->selected_camera_view.empty() ? "Select..." : ptr->selected_camera_view.c_str();
-                if (ImGui::BeginCombo("Viewport Camera", preview))
-                {
-                    for (const auto& cameraPair : *ptr->camera_views)
-                    {
-                        const std::string& name = cameraPair.first;
-                        bool is_selected = (ptr->selected_camera_view == name);
-                        if (ImGui::Selectable(name.c_str(), is_selected))
-                        {
-                            ptr->selected_camera_view = name;
-                            pnanovdb_camera_view_t* cam = cameraPair.second;
-                            if (cam)
-                            {
-                                ptr->render_settings->camera_state = cam->state;
-                                ptr->render_settings->camera_config = cam->config;
-                                ptr->render_settings->is_projection_rh = cam->config.is_projection_rh;
-                                ptr->render_settings->is_orthographic = cam->config.is_orthographic;
-                                ptr->render_settings->is_reverse_z = cam->config.is_reverse_z;
-                                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
-                            }
-                        }
-                        if (is_selected)
-                        {
-                            ImGui::SetItemDefaultFocus();
-                        }
-                    }
-                    ImGui::EndCombo();
-                }
-            }
-            if (!ptr->camera_views)
-            {
-                ImGui::TextDisabled("No cameras available");
+                ImGui::TextDisabled("No camera views available");
             }
             else if (ptr->camera_views->empty())
             {
-                ImGui::TextDisabled("No cameras added");
+                ImGui::TextDisabled("No camera views added");
             }
             else
             {
-                if (ImGui::BeginChild("##CameraList", ImVec2(0, 200), true, ImGuiWindowFlags_AlwaysVerticalScrollbar))
+                ImVec2 fullAvail = ImGui::GetContentRegionAvail();
+                static float cameraListHeight = 120.0f;
+                const float minList = 20.0f;
+                const float minProps = 100.0f;
+                cameraListHeight = std::max(minList, std::min(cameraListHeight, fullAvail.y - minProps));
+
+                if (ImGui::BeginChild("##CameraViewList", ImVec2(0, cameraListHeight), true,
+                                      ImGuiWindowFlags_AlwaysVerticalScrollbar))
                 {
                     for (auto& cameraPair : *ptr->camera_views)
                     {
@@ -931,16 +907,12 @@ static void showWindows(Instance* ptr, float delta_time)
                         }
 
                         const std::string& cameraName = cameraPair.first;
-                        bool isVisible = (camera->is_visible != PNANOVDB_FALSE);
-                        if (ImGui::Checkbox(("##Visible" + cameraName).c_str(), &isVisible))
-                        {
-                            camera->is_visible = isVisible ? PNANOVDB_TRUE : PNANOVDB_FALSE;
-                        }
+                        IMGUI_CHECKBOX_SYNC(("##Visible" + cameraName).c_str(), camera->is_visible);
                         ImGui::SameLine();
-                        bool isSelected = (ptr->selected_camera_view_frustum == cameraName);
+                        bool isSelected = (ptr->selected_camera_frustum == cameraName);
                         if (ImGui::Selectable(cameraName.c_str(), isSelected))
                         {
-                            ptr->selected_camera_view_frustum = cameraName;
+                            ptr->selected_camera_frustum = cameraName;
                         }
                     }
 
@@ -949,36 +921,75 @@ static void showWindows(Instance* ptr, float delta_time)
                     {
                         if (ImGui::InvisibleButton("##ClearCameraFrustumSelectionArea", avail))
                         {
-                            ptr->selected_camera_view_frustum.clear();
+                            ptr->selected_camera_frustum.clear();
                         }
                     }
                 }
                 ImGui::EndChild();
-            }
-            if (ptr->selected_camera_view_frustum.empty())
-            {
-                ImGui::TextDisabled("No camera selected");
-            }
-            else
-            {
-                pnanovdb_camera_view_t* camera = ptr->camera_views->at(ptr->selected_camera_view_frustum);
-                if (camera)
-                {
-                    pnanovdb_vec3_t eyePosition = camera->state.position;
-                    eyePosition.x -= camera->state.eye_direction.x * camera->state.eye_distance_from_position;
-                    eyePosition.y -= camera->state.eye_direction.y * camera->state.eye_distance_from_position;
-                    eyePosition.z -= camera->state.eye_direction.z * camera->state.eye_distance_from_position;
 
-                    ImGui::Text("Position: (%.3f, %.3f, %.3f)", eyePosition.x, eyePosition.y, eyePosition.z);
-                    IMGUI_CHECKBOX_SYNC("Reversed Z", camera->config.is_reverse_z);
-                    IMGUI_CHECKBOX_SYNC("Orthographic", camera->config.is_orthographic);
-                    ImGui::DragFloat("FOV", &camera->config.fov_angle_y, 0.01f, 0.f, M_PI_2);
-                    ImGui::DragFloat("Axis Length", &camera->axis_length, 1.f, 0.f, 100.f);
-                    ImGui::DragFloat("Axis Thickness", &camera->axis_thickness, 0.1f, 0.f, 10.f);
-                    ImGui::DragFloat("Axis Scale", &camera->axis_scale, 0.1f, 0.f, 10.f);
-                    ImGui::DragFloat("Frustum Line Width", &camera->frustum_line_width, 0.1f, 0.f, 10.f);
-                    ImGui::DragFloat("Frustum Scale", &camera->frustum_scale, 0.1f, 0.f, 10.f);
+                ImRect bb;
+                bb.Min = ImGui::GetWindowPos() + ImGui::GetCursorPos();
+                bb.Min.y += 2.f;
+                bb.Max = bb.Min + ImVec2(fullAvail.x, 2.f);
+                float propsHeight = fullAvail.y - cameraListHeight;
+                ImGui::SplitterBehavior(bb, ImGui::GetID("##CameraViewSplitter"), ImGuiAxis_Y, &cameraListHeight,
+                                        &propsHeight, minList, minProps);
+                ImGui::Spacing();
+
+                if (ImGui::BeginChild("##CameraViewProps", ImVec2(0, 0), true))
+                {
+                    if (ptr->selected_camera_frustum.empty())
+                    {
+                        ImGui::TextDisabled("No camera selected");
+                    }
+                    else
+                    {
+                        pnanovdb_camera_view_t* camera = ptr->camera_views->at(ptr->selected_camera_frustum);
+                        if (camera)
+                        {
+                            ImGui::Text("Total Cameras: %d", camera->num_states);
+                            int maxState = (camera->num_states > 0) ? ((int)camera->num_states - 1) : 0;
+                            if (maxState > 0)
+                            {
+                                ImGui::DragInt("Camera Index", &ptr->camera_frustum_index[ptr->selected_camera_frustum],
+                                               1.f, 0, maxState, "%d");
+                            }
+                            else
+                            {
+                                ImGui::Text("Camera Index: 0");
+                            }
+
+                            int stateIdx = ptr->camera_frustum_index[ptr->selected_camera_frustum];
+
+                            if (ImGui::Button("Set Viewport Camera"))
+                            {
+                                ptr->render_settings->camera_state = camera->states[stateIdx];
+                                ptr->render_settings->camera_config = camera->config;
+                                ptr->render_settings->is_projection_rh = camera->config.is_projection_rh;
+                                ptr->render_settings->is_orthographic = camera->config.is_orthographic;
+                                ptr->render_settings->is_reverse_z = camera->config.is_reverse_z;
+                                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                            }
+
+                            pnanovdb_vec3_t eyePosition =
+                                pnanovdb_camera_get_eye_position_from_state(&camera->states[stateIdx]);
+
+                            ImGui::Text(
+                                "World Position: (%.3f, %.3f, %.3f)", eyePosition.x, eyePosition.y, eyePosition.z);
+
+                            ImGui::Separator();
+                            IMGUI_CHECKBOX_SYNC("Reversed Z", camera->config.is_reverse_z);
+                            IMGUI_CHECKBOX_SYNC("Orthographic", camera->config.is_orthographic);
+                            ImGui::DragFloat("FOV", &camera->config.fov_angle_y, 0.01f, 0.f, M_PI_2);
+                            ImGui::DragFloat("Axis Length", &camera->axis_length, 1.f, 0.f, 100.f);
+                            ImGui::DragFloat("Axis Thickness", &camera->axis_thickness, 0.1f, 0.f, 10.f);
+                            ImGui::DragFloat("Axis Scale", &camera->axis_scale, 0.1f, 0.f, 10.f);
+                            ImGui::DragFloat("Frustum Line Width", &camera->frustum_line_width, 0.1f, 0.f, 10.f);
+                            ImGui::DragFloat("Frustum Scale", &camera->frustum_scale, 0.1f, 0.f, 10.f);
+                        }
+                    }
                 }
+                ImGui::EndChild();
             }
 
             ImGui::End();
@@ -1288,27 +1299,18 @@ struct CameraBasisVectors
     pnanovdb_vec3_t forward;
 };
 
-static void calculateFrustumCorners(pnanovdb_camera_state_t camera_state,
-                                    pnanovdb_camera_config_t camera_config,
+static void calculateFrustumCorners(pnanovdb_camera_state_t& camera_state,
+                                    pnanovdb_camera_config_t& camera_config,
                                     float width,
                                     float height,
                                     pnanovdb_vec3_t corners[8],
                                     CameraBasisVectors* basisVectors = nullptr,
                                     float frustum_scale = 1.f)
 {
-    pnanovdb_vec3_t eyePosition = camera_state.position;
-    eyePosition.x -= camera_state.eye_direction.x * camera_state.eye_distance_from_position;
-    eyePosition.y -= camera_state.eye_direction.y * camera_state.eye_distance_from_position;
-    eyePosition.z -= camera_state.eye_direction.z * camera_state.eye_distance_from_position;
+    pnanovdb_vec3_t eyePosition = pnanovdb_camera_get_eye_position_from_state(&camera_state);
 
     // Calculate camera basis vectors
     pnanovdb_vec3_t forward = camera_state.eye_direction;
-    if (camera_config.is_reverse_z)
-    {
-        forward.x = -forward.x;
-        forward.y = -forward.y;
-        forward.z = -forward.z;
-    }
     pnanovdb_vec3_t up = camera_state.eye_up;
     pnanovdb_vec3_t right = { forward.y * up.z - forward.z * up.y, forward.z * up.x - forward.x * up.z,
                               forward.x * up.y - forward.y * up.x };
@@ -1355,8 +1357,8 @@ static void calculateFrustumCorners(pnanovdb_camera_state_t camera_state,
 
     // Calculate frustum dimensions
     float aspectRatio = width / height;
-    float nearPlane = camera_config.is_reverse_z ? farPlaneClamped : nearPlaneClamped;
-    float farPlane = camera_config.is_reverse_z ? nearPlaneClamped : farPlaneClamped;
+    float nearPlane = nearPlaneClamped;
+    float farPlane = farPlaneClamped;
 
     float nearHeight, nearWidth, farHeight, farWidth;
 
@@ -1444,8 +1446,12 @@ static ImVec2 projectToScreen(const pnanovdb_vec3_t& worldPos,
     return ImVec2(std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::quiet_NaN());
 }
 
-static void drawCameraFrustumOverlay(
-    Instance* ptr, ImVec2 windowPos, ImVec2 windowSize, pnanovdb_camera_view_t& camera, bool isSelected = false)
+static void drawCameraFrustumOverlay(Instance* ptr,
+                                     ImVec2 windowPos,
+                                     ImVec2 windowSize,
+                                     pnanovdb_camera_view_t& camera,
+                                     pnanovdb_camera_state_t& cameraState,
+                                     float alpha = 1.f)
 {
     ImDrawList* drawList = ImGui::GetWindowDrawList();
 
@@ -1461,7 +1467,7 @@ static void drawCameraFrustumOverlay(
     viewingCamera.state = ptr->render_settings->camera_state;
     viewingCamera.config = ptr->render_settings->camera_config;
 
-    pnanovdb_camera_state_t target_state = camera.state;
+    pnanovdb_camera_state_t target_state = cameraState;
     pnanovdb_camera_config_t target_config = camera.config;
 
     pnanovdb_vec3_t frustumCorners[8];
@@ -1478,7 +1484,7 @@ static void drawCameraFrustumOverlay(
     }
 
     ImU32 lineColor =
-        IM_COL32(camera.frustum_color.x, camera.frustum_color.y, camera.frustum_color.z, isSelected ? 128 : 255);
+        IM_COL32(camera.frustum_color.x, camera.frustum_color.y, camera.frustum_color.z, ImU32(alpha * 255));
     float frustumLineThickness = camera.frustum_scale * camera.frustum_line_width;
 
     auto drawEdge = [&](int a, int b)
@@ -1508,10 +1514,8 @@ static void drawCameraFrustumOverlay(
     drawEdge(2, 6);
     drawEdge(3, 7);
 
-    pnanovdb_vec3_t eyePosition = target_state.position;
-    eyePosition.x -= target_state.eye_direction.x * target_state.eye_distance_from_position;
-    eyePosition.y -= target_state.eye_direction.y * target_state.eye_distance_from_position;
-    eyePosition.z -= target_state.eye_direction.z * target_state.eye_distance_from_position;
+    pnanovdb_vec3_t eyePosition = pnanovdb_camera_get_eye_position_from_state(&target_state);
+
     ImVec2 cameraScreenPos = projectToScreen(eyePosition, &viewingCamera, windowSize.x, windowSize.y);
     cameraScreenPos.x += windowPos.x;
     cameraScreenPos.y += windowPos.y;
@@ -1542,7 +1546,7 @@ static void drawCameraFrustumOverlay(
 
     float axisThickness = camera.axis_scale * camera.axis_thickness;
     float posRadius = camera.axis_scale * axisThickness;
-    ImU32 posColor = IM_COL32(222, 220, 113, isSelected ? 128 : 255);
+    ImU32 posColor = IM_COL32(222, 220, 113, ImU32(alpha * 255));
 
     if (isValidScreenPoint(cameraScreenPos) && isValidScreenPoint(xAxisScreenPos))
     {
@@ -1597,17 +1601,22 @@ static void drawCameraViews(Instance* ptr)
                 continue;
             }
 
-            bool isOverlaySelected =
-                (!ptr->selected_camera_view_frustum.empty() && ptr->selected_camera_view_frustum == cameraPair.first);
-
-            if (camera->is_visible && ptr->selected_camera_view_frustum != cameraPair.first && !isOverlaySelected)
+            if (camera->is_visible)
             {
-                drawCameraFrustumOverlay(ptr, windowPos, windowSize, *camera);
-            }
-
-            if (isOverlaySelected)
-            {
-                drawCameraFrustumOverlay(ptr, windowPos, windowSize, *camera, true);
+                bool isViewSelected =
+                    (!ptr->selected_camera_frustum.empty() && ptr->selected_camera_frustum == cameraPair.first);
+                int cameraIdx = ptr->camera_frustum_index[ptr->selected_camera_frustum];
+                for (int i = 0; i < camera->num_states; i++)
+                {
+                    if (i == cameraIdx)
+                    {
+                        continue;
+                    }
+                    drawCameraFrustumOverlay(
+                        ptr, windowPos, windowSize, *camera, camera->states[i], isViewSelected ? 0.5f : 1.f);
+                }
+                // selected camera has alpha 1.f
+                drawCameraFrustumOverlay(ptr, windowPos, windowSize, *camera, camera->states[cameraIdx]);
             }
         }
     }

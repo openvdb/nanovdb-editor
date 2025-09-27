@@ -151,7 +151,8 @@ struct Instance
 
     std::map<std::string, pnanovdb_camera_view_t*>* camera_views = nullptr;
     std::string selected_camera_view = "";
-    std::string selected_camera_view_frustum = "";
+    std::string selected_camera_frustum = "";
+    std::map<std::string, int> camera_frustum_index; // map of camera view name to state index for frustum overlay
 
     void set_default_shader(const std::string& shaderName);
 

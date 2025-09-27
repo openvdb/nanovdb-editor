@@ -147,11 +147,12 @@ PNANOVDB_FORCE_INLINE void pnanovdb_camera_init(PNANOVDB_INOUT(pnanovdb_camera_t
     PNANOVDB_DEREF(ptr).key_translate_active_mask = 0u;
 }
 
-typedef struct pnanovdb_camera_view_t
+struct pnanovdb_camera_view_t
 {
     const char* name;
     pnanovdb_camera_config_t config;
-    pnanovdb_camera_state_t state;
+    pnanovdb_camera_state_t* states;
+    pnanovdb_uint32_t num_states;
     float axis_length;
     float axis_thickness;
     float axis_scale;
@@ -159,12 +160,14 @@ typedef struct pnanovdb_camera_view_t
     float frustum_scale;
     pnanovdb_vec3_t frustum_color;
     pnanovdb_bool_t is_visible;
-} pnanovdb_camera_view_t;
+};
+PNANOVDB_STRUCT_TYPEDEF(pnanovdb_camera_view_t)
 
 PNANOVDB_FORCE_INLINE void pnanovdb_debug_camera_default(PNANOVDB_INOUT(pnanovdb_camera_view_t) ptr)
 {
     pnanovdb_camera_config_default(PNANOVDB_REF(PNANOVDB_DEREF(ptr).config));
-    pnanovdb_camera_state_default(PNANOVDB_REF(PNANOVDB_DEREF(ptr).state), PNANOVDB_FALSE);
+    PNANOVDB_DEREF(ptr).states = NULL;
+    PNANOVDB_DEREF(ptr).num_states = 0;
     PNANOVDB_DEREF(ptr).name = NULL;
     PNANOVDB_DEREF(ptr).axis_length = 10.f;
     PNANOVDB_DEREF(ptr).axis_thickness = 4.f;
@@ -370,16 +373,24 @@ PNANOVDB_FORCE_INLINE pnanovdb_camera_mat_t pnanovdb_camera_mat_inverse(const pn
     return ret;
 }
 
+PNANOVDB_FORCE_INLINE pnanovdb_vec3_t pnanovdb_camera_get_eye_position_from_state(PNANOVDB_INOUT(pnanovdb_camera_state_t)
+                                                                                      state)
+{
+    float eye_dist = PNANOVDB_DEREF(state).eye_distance_from_position;
+    eye_dist = eye_dist < 0.f ? -eye_dist : eye_dist;
+
+    pnanovdb_vec3_t eye_position = PNANOVDB_DEREF(state).position;
+    eye_position.x -= PNANOVDB_DEREF(state).eye_direction.x * eye_dist;
+    eye_position.y -= PNANOVDB_DEREF(state).eye_direction.y * eye_dist;
+    eye_position.z -= PNANOVDB_DEREF(state).eye_direction.z * eye_dist;
+
+    return eye_position;
+}
+
 PNANOVDB_FORCE_INLINE void pnanovdb_camera_get_view(PNANOVDB_INOUT(pnanovdb_camera_t) ptr,
                                                     PNANOVDB_INOUT(pnanovdb_camera_mat_t) view)
 {
-    float eye_dist = PNANOVDB_DEREF(ptr).state.eye_distance_from_position;
-    eye_dist = eye_dist < 0.f ? -eye_dist : eye_dist;
-
-    pnanovdb_vec3_t eye_position = PNANOVDB_DEREF(ptr).state.position;
-    eye_position.x -= PNANOVDB_DEREF(ptr).state.eye_direction.x * eye_dist;
-    eye_position.y -= PNANOVDB_DEREF(ptr).state.eye_direction.y * eye_dist;
-    eye_position.z -= PNANOVDB_DEREF(ptr).state.eye_direction.z * eye_dist;
+    pnanovdb_vec3_t eye_position = pnanovdb_camera_get_eye_position_from_state(PNANOVDB_REF(PNANOVDB_DEREF(ptr).state));
 
     pnanovdb_camera_mat_t translate = { { 1.f, 0.f, 0.f, 0.f },
                                         { 0.f, 1.f, 0.f, 0.f },

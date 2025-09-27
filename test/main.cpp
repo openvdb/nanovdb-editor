@@ -201,7 +201,10 @@ int main(int argc, char* argv[])
     debug_state.position = { 0.632428, 0.930241, -0.005193 };
     debug_state.eye_direction = { -0.012344, 0.959868, -0.280182 };
     debug_state.eye_up = { 0.000000, 1.000000, 0.000000 };
-    debug_state.eye_distance_from_position = -41.431084;
+    debug_state.eye_distance_from_position = 41.431084;
+
+    pnanovdb_camera_state_t debug_state_2 = debug_state;
+    debug_state_2.position.z += 0.1f;
 
     pnanovdb_camera_config_t debug_config = {};
     pnanovdb_camera_config_default(&debug_config);
@@ -211,7 +214,10 @@ int main(int argc, char* argv[])
     pnanovdb_camera_view_t debug_camera;
     pnanovdb_debug_camera_default(&debug_camera);
     debug_camera.name = "test";
-    debug_camera.state = debug_state;
+    debug_camera.num_states = 2;
+    debug_camera.states = new pnanovdb_camera_state_t[debug_camera.num_states];
+    debug_camera.states[0] = debug_state;
+    debug_camera.states[1] = debug_state_2;
     debug_camera.config = debug_config;
     editor.add_camera_view(&editor, &debug_camera);
 
@@ -226,7 +232,9 @@ int main(int argc, char* argv[])
     pnanovdb_camera_view_t default_camera;
     pnanovdb_debug_camera_default(&default_camera);
     default_camera.name = "default";
-    default_camera.state = default_state;
+    default_camera.num_states = 1;
+    default_camera.states = new pnanovdb_camera_state_t[default_camera.num_states];
+    default_camera.states[0] = default_state;
     default_camera.config = default_config;
     editor.add_camera_view(&editor, &default_camera);
 #    endif
