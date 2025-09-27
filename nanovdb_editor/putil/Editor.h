@@ -50,18 +50,15 @@ typedef struct pnanovdb_editor_t
 
     void(PNANOVDB_ABI* add_camera)(pnanovdb_editor_t* editor, pnanovdb_camera_t* camera);
 
-    void(PNANOVDB_ABI* add_debug_camera)(pnanovdb_editor_t* editor, pnanovdb_debug_camera_t* camera);
+    void(PNANOVDB_ABI* add_camera_view)(pnanovdb_editor_t* editor, pnanovdb_camera_view_t* camera);
 
-    void(PNANOVDB_ABI* setup_shader_params)(pnanovdb_editor_t* editor,
-                                            void* params,
-                                            const pnanovdb_reflect_data_type_t* data_type);
+    void(PNANOVDB_ABI* add_shader_params)(pnanovdb_editor_t* editor,
+                                          void* params,
+                                          const pnanovdb_reflect_data_type_t* data_type);
 
     void(PNANOVDB_ABI* sync_shader_params)(pnanovdb_editor_t* editor,
                                            const pnanovdb_reflect_data_type_t* data_type,
                                            pnanovdb_bool_t set_data);
-
-    void(PNANOVDB_ABI* wait_for_shader_params_sync)(pnanovdb_editor_t* editor,
-                                                    const pnanovdb_reflect_data_type_t* data_type);
 
     void(PNANOVDB_ABI* show)(pnanovdb_editor_t* editor,
                              pnanovdb_compute_device_t* device,
@@ -74,6 +71,7 @@ typedef struct pnanovdb_editor_t
     void(PNANOVDB_ABI* stop)(pnanovdb_editor_t* editor);
 
     void* module;
+    void* editor_worker;
     pnanovdb_compute_array_t* nanovdb_array;
     pnanovdb_compute_array_t* data_array;
     pnanovdb_raster_gaussian_data_t* gaussian_data;
@@ -81,8 +79,9 @@ typedef struct pnanovdb_editor_t
     pnanovdb_raster_context_t* raster_ctx;
     void* shader_params;
     const pnanovdb_reflect_data_type_t* shader_params_data_type;
-    void* editor_worker;
-    void* debug_draw;
+    void* views;
+
+
 } pnanovdb_editor_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_editor_t
@@ -95,20 +94,19 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(add_nanovdb, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_gaussian_data, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_camera, 0, 0)
-PNANOVDB_REFLECT_FUNCTION_POINTER(add_debug_camera, 0, 0)
-PNANOVDB_REFLECT_FUNCTION_POINTER(setup_shader_params, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(add_camera_view, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(add_shader_params, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(sync_shader_params, 0, 0)
-PNANOVDB_REFLECT_FUNCTION_POINTER(wait_for_shader_params_sync, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(show, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(start, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(stop, 0, 0)
 PNANOVDB_REFLECT_VOID_POINTER(module, 0, 0)
+PNANOVDB_REFLECT_VOID_POINTER(editor_worker, 0, 0)
 PNANOVDB_REFLECT_POINTER(pnanovdb_compute_array_t, nanovdb_array, 0, 0)
 PNANOVDB_REFLECT_POINTER(pnanovdb_compute_array_t, data_array, 0, 0)
 PNANOVDB_REFLECT_VOID_POINTER(shader_params, 0, 0)
 PNANOVDB_REFLECT_POINTER(pnanovdb_reflect_data_type_t, shader_params_data_type, 0, 0)
-PNANOVDB_REFLECT_VOID_POINTER(editor_worker, 0, 0)
-PNANOVDB_REFLECT_VOID_POINTER(debug_draw, 0, 0)
+PNANOVDB_REFLECT_VOID_POINTER(views, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE
@@ -156,7 +154,7 @@ static inline void pnanovdb_editor_load(pnanovdb_editor_t* editor,
     editor->shader_params = NULL;
     editor->shader_params_data_type = NULL;
     editor->editor_worker = NULL;
-    editor->debug_draw = NULL;
+    editor->views = NULL;
     editor->init(editor);
 }
 

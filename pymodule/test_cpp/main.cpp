@@ -164,12 +164,12 @@ int main(int argc, char* argv[])
     debug_config.near_plane = 0.1f;
     debug_config.far_plane = 100.0f;
 
-    pnanovdb_debug_camera_t debug_camera;
+    pnanovdb_camera_view_t debug_camera;
     pnanovdb_debug_camera_default(&debug_camera);
     debug_camera.name = "test";
     debug_camera.state = debug_state;
     debug_camera.config = debug_config;
-    editor.add_debug_camera(&editor, &debug_camera);
+    editor.add_camera_view(&editor, &debug_camera);
 
     pnanovdb_camera_config_t default_config = {};
     pnanovdb_camera_config_default(&default_config);
@@ -179,12 +179,12 @@ int main(int argc, char* argv[])
     pnanovdb_camera_state_t default_state = {};
     pnanovdb_camera_state_default(&default_state, PNANOVDB_FALSE);
 
-    pnanovdb_debug_camera_t default_camera;
+    pnanovdb_camera_view_t default_camera;
     pnanovdb_debug_camera_default(&default_camera);
     default_camera.name = "default";
     default_camera.state = default_state;
     default_camera.config = default_config;
-    editor.add_debug_camera(&editor, &default_camera);
+    editor.add_camera_view(&editor, &default_camera);
 
     const char* raster_file = "../../data/ficus.ply";
     pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
@@ -203,19 +203,17 @@ int main(int argc, char* argv[])
                                  &editor.raster_ctx, nullptr, nullptr, nullptr);
 
     editor.add_gaussian_data(&editor, &raster, queue, gaussian_data);
-    editor.setup_shader_params(&editor, &raster_params, data_type);
+    editor.add_shader_params(&editor, &raster_params, data_type);
 
     runEditorLoop(5);
 
     raster_params.eps2d = 0.5f;
     printf("Updating shader param eps2d to %f\n", raster_params.eps2d);
     editor.sync_shader_params(&editor, data_type, PNANOVDB_TRUE);
-    editor.wait_for_shader_params_sync(&editor, data_type);
 
     runEditorLoop(10);
 
     editor.sync_shader_params(&editor, data_type, PNANOVDB_FALSE);
-    editor.wait_for_shader_params_sync(&editor, data_type);
 
     debug_camera.is_visible = PNANOVDB_FALSE;
 

@@ -33,10 +33,10 @@
 #define TEST_EDITOR
 // #define TEST_EDITOR_START_STOP
 // #define TEST_RASTER
-// #define TEST_RASTER_2D
+#define TEST_RASTER_2D
 // #define TEST_SVRASTER
 // #define TEST_E57
-// #define TEST_CAMERA
+#define TEST_CAMERA
 struct constants_t
 {
     int magic_number;
@@ -208,12 +208,12 @@ int main(int argc, char* argv[])
     debug_config.near_plane = 0.1f;
     debug_config.far_plane = 100.0f;
 
-    pnanovdb_debug_camera_t debug_camera;
+    pnanovdb_camera_view_t debug_camera;
     pnanovdb_debug_camera_default(&debug_camera);
     debug_camera.name = "test";
     debug_camera.state = debug_state;
     debug_camera.config = debug_config;
-    editor.add_debug_camera(&editor, &debug_camera);
+    editor.add_camera_view(&editor, &debug_camera);
 
     pnanovdb_camera_config_t default_config = {};
     pnanovdb_camera_config_default(&default_config);
@@ -223,12 +223,12 @@ int main(int argc, char* argv[])
     pnanovdb_camera_state_t default_state = {};
     pnanovdb_camera_state_default(&default_state, PNANOVDB_FALSE);
 
-    pnanovdb_debug_camera_t default_camera;
+    pnanovdb_camera_view_t default_camera;
     pnanovdb_debug_camera_default(&default_camera);
     default_camera.name = "default";
     default_camera.state = default_state;
     default_camera.config = default_config;
-    editor.add_debug_camera(&editor, &default_camera);
+    editor.add_camera_view(&editor, &default_camera);
 #    endif
 
 #    ifdef TEST_RASTER
@@ -280,7 +280,7 @@ int main(int argc, char* argv[])
                                  &editor.raster_ctx, nullptr, nullptr, nullptr);
 #        endif
 
-    editor.setup_shader_params(&editor, &raster_params, data_type);
+    editor.add_shader_params(&editor, &raster_params, data_type);
 
     raster_params.eps2d = 0.5f;
     raster_params.near_plane_override = 1.f;

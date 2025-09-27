@@ -82,17 +82,13 @@ class pnanovdb_Editor(Structure):
         ),  # pnanovdb_raster_t*, pnanovdb_compute_queue_t*, pnanovdb_raster_gaussian_data_t*
         ("add_camera", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Camera))),
         (
-            "setup_shader_params",
+            "add_shader_params",
             CFUNCTYPE(None, c_void_p, c_void_p, c_void_p),
         ),  # void* params, const pnanovdb_reflect_data_type_t* data_type
         (
             "sync_shader_params",
             CFUNCTYPE(None, c_void_p, c_void_p, c_int32),
         ),  # const pnanovdb_reflect_data_type_t* data_type, pnanovdb_bool_t set_data
-        (
-            "wait_for_shader_params_sync",
-            CFUNCTYPE(None, c_void_p, c_void_p),
-        ),  # const pnanovdb_reflect_data_type_t* data_type
         ("show", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Device), POINTER(pnanovdb_EditorConfig))),
         ("start", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Device), POINTER(pnanovdb_EditorConfig))),
         ("stop", CFUNCTYPE(None, c_void_p)),
@@ -166,20 +162,15 @@ class Editor:
         add_gaussian_data_func = self._editor.contents.add_gaussian_data
         add_gaussian_data_func(self._editor, raster, queue, data)
 
-    def setup_shader_params(self, params, data_type) -> None:
+    def add_shader_params(self, params, data_type) -> None:
         """Setup shader parameters."""
-        setup_shader_params_func = self._editor.contents.setup_shader_params
-        setup_shader_params_func(self._editor, params, data_type)
+        add_shader_params_func = self._editor.contents.add_shader_params
+        add_shader_params_func(self._editor, params, data_type)
 
     def sync_shader_params(self, data_type, set_data: bool) -> None:
         """Sync shader parameters."""
         sync_shader_params_func = self._editor.contents.sync_shader_params
         sync_shader_params_func(self._editor, data_type, 1 if set_data else 0)
-
-    def wait_for_shader_params_sync(self, data_type) -> None:
-        """Wait for shader parameters sync to complete."""
-        wait_for_shader_params_sync_func = self._editor.contents.wait_for_shader_params_sync
-        wait_for_shader_params_sync_func(self._editor, data_type)
 
     def show(self, config=None) -> None:
         show_func = self._editor.contents.show

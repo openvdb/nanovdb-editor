@@ -119,14 +119,14 @@ struct EditorWorker
     PendingData<pnanovdb_compute_array_t> pending_data_array;
     PendingData<pnanovdb_raster_gaussian_data_t> pending_gaussian_data;
     PendingData<pnanovdb_camera_t> pending_camera;
-    PendingData<pnanovdb_debug_camera_t> pending_debug_camera;
+    PendingData<pnanovdb_camera_view_t> pending_camera_view;
     PendingData<void> pending_shader_params;
     ConstPendingData<pnanovdb_reflect_data_type_t> pending_shader_params_data_type;
 };
 
-typedef std::map<std::string, pnanovdb_debug_camera_t*> DebugCamerasT;
+typedef std::map<std::string, pnanovdb_camera_view_t*> DebugCamerasT;
 
-struct EditorDebug
+struct EditorView
 {
     DebugCamerasT cameras;
 };
@@ -214,7 +214,7 @@ static void save_image(const char* filename, float* mapped_data, uint32_t image_
 
 void init(pnanovdb_editor_t* editor)
 {
-    editor->debug_draw = new EditorDebug();
+    editor->views = new EditorView();
 }
 
 void shutdown(pnanovdb_editor_t* editor)
@@ -229,9 +229,9 @@ void shutdown(pnanovdb_editor_t* editor)
         editor->compute->destroy_array(editor->nanovdb_array);
         editor->nanovdb_array = nullptr;
     }
-    if (editor->debug_draw)
+    if (editor->views)
     {
-        delete static_cast<EditorDebug*>(editor->debug_draw);
+        delete static_cast<EditorView*>(editor->views);
     }
 }
 
@@ -313,21 +313,21 @@ void add_camera(pnanovdb_editor_t* editor, pnanovdb_camera_t* camera)
     }
 }
 
-void add_debug_camera(pnanovdb_editor_t* editor, pnanovdb_debug_camera_t* camera)
+void add_camera_view(pnanovdb_editor_t* editor, pnanovdb_camera_view_t* camera)
 {
     if (editor->editor_worker)
     {
         EditorWorker* worker = static_cast<EditorWorker*>(editor->editor_worker);
-        worker->pending_debug_camera.set_pending(camera);
-        worker->pending_debug_camera.wait_for_sync();
+        worker->pending_camera_view.set_pending(camera);
+        worker->pending_camera_view.wait_for_sync();
     }
     else
     {
-        static_cast<EditorDebug*>(editor->debug_draw)->cameras[camera->name] = camera;
+        static_cast<EditorView*>(editor->views)->cameras[camera->name] = camera;
     }
 }
 
-void setup_shader_params(pnanovdb_editor_t* editor, void* params, const pnanovdb_reflect_data_type_t* data_type)
+void add_shader_params(pnanovdb_editor_t* editor, void* params, const pnanovdb_reflect_data_type_t* data_type)
 {
     if (!params || !data_type)
     {
@@ -355,29 +355,22 @@ void sync_shader_params(pnanovdb_editor_t* editor, const pnanovdb_reflect_data_t
         return;
     }
     // TODO don't have set_params and get_params per data_type now
+    EditorWorker* worker = static_cast<EditorWorker*>(editor->editor_worker);
     if (set_data)
     {
-        static_cast<EditorWorker*>(editor->editor_worker)->set_params.fetch_add(1);
+        worker->set_params.fetch_add(1);
+        while (worker->set_params.load() > 0)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
     }
     else
     {
-        static_cast<EditorWorker*>(editor->editor_worker)->get_params.fetch_add(1);
-    }
-}
-
-void wait_for_shader_params_sync(pnanovdb_editor_t* editor, const pnanovdb_reflect_data_type_t* data_type)
-{
-    if (!editor->editor_worker)
-    {
-        return;
-    }
-    // TODO don't have set_params and get_params per data_type now
-
-    // wait until the params are synced
-    EditorWorker* worker = static_cast<EditorWorker*>(editor->editor_worker);
-    while (worker->set_params.load() > 0 || worker->get_params.load() > 0)
-    {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        worker->get_params.fetch_add(1);
+        while (worker->get_params.load() > 0)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
     }
 }
 
@@ -512,7 +505,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     editor->compute->device_interface.get_memory_stats(device, Profiler::getInstance().getMemoryStats());
 
     // debug draw
-    imgui_user_instance->debug_cameras = &(static_cast<EditorDebug*>(editor->debug_draw)->cameras);
+    imgui_user_instance->camera_views = &(static_cast<EditorView*>(editor->views)->cameras);
 
 #ifdef USE_IMGUI_INSTANCE
     ShaderCallback callback =
@@ -627,12 +620,12 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 imgui_user_settings->camera_config = editor->camera->config;
                 imgui_user_settings->sync_camera = PNANOVDB_TRUE;
             }
-            pnanovdb_debug_camera_t* old_debug_cameras = nullptr;
-            pnanovdb_debug_camera_t* debug_camera = nullptr;
-            updated = worker->pending_debug_camera.process_pending(debug_camera, old_debug_cameras);
+            pnanovdb_camera_view_t* old_camera_views = nullptr;
+            pnanovdb_camera_view_t* debug_camera = nullptr;
+            updated = worker->pending_camera_view.process_pending(debug_camera, old_camera_views);
             if (updated)
             {
-                static_cast<EditorDebug*>(editor->debug_draw)->cameras[debug_camera->name] = debug_camera;
+                static_cast<EditorView*>(editor->views)->cameras[debug_camera->name] = debug_camera;
             }
             void* old_shader_params = nullptr;
             worker->pending_shader_params.process_pending(editor->shader_params, old_shader_params);
@@ -1053,7 +1046,9 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                         imgui_user_instance->shader_params.set_compute_array_for_shader(
                             raster2d_shader_name, raster2d_shader_params_array);
 
-                        editor->shader_params = nullptr; // value will be read from imgui from now on
+                        // value will be read from imgui from now on
+                        editor->shader_params = nullptr;
+                        editor->shader_params_data_type = nullptr;
                     }
                 }
                 else // don't have shader params with raster data type
@@ -1233,12 +1228,11 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
     editor.shutdown = shutdown;
     editor.add_nanovdb = add_nanovdb;
     editor.add_array = add_array;
-    editor.setup_shader_params = setup_shader_params;
+    editor.add_shader_params = add_shader_params;
     editor.sync_shader_params = sync_shader_params;
-    editor.wait_for_shader_params_sync = wait_for_shader_params_sync;
     editor.add_gaussian_data = add_gaussian_data;
     editor.add_camera = add_camera;
-    editor.add_debug_camera = add_debug_camera;
+    editor.add_camera_view = add_camera_view;
     editor.show = show;
     editor.start = start;
     editor.stop = stop;

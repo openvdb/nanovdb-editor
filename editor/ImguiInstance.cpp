@@ -126,7 +126,7 @@ static const char* CONSOLE = "Output";
 static const char* SHADER_PARAMS = "Params";
 static const char* BENCHMARK = "Benchmark";
 static const char* FILE_HEADER = "File Header";
-static const char* DEBUG_DRAW = "Debug Draw";
+static const char* CAMERA_VIEWS = "Camera Views";
 
 static const char* getGridTypeName(uint32_t gridType)
 {
@@ -380,7 +380,7 @@ static void initializeDocking()
             ImGui::DockBuilderSplitNode(dock_id_left, ImGuiDir_Down, 0.f, nullptr, &dock_id_left);
         ImGui::DockBuilderSetNodeSize(dock_id_left_bottom, ImVec2(left_dock_width, window_height));
         ImGui::DockBuilderDockWindow(SHADER_PARAMS, dock_id_left_bottom);
-        ImGui::DockBuilderDockWindow(DEBUG_DRAW, dock_id_left_bottom);
+        ImGui::DockBuilderDockWindow(CAMERA_VIEWS, dock_id_left_bottom);
         ImGui::DockBuilderDockWindow(BENCHMARK, dock_id_left_bottom);
 
         ImGui::DockBuilderFinish(dockspace_id);
@@ -404,7 +404,7 @@ static void createMenu(Instance* ptr)
             ImGui::MenuItem(FILE_HEADER, "", &ptr->window.show_file_header);
             ImGui::MenuItem(CONSOLE, "", &ptr->window.show_console);
             ImGui::MenuItem(SHADER_PARAMS, "", &ptr->window.show_shader_params);
-            ImGui::MenuItem(DEBUG_DRAW, "", &ptr->window.show_debug_draw);
+            ImGui::MenuItem(CAMERA_VIEWS, "", &ptr->window.show_views);
             ImGui::MenuItem(BENCHMARK, "", &ptr->window.show_benchmark);
             ImGui::EndMenu();
         }
@@ -874,25 +874,24 @@ static void showWindows(Instance* ptr, float delta_time)
         }
     }
 
-    if (ptr->window.show_debug_draw)
+    if (ptr->window.show_views)
     {
-        if (ImGui::Begin("Debug Draw", &ptr->window.show_debug_draw))
+        if (ImGui::Begin(CAMERA_VIEWS, &ptr->window.show_views))
         {
-            ImGui::Text("Debug Cameras");
-            if (ptr->debug_cameras && !ptr->debug_cameras->empty())
+            if (ptr->camera_views && !ptr->camera_views->empty())
             {
                 const char* preview =
                     ptr->selected_debug_camera.empty() ? "Select..." : ptr->selected_debug_camera.c_str();
                 if (ImGui::BeginCombo("Viewport Camera", preview))
                 {
-                    for (const auto& cameraPair : *ptr->debug_cameras)
+                    for (const auto& cameraPair : *ptr->camera_views)
                     {
                         const std::string& name = cameraPair.first;
                         bool is_selected = (ptr->selected_debug_camera == name);
                         if (ImGui::Selectable(name.c_str(), is_selected))
                         {
                             ptr->selected_debug_camera = name;
-                            pnanovdb_debug_camera_t* cam = cameraPair.second;
+                            pnanovdb_camera_view_t* cam = cameraPair.second;
                             if (cam)
                             {
                                 ptr->render_settings->camera_state = cam->state;
@@ -911,19 +910,19 @@ static void showWindows(Instance* ptr, float delta_time)
                     ImGui::EndCombo();
                 }
             }
-            if (!ptr->debug_cameras)
+            if (!ptr->camera_views)
             {
                 ImGui::TextDisabled("No debug cameras available");
             }
-            else if (ptr->debug_cameras->empty())
+            else if (ptr->camera_views->empty())
             {
                 ImGui::TextDisabled("No cameras added");
             }
             else
             {
-                for (auto& cameraPair : *ptr->debug_cameras)
+                for (auto& cameraPair : *ptr->camera_views)
                 {
-                    pnanovdb_debug_camera_t* camera = cameraPair.second;
+                    pnanovdb_camera_view_t* camera = cameraPair.second;
                     if (!camera)
                         continue;
 
@@ -1399,7 +1398,7 @@ static ImVec2 projectToScreen(const pnanovdb_vec3_t& worldPos,
     return ImVec2(std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::quiet_NaN());
 }
 
-static void drawCameraFrustumOverlay(Instance* ptr, ImVec2 windowPos, ImVec2 windowSize, pnanovdb_debug_camera_t& debugCamera)
+static void drawCameraFrustumOverlay(Instance* ptr, ImVec2 windowPos, ImVec2 windowSize, pnanovdb_camera_view_t& debugCamera)
 {
     ImDrawList* drawList = ImGui::GetWindowDrawList();
 
@@ -1514,7 +1513,7 @@ static void drawCameraFrustumOverlay(Instance* ptr, ImVec2 windowPos, ImVec2 win
 
 static void debugDrawCameras(Instance* ptr)
 {
-    if (!ptr->debug_cameras)
+    if (!ptr->camera_views)
     {
         return;
     }
@@ -1536,9 +1535,9 @@ static void debugDrawCameras(Instance* ptr)
 
     ImGui::Begin("Camera Frustum Overlay", nullptr, windowFlags);
     {
-        for (const auto& cameraPair : *ptr->debug_cameras)
+        for (const auto& cameraPair : *ptr->camera_views)
         {
-            pnanovdb_debug_camera_t* camera = cameraPair.second;
+            pnanovdb_camera_view_t* camera = cameraPair.second;
             if (camera && camera->is_visible && ptr->selected_debug_camera != cameraPair.first)
             {
                 ImVec2 windowPos = ImGui::GetWindowPos();

@@ -147,7 +147,7 @@ PNANOVDB_FORCE_INLINE void pnanovdb_camera_init(PNANOVDB_INOUT(pnanovdb_camera_t
     PNANOVDB_DEREF(ptr).key_translate_active_mask = 0u;
 }
 
-typedef struct pnanovdb_debug_camera_t
+typedef struct pnanovdb_camera_view_t
 {
     const char* name;
     pnanovdb_camera_config_t config;
@@ -158,9 +158,9 @@ typedef struct pnanovdb_debug_camera_t
     float frustum_scale;
     pnanovdb_vec3_t frustum_color;
     pnanovdb_bool_t is_visible;
-} pnanovdb_debug_camera_t;
+} pnanovdb_camera_view_t;
 
-PNANOVDB_FORCE_INLINE void pnanovdb_debug_camera_default(PNANOVDB_INOUT(pnanovdb_debug_camera_t) ptr)
+PNANOVDB_FORCE_INLINE void pnanovdb_debug_camera_default(PNANOVDB_INOUT(pnanovdb_camera_view_t) ptr)
 {
     pnanovdb_camera_config_default(PNANOVDB_REF(PNANOVDB_DEREF(ptr).config));
     pnanovdb_camera_state_default(PNANOVDB_REF(PNANOVDB_DEREF(ptr).state), PNANOVDB_FALSE);

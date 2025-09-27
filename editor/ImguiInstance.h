@@ -103,7 +103,7 @@ struct WindowState
     bool show_shader_params = true;
     bool show_benchmark = false;
     bool show_file_header = false;
-    bool show_debug_draw = true;
+    bool show_views = true;
 };
 
 struct UniformState
@@ -149,7 +149,7 @@ struct Instance
 
     std::shared_ptr<pnanovdb_compute_array_t> nanovdb_array = nullptr;
 
-    std::map<std::string, pnanovdb_debug_camera_t*>* debug_cameras = nullptr;
+    std::map<std::string, pnanovdb_camera_view_t*>* camera_views = nullptr;
     std::string selected_debug_camera = "";
 
     void set_default_shader(const std::string& shaderName);
