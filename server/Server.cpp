@@ -351,6 +351,14 @@ pnanovdb_bool_t pop_event(pnanovdb_server_instance_t* instance, pnanovdb_server_
 
     std::lock_guard<std::mutex> guard(g_mutex);
 
+    if (ptr->events.size() == 0 && ptr->client_ring_buffer_idx.empty())
+    {
+        pnanovdb_server_event_t inactive_event = {};
+        inactive_event.type = PNANOVDB_SERVER_EVENT_INACTIVE;
+        *out_event = inactive_event;
+        return PNANOVDB_TRUE;
+    }
+
     if (ptr->events.size() == 0)
     {
         return PNANOVDB_FALSE;
@@ -364,6 +372,28 @@ pnanovdb_bool_t pop_event(pnanovdb_server_instance_t* instance, pnanovdb_server_
     g_server_instance->events.pop_back();
 
     return PNANOVDB_TRUE;
+}
+
+void wait_until_active(pnanovdb_server_instance_t* instance)
+{
+    auto ptr = cast(instance);
+
+    printf("Server stream going inactive.\n");
+    for (uint32_t idx = 0u; idx < 3600; idx++)
+    {
+        bool should_wait = false;
+        {
+            std::lock_guard<std::mutex> guard(g_mutex);
+
+            should_wait = ptr->client_ring_buffer_idx.empty();
+        }
+        if (!should_wait)
+        {
+            printf("Server stream going active.\n");
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
 }
 
 void destroy_instance(pnanovdb_server_instance_t* instance)
@@ -560,6 +590,7 @@ pnanovdb_server_t* pnanovdb_get_server()
     iface.create_instance = create_instance;
     iface.push_h264 = push_h264;
     iface.pop_event = pop_event;
+    iface.wait_until_active = wait_until_active;
     iface.destroy_instance = destroy_instance;
 
     return &iface;
