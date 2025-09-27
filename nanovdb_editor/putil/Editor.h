@@ -39,6 +39,16 @@ typedef struct pnanovdb_editor_t
 
     void(PNANOVDB_ABI* shutdown)(pnanovdb_editor_t* editor);
 
+    void(PNANOVDB_ABI* show)(pnanovdb_editor_t* editor,
+                             pnanovdb_compute_device_t* device,
+                             pnanovdb_editor_config_t* config);
+
+    void(PNANOVDB_ABI* start)(pnanovdb_editor_t* editor,
+                              pnanovdb_compute_device_t* device,
+                              pnanovdb_editor_config_t* config);
+
+    void(PNANOVDB_ABI* stop)(pnanovdb_editor_t* editor);
+
     void(PNANOVDB_ABI* add_nanovdb)(pnanovdb_editor_t* editor, pnanovdb_compute_array_t* array);
 
     void(PNANOVDB_ABI* add_array)(pnanovdb_editor_t* editor, pnanovdb_compute_array_t* array);
@@ -60,16 +70,6 @@ typedef struct pnanovdb_editor_t
                                            const pnanovdb_reflect_data_type_t* data_type,
                                            pnanovdb_bool_t set_data);
 
-    void(PNANOVDB_ABI* show)(pnanovdb_editor_t* editor,
-                             pnanovdb_compute_device_t* device,
-                             pnanovdb_editor_config_t* config);
-
-    void(PNANOVDB_ABI* start)(pnanovdb_editor_t* editor,
-                              pnanovdb_compute_device_t* device,
-                              pnanovdb_editor_config_t* config);
-
-    void(PNANOVDB_ABI* stop)(pnanovdb_editor_t* editor);
-
     void* module;
     void* editor_worker;
     pnanovdb_compute_array_t* nanovdb_array;
@@ -90,6 +90,9 @@ PNANOVDB_REFLECT_POINTER(pnanovdb_compiler_t, compiler, 0, 0)
 PNANOVDB_REFLECT_POINTER(pnanovdb_compute_t, compute, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(init, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(shutdown, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(show, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(start, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(stop, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_nanovdb, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_gaussian_data, 0, 0)
@@ -97,9 +100,6 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(add_camera, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_camera_view, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_shader_params, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(sync_shader_params, 0, 0)
-PNANOVDB_REFLECT_FUNCTION_POINTER(show, 0, 0)
-PNANOVDB_REFLECT_FUNCTION_POINTER(start, 0, 0)
-PNANOVDB_REFLECT_FUNCTION_POINTER(stop, 0, 0)
 PNANOVDB_REFLECT_VOID_POINTER(module, 0, 0)
 PNANOVDB_REFLECT_VOID_POINTER(editor_worker, 0, 0)
 PNANOVDB_REFLECT_POINTER(pnanovdb_compute_array_t, nanovdb_array, 0, 0)
@@ -146,6 +146,7 @@ static inline void pnanovdb_editor_load(pnanovdb_editor_t* editor,
     editor->module = editor_module;
     editor->compute = compute;
     editor->compiler = compiler;
+    editor->editor_worker = NULL;
     editor->gaussian_data = NULL;
     editor->nanovdb_array = NULL;
     editor->data_array = NULL;
@@ -153,7 +154,6 @@ static inline void pnanovdb_editor_load(pnanovdb_editor_t* editor,
     editor->raster_ctx = NULL;
     editor->shader_params = NULL;
     editor->shader_params_data_type = NULL;
-    editor->editor_worker = NULL;
     editor->views = NULL;
     editor->init(editor);
 }

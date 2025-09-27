@@ -124,11 +124,9 @@ struct EditorWorker
     ConstPendingData<pnanovdb_reflect_data_type_t> pending_shader_params_data_type;
 };
 
-typedef std::map<std::string, pnanovdb_camera_view_t*> DebugCamerasT;
-
 struct EditorView
 {
-    DebugCamerasT cameras;
+    std::map<std::string, pnanovdb_camera_view_t*> cameras;
 };
 
 enum class ViewportShader : int
@@ -1226,6 +1224,9 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
 
     editor.init = init;
     editor.shutdown = shutdown;
+    editor.show = show;
+    editor.start = start;
+    editor.stop = stop;
     editor.add_nanovdb = add_nanovdb;
     editor.add_array = add_array;
     editor.add_shader_params = add_shader_params;
@@ -1233,9 +1234,6 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
     editor.add_gaussian_data = add_gaussian_data;
     editor.add_camera = add_camera;
     editor.add_camera_view = add_camera_view;
-    editor.show = show;
-    editor.start = start;
-    editor.stop = stop;
 
     return &editor;
 }
