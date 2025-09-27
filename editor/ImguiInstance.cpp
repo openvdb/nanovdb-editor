@@ -40,6 +40,10 @@
 #include <cmath>
 #include <limits>
 
+#ifndef M_PI_2
+#define M_PI_2 1.57079632679489661923
+#endif
+
 #define IMGUI_CHECKBOX_SYNC(label, var)                                                                                \
     {                                                                                                                  \
         bool temp_bool = ((var) != PNANOVDB_FALSE);                                                                    \
@@ -957,6 +961,7 @@ static void showWindows(Instance* ptr, float delta_time)
                             else
                             {
                                 ImGui::Text("Camera Index: 0");
+                                ImGui::Dummy(ImVec2(0.f, 1.f));
                             }
 
                             int stateIdx = ptr->camera_frustum_index[ptr->selected_camera_frustum];
@@ -974,18 +979,57 @@ static void showWindows(Instance* ptr, float delta_time)
                             pnanovdb_vec3_t eyePosition =
                                 pnanovdb_camera_get_eye_position_from_state(&camera->states[stateIdx]);
 
-                            ImGui::Text(
-                                "World Position: (%.3f, %.3f, %.3f)", eyePosition.x, eyePosition.y, eyePosition.z);
+                            float eyePos[3] = { eyePosition.x, eyePosition.y, eyePosition.z };
+                            if (ImGui::DragFloat3("World Position", eyePos, 0.1f))
+                            {
+                                pnanovdb_camera_state_t* state = &camera->states[stateIdx];
+                                state->position.x = eyePos[0] + state->eye_direction.x * state->eye_distance_from_position;
+                                state->position.y = eyePos[1] + state->eye_direction.y * state->eye_distance_from_position;
+                                state->position.z = eyePos[2] + state->eye_direction.z * state->eye_distance_from_position;
+                            }
+
+                            pnanovdb_camera_state_t* state = &camera->states[stateIdx];
+                            float lookAt[3] = { state->position.x, state->position.y, state->position.z };
+                            if (ImGui::DragFloat3("Look At", lookAt, 0.1f))
+                            {
+                                pnanovdb_vec3_t eye = pnanovdb_camera_get_eye_position_from_state(state);
+                                pnanovdb_vec3_t delta = { lookAt[0] - eye.x, lookAt[1] - eye.y, lookAt[2] - eye.z };
+                                float len2 = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
+                                if (len2 > 0.f)
+                                {
+                                    float len = pnanovdb_camera_sqrt(len2);
+                                    pnanovdb_vec3_t dir = { delta.x / len, delta.y / len, delta.z / len };
+                                    state->position.x = lookAt[0];
+                                    state->position.y = lookAt[1];
+                                    state->position.z = lookAt[2];
+                                    state->eye_direction = dir;
+                                    state->eye_distance_from_position = len;
+                                }
+                                else
+                                {
+                                    // Eye and look-at coincide; update position and set distance to zero
+                                    state->position.x = lookAt[0];
+                                    state->position.y = lookAt[1];
+                                    state->position.z = lookAt[2];
+                                    state->eye_distance_from_position = 0.f;
+                                }
+                            }
 
                             ImGui::Separator();
-                            IMGUI_CHECKBOX_SYNC("Reversed Z", camera->config.is_reverse_z);
-                            IMGUI_CHECKBOX_SYNC("Orthographic", camera->config.is_orthographic);
-                            ImGui::DragFloat("FOV", &camera->config.fov_angle_y, 0.01f, 0.f, M_PI_2);
                             ImGui::DragFloat("Axis Length", &camera->axis_length, 1.f, 0.f, 100.f);
                             ImGui::DragFloat("Axis Thickness", &camera->axis_thickness, 0.1f, 0.f, 10.f);
                             ImGui::DragFloat("Axis Scale", &camera->axis_scale, 0.1f, 0.f, 10.f);
                             ImGui::DragFloat("Frustum Line Width", &camera->frustum_line_width, 0.1f, 0.f, 10.f);
                             ImGui::DragFloat("Frustum Scale", &camera->frustum_scale, 0.1f, 0.f, 10.f);
+                            if (camera->config.is_orthographic)
+                            {
+                                ImGui::DragFloat("Orthographic Y", &camera->config.orthographic_y, 0.1f, 0.0f, 100000.0f);
+                            }
+                            else
+                            {
+                                ImGui::DragFloat("FOV", &camera->config.fov_angle_y, 0.01f, 0.f, M_PI_2);
+                            }
+                            //IMGUI_CHECKBOX_SYNC("Orthographic", camera->config.is_orthographic);
                         }
                     }
                 }
@@ -1352,21 +1396,32 @@ static void calculateFrustumCorners(pnanovdb_camera_state_t& camera_state,
         basisVectors->forward = forward;
     }
 
-    float nearPlaneClamped = std::max(camera_config.near_plane, EPSILON);
-    float farPlaneClamped = std::min(camera_config.far_plane, 10000000.f);
+    // Handle reverse Z by swapping near/far planes
+    float d0_z = camera_config.is_reverse_z ? camera_config.far_plane : camera_config.near_plane;
+    float d1_z = camera_config.is_reverse_z ? camera_config.near_plane : camera_config.far_plane;
+
+    float nearPlaneClamped = std::max(d0_z, EPSILON);
+    float farPlaneClamped = std::min(d1_z, 10000000.f);
 
     // Calculate frustum dimensions
     float aspectRatio = width / height;
     float nearPlane = nearPlaneClamped;
     float farPlane = farPlaneClamped;
 
+    if (camera_config.is_orthographic)
+    {
+        nearPlane = 0.f; // place near plane at the camera position
+        farPlane = std::max(nearPlaneClamped, farPlaneClamped);
+    }
+
     float nearHeight, nearWidth, farHeight, farWidth;
 
     if (camera_config.is_orthographic)
     {
-        float orthoScale = camera_state.orthographic_scale;
-        nearHeight = farHeight = orthoScale * frustum_scale;
-        nearWidth = farWidth = orthoScale * aspectRatio * frustum_scale;
+        float orthoHeight = camera_config.orthographic_y;
+        float orthoWidth = orthoHeight * aspectRatio;
+        nearHeight = farHeight = orthoHeight * frustum_scale;
+        nearWidth = farWidth = orthoWidth * frustum_scale;
     }
     else
     {
@@ -1467,6 +1522,17 @@ static void drawCameraFrustumOverlay(Instance* ptr,
     viewingCamera.state = ptr->render_settings->camera_state;
     viewingCamera.config = ptr->render_settings->camera_config;
 
+    // Use a temporary perspective projection for overlay when both are ortho,
+    // so the frustum box depth is visible on screen
+    pnanovdb_camera_t overlayCamera = viewingCamera;
+    if (viewingCamera.config.is_orthographic && camera.config.is_orthographic)
+    {
+        overlayCamera.config.is_orthographic = PNANOVDB_FALSE;
+        overlayCamera.config.fov_angle_y = 0.785398163f; // ~45 deg
+        overlayCamera.config.near_plane = 0.1f;
+        overlayCamera.config.far_plane = 10000.f;
+    }
+
     pnanovdb_camera_state_t target_state = cameraState;
     pnanovdb_camera_config_t target_config = camera.config;
 
@@ -1478,7 +1544,7 @@ static void drawCameraFrustumOverlay(Instance* ptr,
     ImVec2 screenCorners[8];
     for (int i = 0; i < 8; i++)
     {
-        screenCorners[i] = projectToScreen(frustumCorners[i], &viewingCamera, windowSize.x, windowSize.y);
+        screenCorners[i] = projectToScreen(frustumCorners[i], &overlayCamera, windowSize.x, windowSize.y);
         screenCorners[i].x += windowPos.x;
         screenCorners[i].y += windowPos.y;
     }
@@ -1516,7 +1582,7 @@ static void drawCameraFrustumOverlay(Instance* ptr,
 
     pnanovdb_vec3_t eyePosition = pnanovdb_camera_get_eye_position_from_state(&target_state);
 
-    ImVec2 cameraScreenPos = projectToScreen(eyePosition, &viewingCamera, windowSize.x, windowSize.y);
+    ImVec2 cameraScreenPos = projectToScreen(eyePosition, &overlayCamera, windowSize.x, windowSize.y);
     cameraScreenPos.x += windowPos.x;
     cameraScreenPos.y += windowPos.y;
 
@@ -1533,9 +1599,9 @@ static void drawCameraFrustumOverlay(Instance* ptr,
     pnanovdb_vec3_t zAxisEnd = { eyePosition.x + forward.x * axisLength, eyePosition.y + forward.y * axisLength,
                                  eyePosition.z + forward.z * axisLength };
 
-    ImVec2 xAxisScreenPos = projectToScreen(xAxisEnd, &viewingCamera, windowSize.x, windowSize.y);
-    ImVec2 yAxisScreenPos = projectToScreen(yAxisEnd, &viewingCamera, windowSize.x, windowSize.y);
-    ImVec2 zAxisScreenPos = projectToScreen(zAxisEnd, &viewingCamera, windowSize.x, windowSize.y);
+    ImVec2 xAxisScreenPos = projectToScreen(xAxisEnd, &overlayCamera, windowSize.x, windowSize.y);
+    ImVec2 yAxisScreenPos = projectToScreen(yAxisEnd, &overlayCamera, windowSize.x, windowSize.y);
+    ImVec2 zAxisScreenPos = projectToScreen(zAxisEnd, &overlayCamera, windowSize.x, windowSize.y);
 
     xAxisScreenPos.x += windowPos.x;
     xAxisScreenPos.y += windowPos.y;
@@ -1605,18 +1671,19 @@ static void drawCameraViews(Instance* ptr)
             {
                 bool isViewSelected =
                     (!ptr->selected_camera_frustum.empty() && ptr->selected_camera_frustum == cameraPair.first);
-                int cameraIdx = ptr->camera_frustum_index[ptr->selected_camera_frustum];
+                int selected = isViewSelected ? ptr->camera_frustum_index[ptr->selected_camera_frustum] : 0;
                 for (int i = 0; i < camera->num_states; i++)
                 {
-                    if (i == cameraIdx)
+                    if (i == selected)
                     {
                         continue;
                     }
+                    // cameras not selected
                     drawCameraFrustumOverlay(
                         ptr, windowPos, windowSize, *camera, camera->states[i], isViewSelected ? 0.5f : 1.f);
                 }
-                // selected camera has alpha 1.f
-                drawCameraFrustumOverlay(ptr, windowPos, windowSize, *camera, camera->states[cameraIdx]);
+                // selected camera
+                drawCameraFrustumOverlay(ptr, windowPos, windowSize, *camera, camera->states[selected], 0.75f);
             }
         }
     }

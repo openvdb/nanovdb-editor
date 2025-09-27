@@ -33,7 +33,7 @@
 #define TEST_EDITOR
 // #define TEST_EDITOR_START_STOP
 // #define TEST_RASTER
-#define TEST_RASTER_2D
+//#define TEST_RASTER_2D
 // #define TEST_SVRASTER
 // #define TEST_E57
 #define TEST_CAMERA
@@ -81,7 +81,7 @@ int main(int argc, char* argv[])
 #if TEST_NODE2
     const char* nvdb_filepath = "./data/dragon_node2.nvdb";
 #else
-    const char* nvdb_filepath = "./data/dragon.nvdb";
+    const char* nvdb_filepath = "";
 #endif
 
     // uses dlopen to load compiler and get symbols
@@ -103,7 +103,7 @@ int main(int argc, char* argv[])
     if (!data_nanovdb)
     {
         printf("Error: Could not load file '%s'\n", nvdb_filepath);
-        return 1;
+        //return 1;
     }
 #else
     pnanovdb_compute_array_t* data_nanovdb = nullptr;
@@ -203,9 +203,6 @@ int main(int argc, char* argv[])
     debug_state.eye_up = { 0.000000, 1.000000, 0.000000 };
     debug_state.eye_distance_from_position = 41.431084;
 
-    pnanovdb_camera_state_t debug_state_2 = debug_state;
-    debug_state_2.position.z += 0.1f;
-
     pnanovdb_camera_config_t debug_config = {};
     pnanovdb_camera_config_default(&debug_config);
     debug_config.near_plane = 0.1f;
@@ -213,12 +210,18 @@ int main(int argc, char* argv[])
 
     pnanovdb_camera_view_t debug_camera;
     pnanovdb_debug_camera_default(&debug_camera);
-    debug_camera.name = "test";
-    debug_camera.num_states = 2;
+    debug_camera.name = "test_10";
+    debug_camera.num_states = 10;
     debug_camera.states = new pnanovdb_camera_state_t[debug_camera.num_states];
-    debug_camera.states[0] = debug_state;
-    debug_camera.states[1] = debug_state_2;
     debug_camera.config = debug_config;
+
+    for (int i = 0; i < debug_camera.num_states; ++i)
+    {
+        pnanovdb_camera_state_t debug_state_i = debug_state;
+        debug_state_i.position.x += 50.f * i;
+        debug_state_i.position.z -= 20.f * i;
+        debug_camera.states[i] = debug_state_i;
+    }
     editor.add_camera_view(&editor, &debug_camera);
 
     pnanovdb_camera_config_t default_config = {};
@@ -260,7 +263,7 @@ int main(int argc, char* argv[])
     camera.state.eye_distance_from_position = -2.111028;
     editor.add_camera(&editor, &camera);
 
-    const char* raster_file = "./data/ficus.ply";
+    const char* raster_file = "";
     pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
 
     pnanovdb_raster_t raster = {};
