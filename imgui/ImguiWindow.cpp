@@ -492,6 +492,17 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
                     keyboardWindow(ptr, (ImGuiKey)event.key, event.code, false, event.alt_key, event.ctrl_key,
                                    event.shift_key, event.meta_key);
                 }
+                else if (event.type == PNANOVDB_SERVER_EVENT_INACTIVE)
+                {
+                    if (swapchain)
+                    {
+                        break;          // swapchain is active, even if server is not
+                    }
+                    else
+                    {
+                        pnanovdb_get_server()->wait_until_active(ptr->server);
+                    }
+                }
             }
         }
     }

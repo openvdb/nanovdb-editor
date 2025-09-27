@@ -28,6 +28,7 @@ typedef struct pnanovdb_server_instance_t pnanovdb_server_instance_t;
 #define PNANOVDB_SERVER_EVENT_MOUSESCROLL 4
 #define PNANOVDB_SERVER_EVENT_KEYDOWN 5
 #define PNANOVDB_SERVER_EVENT_KEYUP 6
+#define PNANOVDB_SERVER_EVENT_INACTIVE 7
 
 typedef struct pnanovdb_server_event_t
 {
@@ -56,6 +57,8 @@ typedef struct pnanovdb_server_t
 
     pnanovdb_bool_t(PNANOVDB_ABI* pop_event)(pnanovdb_server_instance_t* instance, pnanovdb_server_event_t* out_event);
 
+    void(PNANOVDB_ABI* wait_until_active)(pnanovdb_server_instance_t* instance);
+
     void(PNANOVDB_ABI* destroy_instance)(pnanovdb_server_instance_t* instance);
 
 } pnanovdb_server_t;
@@ -65,6 +68,7 @@ PNANOVDB_REFLECT_BEGIN()
 PNANOVDB_REFLECT_FUNCTION_POINTER(create_instance, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(push_h264, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(pop_event, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(wait_until_active, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(destroy_instance, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
