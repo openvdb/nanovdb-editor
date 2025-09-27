@@ -101,7 +101,7 @@ PNANOVDB_FORCE_INLINE void pnanovdb_camera_config_default(PNANOVDB_INOUT(pnanovd
     PNANOVDB_DEREF(ptr).near_plane = 0.1f;
     PNANOVDB_DEREF(ptr).far_plane = PNANOVDB_CAMERA_INFINITY;
     PNANOVDB_DEREF(ptr).fov_angle_y = 3.14159f / 4.f;
-    PNANOVDB_DEREF(ptr).orthographic_y = 500.f;
+    PNANOVDB_DEREF(ptr).orthographic_y = 10.f;
     PNANOVDB_DEREF(ptr).pan_rate = 1.f;
     PNANOVDB_DEREF(ptr).tilt_rate = 1.f;
     PNANOVDB_DEREF(ptr).zoom_rate = 1.f;
