@@ -33,10 +33,10 @@
 #define TEST_EDITOR
 // #define TEST_EDITOR_START_STOP
 // #define TEST_RASTER
-#define TEST_RASTER_2D
+// #define TEST_RASTER_2D
 // #define TEST_SVRASTER
 // #define TEST_E57
-
+// #define TEST_CAMERA
 struct constants_t
 {
     int magic_number;
@@ -195,6 +195,7 @@ int main(int argc, char* argv[])
     pnanovdb_editor_t editor = {};
     pnanovdb_editor_load(&editor, &compute, &compiler);
 
+#    ifdef TEST_CAMERA
     pnanovdb_camera_state_t debug_state = {};
     pnanovdb_camera_state_default(&debug_state, PNANOVDB_FALSE);
     debug_state.position = { 0.632428, 0.930241, -0.005193 };
@@ -228,6 +229,7 @@ int main(int argc, char* argv[])
     default_camera.state = default_state;
     default_camera.config = default_config;
     editor.add_debug_camera(&editor, &default_camera);
+#    endif
 
 #    ifdef TEST_RASTER
     pnanovdb_camera_t camera;

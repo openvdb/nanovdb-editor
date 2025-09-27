@@ -66,6 +66,14 @@ struct PendingData
         }
         return false;
     }
+
+    void wait_for_sync()
+    {
+        while (pending_data.load(std::memory_order_acquire) != nullptr)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
 };
 
 template <typename T>
@@ -90,6 +98,14 @@ struct ConstPendingData
             return true;
         }
         return false;
+    }
+
+    void wait_for_sync()
+    {
+        while (pending_data.load(std::memory_order_acquire) != nullptr)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
     }
 };
 
@@ -227,7 +243,9 @@ void add_nanovdb(pnanovdb_editor_t* editor, pnanovdb_compute_array_t* nanovdb_ar
     }
     if (editor->editor_worker)
     {
-        static_cast<EditorWorker*>(editor->editor_worker)->pending_nanovdb.set_pending(nanovdb_array);
+        EditorWorker* worker = static_cast<EditorWorker*>(editor->editor_worker);
+        worker->pending_nanovdb.set_pending(nanovdb_array);
+        worker->pending_nanovdb.wait_for_sync();
     }
     else
     {
@@ -247,7 +265,9 @@ void add_array(pnanovdb_editor_t* editor, pnanovdb_compute_array_t* data_array)
     }
     if (editor->editor_worker)
     {
-        static_cast<EditorWorker*>(editor->editor_worker)->pending_data_array.set_pending(data_array);
+        EditorWorker* worker = static_cast<EditorWorker*>(editor->editor_worker);
+        worker->pending_data_array.set_pending(data_array);
+        worker->pending_data_array.wait_for_sync();
     }
     else
     {
@@ -265,7 +285,9 @@ void add_gaussian_data(pnanovdb_editor_t* editor,
 {
     if (editor->editor_worker)
     {
-        static_cast<EditorWorker*>(editor->editor_worker)->pending_gaussian_data.set_pending(gaussian_data);
+        EditorWorker* worker = static_cast<EditorWorker*>(editor->editor_worker);
+        worker->pending_gaussian_data.set_pending(gaussian_data);
+        worker->pending_gaussian_data.wait_for_sync();
     }
     else
     {
@@ -281,7 +303,9 @@ void add_camera(pnanovdb_editor_t* editor, pnanovdb_camera_t* camera)
 {
     if (editor->editor_worker)
     {
-        static_cast<EditorWorker*>(editor->editor_worker)->pending_camera.set_pending(camera);
+        EditorWorker* worker = static_cast<EditorWorker*>(editor->editor_worker);
+        worker->pending_camera.set_pending(camera);
+        worker->pending_camera.wait_for_sync();
     }
     else
     {
@@ -293,7 +317,9 @@ void add_debug_camera(pnanovdb_editor_t* editor, pnanovdb_debug_camera_t* camera
 {
     if (editor->editor_worker)
     {
-        static_cast<EditorWorker*>(editor->editor_worker)->pending_debug_camera.set_pending(camera);
+        EditorWorker* worker = static_cast<EditorWorker*>(editor->editor_worker);
+        worker->pending_debug_camera.set_pending(camera);
+        worker->pending_debug_camera.wait_for_sync();
     }
     else
     {
@@ -309,8 +335,11 @@ void setup_shader_params(pnanovdb_editor_t* editor, void* params, const pnanovdb
     }
     if (editor->editor_worker)
     {
-        static_cast<EditorWorker*>(editor->editor_worker)->pending_shader_params.set_pending(params);
-        static_cast<EditorWorker*>(editor->editor_worker)->pending_shader_params_data_type.set_pending(data_type);
+        EditorWorker* worker = static_cast<EditorWorker*>(editor->editor_worker);
+        worker->pending_shader_params.set_pending(params);
+        worker->pending_shader_params.wait_for_sync();
+        worker->pending_shader_params_data_type.set_pending(data_type);
+        worker->pending_shader_params_data_type.wait_for_sync();
     }
     else
     {
@@ -937,7 +966,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                     if (editor->editor_worker && editor->shader_params)
                     {
                         // syncing shader params
-                        if (static_cast<EditorWorker*>(editor->editor_worker)->set_params.load() > 0)
+                        EditorWorker* worker = static_cast<EditorWorker*>(editor->editor_worker);
+                        if (worker->set_params.load() > 0)
                         {
                             pnanovdb_raster_shader_params_t* raster_params =
                                 (pnanovdb_raster_shader_params_t*)editor->shader_params;
@@ -968,7 +998,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                                 imgui_user_settings->sync_camera = PNANOVDB_TRUE;
                             }
 
-                            static_cast<EditorWorker*>(editor->editor_worker)->set_params.fetch_sub(1);
+                            worker->set_params.fetch_sub(1);
                         }
                         else
                         {
@@ -992,7 +1022,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                                 imgui_user_settings->sync_camera = PNANOVDB_TRUE;
                             }
                         }
-                        if (static_cast<EditorWorker*>(editor->editor_worker)->get_params.load() > 0)
+                        if (worker->get_params.load() > 0)
                         {
                             if (raster2d_shader_params_array && raster2d_shader_params_array->data)
                             {
@@ -1001,7 +1031,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                                 std::memcpy(editor->shader_params, raster2d_shader_params_array->data, data_size);
                             }
 
-                            static_cast<EditorWorker*>(editor->editor_worker)->get_params.fetch_sub(1);
+                            worker->get_params.fetch_sub(1);
                         }
                     }
                     else if (editor->shader_params)
@@ -1026,7 +1056,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                         editor->shader_params = nullptr; // value will be read from imgui from now on
                     }
                 }
-                if (editor->shader_params == nullptr)
+                else // don't have shader params with raster data type
                 {
                     // destroy array created from imgui default values
                     editor->compute->destroy_array(raster2d_shader_params_array);

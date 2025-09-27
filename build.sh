@@ -142,6 +142,8 @@ function build_python_module() {
         echo "   -- Removed build directories"
     fi
 
+    rm -rf dist/*.whl
+
     if $debug; then
         PIP_ARGS+=(--config-settings=cmake.build-type=Debug)
     else

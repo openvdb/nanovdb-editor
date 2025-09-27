@@ -617,7 +617,6 @@ void update_camera(pnanovdb_imgui_window_t* window, pnanovdb_imgui_settings_rend
     else
     {
         user_settings->camera_state = ptr->camera.state;
-        user_settings->camera_config = ptr->camera.config;
     }
 }
 

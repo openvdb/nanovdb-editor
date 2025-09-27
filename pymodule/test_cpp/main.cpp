@@ -152,6 +152,40 @@ int main(int argc, char* argv[])
     camera.state.eye_distance_from_position = -2.111028;
     editor.add_camera(&editor, &camera);
 
+    pnanovdb_camera_state_t debug_state = {};
+    pnanovdb_camera_state_default(&debug_state, PNANOVDB_FALSE);
+    debug_state.position = { 0.632428, 0.930241, -0.005193 };
+    debug_state.eye_direction = { -0.012344, 0.959868, -0.280182 };
+    debug_state.eye_up = { 0.000000, 1.000000, 0.000000 };
+    debug_state.eye_distance_from_position = -41.431084;
+
+    pnanovdb_camera_config_t debug_config = {};
+    pnanovdb_camera_config_default(&debug_config);
+    debug_config.near_plane = 0.1f;
+    debug_config.far_plane = 100.0f;
+
+    pnanovdb_debug_camera_t debug_camera;
+    pnanovdb_debug_camera_default(&debug_camera);
+    debug_camera.name = "test";
+    debug_camera.state = debug_state;
+    debug_camera.config = debug_config;
+    editor.add_debug_camera(&editor, &debug_camera);
+
+    pnanovdb_camera_config_t default_config = {};
+    pnanovdb_camera_config_default(&default_config);
+    default_config.near_plane = 0.1f;
+    default_config.far_plane = 100.0f;
+
+    pnanovdb_camera_state_t default_state = {};
+    pnanovdb_camera_state_default(&default_state, PNANOVDB_FALSE);
+
+    pnanovdb_debug_camera_t default_camera;
+    pnanovdb_debug_camera_default(&default_camera);
+    default_camera.name = "default";
+    default_camera.state = default_state;
+    default_camera.config = default_config;
+    editor.add_debug_camera(&editor, &default_camera);
+
     const char* raster_file = "../../data/ficus.ply";
     pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
 
@@ -182,6 +216,8 @@ int main(int argc, char* argv[])
 
     editor.sync_shader_params(&editor, data_type, PNANOVDB_FALSE);
     editor.wait_for_shader_params_sync(&editor, data_type);
+
+    debug_camera.is_visible = PNANOVDB_FALSE;
 
     printf("Updated shader params:\n");
     printf("eps2d: %f\n", raster_params.eps2d);

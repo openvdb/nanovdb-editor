@@ -566,76 +566,6 @@ static void showWindows(Instance* ptr, float delta_time)
         }
     }
 
-    if (ptr->window.show_debug_draw)
-    {
-        if (ImGui::Begin("Debug Draw", &ptr->window.show_debug_draw))
-        {
-            ImGui::Text("Debug Cameras");
-            if (ptr->debug_cameras && !ptr->debug_cameras->empty())
-            {
-                const char* preview =
-                    ptr->selected_debug_camera.empty() ? "Select..." : ptr->selected_debug_camera.c_str();
-                if (ImGui::BeginCombo("Viewport Camera", preview))
-                {
-                    for (const auto& cameraPair : *ptr->debug_cameras)
-                    {
-                        const std::string& name = cameraPair.first;
-                        bool is_selected = (ptr->selected_debug_camera == name);
-                        if (ImGui::Selectable(name.c_str(), is_selected))
-                        {
-                            ptr->selected_debug_camera = name;
-                            pnanovdb_debug_camera_t* cam = cameraPair.second;
-                            if (cam)
-                            {
-                                ptr->render_settings->camera_state = cam->state;
-                                ptr->render_settings->camera_config = cam->config;
-                                ptr->render_settings->is_projection_rh = cam->config.is_projection_rh;
-                                ptr->render_settings->is_orthographic = cam->config.is_orthographic;
-                                ptr->render_settings->is_reverse_z = cam->config.is_reverse_z;
-                                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
-                            }
-                        }
-                        if (is_selected)
-                        {
-                            ImGui::SetItemDefaultFocus();
-                        }
-                    }
-                    ImGui::EndCombo();
-                }
-            }
-            if (!ptr->debug_cameras)
-            {
-                ImGui::TextDisabled("No debug cameras available");
-            }
-            else if (ptr->debug_cameras->empty())
-            {
-                ImGui::TextDisabled("No cameras added");
-            }
-            else
-            {
-                for (auto& cameraPair : *ptr->debug_cameras)
-                {
-                    pnanovdb_debug_camera_t* camera = cameraPair.second;
-                    if (!camera)
-                        continue;
-
-                    bool isVisible = (camera->is_visible != PNANOVDB_FALSE);
-                    const std::string& cameraName = cameraPair.first;
-                    if (ImGui::Checkbox(cameraName.c_str(), &isVisible))
-                    {
-                        camera->is_visible = isVisible ? PNANOVDB_TRUE : PNANOVDB_FALSE;
-                    }
-                }
-            }
-
-            ImGui::End();
-        }
-        else
-        {
-            ImGui::End();
-        }
-    }
-
     if (ptr->window.show_render_settings)
     {
         if (ImGui::Begin(RENDER_SETTINGS, &ptr->window.show_render_settings))
@@ -933,6 +863,76 @@ static void showWindows(Instance* ptr, float delta_time)
                     ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(191, 97, 106, 255)); // Red color
                     ImGui::TextWrapped("Shader params JSON is missing");
                     ImGui::PopStyleColor();
+                }
+            }
+
+            ImGui::End();
+        }
+        else
+        {
+            ImGui::End();
+        }
+    }
+
+    if (ptr->window.show_debug_draw)
+    {
+        if (ImGui::Begin("Debug Draw", &ptr->window.show_debug_draw))
+        {
+            ImGui::Text("Debug Cameras");
+            if (ptr->debug_cameras && !ptr->debug_cameras->empty())
+            {
+                const char* preview =
+                    ptr->selected_debug_camera.empty() ? "Select..." : ptr->selected_debug_camera.c_str();
+                if (ImGui::BeginCombo("Viewport Camera", preview))
+                {
+                    for (const auto& cameraPair : *ptr->debug_cameras)
+                    {
+                        const std::string& name = cameraPair.first;
+                        bool is_selected = (ptr->selected_debug_camera == name);
+                        if (ImGui::Selectable(name.c_str(), is_selected))
+                        {
+                            ptr->selected_debug_camera = name;
+                            pnanovdb_debug_camera_t* cam = cameraPair.second;
+                            if (cam)
+                            {
+                                ptr->render_settings->camera_state = cam->state;
+                                ptr->render_settings->camera_config = cam->config;
+                                ptr->render_settings->is_projection_rh = cam->config.is_projection_rh;
+                                ptr->render_settings->is_orthographic = cam->config.is_orthographic;
+                                ptr->render_settings->is_reverse_z = cam->config.is_reverse_z;
+                                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                            }
+                        }
+                        if (is_selected)
+                        {
+                            ImGui::SetItemDefaultFocus();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+            }
+            if (!ptr->debug_cameras)
+            {
+                ImGui::TextDisabled("No debug cameras available");
+            }
+            else if (ptr->debug_cameras->empty())
+            {
+                ImGui::TextDisabled("No cameras added");
+            }
+            else
+            {
+                for (auto& cameraPair : *ptr->debug_cameras)
+                {
+                    pnanovdb_debug_camera_t* camera = cameraPair.second;
+                    if (!camera)
+                        continue;
+
+                    bool isVisible = (camera->is_visible != PNANOVDB_FALSE);
+                    const std::string& cameraName = cameraPair.first;
+                    if (ImGui::Checkbox(cameraName.c_str(), &isVisible))
+                    {
+                        camera->is_visible = isVisible ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+                    }
                 }
             }
 
@@ -1473,7 +1473,6 @@ static void drawCameraFrustumOverlay(Instance* ptr, ImVec2 windowPos, ImVec2 win
     pnanovdb_vec3_t up = basisVectors.up;
     pnanovdb_vec3_t right = basisVectors.right;
 
-    // Calculate axis directions in screen space
     pnanovdb_vec3_t xAxisEnd = { eyePosition.x + right.x * debugCamera.axis_length,
                                  eyePosition.y + right.y * debugCamera.axis_length,
                                  eyePosition.z + right.z * debugCamera.axis_length };
@@ -1509,7 +1508,7 @@ static void drawCameraFrustumOverlay(Instance* ptr, ImVec2 windowPos, ImVec2 win
     }
     if (isValidScreenPoint(cameraScreenPos))
     {
-        drawList->AddCircleFilled(cameraScreenPos, 1.5f * debugCamera.axis_thickness, IM_COL32(222, 220, 113, 255));
+        drawList->AddCircleFilled(cameraScreenPos, 1.1f * debugCamera.axis_thickness, IM_COL32(222, 220, 113, 255));
     }
 }
 
