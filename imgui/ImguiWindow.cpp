@@ -258,7 +258,7 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
                        pnanovdb_int32_t* out_height,
                        pnanovdb_imgui_window_t* window,
                        pnanovdb_imgui_settings_render_t* user_settings,
-                       pnanovdb_int32_t(*get_external_active_count)(void* external_active_count),
+                       pnanovdb_int32_t (*get_external_active_count)(void* external_active_count),
                        void* external_active_count)
 {
     auto ptr = cast(window);
@@ -499,11 +499,19 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
                 {
                     if (swapchain)
                     {
-                        break;          // swapchain is active, even if server is not
+                        break; // swapchain is active, even if server is not
                     }
                     else
                     {
-                        pnanovdb_get_server()->wait_until_active(ptr->server, get_external_active_count, external_active_count);
+                        pnanovdb_get_server()->wait_until_active(
+                            ptr->server, get_external_active_count, external_active_count);
+                        if (get_external_active_count)
+                        {
+                            if (get_external_active_count(external_active_count) != 0)
+                            {
+                                break;
+                            }
+                        }
                     }
                 }
             }
