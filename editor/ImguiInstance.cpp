@@ -894,7 +894,7 @@ static void showWindows(Instance* ptr, float delta_time)
             else
             {
                 ImVec2 fullAvail = ImGui::GetContentRegionAvail();
-                static float cameraListHeight = 100.f;
+                static float cameraListHeight = 60.f;
                 const float minList = 20.f;
                 const float minProps = 80.f;
                 cameraListHeight = std::max(minList, std::min(cameraListHeight, fullAvail.y - minList));
@@ -963,8 +963,9 @@ static void showWindows(Instance* ptr, float delta_time)
                                 ImGui::Text("Camera Index: 0");
                                 ImGui::Dummy(ImVec2(0.f, 1.f));
                             }
+                            ImGui::SameLine();
                             int cameraIdx = ptr->camera_frustum_index[ptr->selected_camera_frustum];
-                            if (ImGui::Button("Set As Viewport Camera"))
+                            if (ImGui::Button("Set Viewport Camera"))
                             {
                                 ptr->render_settings->camera_state = camera->states[cameraIdx];
                                 ptr->render_settings->camera_config = camera->configs[cameraIdx];
