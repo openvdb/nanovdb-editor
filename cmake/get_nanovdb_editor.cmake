@@ -70,31 +70,8 @@ foreach(_comp ${_NANOVDB_EDITOR_COMPONENTS})
   string(TOUPPER "${_comp}" _COMP_UPPER)
   set("NANOVDB_EDITOR_LIBRARY_${_COMP_UPPER}" "${_chosen_lib}")
 
-  # Create imported target for the component
-  set(_target_name "nanovdb_editor::${_comp}")
-  if(NOT TARGET ${_target_name})
-    add_library(${_target_name} UNKNOWN IMPORTED GLOBAL)
-    set_target_properties(${_target_name} PROPERTIES
-      IMPORTED_LOCATION "${_chosen_lib}")
-    target_include_directories(${_target_name} INTERFACE "${NANOVDB_EDITOR_INCLUDE_DIR}")
-  endif()
-
   list(APPEND NANOVDB_EDITOR_LIBRARIES "${_chosen_lib}")
 endforeach()
-
-# Aggregate, convenient imported interface target for consumers
-if(NOT TARGET nanovdb_editor::nanovdb_editor)
-  add_library(nanovdb_editor::nanovdb_editor INTERFACE IMPORTED)
-  set_target_properties(nanovdb_editor::nanovdb_editor PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${NANOVDB_EDITOR_INCLUDE_DIR}")
-  # Link all component targets
-  set_property(TARGET nanovdb_editor::nanovdb_editor APPEND PROPERTY
-    INTERFACE_LINK_LIBRARIES
-      nanovdb_editor::pnanovdbcompiler
-      nanovdb_editor::pnanovdbcompute
-      nanovdb_editor::pnanovdbfileformat
-      nanovdb_editor::pnanovdbeditor)
-endif()
 
 # Final status output
 message(STATUS "NANOVDB_EDITOR_LIBRARIES: ${NANOVDB_EDITOR_LIBRARIES}")

@@ -222,13 +222,7 @@ if %errorlevel% neq 0 (
 exit /b 1
 
 :BuildPython
-if %debug%==1 (
-    echo -- Building python module in debug mode...
-    set CMAKE_BUILD_TYPE=Debug
-) else (
-    echo -- Building python module in release mode...
-    set CMAKE_BUILD_TYPE=Release
-)
+echo -- Building python module...
 
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
@@ -238,21 +232,21 @@ if %errorlevel% neq 0 (
 
 echo    -- Checking Python dependencies...
 
-echo    -- Installing scikit-build and wheel...
+echo    -- Installing scikit-build-core and wheel...
 python -m pip install --upgrade pip
 if %errorlevel% neq 0 (
     echo Error: Failed to upgrade pip
     goto Error
 )
-python -m pip install --upgrade scikit-build wheel build
+python -m pip install --upgrade scikit-build-core wheel
 if %errorlevel% neq 0 (
     echo Error: Failed to install required packages
     goto Error
 )
-python -c "import skbuild" >nul 2>&1
+python -c "import scikit_build_core" >nul 2>&1
 if %errorlevel% neq 0 (
-    echo Error: Failed to install scikit-build. Please install manually:
-    echo   python -m pip install scikit-build
+    echo Error: Failed to install scikit-build-core. Please install manually:
+    echo   python -m pip install scikit-build-core
     goto Error
 )
 python -c "import wheel" >nul 2>&1
@@ -265,23 +259,48 @@ echo    -- Python dependencies verified successfully
 
 cd pymodule
 
-echo -- Cleaning up old python module builds...
-if exist build rmdir /s /q build 2>nul
-if exist dist rmdir /s /q dist 2>nul
-if exist _skbuild rmdir /s /q _skbuild 2>nul
-for /d %%i in (*.egg-info) do if exist "%%i" rmdir /s /q "%%i" 2>nul
-for /d %%i in (__pycache__) do if exist "%%i" rmdir /s /q "%%i" 2>nul
-del /q *.whl 2>nul
+if %clean_build%==1 (
+    echo -- Cleaning up old python module builds...
+    if exist build rmdir /s /q build 2>nul
+    if exist dist rmdir /s /q dist 2>nul
+    if exist _skbuild rmdir /s /q _skbuild 2>nul
+    for /d %%i in (*.egg-info) do if exist "%%i" rmdir /s /q "%%i" 2>nul
+    for /d %%i in (__pycache__) do if exist "%%i" rmdir /s /q "%%i" 2>nul
+    del /q *.whl 2>nul
+)
 
-python -m build --wheel
+set "PIP_ARGS=--no-build-isolation"
+if %debug%==1 (
+    set "PIP_ARGS=%PIP_ARGS% --config-settings=cmake.build-type=Debug"
+) else (
+    set "PIP_ARGS=%PIP_ARGS% --config-settings=cmake.build-type=Release"
+)
+if "%GLFW_ON%"=="OFF" (
+    set "PIP_ARGS=%PIP_ARGS% --config-settings=cmake.define.NANOVDB_EDITOR_USE_GLFW=OFF"
+)
+if %verbose%==1 (
+    set "PIP_ARGS=%PIP_ARGS% --config-settings=cmake.verbose=true -v"
+)
+
+python -m pip wheel . --wheel-dir dist %PIP_ARGS%
 if %errorlevel% neq 0 (
-    echo Error: Failed to build wheel
+    echo Error: Failed to build NanoVDB editor wheel
     cd ..
     goto Error
 )
 
-echo -- Installing python module...
-pip install --force-reinstall .
+echo -- Installing python module from wheel...
+set "WHEEL_PATH="
+for /f "delims=" %%f in ('dir /b /a:-d /o:-d dist^\*.whl') do (
+    set "WHEEL_PATH=dist\%%f"
+    goto install_wheel
+)
+echo Error: No wheel found in dist
+cd ..
+goto Error
+
+:install_wheel
+python -m pip install "%WHEEL_PATH%" --force-reinstall
 cd ..
 
 :RunTests
