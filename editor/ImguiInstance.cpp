@@ -1024,18 +1024,27 @@ static void showWindows(Instance* ptr, float delta_time)
                             ImGui::DragFloat("Axis Scale", &camera->axis_scale, 0.1f, 0.f, 10.f);
                             ImGui::DragFloat("Frustum Line Width", &camera->frustum_line_width, 0.1f, 0.f, 10.f);
                             ImGui::DragFloat("Frustum Scale", &camera->frustum_scale, 0.1f, 0.f, 10.f);
-                            ImGui::ColorEdit4("Frustum Color", (float*)&camera->frustum_color);
+                            float frustumColor[4] = { (float)camera->frustum_color.x, (float)camera->frustum_color.y,
+                                                      (float)camera->frustum_color.z, 1.0f };
+                            if (ImGui::ColorEdit4("Frustum Color", frustumColor))
+                            {
+                                camera->frustum_color.x = (pnanovdb_uint8_t)(frustumColor[0] * 255.0f);
+                                camera->frustum_color.y = (pnanovdb_uint8_t)(frustumColor[1] * 255.0f);
+                                camera->frustum_color.z = (pnanovdb_uint8_t)(frustumColor[2] * 255.0f);
+                            }
                             ImGui::Separator();
                             ImGui::DragFloat("Near Plane", &camera->configs[cameraIdx].near_plane, 0.1f, 0.01f, 10000.f);
                             ImGui::DragFloat("Far Plane", &camera->configs[cameraIdx].far_plane, 10.f, 1.f, 100000.f);
                             if (camera->configs[cameraIdx].is_orthographic)
                             {
-                                ImGui::DragFloat("Orthographic Y", &camera->configs[cameraIdx].orthographic_y, 0.1f,
-                                                 0.0f, 100000.0f);
+                                ImGui::DragFloat(
+                                    "Orthographic Y", &camera->configs[cameraIdx].orthographic_y, 0.1f, 0.f, 100000.f);
                             }
                             else
                             {
                                 ImGui::DragFloat("FOV", &camera->configs[cameraIdx].fov_angle_y, 0.01f, 0.f, M_PI_2);
+                                ImGui::DragFloat(
+                                    "Aspect Ratio", &camera->configs[cameraIdx].aspect_ratio, 0.01f, 0.f, 2.f);
                             }
                             // IMGUI_CHECKBOX_SYNC("Orthographic", camera->config.is_orthographic);
                         }
@@ -1353,8 +1362,7 @@ struct CameraBasisVectors
 
 static void calculateFrustumCorners(pnanovdb_camera_state_t& camera_state,
                                     pnanovdb_camera_config_t& camera_config,
-                                    float width,
-                                    float height,
+                                    float aspectRatio,
                                     pnanovdb_vec3_t corners[8],
                                     CameraBasisVectors* basisVectors = nullptr,
                                     float frustum_scale = 1.f)
@@ -1412,7 +1420,6 @@ static void calculateFrustumCorners(pnanovdb_camera_state_t& camera_state,
     float farPlaneClamped = std::min(d1_z, 10000000.f);
 
     // Calculate frustum dimensions
-    float aspectRatio = width / height;
     float nearPlane = nearPlaneClamped;
     float farPlane = farPlaneClamped;
 
@@ -1536,10 +1543,12 @@ static void drawCameraFrustumOverlay(
         viewingCamera.config.far_plane = 10000.f;
     }
 
+    float aspectRatio = camera.configs[cameraIdx].aspect_ratio;
+    aspectRatio = aspectRatio <= 0.f ? windowSize.x / windowSize.y : aspectRatio;
     pnanovdb_vec3_t frustumCorners[8];
     CameraBasisVectors basisVectors;
-    calculateFrustumCorners(camera.states[cameraIdx], camera.configs[cameraIdx], windowSize.x, windowSize.y,
-                            frustumCorners, &basisVectors, camera.frustum_scale);
+    calculateFrustumCorners(camera.states[cameraIdx], camera.configs[cameraIdx], aspectRatio, frustumCorners,
+                            &basisVectors, camera.frustum_scale);
 
     ImVec2 screenCorners[8];
     for (int i = 0; i < 8; i++)

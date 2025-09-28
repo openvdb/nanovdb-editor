@@ -207,6 +207,7 @@ int main(int argc, char* argv[])
     pnanovdb_camera_config_default(&debug_config);
     debug_config.near_plane = 0.1f;
     debug_config.far_plane = 100.0f;
+    debug_config.aspect_ratio = 1.0f;
 
     pnanovdb_camera_view_t debug_camera;
     pnanovdb_debug_camera_default(&debug_camera);
