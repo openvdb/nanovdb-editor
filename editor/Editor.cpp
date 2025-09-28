@@ -66,14 +66,6 @@ struct PendingData
         }
         return false;
     }
-
-    void wait_for_sync()
-    {
-        while (pending_data.load(std::memory_order_acquire) != nullptr)
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-    }
 };
 
 template <typename T>
@@ -99,14 +91,6 @@ struct ConstPendingData
         }
         return false;
     }
-
-    void wait_for_sync()
-    {
-        while (pending_data.load(std::memory_order_acquire) != nullptr)
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-    }
 };
 
 struct EditorWorker
@@ -119,7 +103,6 @@ struct EditorWorker
     PendingData<pnanovdb_compute_array_t> pending_data_array;
     PendingData<pnanovdb_raster_gaussian_data_t> pending_gaussian_data;
     PendingData<pnanovdb_camera_t> pending_camera;
-    PendingData<pnanovdb_camera_view_t> pending_camera_view;
     PendingData<void> pending_shader_params;
     ConstPendingData<pnanovdb_reflect_data_type_t> pending_shader_params_data_type;
 };
@@ -243,7 +226,6 @@ void add_nanovdb(pnanovdb_editor_t* editor, pnanovdb_compute_array_t* nanovdb_ar
     {
         EditorWorker* worker = static_cast<EditorWorker*>(editor->editor_worker);
         worker->pending_nanovdb.set_pending(nanovdb_array);
-        worker->pending_nanovdb.wait_for_sync();
     }
     else
     {
@@ -265,7 +247,6 @@ void add_array(pnanovdb_editor_t* editor, pnanovdb_compute_array_t* data_array)
     {
         EditorWorker* worker = static_cast<EditorWorker*>(editor->editor_worker);
         worker->pending_data_array.set_pending(data_array);
-        worker->pending_data_array.wait_for_sync();
     }
     else
     {
@@ -285,7 +266,6 @@ void add_gaussian_data(pnanovdb_editor_t* editor,
     {
         EditorWorker* worker = static_cast<EditorWorker*>(editor->editor_worker);
         worker->pending_gaussian_data.set_pending(gaussian_data);
-        worker->pending_gaussian_data.wait_for_sync();
     }
     else
     {
@@ -303,7 +283,6 @@ void add_camera(pnanovdb_editor_t* editor, pnanovdb_camera_t* camera)
     {
         EditorWorker* worker = static_cast<EditorWorker*>(editor->editor_worker);
         worker->pending_camera.set_pending(camera);
-        worker->pending_camera.wait_for_sync();
     }
     else
     {
@@ -313,16 +292,13 @@ void add_camera(pnanovdb_editor_t* editor, pnanovdb_camera_t* camera)
 
 void add_camera_view(pnanovdb_editor_t* editor, pnanovdb_camera_view_t* camera)
 {
-    if (editor->editor_worker)
+    EditorView* views = static_cast<EditorView*>(editor->views);
+    if (!views || !camera)
     {
-        EditorWorker* worker = static_cast<EditorWorker*>(editor->editor_worker);
-        worker->pending_camera_view.set_pending(camera);
-        worker->pending_camera_view.wait_for_sync();
+        return;
     }
-    else
-    {
-        static_cast<EditorView*>(editor->views)->cameras[camera->name] = camera;
-    }
+    // replace existing view if name matches
+    views->cameras[camera->name] = camera;
 }
 
 void add_shader_params(pnanovdb_editor_t* editor, void* params, const pnanovdb_reflect_data_type_t* data_type)
@@ -335,9 +311,7 @@ void add_shader_params(pnanovdb_editor_t* editor, void* params, const pnanovdb_r
     {
         EditorWorker* worker = static_cast<EditorWorker*>(editor->editor_worker);
         worker->pending_shader_params.set_pending(params);
-        worker->pending_shader_params.wait_for_sync();
         worker->pending_shader_params_data_type.set_pending(data_type);
-        worker->pending_shader_params_data_type.wait_for_sync();
     }
     else
     {
@@ -634,13 +608,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 imgui_user_settings->camera_state = editor->camera->state;
                 imgui_user_settings->camera_config = editor->camera->config;
                 imgui_user_settings->sync_camera = PNANOVDB_TRUE;
-            }
-            pnanovdb_camera_view_t* old_camera_views = nullptr;
-            pnanovdb_camera_view_t* debug_camera = nullptr;
-            updated = worker->pending_camera_view.process_pending(debug_camera, old_camera_views);
-            if (updated)
-            {
-                static_cast<EditorView*>(editor->views)->cameras[debug_camera->name] = debug_camera;
             }
             void* old_shader_params = nullptr;
             worker->pending_shader_params.process_pending(editor->shader_params, old_shader_params);

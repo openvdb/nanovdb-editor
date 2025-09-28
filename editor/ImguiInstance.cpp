@@ -41,7 +41,7 @@
 #include <limits>
 
 #ifndef M_PI_2
-#define M_PI_2 1.57079632679489661923
+#    define M_PI_2 1.57079632679489661923
 #endif
 
 #define IMGUI_CHECKBOX_SYNC(label, var)                                                                                \
@@ -894,9 +894,9 @@ static void showWindows(Instance* ptr, float delta_time)
             else
             {
                 ImVec2 fullAvail = ImGui::GetContentRegionAvail();
-                static float cameraListHeight = 120.0f;
-                const float minList = 20.0f;
-                const float minProps = 100.0f;
+                static float cameraListHeight = 100.f;
+                const float minList = 20.f;
+                const float minProps = 80.f;
                 cameraListHeight = std::max(minList, std::min(cameraListHeight, fullAvail.y - minProps));
 
                 if (ImGui::BeginChild("##CameraViewList", ImVec2(0, cameraListHeight), true,
@@ -921,7 +921,7 @@ static void showWindows(Instance* ptr, float delta_time)
                     }
 
                     ImVec2 avail = ImGui::GetContentRegionAvail();
-                    if (avail.y > 0.0f)
+                    if (avail.y > 0.f)
                     {
                         if (ImGui::InvisibleButton("##ClearCameraFrustumSelectionArea", avail))
                         {
@@ -983,9 +983,12 @@ static void showWindows(Instance* ptr, float delta_time)
                             if (ImGui::DragFloat3("World Position", eyePos, 0.1f))
                             {
                                 pnanovdb_camera_state_t* state = &camera->states[stateIdx];
-                                state->position.x = eyePos[0] + state->eye_direction.x * state->eye_distance_from_position;
-                                state->position.y = eyePos[1] + state->eye_direction.y * state->eye_distance_from_position;
-                                state->position.z = eyePos[2] + state->eye_direction.z * state->eye_distance_from_position;
+                                state->position.x =
+                                    eyePos[0] + state->eye_direction.x * state->eye_distance_from_position;
+                                state->position.y =
+                                    eyePos[1] + state->eye_direction.y * state->eye_distance_from_position;
+                                state->position.z =
+                                    eyePos[2] + state->eye_direction.z * state->eye_distance_from_position;
                             }
 
                             pnanovdb_camera_state_t* state = &camera->states[stateIdx];
@@ -1029,7 +1032,7 @@ static void showWindows(Instance* ptr, float delta_time)
                             {
                                 ImGui::DragFloat("FOV", &camera->config.fov_angle_y, 0.01f, 0.f, M_PI_2);
                             }
-                            //IMGUI_CHECKBOX_SYNC("Orthographic", camera->config.is_orthographic);
+                            // IMGUI_CHECKBOX_SYNC("Orthographic", camera->config.is_orthographic);
                         }
                     }
                 }

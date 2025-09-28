@@ -10,6 +10,7 @@
 #define TEST_EDITOR
 // #define TEST_RASTER
 #define TEST_RASTER_2D
+#define TEST_CAMERA
 // #define TEST_FILE_FORMAT
 // #define FORMAT_INGP
 #define FORMAT_PLY
@@ -143,21 +144,13 @@ int main(int argc, char* argv[])
 
     runEditorLoop(2);
 
-#    ifdef TEST_RASTER_2D
-    pnanovdb_camera_t camera;
-    pnanovdb_camera_init(&camera);
-    camera.state.position = { 0.358805, 0.725740, -0.693701 };
-    camera.state.eye_direction = { -0.012344, 0.959868, -0.280182 };
-    camera.state.eye_up = { 0.000000, 1.000000, 0.000000 };
-    camera.state.eye_distance_from_position = -2.111028;
-    editor.add_camera(&editor, &camera);
-
+#    ifdef TEST_CAMERA
     pnanovdb_camera_state_t debug_state = {};
     pnanovdb_camera_state_default(&debug_state, PNANOVDB_FALSE);
     debug_state.position = { 0.632428, 0.930241, -0.005193 };
     debug_state.eye_direction = { -0.012344, 0.959868, -0.280182 };
     debug_state.eye_up = { 0.000000, 1.000000, 0.000000 };
-    debug_state.eye_distance_from_position = -41.431084;
+    debug_state.eye_distance_from_position = 41.431084;
 
     pnanovdb_camera_config_t debug_config = {};
     pnanovdb_camera_config_default(&debug_config);
@@ -166,9 +159,18 @@ int main(int argc, char* argv[])
 
     pnanovdb_camera_view_t debug_camera;
     pnanovdb_debug_camera_default(&debug_camera);
-    debug_camera.name = "test";
-    debug_camera.state = debug_state;
+    debug_camera.name = "test_10";
+    debug_camera.num_states = 10;
+    debug_camera.states = new pnanovdb_camera_state_t[debug_camera.num_states];
     debug_camera.config = debug_config;
+
+    for (int i = 0; i < debug_camera.num_states; ++i)
+    {
+        pnanovdb_camera_state_t debug_state_i = debug_state;
+        debug_state_i.position.x += 50.f * i;
+        debug_state_i.position.z -= 20.f * i;
+        debug_camera.states[i] = debug_state_i;
+    }
     editor.add_camera_view(&editor, &debug_camera);
 
     pnanovdb_camera_config_t default_config = {};
@@ -182,9 +184,21 @@ int main(int argc, char* argv[])
     pnanovdb_camera_view_t default_camera;
     pnanovdb_debug_camera_default(&default_camera);
     default_camera.name = "default";
-    default_camera.state = default_state;
+    default_camera.num_states = 1;
+    default_camera.states = new pnanovdb_camera_state_t[default_camera.num_states];
+    default_camera.states[0] = default_state;
     default_camera.config = default_config;
     editor.add_camera_view(&editor, &default_camera);
+#    endif
+
+#    ifdef TEST_RASTER_2D
+    pnanovdb_camera_t camera;
+    pnanovdb_camera_init(&camera);
+    camera.state.position = { 0.358805, 0.725740, -0.693701 };
+    camera.state.eye_direction = { -0.012344, 0.959868, -0.280182 };
+    camera.state.eye_up = { 0.000000, 1.000000, 0.000000 };
+    camera.state.eye_distance_from_position = -2.111028;
+    editor.add_camera(&editor, &camera);
 
     const char* raster_file = "../../data/ficus.ply";
     pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
@@ -205,11 +219,15 @@ int main(int argc, char* argv[])
     editor.add_gaussian_data(&editor, &raster, queue, gaussian_data);
     editor.add_shader_params(&editor, &raster_params, data_type);
 
+    printf("got here\n");
+
     runEditorLoop(5);
 
     raster_params.eps2d = 0.5f;
     printf("Updating shader param eps2d to %f\n", raster_params.eps2d);
     editor.sync_shader_params(&editor, data_type, PNANOVDB_TRUE);
+
+    default_camera.is_visible = PNANOVDB_FALSE;
 
     runEditorLoop(10);
 
