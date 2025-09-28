@@ -49,7 +49,7 @@ struct shader_params_t
     float radius_clip;
 
     uint tile_size;
-    uint sh_degree;
+    int sh_degree;
     uint sh_stride_rgbrgbrgb;
     uint _pad2;
 };

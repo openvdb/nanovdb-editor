@@ -11,6 +11,7 @@
 
 #include "ImguiInstance.h"
 
+#include "imgui.h"
 #include "imgui/ImguiRenderer.h"
 #include "compute/ComputeShader.h"
 #include "CodeEditor.h"
@@ -36,6 +37,12 @@
 
 #include <filesystem>
 #include <algorithm>
+#include <cmath>
+#include <limits>
+
+#ifndef M_PI_2
+#    define M_PI_2 1.57079632679489661923
+#endif
 
 #define IMGUI_CHECKBOX_SYNC(label, var)                                                                                \
     {                                                                                                                  \
@@ -45,6 +52,8 @@
             (var) = temp_bool ? PNANOVDB_TRUE : PNANOVDB_FALSE;                                                        \
         }                                                                                                              \
     }
+
+const float EPSILON = 1e-6f;
 
 PNANOVDB_INLINE void timestamp_capture(pnanovdb_uint64_t* ptr)
 {
@@ -122,6 +131,7 @@ static const char* CONSOLE = "Output";
 static const char* SHADER_PARAMS = "Params";
 static const char* BENCHMARK = "Benchmark";
 static const char* FILE_HEADER = "File Header";
+static const char* CAMERA_VIEWS = "Cameras Views";
 
 static const char* getGridTypeName(uint32_t gridType)
 {
@@ -375,6 +385,7 @@ static void initializeDocking()
             ImGui::DockBuilderSplitNode(dock_id_left, ImGuiDir_Down, 0.f, nullptr, &dock_id_left);
         ImGui::DockBuilderSetNodeSize(dock_id_left_bottom, ImVec2(left_dock_width, window_height));
         ImGui::DockBuilderDockWindow(SHADER_PARAMS, dock_id_left_bottom);
+        ImGui::DockBuilderDockWindow(CAMERA_VIEWS, dock_id_left_bottom);
         ImGui::DockBuilderDockWindow(BENCHMARK, dock_id_left_bottom);
 
         ImGui::DockBuilderFinish(dockspace_id);
@@ -398,6 +409,7 @@ static void createMenu(Instance* ptr)
             ImGui::MenuItem(FILE_HEADER, "", &ptr->window.show_file_header);
             ImGui::MenuItem(CONSOLE, "", &ptr->window.show_console);
             ImGui::MenuItem(SHADER_PARAMS, "", &ptr->window.show_shader_params);
+            ImGui::MenuItem(CAMERA_VIEWS, "", &ptr->window.show_views);
             ImGui::MenuItem(BENCHMARK, "", &ptr->window.show_benchmark);
             ImGui::EndMenu();
         }
@@ -437,11 +449,9 @@ static void showWindows(Instance* ptr, float delta_time)
                 }
                 ImGui::EndGroup();
             }
-
-            ImGui::Text("Camera View");
             {
                 ImGui::BeginGroup();
-                if (ImGui::BeginCombo("##render_settings", "Select..."))
+                if (ImGui::BeginCombo("Viewport Camera", "Select..."))
                 {
                     for (const auto& pair : ptr->saved_render_settings)
                     {
@@ -452,6 +462,9 @@ static void showWindows(Instance* ptr, float delta_time)
                             ptr->viewport_settings[(int)ptr->viewport_option].render_settings_name =
                                 ptr->render_settings_name;
                             ptr->pending.load_camera = true;
+
+                            // clear selected debug camera when switching to saved camera
+                            ptr->selected_camera_view.clear();
                         }
                         if (is_selected)
                         {
@@ -866,6 +879,187 @@ static void showWindows(Instance* ptr, float delta_time)
         }
     }
 
+    if (ptr->window.show_views)
+    {
+        if (ImGui::Begin(CAMERA_VIEWS, &ptr->window.show_views))
+        {
+            if (ptr->camera_views == nullptr)
+            {
+                ImGui::TextDisabled("No camera views available");
+            }
+            else if (ptr->camera_views->empty())
+            {
+                ImGui::TextDisabled("No camera views added");
+            }
+            else
+            {
+                ImVec2 fullAvail = ImGui::GetContentRegionAvail();
+                static float cameraListHeight = 60.f;
+                const float minList = 20.f;
+                const float minProps = 80.f;
+                cameraListHeight = std::max(minList, std::min(cameraListHeight, fullAvail.y - minList));
+
+                if (ImGui::BeginChild("##CameraViewList", ImVec2(0, cameraListHeight), true,
+                                      ImGuiWindowFlags_AlwaysVerticalScrollbar))
+                {
+                    for (auto& cameraPair : *ptr->camera_views)
+                    {
+                        pnanovdb_camera_view_t* camera = cameraPair.second;
+                        if (!camera)
+                        {
+                            continue;
+                        }
+
+                        const std::string& cameraName = cameraPair.first;
+                        IMGUI_CHECKBOX_SYNC(("##Visible" + cameraName).c_str(), camera->is_visible);
+                        ImGui::SameLine();
+                        bool isSelected = (ptr->selected_camera_frustum == cameraName);
+                        if (ImGui::Selectable(cameraName.c_str(), isSelected))
+                        {
+                            ptr->selected_camera_frustum = cameraName;
+                        }
+                    }
+
+                    ImVec2 avail = ImGui::GetContentRegionAvail();
+                    if (avail.y > 0.f)
+                    {
+                        if (ImGui::InvisibleButton("##ClearCameraFrustumSelectionArea", avail))
+                        {
+                            ptr->selected_camera_frustum.clear();
+                        }
+                    }
+                }
+                ImGui::EndChild();
+
+                ImRect bb;
+                bb.Min = ImGui::GetWindowPos() + ImGui::GetCursorPos();
+                bb.Min.y += 2.f;
+                bb.Max = bb.Min + ImVec2(fullAvail.x, 2.f);
+                float propsHeight = fullAvail.y - cameraListHeight;
+                ImGui::SplitterBehavior(bb, ImGui::GetID("##CameraViewSplitter"), ImGuiAxis_Y, &cameraListHeight,
+                                        &propsHeight, minList, minProps);
+                ImGui::Spacing();
+
+                if (ImGui::BeginChild("##CameraViewProps", ImVec2(0, 0), true))
+                {
+                    if (ptr->selected_camera_frustum.empty())
+                    {
+                        ImGui::TextDisabled("No camera selected");
+                    }
+                    else
+                    {
+                        pnanovdb_camera_view_t* camera = ptr->camera_views->at(ptr->selected_camera_frustum);
+                        if (camera)
+                        {
+                            ImGui::Text("Total Cameras: %d", camera->num_cameras);
+                            int maxState = (camera->num_cameras > 0) ? ((int)camera->num_cameras - 1) : 0;
+                            if (maxState > 0)
+                            {
+                                ImGui::DragInt("Camera Index", &ptr->camera_frustum_index[ptr->selected_camera_frustum],
+                                               1.f, 0, maxState, "%d");
+                            }
+                            else
+                            {
+                                ImGui::Text("Camera Index: 0");
+                                ImGui::Dummy(ImVec2(0.f, 1.f));
+                            }
+                            ImGui::SameLine();
+                            int cameraIdx = ptr->camera_frustum_index[ptr->selected_camera_frustum];
+                            if (ImGui::Button("Set Viewport Camera"))
+                            {
+                                ptr->render_settings->camera_state = camera->states[cameraIdx];
+                                ptr->render_settings->camera_config = camera->configs[cameraIdx];
+                                ptr->render_settings->is_projection_rh = camera->configs[cameraIdx].is_projection_rh;
+                                ptr->render_settings->is_orthographic = camera->configs[cameraIdx].is_orthographic;
+                                ptr->render_settings->is_reverse_z = camera->configs[cameraIdx].is_reverse_z;
+                                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                            }
+
+                            pnanovdb_vec3_t eyePosition =
+                                pnanovdb_camera_get_eye_position_from_state(&camera->states[cameraIdx]);
+
+                            float eyePos[3] = { eyePosition.x, eyePosition.y, eyePosition.z };
+                            if (ImGui::DragFloat3("World Position", eyePos, 0.1f))
+                            {
+                                pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
+                                state->position.x =
+                                    eyePos[0] + state->eye_direction.x * state->eye_distance_from_position;
+                                state->position.y =
+                                    eyePos[1] + state->eye_direction.y * state->eye_distance_from_position;
+                                state->position.z =
+                                    eyePos[2] + state->eye_direction.z * state->eye_distance_from_position;
+                            }
+
+                            pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
+                            float lookAt[3] = { state->position.x, state->position.y, state->position.z };
+                            if (ImGui::DragFloat3("Look At", lookAt, 0.1f))
+                            {
+                                pnanovdb_vec3_t eye = pnanovdb_camera_get_eye_position_from_state(state);
+                                pnanovdb_vec3_t delta = { lookAt[0] - eye.x, lookAt[1] - eye.y, lookAt[2] - eye.z };
+                                float len2 = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
+                                if (len2 > 0.f)
+                                {
+                                    float len = pnanovdb_camera_sqrt(len2);
+                                    pnanovdb_vec3_t dir = { delta.x / len, delta.y / len, delta.z / len };
+                                    state->position.x = lookAt[0];
+                                    state->position.y = lookAt[1];
+                                    state->position.z = lookAt[2];
+                                    state->eye_direction = dir;
+                                    state->eye_distance_from_position = len;
+                                }
+                                else
+                                {
+                                    // Eye and look-at coincide; update position and set distance to zero
+                                    state->position.x = lookAt[0];
+                                    state->position.y = lookAt[1];
+                                    state->position.z = lookAt[2];
+                                    state->eye_distance_from_position = 0.f;
+                                }
+                            }
+
+                            ImGui::Separator();
+                            ImGui::DragFloat("Axis Length", &camera->axis_length, 1.f, 0.f, 100.f);
+                            ImGui::DragFloat("Axis Thickness", &camera->axis_thickness, 0.1f, 0.f, 10.f);
+                            ImGui::DragFloat("Axis Scale", &camera->axis_scale, 0.1f, 0.f, 10.f);
+                            ImGui::DragFloat("Frustum Line Width", &camera->frustum_line_width, 0.1f, 0.f, 10.f);
+                            ImGui::DragFloat("Frustum Scale", &camera->frustum_scale, 0.1f, 0.f, 10.f);
+                            float frustumColor[4] = { (float)camera->frustum_color.x, (float)camera->frustum_color.y,
+                                                      (float)camera->frustum_color.z, 1.0f };
+                            if (ImGui::ColorEdit4("Frustum Color", frustumColor))
+                            {
+                                camera->frustum_color.x = (pnanovdb_uint8_t)(frustumColor[0] * 255.0f);
+                                camera->frustum_color.y = (pnanovdb_uint8_t)(frustumColor[1] * 255.0f);
+                                camera->frustum_color.z = (pnanovdb_uint8_t)(frustumColor[2] * 255.0f);
+                            }
+                            ImGui::Separator();
+                            ImGui::DragFloat("Near Plane", &camera->configs[cameraIdx].near_plane, 0.1f, 0.01f, 10000.f);
+                            ImGui::DragFloat("Far Plane", &camera->configs[cameraIdx].far_plane, 10.f, 1.f, 100000.f);
+                            if (camera->configs[cameraIdx].is_orthographic)
+                            {
+                                ImGui::DragFloat(
+                                    "Orthographic Y", &camera->configs[cameraIdx].orthographic_y, 0.1f, 0.f, 100000.f);
+                            }
+                            else
+                            {
+                                ImGui::DragFloat("FOV", &camera->configs[cameraIdx].fov_angle_y, 0.01f, 0.f, M_PI_2);
+                                ImGui::DragFloat(
+                                    "Aspect Ratio", &camera->configs[cameraIdx].aspect_ratio, 0.01f, 0.f, 2.f);
+                            }
+                            // IMGUI_CHECKBOX_SYNC("Orthographic", camera->config.is_orthographic);
+                        }
+                    }
+                }
+                ImGui::EndChild();
+            }
+
+            ImGui::End();
+        }
+        else
+        {
+            ImGui::End();
+        }
+    }
+
     if (ptr->window.show_benchmark)
     {
         if (ImGui::Begin(BENCHMARK, &ptr->window.show_benchmark))
@@ -1158,6 +1352,351 @@ static void showWindows(Instance* ptr, float delta_time)
     }
 }
 
+struct CameraBasisVectors
+{
+    pnanovdb_vec3_t right;
+    pnanovdb_vec3_t up;
+    pnanovdb_vec3_t forward;
+};
+
+static void calculateFrustumCorners(pnanovdb_camera_state_t& camera_state,
+                                    pnanovdb_camera_config_t& camera_config,
+                                    float aspectRatio,
+                                    pnanovdb_vec3_t corners[8],
+                                    CameraBasisVectors* basisVectors = nullptr,
+                                    float frustum_scale = 1.f)
+{
+    pnanovdb_vec3_t eyePosition = pnanovdb_camera_get_eye_position_from_state(&camera_state);
+
+    // Calculate camera basis vectors
+    pnanovdb_vec3_t forward = camera_state.eye_direction;
+    pnanovdb_vec3_t up = camera_state.eye_up;
+    pnanovdb_vec3_t right = { forward.y * up.z - forward.z * up.y, forward.z * up.x - forward.x * up.z,
+                              forward.x * up.y - forward.y * up.x };
+
+    // Normalize right vector
+    float rightLength = sqrt(right.x * right.x + right.y * right.y + right.z * right.z);
+    if (rightLength > EPSILON)
+    {
+        right.x /= rightLength;
+        right.y /= rightLength;
+        right.z /= rightLength;
+    }
+    else
+    {
+        right = { 1.f, 0.f, 0.f };
+    }
+
+    up.x = right.y * forward.z - right.z * forward.y;
+    up.y = right.z * forward.x - right.x * forward.z;
+    up.z = right.x * forward.y - right.y * forward.x;
+
+    // Normalize the recalculated up vector
+    float upLength = sqrt(up.x * up.x + up.y * up.y + up.z * up.z);
+    if (upLength > EPSILON)
+    {
+        up.x /= upLength;
+        up.y /= upLength;
+        up.z /= upLength;
+    }
+    else
+    {
+        up = { 0.f, 1.f, 0.f };
+    }
+
+    if (basisVectors)
+    {
+        basisVectors->right = right;
+        basisVectors->up = up;
+        basisVectors->forward = forward;
+    }
+
+    // Handle reverse Z by swapping near/far planes
+    float d0_z = camera_config.is_reverse_z ? camera_config.far_plane : camera_config.near_plane;
+    float d1_z = camera_config.is_reverse_z ? camera_config.near_plane : camera_config.far_plane;
+
+    float nearPlaneClamped = std::max(d0_z, EPSILON);
+    float farPlaneClamped = std::min(d1_z, 10000000.f);
+
+    // Calculate frustum dimensions
+    float nearPlane = nearPlaneClamped;
+    float farPlane = farPlaneClamped;
+
+    if (camera_config.is_orthographic)
+    {
+        nearPlane = 0.f; // place near plane at the camera position
+        farPlane = std::max(nearPlaneClamped, farPlaneClamped);
+    }
+
+    float nearHeight, nearWidth, farHeight, farWidth;
+
+    if (camera_config.is_orthographic)
+    {
+        float orthoHeight = camera_config.orthographic_y;
+        float orthoWidth = orthoHeight * aspectRatio;
+        nearHeight = farHeight = orthoHeight * frustum_scale;
+        nearWidth = farWidth = orthoWidth * frustum_scale;
+    }
+    else
+    {
+        float tanHalfFov = tan(camera_config.fov_angle_y * 0.5f);
+        nearHeight = nearPlane * tanHalfFov * frustum_scale;
+        nearWidth = nearHeight * aspectRatio;
+        farHeight = farPlane * tanHalfFov * frustum_scale;
+        farWidth = farHeight * aspectRatio;
+    }
+
+    // Calculate near plane corners
+    pnanovdb_vec3_t nearCenter = { eyePosition.x + forward.x * nearPlane, eyePosition.y + forward.y * nearPlane,
+                                   eyePosition.z + forward.z * nearPlane };
+
+    corners[0] = { nearCenter.x - right.x * nearWidth * 0.5f - up.x * nearHeight * 0.5f,
+                   nearCenter.y - right.y * nearWidth * 0.5f - up.y * nearHeight * 0.5f,
+                   nearCenter.z - right.z * nearWidth * 0.5f - up.z * nearHeight * 0.5f };
+
+    corners[1] = { nearCenter.x + right.x * nearWidth * 0.5f - up.x * nearHeight * 0.5f,
+                   nearCenter.y + right.y * nearWidth * 0.5f - up.y * nearHeight * 0.5f,
+                   nearCenter.z + right.z * nearWidth * 0.5f - up.z * nearHeight * 0.5f };
+
+    corners[2] = { nearCenter.x + right.x * nearWidth * 0.5f + up.x * nearHeight * 0.5f,
+                   nearCenter.y + right.y * nearWidth * 0.5f + up.y * nearHeight * 0.5f,
+                   nearCenter.z + right.z * nearWidth * 0.5f + up.z * nearHeight * 0.5f };
+
+    corners[3] = { nearCenter.x - right.x * nearWidth * 0.5f + up.x * nearHeight * 0.5f,
+                   nearCenter.y - right.y * nearWidth * 0.5f + up.y * nearHeight * 0.5f,
+                   nearCenter.z - right.z * nearWidth * 0.5f + up.z * nearHeight * 0.5f };
+
+    // Calculate far plane corners
+    pnanovdb_vec3_t farCenter = { eyePosition.x + forward.x * farPlane, eyePosition.y + forward.y * farPlane,
+                                  eyePosition.z + forward.z * farPlane };
+
+    corners[4] = { farCenter.x - right.x * farWidth * 0.5f - up.x * farHeight * 0.5f,
+                   farCenter.y - right.y * farWidth * 0.5f - up.y * farHeight * 0.5f,
+                   farCenter.z - right.z * farWidth * 0.5f - up.z * farHeight * 0.5f };
+
+    corners[5] = { farCenter.x + right.x * farWidth * 0.5f - up.x * farHeight * 0.5f,
+                   farCenter.y + right.y * farWidth * 0.5f - up.y * farHeight * 0.5f,
+                   farCenter.z + right.z * farWidth * 0.5f - up.z * farHeight * 0.5f };
+
+    corners[6] = { farCenter.x + right.x * farWidth * 0.5f + up.x * farHeight * 0.5f,
+                   farCenter.y + right.y * farWidth * 0.5f + up.y * farHeight * 0.5f,
+                   farCenter.z + right.z * farWidth * 0.5f + up.z * farHeight * 0.5f };
+
+    corners[7] = { farCenter.x - right.x * farWidth * 0.5f + up.x * farHeight * 0.5f,
+                   farCenter.y - right.y * farWidth * 0.5f + up.y * farHeight * 0.5f,
+                   farCenter.z - right.z * farWidth * 0.5f + up.z * farHeight * 0.5f };
+}
+
+static ImVec2 projectToScreen(const pnanovdb_vec3_t& worldPos,
+                              pnanovdb_camera_t* viewingCamera,
+                              float screenWidth,
+                              float screenHeight)
+{
+    pnanovdb_camera_mat_t view, proj;
+    pnanovdb_camera_get_view(viewingCamera, &view);
+    pnanovdb_camera_get_projection(viewingCamera, &proj, screenWidth, screenHeight);
+    pnanovdb_camera_mat_t viewProj = pnanovdb_camera_mat_mul(view, proj);
+
+    pnanovdb_vec4_t worldPos4 = { worldPos.x, worldPos.y, worldPos.z, 1.f };
+    pnanovdb_vec4_t clipPos = pnanovdb_camera_vec4_transform(worldPos4, viewProj);
+
+    if (clipPos.w > EPSILON)
+    {
+        float x = clipPos.x / clipPos.w;
+        float y = clipPos.y / clipPos.w;
+
+        // Convert from NDC to screen coordinates
+        float screenX = (x + 1.f) * 0.5f * screenWidth;
+        float screenY = (1.f - y) * 0.5f * screenHeight; // Flip Y coordinate
+
+        return ImVec2(screenX, screenY);
+    }
+
+    return ImVec2(std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::quiet_NaN());
+}
+
+static void drawCameraFrustumOverlay(
+    Instance* ptr, ImVec2 windowPos, ImVec2 windowSize, pnanovdb_camera_view_t& camera, int cameraIdx, float alpha = 1.f)
+{
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+    auto isPointFinite = [](const ImVec2& p) { return std::isfinite(p.x) && std::isfinite(p.y); };
+    auto isPointInsideWindow = [&](const ImVec2& p)
+    {
+        return (p.x >= windowPos.x && p.x <= windowPos.x + windowSize.x && p.y >= windowPos.y &&
+                p.y <= windowPos.y + windowSize.y);
+    };
+    auto isValidScreenPoint = [&](const ImVec2& p) { return isPointFinite(p) && isPointInsideWindow(p); };
+
+    pnanovdb_camera_t viewingCamera = {};
+    viewingCamera.state = ptr->render_settings->camera_state;
+    viewingCamera.config = ptr->render_settings->camera_config;
+
+    // Use a temporary perspective projection for overlay when both are ortho,
+    // so the frustum box depth is visible on screen
+    if (viewingCamera.config.is_orthographic && camera.configs[cameraIdx].is_orthographic)
+    {
+        viewingCamera.config.is_orthographic = PNANOVDB_FALSE;
+        viewingCamera.config.fov_angle_y = 0.785398163f; // ~45 deg
+        viewingCamera.config.near_plane = 0.1f;
+        viewingCamera.config.far_plane = 10000.f;
+    }
+
+    float aspectRatio = camera.configs[cameraIdx].aspect_ratio;
+    aspectRatio = aspectRatio <= 0.f ? windowSize.x / windowSize.y : aspectRatio;
+    pnanovdb_vec3_t frustumCorners[8];
+    CameraBasisVectors basisVectors;
+    calculateFrustumCorners(camera.states[cameraIdx], camera.configs[cameraIdx], aspectRatio, frustumCorners,
+                            &basisVectors, camera.frustum_scale);
+
+    ImVec2 screenCorners[8];
+    for (int i = 0; i < 8; i++)
+    {
+        screenCorners[i] = projectToScreen(frustumCorners[i], &viewingCamera, windowSize.x, windowSize.y);
+        screenCorners[i].x += windowPos.x;
+        screenCorners[i].y += windowPos.y;
+    }
+
+    ImU32 lineColor =
+        IM_COL32(camera.frustum_color.x, camera.frustum_color.y, camera.frustum_color.z, ImU32(alpha * 255));
+    float frustumLineThickness = camera.frustum_scale * camera.frustum_line_width;
+
+    auto drawEdge = [&](int a, int b)
+    {
+        if (!isValidScreenPoint(screenCorners[a]) || !isValidScreenPoint(screenCorners[b]))
+        {
+            return;
+        }
+        drawList->AddLine(screenCorners[a], screenCorners[b], lineColor, frustumLineThickness);
+    };
+
+    // Near plane
+    drawEdge(0, 1);
+    drawEdge(1, 2);
+    drawEdge(2, 3);
+    drawEdge(3, 0);
+
+    // Far plane
+    drawEdge(4, 5);
+    drawEdge(5, 6);
+    drawEdge(6, 7);
+    drawEdge(7, 4);
+
+    // Sides
+    drawEdge(0, 4);
+    drawEdge(1, 5);
+    drawEdge(2, 6);
+    drawEdge(3, 7);
+
+    pnanovdb_vec3_t eyePosition = pnanovdb_camera_get_eye_position_from_state(&camera.states[cameraIdx]);
+
+    ImVec2 cameraScreenPos = projectToScreen(eyePosition, &viewingCamera, windowSize.x, windowSize.y);
+    cameraScreenPos.x += windowPos.x;
+    cameraScreenPos.y += windowPos.y;
+
+    pnanovdb_vec3_t forward = basisVectors.forward;
+    pnanovdb_vec3_t up = basisVectors.up;
+    pnanovdb_vec3_t right = basisVectors.right;
+
+    float axisLength = camera.axis_scale * camera.axis_length;
+
+    pnanovdb_vec3_t xAxisEnd = { eyePosition.x + right.x * axisLength, eyePosition.y + right.y * axisLength,
+                                 eyePosition.z + right.z * axisLength };
+    pnanovdb_vec3_t yAxisEnd = { eyePosition.x + up.x * axisLength, eyePosition.y + up.y * axisLength,
+                                 eyePosition.z + up.z * axisLength };
+    pnanovdb_vec3_t zAxisEnd = { eyePosition.x + forward.x * axisLength, eyePosition.y + forward.y * axisLength,
+                                 eyePosition.z + forward.z * axisLength };
+
+    ImVec2 xAxisScreenPos = projectToScreen(xAxisEnd, &viewingCamera, windowSize.x, windowSize.y);
+    ImVec2 yAxisScreenPos = projectToScreen(yAxisEnd, &viewingCamera, windowSize.x, windowSize.y);
+    ImVec2 zAxisScreenPos = projectToScreen(zAxisEnd, &viewingCamera, windowSize.x, windowSize.y);
+
+    xAxisScreenPos.x += windowPos.x;
+    xAxisScreenPos.y += windowPos.y;
+    yAxisScreenPos.x += windowPos.x;
+    yAxisScreenPos.y += windowPos.y;
+    zAxisScreenPos.x += windowPos.x;
+    zAxisScreenPos.y += windowPos.y;
+
+    float axisThickness = camera.axis_scale * camera.axis_thickness;
+    float posRadius = camera.axis_scale * axisThickness;
+    ImU32 posColor = IM_COL32(222, 220, 113, ImU32(alpha * 255));
+
+    if (isValidScreenPoint(cameraScreenPos) && isValidScreenPoint(xAxisScreenPos))
+    {
+        drawList->AddLine(cameraScreenPos, xAxisScreenPos, IM_COL32(255, 0, 0, 255), axisThickness); // right
+    }
+    if (isValidScreenPoint(cameraScreenPos) && isValidScreenPoint(yAxisScreenPos))
+    {
+        drawList->AddLine(cameraScreenPos, yAxisScreenPos, IM_COL32(0, 255, 0, 255), axisThickness); // up
+    }
+    if (isValidScreenPoint(cameraScreenPos) && isValidScreenPoint(zAxisScreenPos))
+    {
+        drawList->AddLine(cameraScreenPos, zAxisScreenPos, IM_COL32(0, 0, 255, 255), axisThickness); // forward
+    }
+    if (isValidScreenPoint(cameraScreenPos))
+    {
+        drawList->AddCircleFilled(cameraScreenPos, posRadius, posColor);
+    }
+}
+
+static void drawCameraViews(Instance* ptr)
+{
+    if (!ptr->camera_views)
+    {
+        return;
+    }
+
+    // Get the main viewport (central docking area)
+    ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+    ImVec2 viewportPos = mainViewport->Pos;
+    ImVec2 viewportSize = mainViewport->Size;
+
+    // Create an overlay window to draw in the main viewport area
+    ImGui::SetNextWindowPos(viewportPos);
+    ImGui::SetNextWindowSize(viewportSize);
+    ImGui::SetNextWindowBgAlpha(0.f);
+
+    ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings |
+                                   ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoFocusOnAppearing |
+                                   ImGuiWindowFlags_NoBringToFrontOnFocus;
+
+    ImGui::Begin("Camera Frustum Overlay", nullptr, windowFlags);
+    {
+        ImVec2 windowPos = ImGui::GetWindowPos();
+        ImVec2 windowSize = ImGui::GetWindowSize();
+
+        for (const auto& cameraPair : *ptr->camera_views)
+        {
+            pnanovdb_camera_view_t* camera = cameraPair.second;
+            if (!camera)
+            {
+                continue;
+            }
+
+            if (camera->is_visible)
+            {
+                bool isViewSelected =
+                    (!ptr->selected_camera_frustum.empty() && ptr->selected_camera_frustum == cameraPair.first);
+                int selected = isViewSelected ? ptr->camera_frustum_index[ptr->selected_camera_frustum] : 0;
+                for (int i = 0; i < camera->num_cameras; i++)
+                {
+                    if (i == selected)
+                    {
+                        continue;
+                    }
+                    // cameras not selected
+                    drawCameraFrustumOverlay(ptr, windowPos, windowSize, *camera, i, isViewSelected ? 0.5f : 1.f);
+                }
+                // selected camera
+                drawCameraFrustumOverlay(ptr, windowPos, windowSize, *camera, selected, 0.75f);
+            }
+        }
+    }
+    ImGui::End();
+}
+
 void update(pnanovdb_imgui_instance_t* instance)
 {
     auto ptr = cast(instance);
@@ -1180,6 +1719,8 @@ void update(pnanovdb_imgui_instance_t* instance)
     ImGui::NewFrame();
 
     initializeDocking();
+
+    drawCameraViews(ptr);
 
     createMenu(ptr);
 

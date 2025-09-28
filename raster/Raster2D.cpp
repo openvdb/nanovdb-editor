@@ -95,7 +95,7 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
         gpu_params.tile_size = 16u;
     }
 
-    if (gpu_params.sh_degree_override == 0)
+    if (gpu_params.sh_degree_override < 0)
     {
         // TODO: get the SH degree from the data
         gpu_params.sh_degree_override = 3;
@@ -435,7 +435,8 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
             resources[8u].buffer_transient = intersection_vals_transient;
 
             compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_tile_intersections_slang],
-                                    resources, (constants.prim_count + 255u) / 256u, 1u, 1u, "gaussian_tile_intersections");
+                                     resources, (constants.prim_count + 255u) / 256u, 1u, 1u,
+                                     "gaussian_tile_intersections");
         }
 
         // radix sort
@@ -447,8 +448,8 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
             }
 
             ctx->parallel_primitives.radix_sort_dual_key(
-                compute, queue, ctx->parallel_primitives_ctx, intersection_keys_low_buffer, intersection_keys_high_buffer,
-                intersection_vals_buffer, constants.n_isects, 32u, num_tile_id_bits);
+                compute, queue, ctx->parallel_primitives_ctx, intersection_keys_low_buffer,
+                intersection_keys_high_buffer, intersection_vals_buffer, constants.n_isects, 32u, num_tile_id_bits);
         }
 
         buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED;
@@ -473,8 +474,8 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
             resources[2u].buffer_transient = intersection_keys_high_transient;
             resources[3u].buffer_transient = tile_offsets_transient;
 
-            compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_tile_offsets_slang], resources,
-                                    (constants.n_isects + 255u) / 256u, 1u, 1u, "gaussian_tile_offsets");
+            compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_tile_offsets_slang],
+                                     resources, (constants.n_isects + 255u) / 256u, 1u, 1u, "gaussian_tile_offsets");
         }
 
         pnanovdb_compute_texture_transient_t* color_2d_transient =
@@ -494,9 +495,9 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
             resources[8u].texture_transient = color_2d_transient;
 
             compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_rasterize_2d_slang], resources,
-                                    (constants.image_height + gpu_params.tile_size - 1u) / gpu_params.tile_size,
-                                    (constants.image_width + gpu_params.tile_size - 1u) / gpu_params.tile_size, 1u,
-                                    "gaussian_rasterize_2d");
+                                     (constants.image_height + gpu_params.tile_size - 1u) / gpu_params.tile_size,
+                                     (constants.image_width + gpu_params.tile_size - 1u) / gpu_params.tile_size, 1u,
+                                     "gaussian_rasterize_2d");
         }
 
         compute_interface->destroy_buffer(context, tile_offsets_buffer);
@@ -516,10 +517,11 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
             resources[1u].buffer_transient = shader_params_transient;
             resources[2u].texture_transient = color_2d_transient;
 
-            compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_rasterize_2d_null_slang], resources,
-                                    (constants.image_height + gpu_params.tile_size - 1u) / gpu_params.tile_size,
-                                    (constants.image_width + gpu_params.tile_size - 1u) / gpu_params.tile_size, 1u,
-                                    "gaussian_rasterize_2d_null");
+            compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_rasterize_2d_null_slang],
+                                     resources,
+                                     (constants.image_height + gpu_params.tile_size - 1u) / gpu_params.tile_size,
+                                     (constants.image_width + gpu_params.tile_size - 1u) / gpu_params.tile_size, 1u,
+                                     "gaussian_rasterize_2d_null");
         }
     }
 

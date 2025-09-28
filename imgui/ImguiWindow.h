@@ -58,6 +58,9 @@ PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, is_orthographic, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, is_reverse_z, 0, 0)
 PNANOVDB_REFLECT_VALUE(float, near_plane, 0, 0)
 PNANOVDB_REFLECT_VALUE(float, far_plane, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, fov_angle_y, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, orthographic_y, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, aspect_ratio, 0, 0)
 PNANOVDB_REFLECT_END(0)
 #undef PNANOVDB_REFLECT_TYPE
 
@@ -165,7 +168,7 @@ typedef struct pnanovdb_imgui_window_interface_t
                                           pnanovdb_int32_t* out_height,
                                           pnanovdb_imgui_window_t* window,
                                           pnanovdb_imgui_settings_render_t* user_settings,
-                                          pnanovdb_int32_t(*get_external_active_count)(void* external_active_count),
+                                          pnanovdb_int32_t (*get_external_active_count)(void* external_active_count),
                                           void* external_active_count);
 
     void(PNANOVDB_ABI* get_camera_view_proj)(pnanovdb_imgui_window_t* window,
