@@ -375,7 +375,7 @@ pnanovdb_bool_t pop_event(pnanovdb_server_instance_t* instance, pnanovdb_server_
 }
 
 void wait_until_active(pnanovdb_server_instance_t* instance,
-                       pnanovdb_int32_t(*get_external_active_count)(void* external_active_count),
+                       pnanovdb_int32_t (*get_external_active_count)(void* external_active_count),
                        void* external_active_count)
 {
     auto ptr = cast(instance);

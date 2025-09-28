@@ -363,6 +363,23 @@ pnanovdb_int32_t editor_get_external_active_count(void* external_active_count)
     return count;
 };
 
+pnanovdb_int32_t editor_get_external_active_count(void* external_active_count)
+{
+    auto editor = static_cast<pnanovdb_editor_t*>(external_active_count);
+    if (!editor->editor_worker)
+    {
+        return 0;
+    }
+
+    auto worker = static_cast<EditorWorker*>(editor->editor_worker);
+    pnanovdb_int32_t count = 0;
+    if (worker->set_params.load() > 0 || worker->get_params.load() > 0)
+    {
+        count = 1;
+    }
+    return count;
+};
+
 void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb_editor_config_t* config)
 {
     if (!editor->compute || !editor->compiler || !device || !config)
