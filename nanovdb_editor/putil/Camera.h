@@ -150,9 +150,9 @@ PNANOVDB_FORCE_INLINE void pnanovdb_camera_init(PNANOVDB_INOUT(pnanovdb_camera_t
 struct pnanovdb_camera_view_t
 {
     const char* name;
-    pnanovdb_camera_config_t config;
+    pnanovdb_camera_config_t* configs;
     pnanovdb_camera_state_t* states;
-    pnanovdb_uint32_t num_states;
+    pnanovdb_uint32_t num_cameras;
     float axis_length;
     float axis_thickness;
     float axis_scale;
@@ -165,9 +165,9 @@ PNANOVDB_STRUCT_TYPEDEF(pnanovdb_camera_view_t)
 
 PNANOVDB_FORCE_INLINE void pnanovdb_debug_camera_default(PNANOVDB_INOUT(pnanovdb_camera_view_t) ptr)
 {
-    pnanovdb_camera_config_default(PNANOVDB_REF(PNANOVDB_DEREF(ptr).config));
+    PNANOVDB_DEREF(ptr).configs = NULL;
     PNANOVDB_DEREF(ptr).states = NULL;
-    PNANOVDB_DEREF(ptr).num_states = 0;
+    PNANOVDB_DEREF(ptr).num_cameras = 0;
     PNANOVDB_DEREF(ptr).name = NULL;
     PNANOVDB_DEREF(ptr).axis_length = 10.f;
     PNANOVDB_DEREF(ptr).axis_thickness = 4.f;

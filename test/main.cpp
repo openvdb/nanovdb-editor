@@ -33,7 +33,7 @@
 #define TEST_EDITOR
 // #define TEST_EDITOR_START_STOP
 // #define TEST_RASTER
-//#define TEST_RASTER_2D
+// #define TEST_RASTER_2D
 // #define TEST_SVRASTER
 // #define TEST_E57
 #define TEST_CAMERA
@@ -103,7 +103,7 @@ int main(int argc, char* argv[])
     if (!data_nanovdb)
     {
         printf("Error: Could not load file '%s'\n", nvdb_filepath);
-        //return 1;
+        // return 1;
     }
 #else
     pnanovdb_compute_array_t* data_nanovdb = nullptr;
@@ -211,16 +211,17 @@ int main(int argc, char* argv[])
     pnanovdb_camera_view_t debug_camera;
     pnanovdb_debug_camera_default(&debug_camera);
     debug_camera.name = "test_10";
-    debug_camera.num_states = 10;
-    debug_camera.states = new pnanovdb_camera_state_t[debug_camera.num_states];
-    debug_camera.config = debug_config;
+    debug_camera.num_cameras = 10;
+    debug_camera.states = new pnanovdb_camera_state_t[debug_camera.num_cameras];
+    debug_camera.configs = new pnanovdb_camera_config_t[debug_camera.num_cameras];
 
-    for (int i = 0; i < debug_camera.num_states; ++i)
+    for (int i = 0; i < debug_camera.num_cameras; ++i)
     {
         pnanovdb_camera_state_t debug_state_i = debug_state;
         debug_state_i.position.x += 50.f * i;
         debug_state_i.position.z -= 20.f * i;
         debug_camera.states[i] = debug_state_i;
+        debug_camera.configs[i] = debug_config;
     }
     editor.add_camera_view(&editor, &debug_camera);
 
@@ -235,11 +236,12 @@ int main(int argc, char* argv[])
     pnanovdb_camera_view_t default_camera;
     pnanovdb_debug_camera_default(&default_camera);
     default_camera.name = "default";
-    default_camera.num_states = 1;
-    default_camera.states = new pnanovdb_camera_state_t[default_camera.num_states];
+    default_camera.num_cameras = 1;
+    default_camera.states = new pnanovdb_camera_state_t[default_camera.num_cameras];
     default_camera.states[0] = default_state;
-    default_camera.config = default_config;
-    editor.add_camera_view(&editor, &default_camera);
+    default_camera.configs = new pnanovdb_camera_config_t[default_camera.num_cameras];
+    default_camera.configs[0] = default_config;
+    // editor.add_camera_view(&editor, &default_camera);
 #    endif
 
 #    ifdef TEST_RASTER
