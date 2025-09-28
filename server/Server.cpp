@@ -374,25 +374,35 @@ pnanovdb_bool_t pop_event(pnanovdb_server_instance_t* instance, pnanovdb_server_
     return PNANOVDB_TRUE;
 }
 
-void wait_until_active(pnanovdb_server_instance_t* instance)
+void wait_until_active(pnanovdb_server_instance_t* instance, void* external_active_count_int)
 {
     auto ptr = cast(instance);
 
     printf("Server stream going inactive.\n");
-    for (uint32_t idx = 0u; idx < 3600; idx++)
+    bool is_active = false;
+    while (!is_active)
     {
-        bool should_wait = false;
         {
             std::lock_guard<std::mutex> guard(g_mutex);
-
-            should_wait = ptr->client_ring_buffer_idx.empty();
+            if (!ptr->client_ring_buffer_idx.empty())
+            {
+                is_active = true;
+            }
         }
-        if (!should_wait)
+        if (external_active_count_int)
+        {
+            std::atomic<int>* active_count = static_cast<std::atomic<int>*>(external_active_count_int);
+            if (active_count->load() != 0)
+            {
+                is_active = true;
+            }
+        }
+        if (is_active)
         {
             printf("Server stream going active.\n");
             break;
         }
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
 
