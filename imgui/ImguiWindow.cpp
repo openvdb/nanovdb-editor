@@ -497,22 +497,12 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
                 }
                 else if (event.type == PNANOVDB_SERVER_EVENT_INACTIVE)
                 {
-                    if (swapchain)
-                    {
-                        break; // swapchain is active, even if server is not
-                    }
-                    else
+                    if (!swapchain) // swapchain means local viewer, so don't wait in that case
                     {
                         pnanovdb_get_server()->wait_until_active(
                             ptr->server, get_external_active_count, external_active_count);
-                        if (get_external_active_count)
-                        {
-                            if (get_external_active_count(external_active_count) != 0)
-                            {
-                                break;
-                            }
-                        }
                     }
+                    break;
                 }
             }
         }
