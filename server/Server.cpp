@@ -374,7 +374,9 @@ pnanovdb_bool_t pop_event(pnanovdb_server_instance_t* instance, pnanovdb_server_
     return PNANOVDB_TRUE;
 }
 
-void wait_until_active(pnanovdb_server_instance_t* instance, void* external_active_count_int)
+void wait_until_active(pnanovdb_server_instance_t* instance,
+                       pnanovdb_int32_t(*get_external_active_count)(void* external_active_count),
+                       void* external_active_count)
 {
     auto ptr = cast(instance);
 
@@ -389,10 +391,9 @@ void wait_until_active(pnanovdb_server_instance_t* instance, void* external_acti
                 is_active = true;
             }
         }
-        if (external_active_count_int)
+        if (get_external_active_count)
         {
-            std::atomic<int>* active_count = static_cast<std::atomic<int>*>(external_active_count_int);
-            if (active_count->load() != 0)
+            if (get_external_active_count(external_active_count) != 0)
             {
                 is_active = true;
             }

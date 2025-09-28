@@ -57,7 +57,9 @@ typedef struct pnanovdb_server_t
 
     pnanovdb_bool_t(PNANOVDB_ABI* pop_event)(pnanovdb_server_instance_t* instance, pnanovdb_server_event_t* out_event);
 
-    void(PNANOVDB_ABI* wait_until_active)(pnanovdb_server_instance_t* instance, void* external_active_count_int);
+    void(PNANOVDB_ABI* wait_until_active)(pnanovdb_server_instance_t* instance,
+                                          pnanovdb_int32_t(*get_external_active_count)(void* external_active_count),
+                                          void* external_active_count);
 
     void(PNANOVDB_ABI* destroy_instance)(pnanovdb_server_instance_t* instance);
 

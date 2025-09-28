@@ -165,7 +165,8 @@ typedef struct pnanovdb_imgui_window_interface_t
                                           pnanovdb_int32_t* out_height,
                                           pnanovdb_imgui_window_t* window,
                                           pnanovdb_imgui_settings_render_t* user_settings,
-                                          void* external_active_count_int);
+                                          pnanovdb_int32_t(*get_external_active_count)(void* external_active_count),
+                                          void* external_active_count);
 
     void(PNANOVDB_ABI* get_camera_view_proj)(pnanovdb_imgui_window_t* window,
                                              pnanovdb_int32_t* out_width,

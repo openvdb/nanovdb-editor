@@ -99,7 +99,6 @@ struct EditorWorker
     std::atomic<bool> should_stop{ false };
     std::atomic<int> set_params{ 0 };
     std::atomic<int> get_params{ 0 };
-    std::atomic<int> server_active_req_count{ 0 };
     PendingData<pnanovdb_compute_array_t> pending_nanovdb;
     PendingData<pnanovdb_compute_array_t> pending_data_array;
     PendingData<pnanovdb_raster_gaussian_data_t> pending_gaussian_data;
@@ -322,13 +321,28 @@ void wait_for_shader_params_sync(pnanovdb_editor_t* editor, const pnanovdb_refle
 
     // wait until the params are synced
     EditorWorker* worker = static_cast<EditorWorker*>(editor->editor_worker);
-    worker->server_active_req_count.fetch_add(1);
     while (worker->set_params.load() > 0 || worker->get_params.load() > 0)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    worker->server_active_req_count.fetch_sub(1);
 }
+
+pnanovdb_int32_t editor_get_external_active_count(void* external_active_count)
+{
+    auto editor = static_cast<pnanovdb_editor_t*>(external_active_count);
+    if (!editor->editor_worker)
+    {
+        return 0;
+    }
+
+    auto worker = static_cast<EditorWorker*>(editor->editor_worker);
+    pnanovdb_int32_t count = 0;
+    if (worker->set_params.load() > 0 || worker->get_params.load() > 0)
+    {
+        count = 1;
+    }
+    return count;
+};
 
 void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb_editor_config_t* config)
 {
@@ -1082,18 +1096,12 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 #endif
         imgui_window_iface->update_camera(imgui_window, imgui_user_settings);
 
-        void* external_active_count_uint32 = nullptr;
-        if (editor->editor_worker)
-        {
-            external_active_count_uint32 = &(static_cast<EditorWorker*>(editor->editor_worker)->server_active_req_count);
-        }
-
         // update viewport image
         should_run = imgui_window_iface->update(
             editor->compute, device_queue,
             background_image ? compute_interface->register_texture_as_transient(compute_context, background_image) :
                                nullptr,
-            &image_width, &image_height, imgui_window, imgui_user_settings, external_active_count_uint32);
+            &image_width, &image_height, imgui_window, imgui_user_settings, editor_get_external_active_count, editor);
 
         if (background_image)
         {
