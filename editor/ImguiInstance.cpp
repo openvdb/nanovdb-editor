@@ -897,7 +897,7 @@ static void showWindows(Instance* ptr, float delta_time)
                 static float cameraListHeight = 100.f;
                 const float minList = 20.f;
                 const float minProps = 80.f;
-                cameraListHeight = std::max(minList, std::min(cameraListHeight, fullAvail.y - minProps));
+                cameraListHeight = std::max(minList, std::min(cameraListHeight, fullAvail.y - minList));
 
                 if (ImGui::BeginChild("##CameraViewList", ImVec2(0, cameraListHeight), true,
                                       ImGuiWindowFlags_AlwaysVerticalScrollbar))
@@ -963,10 +963,8 @@ static void showWindows(Instance* ptr, float delta_time)
                                 ImGui::Text("Camera Index: 0");
                                 ImGui::Dummy(ImVec2(0.f, 1.f));
                             }
-
                             int cameraIdx = ptr->camera_frustum_index[ptr->selected_camera_frustum];
-
-                            if (ImGui::Button("Set Viewport Camera"))
+                            if (ImGui::Button("Set As Viewport Camera"))
                             {
                                 ptr->render_settings->camera_state = camera->states[cameraIdx];
                                 ptr->render_settings->camera_config = camera->configs[cameraIdx];

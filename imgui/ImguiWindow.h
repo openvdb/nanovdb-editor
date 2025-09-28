@@ -58,6 +58,9 @@ PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, is_orthographic, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, is_reverse_z, 0, 0)
 PNANOVDB_REFLECT_VALUE(float, near_plane, 0, 0)
 PNANOVDB_REFLECT_VALUE(float, far_plane, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, fov_angle_y, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, orthographic_y, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, aspect_ratio, 0, 0)
 PNANOVDB_REFLECT_END(0)
 #undef PNANOVDB_REFLECT_TYPE
 

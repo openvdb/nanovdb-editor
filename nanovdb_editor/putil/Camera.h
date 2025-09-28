@@ -72,7 +72,7 @@ struct pnanovdb_camera_config_t
     float far_plane;
     float fov_angle_y;
     float orthographic_y;
-    float aspect_ratio; // 0 = use viewport aspect ratio
+    float aspect_ratio; // only for frustum rendering; 0 means auto (based on viewport)
     float pan_rate;
     float tilt_rate;
     float zoom_rate;
@@ -426,8 +426,7 @@ PNANOVDB_FORCE_INLINE void pnanovdb_camera_get_projection(PNANOVDB_INOUT(pnanovd
                                                           float aspect_width,
                                                           float aspect_height)
 {
-    float aspect_ratio = PNANOVDB_DEREF(ptr).config.aspect_ratio <= 0.f ? aspect_width / aspect_height :
-                                                                          PNANOVDB_DEREF(ptr).config.aspect_ratio;
+    float aspect_ratio = aspect_width / aspect_height;
     float d0_z = PNANOVDB_DEREF(ptr).config.is_reverse_z ? PNANOVDB_DEREF(ptr).config.far_plane :
                                                            PNANOVDB_DEREF(ptr).config.near_plane;
     float d1_z = PNANOVDB_DEREF(ptr).config.is_reverse_z ? PNANOVDB_DEREF(ptr).config.near_plane :

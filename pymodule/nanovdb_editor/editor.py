@@ -1,7 +1,19 @@
 # Copyright Contributors to the OpenVDB Project
 # SPDX-License-Identifier: Apache-2.0
 
-from ctypes import *
+from ctypes import (
+    Structure,
+    POINTER,
+    CFUNCTYPE,
+    c_void_p,
+    c_char_p,
+    c_int,
+    c_int32,
+    c_uint32,
+    c_float,
+    byref,
+    pointer,
+)
 
 from .compute import Compute, pnanovdb_Compute, pnanovdb_ComputeArray
 from .compiler import Compiler, pnanovdb_Compiler
@@ -9,6 +21,10 @@ from .device import pnanovdb_Device
 from .utils import load_library
 
 EDITOR_LIB = "pnanovdbeditor"
+
+
+# Match pnanovdb_bool_t (int32_t)
+pnanovdb_bool_t = c_int32
 
 
 class pnanovdb_EditorConfig(Structure):
@@ -36,11 +52,18 @@ class pnanovdb_CameraConfig(Structure):
     """Definition equivalent to pnanovdb_camera_config_t."""
 
     _fields_ = [
-        ("position", pnanovdb_Vec3),
-        ("eye_direction", pnanovdb_Vec3),
-        ("eye_up", pnanovdb_Vec3),
-        ("eye_distance_from_position", c_float),
-        ("orthographic_scale", c_float),
+        ("is_projection_rh", pnanovdb_bool_t),
+        ("is_orthographic", pnanovdb_bool_t),
+        ("is_reverse_z", pnanovdb_bool_t),
+        ("near_plane", c_float),
+        ("far_plane", c_float),
+        ("fov_angle_y", c_float),
+        ("orthographic_y", c_float),
+        ("aspect_ratio", c_float),
+        ("pan_rate", c_float),
+        ("tilt_rate", c_float),
+        ("zoom_rate", c_float),
+        ("key_translation_rate", c_float),
     ]
 
 
@@ -62,6 +85,30 @@ class pnanovdb_Camera(Structure):
     _fields_ = [
         ("config", pnanovdb_CameraConfig),
         ("state", pnanovdb_CameraState),
+        ("mouse_x_prev", c_int),
+        ("mouse_y_prev", c_int),
+        ("rotation_active", pnanovdb_bool_t),
+        ("zoom_active", pnanovdb_bool_t),
+        ("translate_active", pnanovdb_bool_t),
+        ("key_translate_active_mask", c_uint32),
+    ]
+
+
+class pnanovdb_CameraView(Structure):
+    """Definition equivalent to pnanovdb_camera_view_t."""
+
+    _fields_ = [
+        ("name", c_char_p),
+        ("configs", POINTER(pnanovdb_CameraConfig)),
+        ("states", POINTER(pnanovdb_CameraState)),
+        ("num_cameras", c_uint32),
+        ("axis_length", c_float),
+        ("axis_thickness", c_float),
+        ("axis_scale", c_float),
+        ("frustum_line_width", c_float),
+        ("frustum_scale", c_float),
+        ("frustum_color", pnanovdb_Vec3),
+        ("is_visible", pnanovdb_bool_t),
     ]
 
 
@@ -69,38 +116,45 @@ class pnanovdb_Editor(Structure):
     """Definition equivalent to pnanovdb_editor_t."""
 
     _fields_ = [
-        ("interface_pnanovdb_reflect_data_type", c_void_p),  # PNANOVDB_REFLECT_INTERFACE()
+        ("interface_pnanovdb_reflect_data_type", c_void_p),
         ("compiler", POINTER(pnanovdb_Compiler)),
         ("compute", POINTER(pnanovdb_Compute)),
         ("init", CFUNCTYPE(None, c_void_p)),
         ("shutdown", CFUNCTYPE(None, c_void_p)),
+        ("show", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Device), POINTER(pnanovdb_EditorConfig))),
+        ("start", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Device), POINTER(pnanovdb_EditorConfig))),
+        ("stop", CFUNCTYPE(None, c_void_p)),
         ("add_nanovdb", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_ComputeArray))),
         ("add_array", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_ComputeArray))),
         (
             "add_gaussian_data",
             CFUNCTYPE(None, c_void_p, c_void_p, c_void_p, c_void_p),
-        ),  # pnanovdb_raster_t*, pnanovdb_compute_queue_t*, pnanovdb_raster_gaussian_data_t*
+        ),  # pnanovdb_raster_t*, queue, pnanovdb_raster_gaussian_data_t*
         ("add_camera", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Camera))),
+        ("add_camera_view", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_CameraView))),
         (
             "add_shader_params",
             CFUNCTYPE(None, c_void_p, c_void_p, c_void_p),
         ),  # void* params, const pnanovdb_reflect_data_type_t* data_type
         (
             "sync_shader_params",
-            CFUNCTYPE(None, c_void_p, c_void_p, c_int32),
+            CFUNCTYPE(
+                None,
+                c_void_p,
+                c_void_p,
+                c_int32,
+            ),
         ),  # const pnanovdb_reflect_data_type_t* data_type, pnanovdb_bool_t set_data
-        ("show", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Device), POINTER(pnanovdb_EditorConfig))),
-        ("start", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Device), POINTER(pnanovdb_EditorConfig))),
-        ("stop", CFUNCTYPE(None, c_void_p)),
         ("module", c_void_p),
+        ("editor_worker", c_void_p),
         ("nanovdb_array", POINTER(pnanovdb_ComputeArray)),
         ("data_array", POINTER(pnanovdb_ComputeArray)),
         ("gaussian_data", c_void_p),  # pnanovdb_raster_gaussian_data_t*
         ("camera", POINTER(pnanovdb_Camera)),
         ("raster_ctx", c_void_p),  # pnanovdb_raster_context_t*
         ("shader_params", c_void_p),
-        ("shader_params_data_type", c_void_p),  # const pnanovdb_reflect_data_type_t*
-        ("editor_worker", c_void_p),
+        ("shader_params_data_type", c_void_p),
+        ("views", c_void_p),
     ]
 
 
@@ -183,7 +237,11 @@ class Editor:
                 config.port = 8080
                 config.headless = 0  # pnanovdb_bool_t
                 config.streaming = 0  # pnanovdb_bool_t
-            show_func(self._editor, self._compute.device_interface().get_device(), byref(config))
+            show_func(
+                self._editor,
+                self._compute.device_interface().get_device(),
+                byref(config),
+            )
         except Exception as e:
             print(f"Error: Editor runtime error ({e})")
 
@@ -199,7 +257,11 @@ class Editor:
                 config.port = 8080
                 config.headless = 0  # pnanovdb_bool_t
                 config.streaming = 0  # pnanovdb_bool_t
-            start_func(self._editor, self._compute.device_interface().get_device(), byref(config))
+            start_func(
+                self._editor,
+                self._compute.device_interface().get_device(),
+                byref(config),
+            )
         except Exception as e:
             print(f"Error: Editor start error ({e})")
 

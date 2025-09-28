@@ -493,7 +493,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         compute_context, (void*)"editor", pnanovdb_editor::Profiler::report_callback);
     editor->compute->device_interface.get_memory_stats(device, Profiler::getInstance().getMemoryStats());
 
-    // debug draw
+    // views UI
     imgui_user_instance->camera_views = &(static_cast<EditorView*>(editor->views)->cameras);
 
 #ifdef USE_IMGUI_INSTANCE
