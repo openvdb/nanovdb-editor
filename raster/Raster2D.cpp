@@ -135,12 +135,11 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
 
         pnanovdb_vec3_t view_dir;
         pnanovdb_uint32_t num_tiles;
-        pnanovdb_uint32_t is_orthographic;
 
-        pnanovdb_uint32_t pad3;
+        pnanovdb_uint32_t is_orthographic;
+        pnanovdb_uint32_t sh_stride;
         pnanovdb_uint32_t pad4;
         pnanovdb_uint32_t pad5;
-        pnanovdb_uint32_t pad6;
     };
     constants_t constants = {};
 
@@ -174,6 +173,7 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
     constants.view_dir = view_dir;
     constants.num_tiles = constants.num_tiles_w * constants.num_tiles_h;
     constants.is_orthographic = projection->z.w == 0.f ? 1u : 0u;
+    constants.sh_stride = data->sh_stride;
 
     // printf("fx(%f) fy(%f) cx(%f) cy(%f)\n", constants.fx, constants.fy, constants.cx, constants.cy);
 

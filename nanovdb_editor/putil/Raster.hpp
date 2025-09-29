@@ -49,6 +49,8 @@ bool raster_gaussians(pnanovdb_raster_t* raster,
     pnanovdb_compute_array_t* spherical_harmonics_arr = arrays_gaussian[4];
     pnanovdb_compute_array_t* color_arr = compute->create_array(4u, point_count * 3u, nullptr);
 
+    pnanovdb_uint32_t sh_stride = (pnanovdb_uint32_t)(spherical_harmonics_arr->element_count / means_arr->element_count);
+
     if (worker)
     {
         worker->updateTaskProgress(0.4f);
@@ -95,9 +97,9 @@ bool raster_gaussians(pnanovdb_raster_t* raster,
     for (pnanovdb_uint64_t point_idx = 0u; point_idx < point_count; point_idx++)
     {
         const float c0 = 0.28209479177387814f;
-        mapped_color[3u * point_idx + 0u] = c0 * mapped_spherical_harmonics[48u * point_idx + 0u] + 0.5f;
-        mapped_color[3u * point_idx + 1u] = c0 * mapped_spherical_harmonics[48u * point_idx + 1u] + 0.5f;
-        mapped_color[3u * point_idx + 2u] = c0 * mapped_spherical_harmonics[48u * point_idx + 2u] + 0.5f;
+        mapped_color[3u * point_idx + 0u] = c0 * mapped_spherical_harmonics[3u * sh_stride * point_idx + 0u * sh_stride] + 0.5f;
+        mapped_color[3u * point_idx + 1u] = c0 * mapped_spherical_harmonics[3u * sh_stride * point_idx + 1u * sh_stride] + 0.5f;
+        mapped_color[3u * point_idx + 2u] = c0 * mapped_spherical_harmonics[3u * sh_stride * point_idx + 2u * sh_stride] + 0.5f;
     }
     compute->unmap_array(spherical_harmonics_arr);
     compute->unmap_array(color_arr);

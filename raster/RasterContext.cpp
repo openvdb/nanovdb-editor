@@ -105,6 +105,7 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
     auto ptr = new gaussian_data_t();
 
     ptr->point_count = means->element_count / 3u;
+    ptr->sh_stride = (pnanovdb_uint32_t)(spherical_harmonics->element_count / means->element_count);
 
     ptr->has_uploaded = PNANOVDB_FALSE;
 
