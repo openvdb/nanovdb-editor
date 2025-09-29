@@ -40,7 +40,7 @@ static const pnanovdb_raster_shader_params_t default_shader_params = {
     0.f, // near_plane override, should be initialized from current camera
     0.f, // far_plane override, should be initialized from current camera
     0.3f, // eps2d
-    2.f, // min_radius_2d
+    0.f, // min_radius_2d
     16u, // tile_size
     0, // sh_degree override, <0 means loaded SH degree
     0, // sh_stride_rgbrgbrgb override, 0 means SH are packed rrr...ggg...bbb
