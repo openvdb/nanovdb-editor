@@ -139,21 +139,21 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     uint idx = group_idx.x * 256u + thread_idx.x;
 
     uint sh_degree = shader_params.sh_degree;
-    if (constants.sh_stride < 25 && sh_degree > 3u)
-    {
-        sh_degree = 3u;
-    }
-    if (constants.sh_stride < 16 && sh_degree > 2u)
-    {
-        sh_degree = 2u;
-    }
-    if (constants.sh_stride < 9 && sh_degree > 1u)
-    {
-        sh_degree = 1u;
-    }
-    if (constants.sh_stride < 4 && sh_degree > 0u)
+    if (constants.sh_stride < 4)
     {
         sh_degree = 0u;
+    }
+    else if (constants.sh_stride < 9)
+    {
+        sh_degree = sh_degree > 1u ? 1u : sh_degree;
+    }
+    else if (constants.sh_stride < 16)
+    {
+        sh_degree = sh_degree > 2u ? 2u : sh_degree;
+    }
+    else if (constants.sh_stride < 25)
+    {
+        sh_degree = sh_degree > 3u ? 3u : sh_degree;
     }
 
     float3 color = eval_sh_function(sh_degree, 3u * constants.sh_stride * idx, constants.view_dir);
