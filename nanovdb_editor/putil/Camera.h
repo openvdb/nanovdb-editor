@@ -77,6 +77,7 @@ struct pnanovdb_camera_config_t
     float tilt_rate;
     float zoom_rate;
     float key_translation_rate;
+    float scroll_zoom_rate;
 };
 PNANOVDB_STRUCT_TYPEDEF(pnanovdb_camera_config_t)
 
@@ -108,6 +109,7 @@ PNANOVDB_FORCE_INLINE void pnanovdb_camera_config_default(PNANOVDB_INOUT(pnanovd
     PNANOVDB_DEREF(ptr).tilt_rate = 1.f;
     PNANOVDB_DEREF(ptr).zoom_rate = 1.f;
     PNANOVDB_DEREF(ptr).key_translation_rate = 1.f;
+    PNANOVDB_DEREF(ptr).scroll_zoom_rate = 0.1f;
 }
 
 PNANOVDB_FORCE_INLINE void pnanovdb_camera_state_default(PNANOVDB_INOUT(pnanovdb_camera_state_t) ptr, pnanovdb_bool_t y_up)
@@ -686,6 +688,25 @@ PNANOVDB_FORCE_INLINE void pnanovdb_camera_mouse_update(PNANOVDB_INOUT(pnanovdb_
     // apply zoom
     if (zoom_dy != 0.f)
     {
+        if (PNANOVDB_DEREF(ptr).config.is_orthographic)
+        {
+            PNANOVDB_DEREF(ptr).state.orthographic_scale *= (1.f - PNANOVDB_DEREF(ptr).config.zoom_rate * zoom_dy);
+        }
+        else
+        {
+            PNANOVDB_DEREF(ptr).state.eye_distance_from_position *=
+                (1.f + PNANOVDB_DEREF(ptr).config.zoom_rate * zoom_dy);
+        }
+    }
+}
+
+PNANOVDB_FORCE_INLINE void pnanovdb_camera_mouse_wheel_update(PNANOVDB_INOUT(pnanovdb_camera_t) ptr,
+                                                        float scroll_x,
+                                                        float scroll_y)
+{
+    if (scroll_y != 0.f)
+    {
+        float zoom_dy = (-PNANOVDB_DEREF(ptr).config.scroll_zoom_rate) * scroll_y;
         if (PNANOVDB_DEREF(ptr).config.is_orthographic)
         {
             PNANOVDB_DEREF(ptr).state.orthographic_scale *= (1.f - PNANOVDB_DEREF(ptr).config.zoom_rate * zoom_dy);
