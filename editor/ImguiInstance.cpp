@@ -963,7 +963,6 @@ static void showWindows(Instance* ptr, float delta_time)
                                 ImGui::Text("Camera Index: 0");
                                 ImGui::Dummy(ImVec2(0.f, 1.f));
                             }
-                            ImGui::SameLine();
                             int cameraIdx = ptr->camera_frustum_index[ptr->selected_camera_frustum];
                             if (ImGui::Button("Set Viewport Camera"))
                             {

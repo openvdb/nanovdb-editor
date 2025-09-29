@@ -36,7 +36,7 @@ struct constants_t
     uint num_tiles;
 
     uint is_orthographic;
-    uint pad3;
+    uint sh_stride;
     uint pad4;
     uint pad5;
 };

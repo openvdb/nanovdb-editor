@@ -55,6 +55,7 @@ PNANOVDB_CAST_PAIR(pnanovdb_raster_context_t, raster_context_t)
 struct gaussian_data_t
 {
     pnanovdb_uint64_t point_count;
+    pnanovdb_uint32_t sh_stride;
 
     pnanovdb_bool_t has_uploaded;
 
