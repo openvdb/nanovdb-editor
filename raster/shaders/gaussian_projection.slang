@@ -56,9 +56,11 @@ void persp_proj(float3 mean3d,
     float z = mean3d.z;
 
     // for right handed projection, flip z sign
+    float J_off_sign = -1.f;
     if (constants.near_plane < 0.f)
     {
         z = -z;
+        J_off_sign = 1.f;
     }
 
     float tan_fovx = 0.5f * float(width) / fx;
@@ -73,7 +75,7 @@ void persp_proj(float3 mean3d,
     float tx = z * min(lim_x_pos, max(-lim_x_neg, x * rz));
     float ty = z * min(lim_y_pos, max(-lim_y_neg, y * rz));
 
-    float2x3 J = float2x3(fx * rz, 0.f, -fx * tx * rz2, 0.f, fy * rz, -fy * ty * rz2);
+    float2x3 J = float2x3(fx * rz, 0.f, J_off_sign * fx * tx * rz2, 0.f, fy * rz, J_off_sign * fy * ty * rz2);
 
     cov2d = mul(mul(J, cov3d), transpose(J));
     mean2d = float2(fx * x * rz + cx, fy * y * rz + cy);
@@ -124,7 +126,7 @@ float inverse(float2x2 M, inout float2x2 Minv)
         return det;
     }
     float invDet = 1.f / det;
-    Minv = float2x2(M[1][1] * invDet, -M[0][1] * invDet, -M[0][1] * invDet, M[0][0] * invDet);
+    Minv = float2x2(M[1][1] * invDet, -M[0][1] * invDet, -M[1][0] * invDet, M[0][0] * invDet);
     return det;
 }
 
