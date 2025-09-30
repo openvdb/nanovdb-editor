@@ -501,13 +501,13 @@ PNANOVDB_FORCE_INLINE void pnanovdb_camera_mouse_update(PNANOVDB_INOUT(pnanovdb_
             rotation_dx = 0.f;
             rotation_dy = 0.f;
         }
-        else if (button == PNANOVDB_CAMERA_MOUSE_BUTTON_MIDDLE)
+        else if (button == PNANOVDB_CAMERA_MOUSE_BUTTON_RIGHT)
         {
             PNANOVDB_DEREF(ptr).translate_active = PNANOVDB_TRUE;
             translate_dx = 0.f;
             translate_dy = 0.f;
         }
-        else if (button == PNANOVDB_CAMERA_MOUSE_BUTTON_RIGHT)
+        else if (button == PNANOVDB_CAMERA_MOUSE_BUTTON_MIDDLE)
         {
             PNANOVDB_DEREF(ptr).zoom_active = PNANOVDB_TRUE;
             zoom_dy = 0.f;
@@ -524,13 +524,13 @@ PNANOVDB_FORCE_INLINE void pnanovdb_camera_mouse_update(PNANOVDB_INOUT(pnanovdb_
             rotation_dx = 0.f;
             rotation_dy = 0.f;
         }
-        else if (button == PNANOVDB_CAMERA_MOUSE_BUTTON_MIDDLE)
+        else if (button == PNANOVDB_CAMERA_MOUSE_BUTTON_RIGHT)
         {
             PNANOVDB_DEREF(ptr).translate_active = PNANOVDB_FALSE;
             translate_dx = 0.f;
             translate_dy = 0.f;
         }
-        else if (button == PNANOVDB_CAMERA_MOUSE_BUTTON_RIGHT)
+        else if (button == PNANOVDB_CAMERA_MOUSE_BUTTON_MIDDLE)
         {
             PNANOVDB_DEREF(ptr).zoom_active = PNANOVDB_FALSE;
             zoom_dy = 0.f;
