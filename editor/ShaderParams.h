@@ -37,6 +37,8 @@ struct ShaderParam
     std::vector<char> min;
     std::vector<char> max;
     float step;
+    bool is_slider = false; // use slider in UI, for integers only
+    bool is_bool = false; // use checkbox in UI, for integers only
     nlohmann::json pending_value; // store value to apply when pool array is allocated
 
     ShaderParam() : pool_index(SIZE_MAX), size(0), num_elements(0), step(0.0f)
@@ -165,6 +167,8 @@ private:
     void createDefaultBoolParam(const std::string& name, nlohmann::ordered_json& json_shader_params);
     void createBoolParam(const std::string& name, const nlohmann::json& value, std::vector<ShaderParam>& params);
     void addToBoolParam(const std::string& name, const nlohmann::json& value, std::vector<ShaderParam>& params);
+
+    void renderParams(const std::string& shader_name, ShaderParam& shader_param);
 
 public:
     template <typename ShaderParamsT>
