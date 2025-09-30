@@ -63,6 +63,7 @@ struct server_instance_t
 
     std::string serveraddress;
     int port;
+    pnanovdb_compute_log_print_t log_print;
 
     std::vector<std::vector<char>> buffers;
     std::map<uint64_t, uint64_t> client_ring_buffer_idx;
@@ -291,7 +292,7 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
     return router;
 }
 
-pnanovdb_server_instance_t* create_instance(const char* serveraddress, int port)
+pnanovdb_server_instance_t* create_instance(const char* serveraddress, int port, pnanovdb_compute_log_print_t log_print)
 {
     auto ptr = new server_instance_t();
 
@@ -305,6 +306,7 @@ pnanovdb_server_instance_t* create_instance(const char* serveraddress, int port)
 
     ptr->serveraddress = serveraddress;
     ptr->port = port;
+    ptr->log_print = log_print;
 
     g_ioctx = ptr->ioctx.get();
     try
@@ -322,7 +324,10 @@ pnanovdb_server_instance_t* create_instance(const char* serveraddress, int port)
     }
     catch (const std::system_error& e)
     {
-        printf("Error starting server - %s\n", e.what());
+        if (ptr->log_print)
+        {
+            ptr->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_ERROR, "Error starting server - %s", e.what());
+        }
         delete ptr;
         return nullptr;
     }
@@ -380,7 +385,10 @@ void wait_until_active(pnanovdb_server_instance_t* instance,
 {
     auto ptr = cast(instance);
 
-    printf("Server stream going inactive.\n");
+    if (ptr->log_print)
+    {
+        ptr->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Server stream going inactive.");
+    }
     bool is_active = false;
     while (!is_active)
     {
@@ -400,7 +408,10 @@ void wait_until_active(pnanovdb_server_instance_t* instance,
         }
         if (is_active)
         {
-            printf("Server stream going active.\n");
+            if (ptr->log_print)
+            {
+                ptr->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Server stream going active.");
+            }
             break;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));

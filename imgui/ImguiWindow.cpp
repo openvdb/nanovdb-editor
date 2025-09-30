@@ -324,7 +324,7 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         if (!ptr->server)
         {
             ptr->server =
-                pnanovdb_get_server()->create_instance(user_settings->server_address, user_settings->server_port);
+                pnanovdb_get_server()->create_instance(user_settings->server_address, user_settings->server_port, log_print);
             if (!ptr->server)
             {
                 if (log_print)
@@ -765,7 +765,8 @@ void keyboardWindow(Window* ptr, ImGuiKey key, int scanCode, bool is_pressed, bo
             io.AddKeyEvent(key, is_pressed);
         }
     }
-    if (zeroWantCaptureKeyboard && zeroWantCaptureMouse)
+    // always report key release, conditional on key down
+    if ((zeroWantCaptureKeyboard && zeroWantCaptureMouse) || !is_pressed)
     {
         pnanovdb_camera_action_t p_action = PNANOVDB_CAMERA_ACTION_UNKNOWN;
         if (is_pressed)
@@ -777,19 +778,19 @@ void keyboardWindow(Window* ptr, ImGuiKey key, int scanCode, bool is_pressed, bo
             p_action = PNANOVDB_CAMERA_ACTION_UP;
         }
         pnanovdb_camera_key_t p_key = PNANOVDB_CAMERA_KEY_UNKNOWN;
-        if (key == ImGuiKey_UpArrow)
+        if (key == ImGuiKey_UpArrow || key == ImGuiKey_W)
         {
             p_key = PNANOVDB_CAMERA_KEY_UP;
         }
-        else if (key == ImGuiKey_DownArrow)
+        else if (key == ImGuiKey_DownArrow || key == ImGuiKey_S)
         {
             p_key = PNANOVDB_CAMERA_KEY_DOWN;
         }
-        else if (key == ImGuiKey_LeftArrow)
+        else if (key == ImGuiKey_LeftArrow || key == ImGuiKey_A)
         {
             p_key = PNANOVDB_CAMERA_KEY_LEFT;
         }
-        else if (key == ImGuiKey_RightArrow)
+        else if (key == ImGuiKey_RightArrow || key == ImGuiKey_D)
         {
             p_key = PNANOVDB_CAMERA_KEY_RIGHT;
         }
@@ -897,14 +898,24 @@ void mouseButtonWindow(Window* ptr, int button, bool is_pressed, int modifiers)
 
 void mouseWheelWindow(Window* ptr, double scrollX, double scrollY)
 {
+    bool zeroWantCaptureMouse = true;
     for (pnanovdb_uint64_t instance_idx = 0u; instance_idx < ptr->imgui_instances.size(); instance_idx++)
     {
         auto& inst = ptr->imgui_instances[instance_idx];
 
         ImGuiIO& io = *inst.instance_interface.get_io(inst.instance);
 
+        if (io.WantCaptureMouse)
+        {
+            zeroWantCaptureMouse = false;
+        }
+
         io.MouseWheelH += (float)scrollX;
         io.MouseWheel += (float)scrollY;
+    }
+    if (zeroWantCaptureMouse)
+    {
+        pnanovdb_camera_mouse_wheel_update(&ptr->camera, (float)scrollX, (float)scrollY);
     }
 }
 
