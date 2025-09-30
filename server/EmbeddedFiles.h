@@ -106,10 +106,18 @@ top: 0; left: 0; bottom: 0; right: 0;
         var ws = new WebSocket("ws://$serveraddress:$port/ws");
         ws.binaryType = 'arraybuffer';
         ws.addEventListener('message',function(event){
-            if (!document.hidden){
-                jmuxer.feed({
-                    video: new Uint8Array(event.data)
-                });
+            if (event.data instanceof ArrayBuffer)
+            {
+                if (!document.hidden){
+                    jmuxer.feed({
+                        video: new Uint8Array(event.data)
+                    });
+                }
+            }
+            else if(typeof event.data === 'string')
+            {
+                ws.send(event.data);
+                //console.log('String message: ', event.data);
             }
         });
 

@@ -66,8 +66,10 @@ struct server_instance_t
     pnanovdb_compute_log_print_t log_print;
 
     std::vector<std::vector<char>> buffers;
+    std::vector<uint64_t> frame_ids;
     std::map<uint64_t, uint64_t> client_ring_buffer_idx;
     uint32_t ring_buffer_idx = 0u;
+    uint64_t frame_id_counter = 0llu;
     std::vector<pnanovdb_server_event_t> events;
 };
 
@@ -102,12 +104,21 @@ void send_video(const asio::error_code& ec)
                 while (ring_buf_it->second != ~0u && ring_buf_it->second != g_server_instance->ring_buffer_idx)
                 {
                     auto& front = g_server_instance->buffers[ring_buf_it->second];
+                    uint64_t frame_id = g_server_instance->frame_ids[ring_buf_it->second];
                     ring_buf_it->second = (ring_buf_it->second + 1) % ring_buffer_size;
 
                     // printf("Sending %zu bytes of video\n", front.size());
 
                     auto& wsh = wsh_itr->second;
 
+                    nlohmann::json msg = {
+                        {"type", "event"},
+                        {"eventType", "frameid"},
+                        {"frameid", frame_id}
+                    };
+
+                    wsh->send_message(rws::final_frame_flag_t::final_frame, rws::opcode_t::text_frame,
+                                    restinio::writable_item_t(msg.dump()));
                     wsh->send_message(rws::final_frame_flag_t::final_frame, rws::opcode_t::binary_frame,
                                       restinio::writable_item_t(front));
                 }
@@ -238,6 +249,14 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
                                                  event.shift_key = msg["shiftKey"];
                                                  event.meta_key = msg["metaKey"];
                                              }
+                                             else if (eventType == "frameid")
+                                             {
+                                                uint64_t frame_id = msg["frameid"].get<uint64_t>();
+                                                if (g_server_instance && g_server_instance->log_print)
+                                                {
+                                                    g_server_instance->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "frame_id(%zu)", frame_id);
+                                                }
+                                             }
 
                                              if (g_server_instance)
                                              {
@@ -297,6 +316,7 @@ pnanovdb_server_instance_t* create_instance(const char* serveraddress, int port,
     auto ptr = new server_instance_t();
 
     ptr->buffers.resize(ring_buffer_size);
+    ptr->frame_ids.resize(ring_buffer_size);
 
     std::lock_guard<std::mutex> guard(g_mutex);
 
@@ -346,8 +366,10 @@ void push_h264(pnanovdb_server_instance_t* instance, const void* data, pnanovdb_
     const char* data_char = (const char*)data;
 
     ptr->buffers[ptr->ring_buffer_idx].assign(data_char, data_char + data_size);
+    ptr->frame_ids[ptr->ring_buffer_idx] = ptr->frame_id_counter;
 
     ptr->ring_buffer_idx = (ptr->ring_buffer_idx + 1) % ring_buffer_size;
+    ptr->frame_id_counter++;
 }
 
 pnanovdb_bool_t pop_event(pnanovdb_server_instance_t* instance, pnanovdb_server_event_t* out_event)
