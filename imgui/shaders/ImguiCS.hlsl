@@ -45,8 +45,11 @@ float3 computeBary(float2 p1, float2 p2, float2 p3, float2 p)
     float det = (p2.y - p3.y) * (p1.x - p3.x) + (p3.x - p2.x) * (p1.y - p3.y);
     float b1 = (p2.y - p3.y) * (p.x - p3.x) + (p3.x - p2.x) * (p.y - p3.y);
     float b2 = (p3.y - p1.y) * (p.x - p3.x) + (p1.x - p3.x) * (p.y - p3.y);
-    b1 = b1 / det;
-    b2 = b2 / det;
+    if (det != 0.f)
+    {
+        b1 = b1 / det;
+        b2 = b2 / det;
+    }
     float b3 = 1.f - b1 - b2;
     return float3(b1, b2, b3);
 }
@@ -59,7 +62,7 @@ bool edgeTest(float2 edgeA_fp, float2 edgeB_fp, float2 inside_fp, float2 pt_fp)
     int2 pt = int2(pt_fp);
 
     int2 m = edgeB - edgeA;
-    bool isBelow;
+    bool isBelow = false;
     if (abs(m.y) > abs(m.x))
     {
         int insX_num = (edgeB.y - inside.y) * edgeA.x - (edgeA.y - inside.y) * edgeB.x;
@@ -70,7 +73,7 @@ bool edgeTest(float2 edgeA_fp, float2 edgeB_fp, float2 inside_fp, float2 pt_fp)
         int cmpX = int(float(cmpX_num) / float(m.y));
         isBelow = insideIsBelow ? pt.x < cmpX : pt.x >= cmpX;
     }
-    else
+    else if (abs(m.x) != 0.f)
     {
         int insY_num = (edgeB.x - inside.x) * edgeA.y - (edgeA.x - inside.x) * edgeB.y;
         int insY = int(float(insY_num) / float(m.x));
