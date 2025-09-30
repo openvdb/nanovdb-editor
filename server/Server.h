@@ -12,9 +12,9 @@
 #ifndef NANOVDB_EDITOR_SERVER_H_HAS_BEEN_INCLUDED
 #define NANOVDB_EDITOR_SERVER_H_HAS_BEEN_INCLUDED
 
-#include "nanovdb_editor/putil/Loader.h"
-#include "nanovdb_editor/putil/Reflect.h"
-#include <stdio.h>
+#include <nanovdb_editor/putil/Loader.h>
+#include <nanovdb_editor/putil/Reflect.h>
+#include <nanovdb_editor/putil/Compute.h>
 
 /// ********************************* Server Interface ***************************************
 
@@ -51,7 +51,7 @@ typedef struct pnanovdb_server_t
 {
     PNANOVDB_REFLECT_INTERFACE();
 
-    pnanovdb_server_instance_t*(PNANOVDB_ABI* create_instance)(const char* serveraddress, int port);
+    pnanovdb_server_instance_t*(PNANOVDB_ABI* create_instance)(const char* serveraddress, int port, pnanovdb_compute_log_print_t log_print);
 
     void(PNANOVDB_ABI* push_h264)(pnanovdb_server_instance_t* instance, const void* data, pnanovdb_uint64_t data_size);
 

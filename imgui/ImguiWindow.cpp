@@ -324,7 +324,7 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         if (!ptr->server)
         {
             ptr->server =
-                pnanovdb_get_server()->create_instance(user_settings->server_address, user_settings->server_port);
+                pnanovdb_get_server()->create_instance(user_settings->server_address, user_settings->server_port, log_print);
             if (!ptr->server)
             {
                 if (log_print)
