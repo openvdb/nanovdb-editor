@@ -952,11 +952,11 @@ static void showWindows(Instance* ptr, float delta_time)
                         if (camera)
                         {
                             ImGui::Text("Total Cameras: %d", camera->num_cameras);
-                            int maxState = (camera->num_cameras > 0) ? ((int)camera->num_cameras - 1) : 0;
-                            if (maxState > 0)
+                            int maxIndex = (camera->num_cameras > 0) ? ((int)camera->num_cameras - 1) : 0;
+                            if (maxIndex > 0)
                             {
-                                ImGui::DragInt("Camera Index", &ptr->camera_frustum_index[ptr->selected_camera_frustum],
-                                               1.f, 0, maxState, "%d");
+                                ImGui::SliderInt("Camera Index", &ptr->camera_frustum_index[ptr->selected_camera_frustum],
+                                                 0, maxIndex, "%d");
                             }
                             else
                             {
@@ -1019,16 +1019,15 @@ static void showWindows(Instance* ptr, float delta_time)
                             ImGui::Separator();
                             ImGui::DragFloat("Axis Length", &camera->axis_length, 1.f, 0.f, 100.f);
                             ImGui::DragFloat("Axis Thickness", &camera->axis_thickness, 0.1f, 0.f, 10.f);
-                            ImGui::DragFloat("Axis Scale", &camera->axis_scale, 0.1f, 0.f, 10.f);
                             ImGui::DragFloat("Frustum Line Width", &camera->frustum_line_width, 0.1f, 0.f, 10.f);
                             ImGui::DragFloat("Frustum Scale", &camera->frustum_scale, 0.1f, 0.f, 10.f);
                             float frustumColor[4] = { (float)camera->frustum_color.x, (float)camera->frustum_color.y,
                                                       (float)camera->frustum_color.z, 1.0f };
                             if (ImGui::ColorEdit4("Frustum Color", frustumColor))
                             {
-                                camera->frustum_color.x = (pnanovdb_uint8_t)(frustumColor[0] * 255.0f);
-                                camera->frustum_color.y = (pnanovdb_uint8_t)(frustumColor[1] * 255.0f);
-                                camera->frustum_color.z = (pnanovdb_uint8_t)(frustumColor[2] * 255.0f);
+                                camera->frustum_color.x = frustumColor[0];
+                                camera->frustum_color.y = frustumColor[1];
+                                camera->frustum_color.z = frustumColor[2];
                             }
                             ImGui::Separator();
                             ImGui::DragFloat("Near Plane", &camera->configs[cameraIdx].near_plane, 0.1f, 0.01f, 10000.f);
@@ -1363,7 +1362,7 @@ static void calculateFrustumCorners(pnanovdb_camera_state_t& camera_state,
                                     float aspectRatio,
                                     pnanovdb_vec3_t corners[8],
                                     CameraBasisVectors* basisVectors = nullptr,
-                                    float frustum_scale = 1.f)
+                                    float frustumScale = 1.f)
 {
     pnanovdb_vec3_t eyePosition = pnanovdb_camera_get_eye_position_from_state(&camera_state);
 
@@ -1411,20 +1410,20 @@ static void calculateFrustumCorners(pnanovdb_camera_state_t& camera_state,
     }
 
     // Handle reverse Z by swapping near/far planes
-    float d0_z = camera_config.is_reverse_z ? camera_config.far_plane : camera_config.near_plane;
-    float d1_z = camera_config.is_reverse_z ? camera_config.near_plane : camera_config.far_plane;
+    float nearPlane = camera_config.is_reverse_z ? camera_config.far_plane : camera_config.near_plane;
+    float farPlane = camera_config.is_reverse_z ? camera_config.near_plane : camera_config.far_plane;
 
-    float nearPlaneClamped = std::max(d0_z, EPSILON);
-    float farPlaneClamped = std::min(d1_z, 10000000.f);
+    nearPlane = std::max(nearPlane, EPSILON);
+    farPlane = std::min(farPlane, 10000000.f);
 
     // Calculate frustum dimensions
-    float nearPlane = nearPlaneClamped;
-    float farPlane = farPlaneClamped;
+    float frustumNear = nearPlane * frustumScale;
+    float frustumFar = farPlane * frustumScale;
 
     if (camera_config.is_orthographic)
     {
-        nearPlane = 0.f; // place near plane at the camera position
-        farPlane = std::max(nearPlaneClamped, farPlaneClamped);
+        frustumNear = 0.f; // place near plane at the camera position
+        frustumFar = std::max(frustumNear, frustumFar);
     }
 
     float nearHeight, nearWidth, farHeight, farWidth;
@@ -1433,21 +1432,21 @@ static void calculateFrustumCorners(pnanovdb_camera_state_t& camera_state,
     {
         float orthoHeight = camera_config.orthographic_y;
         float orthoWidth = orthoHeight * aspectRatio;
-        nearHeight = farHeight = orthoHeight * frustum_scale;
-        nearWidth = farWidth = orthoWidth * frustum_scale;
+        nearHeight = farHeight = orthoHeight * frustumScale;
+        nearWidth = farWidth = orthoWidth * frustumScale;
     }
     else
     {
         float tanHalfFov = tan(camera_config.fov_angle_y * 0.5f);
-        nearHeight = nearPlane * tanHalfFov * frustum_scale;
+        nearHeight = frustumNear * tanHalfFov * frustumScale;
         nearWidth = nearHeight * aspectRatio;
-        farHeight = farPlane * tanHalfFov * frustum_scale;
+        farHeight = frustumFar * tanHalfFov * frustumScale;
         farWidth = farHeight * aspectRatio;
     }
 
     // Calculate near plane corners
-    pnanovdb_vec3_t nearCenter = { eyePosition.x + forward.x * nearPlane, eyePosition.y + forward.y * nearPlane,
-                                   eyePosition.z + forward.z * nearPlane };
+    pnanovdb_vec3_t nearCenter = { eyePosition.x + forward.x * frustumNear, eyePosition.y + forward.y * frustumNear,
+                                   eyePosition.z + forward.z * frustumNear };
 
     corners[0] = { nearCenter.x - right.x * nearWidth * 0.5f - up.x * nearHeight * 0.5f,
                    nearCenter.y - right.y * nearWidth * 0.5f - up.y * nearHeight * 0.5f,
@@ -1466,8 +1465,8 @@ static void calculateFrustumCorners(pnanovdb_camera_state_t& camera_state,
                    nearCenter.z - right.z * nearWidth * 0.5f + up.z * nearHeight * 0.5f };
 
     // Calculate far plane corners
-    pnanovdb_vec3_t farCenter = { eyePosition.x + forward.x * farPlane, eyePosition.y + forward.y * farPlane,
-                                  eyePosition.z + forward.z * farPlane };
+    pnanovdb_vec3_t farCenter = { eyePosition.x + forward.x * frustumFar, eyePosition.y + forward.y * frustumFar,
+                                  eyePosition.z + forward.z * frustumFar };
 
     corners[4] = { farCenter.x - right.x * farWidth * 0.5f - up.x * farHeight * 0.5f,
                    farCenter.y - right.y * farWidth * 0.5f - up.y * farHeight * 0.5f,
@@ -1556,8 +1555,8 @@ static void drawCameraFrustumOverlay(
         screenCorners[i].y += windowPos.y;
     }
 
-    ImU32 lineColor =
-        IM_COL32(camera.frustum_color.x, camera.frustum_color.y, camera.frustum_color.z, ImU32(alpha * 255));
+    ImU32 lineColor = IM_COL32(ImU32(camera.frustum_color.x * 255.f), ImU32(camera.frustum_color.y * 255.f),
+                               ImU32(camera.frustum_color.z * 255.f), ImU32(alpha * 255.f));
     float frustumLineThickness = camera.frustum_scale * camera.frustum_line_width;
 
     auto drawEdge = [&](int a, int b)
@@ -1597,14 +1596,14 @@ static void drawCameraFrustumOverlay(
     pnanovdb_vec3_t up = basisVectors.up;
     pnanovdb_vec3_t right = basisVectors.right;
 
-    float axisLength = camera.axis_scale * camera.axis_length;
-
-    pnanovdb_vec3_t xAxisEnd = { eyePosition.x + right.x * axisLength, eyePosition.y + right.y * axisLength,
-                                 eyePosition.z + right.z * axisLength };
-    pnanovdb_vec3_t yAxisEnd = { eyePosition.x + up.x * axisLength, eyePosition.y + up.y * axisLength,
-                                 eyePosition.z + up.z * axisLength };
-    pnanovdb_vec3_t zAxisEnd = { eyePosition.x + forward.x * axisLength, eyePosition.y + forward.y * axisLength,
-                                 eyePosition.z + forward.z * axisLength };
+    pnanovdb_vec3_t xAxisEnd = { eyePosition.x + right.x * camera.axis_length,
+                                 eyePosition.y + right.y * camera.axis_length,
+                                 eyePosition.z + right.z * camera.axis_length };
+    pnanovdb_vec3_t yAxisEnd = { eyePosition.x + up.x * camera.axis_length, eyePosition.y + up.y * camera.axis_length,
+                                 eyePosition.z + up.z * camera.axis_length };
+    pnanovdb_vec3_t zAxisEnd = { eyePosition.x + forward.x * camera.axis_length,
+                                 eyePosition.y + forward.y * camera.axis_length,
+                                 eyePosition.z + forward.z * camera.axis_length };
 
     ImVec2 xAxisScreenPos = projectToScreen(xAxisEnd, &viewingCamera, windowSize.x, windowSize.y);
     ImVec2 yAxisScreenPos = projectToScreen(yAxisEnd, &viewingCamera, windowSize.x, windowSize.y);
@@ -1617,21 +1616,20 @@ static void drawCameraFrustumOverlay(
     zAxisScreenPos.x += windowPos.x;
     zAxisScreenPos.y += windowPos.y;
 
-    float axisThickness = camera.axis_scale * camera.axis_thickness;
-    float posRadius = camera.axis_scale * axisThickness;
+    float posRadius = camera.axis_thickness;
     ImU32 posColor = IM_COL32(222, 220, 113, ImU32(alpha * 255));
 
     if (isValidScreenPoint(cameraScreenPos) && isValidScreenPoint(xAxisScreenPos))
     {
-        drawList->AddLine(cameraScreenPos, xAxisScreenPos, IM_COL32(255, 0, 0, 255), axisThickness); // right
+        drawList->AddLine(cameraScreenPos, xAxisScreenPos, IM_COL32(255, 0, 0, 255), camera.axis_thickness); // right
     }
     if (isValidScreenPoint(cameraScreenPos) && isValidScreenPoint(yAxisScreenPos))
     {
-        drawList->AddLine(cameraScreenPos, yAxisScreenPos, IM_COL32(0, 255, 0, 255), axisThickness); // up
+        drawList->AddLine(cameraScreenPos, yAxisScreenPos, IM_COL32(0, 255, 0, 255), camera.axis_thickness); // up
     }
     if (isValidScreenPoint(cameraScreenPos) && isValidScreenPoint(zAxisScreenPos))
     {
-        drawList->AddLine(cameraScreenPos, zAxisScreenPos, IM_COL32(0, 0, 255, 255), axisThickness); // forward
+        drawList->AddLine(cameraScreenPos, zAxisScreenPos, IM_COL32(0, 0, 255, 255), camera.axis_thickness); // forward
     }
     if (isValidScreenPoint(cameraScreenPos))
     {

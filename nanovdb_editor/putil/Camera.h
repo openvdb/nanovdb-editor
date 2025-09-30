@@ -159,7 +159,7 @@ struct pnanovdb_camera_view_t
     pnanovdb_uint32_t num_cameras;
     float axis_length;
     float axis_thickness;
-    float axis_scale;
+    float axis_scale; // TODO: unused, remove in 0.0.3
     float frustum_line_width;
     float frustum_scale;
     pnanovdb_vec3_t frustum_color;
@@ -178,7 +178,7 @@ PNANOVDB_FORCE_INLINE void pnanovdb_debug_camera_default(PNANOVDB_INOUT(pnanovdb
     PNANOVDB_DEREF(ptr).axis_scale = 1.f;
     PNANOVDB_DEREF(ptr).frustum_line_width = 2.f;
     PNANOVDB_DEREF(ptr).frustum_scale = 1.f;
-    PNANOVDB_DEREF(ptr).frustum_color = { 132.f, 204.f, 78.f };
+    PNANOVDB_DEREF(ptr).frustum_color = { 0.f, 1.f, 0.f };
     PNANOVDB_DEREF(ptr).is_visible = PNANOVDB_TRUE;
 }
 
@@ -701,8 +701,8 @@ PNANOVDB_FORCE_INLINE void pnanovdb_camera_mouse_update(PNANOVDB_INOUT(pnanovdb_
 }
 
 PNANOVDB_FORCE_INLINE void pnanovdb_camera_mouse_wheel_update(PNANOVDB_INOUT(pnanovdb_camera_t) ptr,
-                                                        float scroll_x,
-                                                        float scroll_y)
+                                                              float scroll_x,
+                                                              float scroll_y)
 {
     if (scroll_y != 0.f)
     {

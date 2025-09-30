@@ -521,6 +521,50 @@ bool ShaderParams::getAllocatedPoolArray(ShaderParam& shader_param)
     return true;
 }
 
+// Helpers to interpret non-bool typed memory as boolean and write back
+static bool getElementAsBool(ImGuiDataType type, const void* base_ptr, size_t elem_size, int index)
+{
+    const char* ptr = static_cast<const char*>(base_ptr) + static_cast<size_t>(index) * elem_size;
+    switch (type)
+    {
+    case ImGuiDataType_S32:
+        return *reinterpret_cast<const int32_t*>(ptr) != 0;
+    case ImGuiDataType_U32:
+        return *reinterpret_cast<const uint32_t*>(ptr) != 0u;
+    case ImGuiDataType_S64:
+        return *reinterpret_cast<const int64_t*>(ptr) != 0LL;
+    case ImGuiDataType_U64:
+        return *reinterpret_cast<const uint64_t*>(ptr) != 0ULL;
+    case ImGuiDataType_Float:
+    default:
+        return *reinterpret_cast<const float*>(ptr) != 0.0f;
+    }
+}
+
+static void setElementFromBool(ImGuiDataType type, void* base_ptr, size_t elem_size, int index, bool value)
+{
+    char* ptr = static_cast<char*>(base_ptr) + static_cast<size_t>(index) * elem_size;
+    switch (type)
+    {
+    case ImGuiDataType_S32:
+        *reinterpret_cast<int32_t*>(ptr) = value ? 1 : 0;
+        break;
+    case ImGuiDataType_U32:
+        *reinterpret_cast<uint32_t*>(ptr) = value ? 1u : 0u;
+        break;
+    case ImGuiDataType_S64:
+        *reinterpret_cast<int64_t*>(ptr) = value ? 1LL : 0LL;
+        break;
+    case ImGuiDataType_U64:
+        *reinterpret_cast<uint64_t*>(ptr) = value ? 1ULL : 0ULL;
+        break;
+    case ImGuiDataType_Float:
+    default:
+        *reinterpret_cast<float*>(ptr) = value ? 1.0f : 0.0f;
+        break;
+    }
+}
+
 static std::pair<ImGuiDataType, size_t> getScalarTypeAndSize(const std::string& type)
 {
     static const std::unordered_map<std::string, std::pair<ImGuiDataType, size_t>> typeMap = {
@@ -566,6 +610,8 @@ void ShaderParams::createDefaultScalarNParam(const std::string& name,
     param["min"] = 0;
     param["max"] = 1;
     param["step"] = 0.01;
+    param["useSlider"] = false;
+    param["isBool"] = false;
     json_shader_params[name] = param;
 }
 
@@ -618,7 +664,26 @@ void ShaderParams::addToScalarNParam(const std::string& name, const nlohmann::js
     assignTypedValue(shader_param.type, shader_param.getMin(), value["min"], nlohmann::json(0));
     assignTypedValue(shader_param.type, shader_param.getMax(), value["max"], nlohmann::json(1));
 
-    shader_param.step = value["step"];
+    if (value.contains("step") && value["step"].is_number())
+    {
+        shader_param.step = value["step"];
+    }
+
+    if (shader_param.type != ImGuiDataType_Float)
+    {
+        if (value.contains("isBool") && value["isBool"].is_boolean())
+        {
+            shader_param.is_bool = value["isBool"].get<bool>();
+        }
+    }
+
+    if (shader_param.type != ImGuiDataType_Bool)
+    {
+        if (value.contains("useSlider") && value["useSlider"].is_boolean())
+        {
+            shader_param.is_slider = value["useSlider"].get<bool>();
+        }
+    }
 }
 
 void ShaderParams::createDefaultBoolParam(const std::string& name, nlohmann::ordered_json& json_shader_params)
@@ -681,49 +746,7 @@ void ShaderParams::render(const std::string& shader_name)
     std::vector<ShaderParam>& shader_params = *get(shader_name);
     for (auto& shader_param : shader_params)
     {
-        if (shader_param.name.find("_pad") != std::string::npos)
-        {
-            continue;
-        }
-
-        if (!getAllocatedPoolArray(shader_param))
-        {
-            printf("Failed to allocate UI array for parameter '%s'\n", shader_param.name.c_str());
-            continue;
-        }
-
-        const std::string label = shader_param.name + "##" + shader_name;
-
-        if ((ImGuiDataType)shader_param.type == ImGuiDataType_Bool)
-        {
-            ImGui::Checkbox(label.c_str(), (bool*)getValue(shader_param));
-        }
-        else
-        {
-            if (shader_param.num_elements == 16)
-            {
-                ImGui::Text("%s", label.c_str());
-                size_t num_rows = 4;
-                size_t num_cols = 4;
-                const char* names[] = { "x", "y", "z", "w" };
-                for (int i = 0; i < num_rows; i++)
-                {
-                    void* row_ptr = (char*)getValue(shader_param) + i * num_cols * shader_param.size;
-                    ImGui::DragScalarN(names[i], (ImGuiDataType)shader_param.type, row_ptr, num_cols, shader_param.step,
-                                       shader_param.getMin(), shader_param.getMax());
-                }
-            }
-            else
-            {
-                ImGui::DragScalarN(label.c_str(), (ImGuiDataType)shader_param.type, getValue(shader_param),
-                                   shader_param.num_elements, shader_param.step, shader_param.getMin(),
-                                   shader_param.getMax());
-            }
-        }
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip("%s", shader_name.c_str());
-        }
+        renderParams(shader_name, shader_param);
     }
     return;
 }
@@ -739,40 +762,78 @@ void ShaderParams::renderGroup(const std::string& group_file_path)
     // render unique parameters by pool index (avoids duplicates)
     for (auto& [pool_index, shader_param_pair] : group_params_)
     {
-        const std::string& shader_name = shader_param_pair.first;
-        ShaderParam& shader_param = shader_param_pair.second;
+        renderParams(shader_param_pair.first, shader_param_pair.second);
+    }
 
-        if (shader_param.name.find("_pad") != std::string::npos)
+    return;
+}
+
+void ShaderParams::renderParams(const std::string& shader_name, ShaderParam& shader_param)
+{
+    if (shader_param.name.find("_pad") != std::string::npos)
+    {
+        return;
+    }
+
+    if (!getAllocatedPoolArray(shader_param))
+    {
+        printf("Failed to allocate UI array for parameter '%s'\n", shader_param.name.c_str());
+        return;
+    }
+
+    const std::string label = shader_param.name + "##" + shader_name;
+
+    if ((ImGuiDataType)shader_param.type == ImGuiDataType_Bool)
+    {
+        ImGui::Checkbox(label.c_str(), (bool*)getValue(shader_param));
+    }
+    else
+    {
+        if (shader_param.num_elements == 16)
         {
-            continue;
-        }
-
-        if (!getAllocatedPoolArray(shader_param))
-        {
-            printf("Failed get UI values for parameter '%s'\n", shader_param.name.c_str());
-            continue;
-        }
-
-        // Create a unique label for the group parameter
-        std::string label = shader_param.name + "##" + shader_name;
-
-        if ((ImGuiDataType)shader_param.type == ImGuiDataType_Bool)
-        {
-            ImGui::Checkbox(label.c_str(), (bool*)getValue(shader_param));
+            ImGui::Text("%s", label.c_str());
+            size_t num_rows = 4;
+            size_t num_cols = 4;
+            const char* names[] = { "x", "y", "z", "w" };
+            for (int i = 0; i < num_rows; i++)
+            {
+                void* row_ptr = (char*)getValue(shader_param) + i * num_cols * shader_param.size;
+                ImGui::DragScalarN(names[i], (ImGuiDataType)shader_param.type, row_ptr, num_cols, shader_param.step,
+                                   shader_param.getMin(), shader_param.getMax());
+            }
         }
         else
         {
-            if (shader_param.num_elements == 16)
+            if (shader_param.is_bool)
             {
-                ImGui::Text("%s", label.c_str());
-                size_t num_rows = 4;
-                size_t num_cols = 4;
-                const char* names[] = { "x", "y", "z", "w" };
-                for (int i = 0; i < num_rows; i++)
+                if (shader_param.num_elements == 1)
                 {
-                    void* row_ptr = (char*)getValue(shader_param) + i * num_cols * shader_param.size;
-                    ImGui::DragScalarN(names[i], (ImGuiDataType)shader_param.type, row_ptr, num_cols, shader_param.step,
-                                       shader_param.getMin(), shader_param.getMax());
+                    bool b =
+                        getElementAsBool((ImGuiDataType)shader_param.type, getValue(shader_param), shader_param.size, 0);
+                    if (ImGui::Checkbox(label.c_str(), &b))
+                    {
+                        setElementFromBool(
+                            (ImGuiDataType)shader_param.type, getValue(shader_param), shader_param.size, 0, b);
+                    }
+                }
+                else
+                {
+                    printf("Not implemented for num_elements > 1\n");
+                }
+            }
+            else if (shader_param.is_slider)
+            {
+                const ImGuiDataType dtype = (ImGuiDataType)shader_param.type;
+                const char* fmt = nullptr; // let ImGui pick correct integer format
+                if (dtype == ImGuiDataType_Float)
+                {
+                    ImGui::SliderFloat(label.c_str(), (float*)getValue(shader_param), *(float*)shader_param.getMin(),
+                                       *(float*)shader_param.getMax(), "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                }
+                else
+                {
+                    ImGui::SliderScalarN(label.c_str(), dtype, getValue(shader_param), shader_param.num_elements,
+                                         shader_param.getMin(), shader_param.getMax(), fmt, ImGuiSliderFlags_AlwaysClamp);
                 }
             }
             else
@@ -782,12 +843,10 @@ void ShaderParams::renderGroup(const std::string& group_file_path)
                                    shader_param.getMax());
             }
         }
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip("%s", shader_name.c_str());
-        }
     }
-
-    return;
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip("%s", shader_name.c_str());
+    }
 }
 }
