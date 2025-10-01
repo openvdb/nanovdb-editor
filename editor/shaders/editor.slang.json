@@ -7,10 +7,18 @@
             "step": 0.01
         },
         "narrow_band_only": {
-            "value": true
+            "value": 1,
+            "min": 0,
+            "max": 1,
+            "step": 1,
+            "isBool": true
         },
         "highlight_bbox": {
-            "value": false
+            "value": 0,
+            "min": 0,
+            "max": 1,
+            "step": 1,
+            "isBool": true
         },
         "slice_plane_thickness": {
             "value": 0,
@@ -28,6 +36,13 @@
             "min": 0,
             "max": 1,
             "step": 0.01
+        },
+        "auto_center": {
+            "value": 1,
+            "min": 0,
+            "max": 1,
+            "step": 1,
+            "isBool": true
         }
     }
 }

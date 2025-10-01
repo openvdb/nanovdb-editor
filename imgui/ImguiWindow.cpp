@@ -137,8 +137,9 @@ pnanovdb_imgui_window_t* create(const pnanovdb_compute_t* compute,
     pnanovdb_camera_state_default(&settings->camera_state, PNANOVDB_FALSE);
     *imgui_user_settings = settings;
 
-    ptr->prev_is_upside_down = settings->is_upside_down;
-    ptr->prev_is_y_up = settings->is_y_up;
+    // set to opposite to force refresh
+    ptr->prev_is_upside_down = settings->is_upside_down ? PNANOVDB_FALSE : PNANOVDB_TRUE;
+    ptr->prev_is_y_up = settings->is_y_up ? PNANOVDB_FALSE : PNANOVDB_TRUE;
     ptr->window_glfw = window_glfw;
     ptr->log_print = log_print;
 
