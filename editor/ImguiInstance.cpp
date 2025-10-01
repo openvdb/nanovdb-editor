@@ -617,6 +617,11 @@ static void showWindows(Instance* ptr, float delta_time)
 
                 IMGUI_CHECKBOX_SYNC("Upside down", settings->is_upside_down);
             }
+            ImGui::DragFloat("Shift Speed Multiplier",
+                             &settings->key_translation_shift_multiplier,
+                             0.f,
+                             1.f,
+                             1000.f);
             IMGUI_CHECKBOX_SYNC("Video Encode", settings->enable_encoder);
             if (ImGui::BeginCombo("Resolution", "Select..."))
             {
