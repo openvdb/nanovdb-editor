@@ -106,6 +106,10 @@ static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* ent
     {
         instance->saved_render_settings[name].is_upside_down = (pnanovdb_bool_t)boolValue;
     }
+    else if (sscanf(line, "key_translation_shift_multiplier=%f", &x) == 1)
+    {
+        instance->saved_render_settings[name].key_translation_shift_multiplier = x;
+    }
 }
 
 static void WriteAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler, ImGuiTextBuffer* buf)
@@ -133,6 +137,7 @@ static void WriteAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler, ImGuiText
         buf->appendf("is_reverse_z=%d\n", render_settings.is_reverse_z);
         buf->appendf("is_y_up=%d\n", render_settings.is_y_up);
         buf->appendf("is_upside_down=%d\n", render_settings.is_upside_down);
+        buf->appendf("key_translation_shift_multiplier=%f\n", render_settings.key_translation_shift_multiplier);
         buf->append("\n");
     }
 }

@@ -81,6 +81,7 @@ typedef struct pnanovdb_imgui_settings_render_t
     pnanovdb_bool_t sync_camera = false;
     pnanovdb_camera_state_t camera_state = {};
     pnanovdb_camera_config_t camera_config = {};
+    float key_translation_shift_multiplier = 100.f;
 
 } pnanovdb_imgui_settings_render_t;
 
@@ -100,6 +101,7 @@ PNANOVDB_REFLECT_VALUE(pnanovdb_int32_t, server_port, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, sync_camera, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_camera_state_t, camera_state, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_camera_config_t, camera_config, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, key_translation_shift_multiplier, 0, 0)
 PNANOVDB_REFLECT_END(0)
 #undef PNANOVDB_REFLECT_TYPE
 
