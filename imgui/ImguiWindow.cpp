@@ -616,6 +616,7 @@ void update_camera(pnanovdb_imgui_window_t* window, pnanovdb_imgui_settings_rend
     }
     if (user_settings->is_upside_down != ptr->prev_is_upside_down)
     {
+        ptr->camera.state.eye_up.x = -ptr->camera.state.eye_up.x;
         ptr->camera.state.eye_up.y = -ptr->camera.state.eye_up.y;
         ptr->camera.state.eye_up.z = -ptr->camera.state.eye_up.z;
 
