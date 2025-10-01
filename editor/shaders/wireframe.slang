@@ -16,6 +16,15 @@ struct EditorParams
     float4 projection_inv_z;
     float4 projection_inv_w;
 
+    float4 view_x;
+    float4 view_y;
+    float4 view_z;
+    float4 view_w;
+    float4 projection_x;
+    float4 projection_y;
+    float4 projection_z;
+    float4 projection_w;
+
     uint width;
     uint height;
     uint pad1;
@@ -24,7 +33,8 @@ struct EditorParams
 
 struct shader_params_t
 {
-    bool highlight_bbox;
+    uint highlight_bbox;
+    uint auto_center;
 };
 
 StructuredBuffer<uint2> buf;
@@ -243,11 +253,15 @@ void ray_march_nanovdb(StructuredBuffer<uint2> buf,
     int3 bbox_max = pnanovdb_root_get_bbox_max(buf, root);
 
     // auto centering
-    int3 bbox_ave = ((bbox_max + bbox_min) >> 1u);
-    int3 ijk_offset = (bbox_ave & ~4095);
-    bbox_min = bbox_min - ijk_offset;
-    bbox_max = bbox_max - ijk_offset;
-    rayOrigin = rayOrigin + float3(bbox_ave - ijk_offset);
+    int3 ijk_offset = int3(0, 0, 0);
+    if (shader_params.auto_center != 0u)
+    {
+        int3 bbox_ave = ((bbox_max + bbox_min) >> 1u);
+        ijk_offset = (bbox_ave & ~4095);
+        bbox_min = bbox_min - ijk_offset;
+        bbox_max = bbox_max - ijk_offset;
+        rayOrigin = rayOrigin + float3(bbox_ave - ijk_offset);
+    }
 
     float3 bbox_minf = float3(bbox_min);
     float3 bbox_maxf = float3(bbox_max + int3(1, 1, 1));
@@ -333,11 +347,15 @@ void ray_march_nanovdb_node2_intern(StructuredBuffer<uint2> buf,
     pnanovdb_coord_t bbox_max = pnanovdb_read_coord(buf, pnanovdb_address_offset(bboxes, 12u));
 
     // auto centering
-    int3 bbox_ave = ((bbox_max + bbox_min) >> 1u);
-    int3 ijk_offset = (bbox_ave & ~4095);
-    bbox_min = bbox_min - ijk_offset;
-    bbox_max = bbox_max - ijk_offset;
-    rayOrigin = rayOrigin + float3(bbox_ave - ijk_offset);
+    int3 ijk_offset = int3(0, 0, 0);
+    if (shader_params.auto_center != 0u)
+    {
+        int3 bbox_ave = ((bbox_max + bbox_min) >> 1u);
+        ijk_offset = (bbox_ave & ~4095);
+        bbox_min = bbox_min - ijk_offset;
+        bbox_max = bbox_max - ijk_offset;
+        rayOrigin = rayOrigin + float3(bbox_ave - ijk_offset);
+    }
 
     float3 bbox_minf = float3(bbox_min);
     float3 bbox_maxf = float3(bbox_max + int3(1, 1, 1));

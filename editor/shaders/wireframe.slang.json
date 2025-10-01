@@ -1,7 +1,18 @@
 {
     "ShaderParams": {
         "highlight_bbox": {
-            "value": false
+            "value": 0,
+            "min": 0,
+            "max": 1,
+            "step": 1,
+            "isBool": true
+        },
+        "auto_center": {
+            "value": 1,
+            "min": 0,
+            "max": 1,
+            "step": 1,
+            "isBool": true
         }
     }
 }
