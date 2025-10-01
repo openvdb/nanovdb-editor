@@ -128,6 +128,8 @@ struct EditorParams
 {
     pnanovdb_camera_mat_t view_inv;
     pnanovdb_camera_mat_t projection_inv;
+    pnanovdb_camera_mat_t view;
+    pnanovdb_camera_mat_t projection;
     uint32_t width;
     uint32_t height;
     uint32_t pad1;
@@ -867,6 +869,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 EditorParams editor_params = {};
                 editor_params.view_inv = pnanovdb_camera_mat_transpose(view_inv);
                 editor_params.projection_inv = pnanovdb_camera_mat_transpose(projection_inv);
+                editor_params.view = pnanovdb_camera_mat_transpose(view);
+                editor_params.projection = pnanovdb_camera_mat_transpose(projection);
                 editor_params.width = image_width;
                 editor_params.height = image_height;
 
@@ -1110,6 +1114,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             EditorParams editor_params = {};
             editor_params.view_inv = pnanovdb_camera_mat_transpose(view_inv);
             editor_params.projection_inv = pnanovdb_camera_mat_transpose(projection_inv);
+            editor_params.view = pnanovdb_camera_mat_transpose(view);
+            editor_params.projection = pnanovdb_camera_mat_transpose(projection);
             editor_params.width = image_width;
             editor_params.height = image_height;
 
