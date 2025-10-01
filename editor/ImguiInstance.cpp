@@ -512,6 +512,7 @@ static void showWindows(Instance* ptr, float delta_time)
                 }
                 ImGui::EndGroup();
             }
+            ImGui::Separator();
 
             ImGui::Text("Gaussian File");
             {
@@ -966,7 +967,34 @@ static void showWindows(Instance* ptr, float delta_time)
                             int cameraIdx = ptr->camera_frustum_index[ptr->selected_camera_frustum];
                             if (ImGui::Button("Set Viewport Camera"))
                             {
+                                pnanovdb_vec3_t& up = camera->states[cameraIdx].eye_up;
+
+                                // keep up direction from the current viewport camera, don't override it
+                                if (camera->states[cameraIdx].eye_up.x != ptr->render_settings->camera_state.eye_up.x ||
+                                    camera->states[cameraIdx].eye_up.y != ptr->render_settings->camera_state.eye_up.y ||
+                                    camera->states[cameraIdx].eye_up.z != ptr->render_settings->camera_state.eye_up.z)
+                                {
+                                    // recompute up vector to be orthogonal to eye_direction if "flipped"
+                                    pnanovdb_vec3_t& dir = camera->states[cameraIdx].eye_direction;
+                                    pnanovdb_vec3_t right = { dir.y * up.z - dir.z * up.y, dir.z * up.x - dir.x * up.z,
+                                                              dir.x * up.y - dir.y * up.x };
+
+                                    up.x = -(right.y * dir.z - right.z * dir.y);
+                                    up.y = -(right.z * dir.x - right.x * dir.z);
+                                    up.z = -(right.x * dir.y - right.y * dir.x);
+
+                                    float len = sqrtf(up.x * up.x + up.y * up.y + up.z * up.z);
+                                    if (len > EPSILON)
+                                    {
+                                        up.x /= len;
+                                        up.y /= len;
+                                        up.z /= len;
+                                    }
+                                }
+                                pnanovdb_vec3_t eyeUp = camera->states[cameraIdx].eye_up;
+
                                 ptr->render_settings->camera_state = camera->states[cameraIdx];
+                                ptr->render_settings->camera_state.eye_up = up;
                                 ptr->render_settings->camera_config = camera->configs[cameraIdx];
                                 ptr->render_settings->is_projection_rh = camera->configs[cameraIdx].is_projection_rh;
                                 ptr->render_settings->is_orthographic = camera->configs[cameraIdx].is_orthographic;
@@ -978,7 +1006,7 @@ static void showWindows(Instance* ptr, float delta_time)
                                 pnanovdb_camera_get_eye_position_from_state(&camera->states[cameraIdx]);
 
                             float eyePos[3] = { eyePosition.x, eyePosition.y, eyePosition.z };
-                            if (ImGui::DragFloat3("World Position", eyePos, 0.1f))
+                            if (ImGui::DragFloat3("Origin", eyePos, 0.1f))
                             {
                                 pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
                                 state->position.x =
@@ -1015,7 +1043,21 @@ static void showWindows(Instance* ptr, float delta_time)
                                     state->eye_distance_from_position = 0.f;
                                 }
                             }
-
+                            float upVec[3] = { state->eye_up.x, state->eye_up.y, state->eye_up.z };
+                            if (ImGui::DragFloat3("Up", upVec, 0.1f))
+                            {
+                                state->eye_up.x = upVec[0];
+                                state->eye_up.y = upVec[1];
+                                state->eye_up.z = upVec[2];
+                                float len = sqrtf(state->eye_up.x * state->eye_up.x +
+                                                  state->eye_up.y * state->eye_up.y + state->eye_up.z * state->eye_up.z);
+                                if (len > EPSILON)
+                                {
+                                    state->eye_up.x /= len;
+                                    state->eye_up.y /= len;
+                                    state->eye_up.z /= len;
+                                }
+                            }
                             ImGui::Separator();
                             ImGui::DragFloat("Axis Length", &camera->axis_length, 1.f, 0.f, 100.f);
                             ImGui::DragFloat("Axis Thickness", &camera->axis_thickness, 0.1f, 0.f, 10.f);
@@ -1513,7 +1555,7 @@ static ImVec2 projectToScreen(const pnanovdb_vec3_t& worldPos,
     return ImVec2(std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::quiet_NaN());
 }
 
-static void drawCameraFrustumOverlay(
+static void drawCameraFrustum(
     Instance* ptr, ImVec2 windowPos, ImVec2 windowSize, pnanovdb_camera_view_t& camera, int cameraIdx, float alpha = 1.f)
 {
     ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -1561,7 +1603,8 @@ static void drawCameraFrustumOverlay(
 
     auto drawEdge = [&](int a, int b)
     {
-        if (!isValidScreenPoint(screenCorners[a]) || !isValidScreenPoint(screenCorners[b]))
+        if (screenCorners[a] == screenCorners[b] || !isValidScreenPoint(screenCorners[a]) ||
+            !isValidScreenPoint(screenCorners[b]))
         {
             return;
         }
@@ -1592,6 +1635,12 @@ static void drawCameraFrustumOverlay(
     cameraScreenPos.x += windowPos.x;
     cameraScreenPos.y += windowPos.y;
 
+    if (!isValidScreenPoint(cameraScreenPos))
+    {
+        return;
+    }
+
+    // XYZ axes in RGB
     pnanovdb_vec3_t forward = basisVectors.forward;
     pnanovdb_vec3_t up = basisVectors.up;
     pnanovdb_vec3_t right = basisVectors.right;
@@ -1616,23 +1665,24 @@ static void drawCameraFrustumOverlay(
     zAxisScreenPos.x += windowPos.x;
     zAxisScreenPos.y += windowPos.y;
 
-    float posRadius = camera.axis_thickness;
-    ImU32 posColor = IM_COL32(222, 220, 113, ImU32(alpha * 255));
+    auto drawAxis = [&](const ImVec2& from, const ImVec2& to, ImU32 color)
+    {
+        if (from != to && isValidScreenPoint(to))
+        {
+            drawList->AddLine(from, to, color, camera.axis_thickness);
+        }
+    };
 
-    if (isValidScreenPoint(cameraScreenPos) && isValidScreenPoint(xAxisScreenPos))
-    {
-        drawList->AddLine(cameraScreenPos, xAxisScreenPos, IM_COL32(255, 0, 0, 255), camera.axis_thickness); // right
-    }
-    if (isValidScreenPoint(cameraScreenPos) && isValidScreenPoint(yAxisScreenPos))
-    {
-        drawList->AddLine(cameraScreenPos, yAxisScreenPos, IM_COL32(0, 255, 0, 255), camera.axis_thickness); // up
-    }
-    if (isValidScreenPoint(cameraScreenPos) && isValidScreenPoint(zAxisScreenPos))
-    {
-        drawList->AddLine(cameraScreenPos, zAxisScreenPos, IM_COL32(0, 0, 255, 255), camera.axis_thickness); // forward
-    }
+    drawAxis(cameraScreenPos, xAxisScreenPos, IM_COL32(255, 0, 0, 255)); // right
+    drawAxis(cameraScreenPos, yAxisScreenPos, IM_COL32(0, 255, 0, 255)); // up
+    drawAxis(cameraScreenPos, zAxisScreenPos, IM_COL32(0, 0, 255, 255)); // forward
+
+    // Camera position
     if (isValidScreenPoint(cameraScreenPos))
     {
+        float posRadius = 1.5f * camera.axis_thickness;
+        ImU32 posColor = IM_COL32(222, 220, 113, ImU32(alpha * 255));
+
         drawList->AddCircleFilled(cameraScreenPos, posRadius, posColor);
     }
 }
@@ -1676,18 +1726,21 @@ static void drawCameraViews(Instance* ptr)
             {
                 bool isViewSelected =
                     (!ptr->selected_camera_frustum.empty() && ptr->selected_camera_frustum == cameraPair.first);
-                int selected = isViewSelected ? ptr->camera_frustum_index[ptr->selected_camera_frustum] : 0;
+                int selected = isViewSelected ? ptr->camera_frustum_index[ptr->selected_camera_frustum] : -1;
+                // first draw non-selected cameras with lower alpha
                 for (int i = 0; i < camera->num_cameras; i++)
                 {
                     if (i == selected)
                     {
                         continue;
                     }
-                    // cameras not selected
-                    drawCameraFrustumOverlay(ptr, windowPos, windowSize, *camera, i, isViewSelected ? 0.5f : 1.f);
+                    drawCameraFrustum(ptr, windowPos, windowSize, *camera, i, isViewSelected ? 0.8f : 1.f);
                 }
-                // selected camera
-                drawCameraFrustumOverlay(ptr, windowPos, windowSize, *camera, selected, 0.75f);
+                // than draw selected camera with even lower alpha
+                if (selected >= 0)
+                {
+                    drawCameraFrustum(ptr, windowPos, windowSize, *camera, selected, 0.4f);
+                }
             }
         }
     }
