@@ -73,7 +73,7 @@ bool edgeTest(float2 edgeA_fp, float2 edgeB_fp, float2 inside_fp, float2 pt_fp)
         int cmpX = int(float(cmpX_num) / float(m.y));
         isBelow = insideIsBelow ? pt.x < cmpX : pt.x >= cmpX;
     }
-    else if (abs(m.x) != 0.f)
+    else if (abs(m.x) != 0)
     {
         int insY_num = (edgeB.x - inside.x) * edgeA.y - (edgeA.x - inside.x) * edgeB.y;
         int insY = int(float(insY_num) / float(m.x));
