@@ -617,11 +617,8 @@ static void showWindows(Instance* ptr, float delta_time)
 
                 IMGUI_CHECKBOX_SYNC("Upside down", settings->is_upside_down);
             }
-            ImGui::DragFloat("Shift Speed Multiplier",
-                             &settings->key_translation_shift_multiplier,
-                             0.f,
-                             1.f,
-                             1000.f);
+            ImGui::DragFloat("Shift Speed Multiplier", &settings->key_translation_shift_multiplier, 0.f, 1.f, 10000.f,
+                             "%.1f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
             IMGUI_CHECKBOX_SYNC("Video Encode", settings->enable_encoder);
             if (ImGui::BeginCombo("Resolution", "Select..."))
             {
@@ -1179,9 +1176,11 @@ static void showWindows(Instance* ptr, float delta_time)
                             if (isSet)
                                 hasAnyFlags = true;
 
-                            ImGui::PushStyleColor(ImGuiCol_Text, isSet ? IM_COL32(144, 238, 144, 255) : // Light green
-                                                                                                        // for enabled
-                                                                     IM_COL32(128, 128, 128, 255)); // Gray for disabled
+                            ImGui::PushStyleColor(ImGuiCol_Text, isSet ? IM_COL32(144, 238, 144, 255) : // Light
+                                                                                                        // green for
+                                                                                                        // enabled
+                                                                     IM_COL32(128, 128, 128, 255)); // Gray for
+                                                                                                    // disabled
 
                             ImGui::Text("[%s] %s", isSet ? "X" : " ", flagInfo.name);
                             if (ImGui::IsItemHovered())
@@ -1928,7 +1927,6 @@ void Instance::set_default_shader(const std::string& shaderName)
     pending.shader_name = shaderName;
     pnanovdb_editor::CodeEditor::getInstance().setSelectedShader(shaderName);
 }
-
 }
 
 pnanovdb_imgui_instance_interface_t* get_user_imgui_instance_interface()
