@@ -478,6 +478,14 @@ if (NOT SKBUILD)
 
     add_dependencies(pnanovdbeditortestapp pnanovdbeditor_prebuild)
     add_dependencies(pnanovdbeditortestapp openh264_build)
+
+    # Ensure libopenh264.a has proper symbol index for CI builds
+    add_custom_command(
+        TARGET pnanovdbeditortestapp PRE_LINK
+        COMMAND ${CMAKE_AR} -s lib/libopenh264.a
+        COMMENT "Indexing libopenh264.a with ranlib"
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
 endif()
 
 if (NOT WIN32)
