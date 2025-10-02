@@ -157,6 +157,7 @@ private:
     std::vector<std::vector<char>> shader_params_pool_; // each array corresponds to a shader parameter pool index
     std::map<std::string, std::vector<ShaderParam>> params_map_; // <shader_name, shader_params>
     std::map<size_t, std::pair<std::string, ShaderParam>> group_params_; // <pool_index, <shader_file, ShaderParam>>
+    std::map<std::string, pnanovdb_compute_array_t*> pending_arrays_; // <shader_name, array> - arrays waiting for params to be loaded
 
     void* getValue(ShaderParam& shader_param);
     void createDefaultScalarNParam(const std::string& name,
@@ -169,6 +170,7 @@ private:
     void addToBoolParam(const std::string& name, const nlohmann::json& value, std::vector<ShaderParam>& params);
 
     void renderParams(const std::string& shader_name, ShaderParam& shader_param);
+    void processPendingArrays(const std::string& shader_name);
 
 public:
     template <typename ShaderParamsT>
