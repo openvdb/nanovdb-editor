@@ -606,6 +606,8 @@ if(openh264_ADDED)
         COMMAND ar rcs ${OPENH264_BUILD_LIB}
             libencoder.a
             libcommon.a
+        # Run ranlib to add symbol index to the archive
+        COMMAND ranlib ${OPENH264_BUILD_LIB}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             ${OPENH264_BUILD_LIB}
