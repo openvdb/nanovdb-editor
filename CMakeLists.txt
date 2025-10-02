@@ -478,44 +478,6 @@ if (NOT SKBUILD)
 
     add_dependencies(pnanovdbeditortestapp pnanovdbeditor_prebuild)
     add_dependencies(pnanovdbeditortestapp openh264_build)
-
-    # Create a script to ensure libopenh264.a has proper symbol index before linking
-    file(WRITE ${CMAKE_BINARY_DIR}/fix_openh264.sh
-        "#!/bin/bash\n"
-        "set -e\n"
-        "cd \"${CMAKE_BINARY_DIR}\"\n"
-        "echo \"Working directory: $(pwd)\"\n"
-        "echo \"Looking for library files...\"\n"
-        "find . -name \"libopenh264.a\" -type f\n"
-        "LIB_PATH=\"lib/libopenh264.a\"\n"
-        "FULL_LIB_PATH=\"${CMAKE_BINARY_DIR}/lib/libopenh264.a\"\n"
-        "echo \"Checking relative path: $LIB_PATH\"\n"
-        "echo \"Checking absolute path: $FULL_LIB_PATH\"\n"
-        "for lib in \"$LIB_PATH\" \"$FULL_LIB_PATH\"; do\n"
-        "    if [ -f \"$lib\" ]; then\n"
-        "        echo \"Processing library: $lib\"\n"
-        "        echo \"Before ranlib:\"\n"
-        "        nm -s \"$lib\" 2>&1 | head -3 || echo \"nm failed\"\n"
-        "        ranlib \"$lib\"\n"
-        "        echo \"After ranlib:\"\n"
-        "        nm -s \"$lib\" 2>&1 | head -3 || echo \"nm failed\"\n"
-        "        echo \"File info:\"\n"
-        "        ls -la \"$lib\"\n"
-        "    else\n"
-        "        echo \"Library not found at: $lib\"\n"
-        "    fi\n"
-        "done\n"
-    )
-
-    # Make the script executable and run it before linking
-    add_custom_command(
-        TARGET pnanovdbeditortestapp PRE_LINK
-        COMMAND chmod +x ${CMAKE_BINARY_DIR}/fix_openh264.sh
-        COMMAND ${CMAKE_BINARY_DIR}/fix_openh264.sh
-        COMMENT "Ensuring libopenh264.a has proper symbol index"
-        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-        VERBATIM
-    )
 endif()
 
 if (NOT WIN32)
