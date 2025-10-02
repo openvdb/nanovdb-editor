@@ -181,7 +181,16 @@ bool ShaderParams::load(const std::string& shader_name, bool reload, bool load_g
     }
 
     nlohmann::ordered_json shader_json;
-    shader_json_file >> shader_json;
+    try
+    {
+        shader_json_file >> shader_json;
+    }
+    catch (const nlohmann::json::parse_error& e)
+    {
+        // jsong migt be incomplete if being written to
+        shader_json_file.close();
+        return false;
+    }
     shader_json_file.close();
     if (!shader_json.contains("shaderParams"))
     {
@@ -284,7 +293,7 @@ bool ShaderParams::loadGroup(const std::string& group_file, bool reload)
             auto* shader_params = get(shader_name);
             if (shader_params)
             {
-                for (const auto& param : *shader_params)
+                for (auto& param : *shader_params)
                 {
                     if (param.pool_index != SIZE_MAX)
                     {
@@ -296,6 +305,10 @@ bool ShaderParams::loadGroup(const std::string& group_file, bool reload)
                     }
                 }
             }
+        }
+        else
+        {
+            return false;
         }
     }
 
@@ -756,6 +769,7 @@ void ShaderParams::renderGroup(const std::string& group_file_path)
     bool hasGroup = loadGroup(group_file_path, false);
     if (!hasGroup)
     {
+        ImGui::TextDisabled("Shader params not loaded");
         return;
     }
 
