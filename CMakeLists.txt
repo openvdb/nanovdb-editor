@@ -473,7 +473,7 @@ if (NOT SKBUILD)
             pnanovdbcompute
             pnanovdbfileformat
             pnanovdbeditor
-            openh264
+            $<$<BOOL:${NANOVDB_EDITOR_USE_H264}>:openh264>
     )
 
     add_dependencies(pnanovdbeditortestapp pnanovdbeditor_prebuild)
