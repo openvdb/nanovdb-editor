@@ -51,7 +51,7 @@ struct constants_t
 
 void test_openh264()
 {
-    printf("Testing OpenH264 encoder/decoder...\n");
+    printf("Testing OpenH264 encoder...\n");
 
     // Create encoder
     ISVCEncoder* encoder = nullptr;

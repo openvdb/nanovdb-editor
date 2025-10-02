@@ -47,7 +47,7 @@ The `NANOVDB_EDITOR_USE_GLFW` option can be disabled when using the editor in ha
 
 For building openh264 enable `NANOVDB_EDITOR_USE_H264` and make sure you have:
 ```sh
-sudo apt-get install make nasm
+sudo apt-get install make
 ```
 
 #### macOS

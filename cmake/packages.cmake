@@ -595,14 +595,24 @@ if(openh264_ADDED)
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CPM_PACKAGE_openh264_SOURCE_DIR}
             ${CPM_PACKAGE_openh264_BINARY_DIR}
-        COMMAND make -j${CMAKE_BUILD_PARALLEL_LEVEL} USE_ASM=Yes BUILDTYPE=static
+        # Build encoder and common libraries from root directory
+        COMMAND ${CMAKE_COMMAND} -E env CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER}
+                make -j${CMAKE_BUILD_PARALLEL_LEVEL}
+                USE_ASM=No BUILDTYPE=static DECODER=No
+                "CFLAGS=-fPIC -DWELS_X86_ASM=0"
+                "CXXFLAGS=-fPIC -std=c++11 -DWELS_X86_ASM=0"
+                libencoder.a libcommon.a
+        # Create our own static library from encoder objects
+        COMMAND ar rcs ${OPENH264_BUILD_LIB}
+            libencoder.a
+            libcommon.a
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             ${OPENH264_BUILD_LIB}
             ${OPENH264_OUTPUT_LIB}
         WORKING_DIRECTORY ${CPM_PACKAGE_openh264_BINARY_DIR}
         DEPENDS ${CPM_PACKAGE_openh264_SOURCE_DIR}/Makefile
-        COMMENT "Building openh264 static library"
+        COMMENT "Building openh264 encoder-only static library"
         VERBATIM
     )
     add_custom_target(openh264_build ALL
