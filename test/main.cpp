@@ -45,6 +45,139 @@ struct constants_t
     int pad3;
 };
 
+#include <wels/codec_api.h>
+#include <wels/codec_app_def.h>
+#include <wels/codec_def.h>
+
+void test_openh264()
+{
+    printf("Testing OpenH264 encoder/decoder...\n");
+
+    // Create encoder
+    ISVCEncoder* encoder = nullptr;
+    int rv = WelsCreateSVCEncoder(&encoder);
+    if (rv != 0 || !encoder)
+    {
+        printf("Error: Failed to create OpenH264 encoder\n");
+        return;
+    }
+
+    // Set encoding parameters
+    SEncParamExt param;
+    memset(&param, 0, sizeof(SEncParamExt));
+    encoder->GetDefaultParams(&param);
+
+    param.iUsageType = CAMERA_VIDEO_REAL_TIME;
+    param.fMaxFrameRate = 30.0f;
+    param.iPicWidth = 320;
+    param.iPicHeight = 240;
+    param.iTargetBitrate = 5000000;
+    param.iRCMode = RC_QUALITY_MODE;
+    param.iTemporalLayerNum = 1;
+    param.iSpatialLayerNum = 1;
+    param.bEnableDenoise = false;
+    param.bEnableBackgroundDetection = true;
+    param.bEnableAdaptiveQuant = true;
+    param.bEnableFrameSkip = true;
+    param.bEnableLongTermReference = false;
+    param.iLtrMarkPeriod = 30;
+    param.uiIntraPeriod = 320;
+    param.eSpsPpsIdStrategy = INCREASING_ID;
+    param.bPrefixNalAddingCtrl = false;
+    param.iComplexityMode = LOW_COMPLEXITY;
+    param.bSimulcastAVC = false;
+
+    param.sSpatialLayers[0].iVideoWidth = param.iPicWidth;
+    param.sSpatialLayers[0].iVideoHeight = param.iPicHeight;
+    param.sSpatialLayers[0].fFrameRate = param.fMaxFrameRate;
+    param.sSpatialLayers[0].iSpatialBitrate = param.iTargetBitrate;
+    param.sSpatialLayers[0].iMaxSpatialBitrate = param.iTargetBitrate;
+    param.sSpatialLayers[0].uiProfileIdc = PRO_BASELINE;
+    param.sSpatialLayers[0].uiLevelIdc = LEVEL_5_1;
+    param.sSpatialLayers[0].iDLayerQp = 24;
+    param.sSpatialLayers[0].sSliceArgument.uiSliceMode = SM_SINGLE_SLICE;
+
+    // Initialize encoder
+    rv = encoder->InitializeExt(&param);
+    if (rv != cmResultSuccess)
+    {
+        printf("Error: Failed to initialize OpenH264 encoder (code: %d)\n", rv);
+        WelsDestroySVCEncoder(encoder);
+        return;
+    }
+
+    // Create a simple test frame (solid color)
+    int frameSize = param.iPicWidth * param.iPicHeight * 3 / 2; // YUV420
+    unsigned char* yuvData = new unsigned char[frameSize];
+
+    // Fill with simple pattern
+    int ySize = param.iPicWidth * param.iPicHeight;
+    int uvSize = ySize / 4;
+
+    // Y plane (luminance) - gradient
+    for (int i = 0; i < ySize; i++)
+    {
+        yuvData[i] = (unsigned char)((i * 255) / ySize);
+    }
+
+    // U plane (blue chroma) - constant
+    for (int i = 0; i < uvSize; i++)
+    {
+        yuvData[ySize + i] = 128;
+    }
+
+    // V plane (red chroma) - constant
+    for (int i = 0; i < uvSize; i++)
+    {
+        yuvData[ySize + uvSize + i] = 128;
+    }
+
+    // Prepare source picture
+    SSourcePicture sourcePicture;
+    memset(&sourcePicture, 0, sizeof(SSourcePicture));
+    sourcePicture.iPicWidth = param.iPicWidth;
+    sourcePicture.iPicHeight = param.iPicHeight;
+    sourcePicture.iColorFormat = videoFormatI420;
+    sourcePicture.iStride[0] = param.iPicWidth;
+    sourcePicture.iStride[1] = param.iPicWidth / 2;
+    sourcePicture.iStride[2] = param.iPicWidth / 2;
+    sourcePicture.pData[0] = yuvData;
+    sourcePicture.pData[1] = yuvData + ySize;
+    sourcePicture.pData[2] = yuvData + ySize + uvSize;
+
+    // Encode frame
+    SFrameBSInfo frameInfo;
+    memset(&frameInfo, 0, sizeof(SFrameBSInfo));
+
+    rv = encoder->EncodeFrame(&sourcePicture, &frameInfo);
+    if (rv != cmResultSuccess)
+    {
+        printf("Error: Failed to encode frame (code: %d)\n", rv);
+    }
+    else
+    {
+        printf("Success: Encoded frame with %d layers\n", frameInfo.iLayerNum);
+
+        // Calculate total encoded size
+        int totalSize = 0;
+        for (int i = 0; i < frameInfo.iLayerNum; i++)
+        {
+            for (int j = 0; j < frameInfo.sLayerInfo[i].iNalCount; j++)
+            {
+                totalSize += frameInfo.sLayerInfo[i].pNalLengthInByte[j];
+            }
+        }
+        printf("Encoded size: %d bytes\n", totalSize);
+    }
+
+    // Cleanup
+    delete[] yuvData;
+    encoder->Uninitialize();
+    WelsDestroySVCEncoder(encoder);
+
+    printf("OpenH264 test completed\n");
+}
+
 void pnanovdb_compute_log_print(pnanovdb_compute_log_level_t level, const char* format, ...)
 {
     va_list args;
@@ -76,6 +209,11 @@ struct NanoVDBEditorArgs : public argparse::Args
 
 int main(int argc, char* argv[])
 {
+#if 1
+    test_openh264();
+    return 0;
+#endif
+
     auto args = argparse::parse<NanoVDBEditorArgs>(argc, argv);
 
 #if TEST_NODE2
@@ -207,7 +345,7 @@ int main(int argc, char* argv[])
     pnanovdb_camera_config_default(&debug_config);
     debug_config.near_plane = 0.1f;
     debug_config.far_plane = 100.0f;
-    debug_config.aspect_ratio = 1.0f;
+    debug_config.aspect_ratio = 2.0f;
 
     pnanovdb_camera_view_t debug_camera;
     pnanovdb_debug_camera_default(&debug_camera);
@@ -266,7 +404,7 @@ int main(int argc, char* argv[])
     camera.state.eye_distance_from_position = -2.111028;
     editor.add_camera(&editor, &camera);
 
-    const char* raster_file = "";
+    const char* raster_file = "data/ficus.ply";
     pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
 
     pnanovdb_raster_t raster = {};

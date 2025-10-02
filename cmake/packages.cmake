@@ -359,6 +359,17 @@ if(NANOVDB_EDITOR_E57_FORMAT)
     )
 endif()
 
+if(NANOVDB_EDITOR_USE_H264)
+    CPMAddPackage(
+        NAME openh264
+        GITHUB_REPOSITORY cisco/openh264
+        GIT_TAG 2.5.1
+        GIT_SHALLOW TRUE
+        VERSION 2.5.1
+        DOWNLOAD_ONLY YES
+    )
+endif()
+
 # Google Test
 if(NANOVDB_EDITOR_BUILD_TESTS)
     CPMAddPackage(
@@ -571,4 +582,38 @@ endif()
 
 if(NANOVDB_EDITOR_E57_FORMAT AND libE57Format_ADDED AND TARGET E57Format)
     set_target_properties(E57Format PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
+
+if(openh264_ADDED)
+    file(MAKE_DIRECTORY ${CPM_PACKAGE_openh264_BINARY_DIR})     # DOWNLOAD_ONLY does not create build dir
+
+    set(OPENH264_OUTPUT_LIB ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libopenh264${CMAKE_STATIC_LIBRARY_SUFFIX})
+    set(OPENH264_BUILD_LIB ${CPM_PACKAGE_openh264_BINARY_DIR}/libopenh264${CMAKE_STATIC_LIBRARY_SUFFIX})
+
+    add_custom_command(
+        OUTPUT ${OPENH264_OUTPUT_LIB}
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CPM_PACKAGE_openh264_SOURCE_DIR}
+            ${CPM_PACKAGE_openh264_BINARY_DIR}
+        COMMAND make -j${CMAKE_BUILD_PARALLEL_LEVEL} USE_ASM=Yes BUILDTYPE=static
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${OPENH264_BUILD_LIB}
+            ${OPENH264_OUTPUT_LIB}
+        WORKING_DIRECTORY ${CPM_PACKAGE_openh264_BINARY_DIR}
+        DEPENDS ${CPM_PACKAGE_openh264_SOURCE_DIR}/Makefile
+        COMMENT "Building openh264 static library"
+        VERBATIM
+    )
+    add_custom_target(openh264_build ALL
+        DEPENDS ${OPENH264_OUTPUT_LIB}
+    )
+
+    # Create an imported library target pointing to the built library in output dir
+    add_library(openh264 STATIC IMPORTED)
+    set_target_properties(openh264 PROPERTIES
+        IMPORTED_LOCATION ${OPENH264_OUTPUT_LIB}
+        INTERFACE_INCLUDE_DIRECTORIES ${CPM_PACKAGE_openh264_SOURCE_DIR}/codec/api
+    )
+    add_dependencies(openh264 openh264_build)
 endif()
