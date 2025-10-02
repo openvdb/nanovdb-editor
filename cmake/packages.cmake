@@ -606,10 +606,12 @@ if(openh264_ADDED)
         COMMAND ar rcs ${OPENH264_BUILD_LIB}
             libencoder.a
             libcommon.a
+        COMMAND ranlib ${OPENH264_BUILD_LIB}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             ${OPENH264_BUILD_LIB}
             ${OPENH264_OUTPUT_LIB}
+        COMMAND ranlib ${OPENH264_OUTPUT_LIB}
         WORKING_DIRECTORY ${CPM_PACKAGE_openh264_BINARY_DIR}
         DEPENDS ${CPM_PACKAGE_openh264_SOURCE_DIR}/Makefile
         COMMENT "Building openh264 encoder-only static library"
