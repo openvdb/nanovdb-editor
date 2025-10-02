@@ -601,12 +601,13 @@ if(openh264_ADDED)
                 USE_ASM=No BUILDTYPE=static DECODER=No
                 "CFLAGS=-fPIC -DWELS_X86_ASM=0"
                 "CXXFLAGS=-fPIC -std=c++11 -DWELS_X86_ASM=0"
-                libencoder.a libcommon.a
+                libencoder.a libcommon.a libprocessing.a
         # Create our own static library from encoder objects
         COMMAND ${CMAKE_COMMAND} -E rm -rf temp_openh264_objects
         COMMAND ${CMAKE_COMMAND} -E make_directory temp_openh264_objects
         COMMAND ${CMAKE_COMMAND} -E chdir temp_openh264_objects ar x ../libencoder.a
         COMMAND ${CMAKE_COMMAND} -E chdir temp_openh264_objects ar x ../libcommon.a
+        COMMAND ${CMAKE_COMMAND} -E chdir temp_openh264_objects ar x ../libprocessing.a
         COMMAND find temp_openh264_objects -name "*.o" -print0 | xargs -0 ar rcs ${OPENH264_BUILD_LIB}
         COMMAND ${CMAKE_COMMAND} -E rm -rf temp_openh264_objects
         # Ensure proper symbol index
