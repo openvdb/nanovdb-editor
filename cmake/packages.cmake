@@ -606,7 +606,11 @@ if(openh264_ADDED)
         COMMAND ${CMAKE_COMMAND} -E make_directory extracted_objects
         COMMAND ${CMAKE_COMMAND} -E chdir extracted_objects ar x ../libencoder.a
         COMMAND ${CMAKE_COMMAND} -E chdir extracted_objects ar x ../libcommon.a
-        COMMAND ${CMAKE_COMMAND} -E chdir extracted_objects ar rcs ../${OPENH264_BUILD_LIB} *.o
+        COMMAND ${CMAKE_COMMAND} -E chdir extracted_objects ar rcs ../libopenh264.a *.o
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            libopenh264.a
+            ${OPENH264_BUILD_LIB}
+        # Ensure proper symbol index
         COMMAND ranlib ${OPENH264_BUILD_LIB}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
