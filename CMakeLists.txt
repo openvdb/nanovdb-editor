@@ -479,12 +479,35 @@ if (NOT SKBUILD)
     add_dependencies(pnanovdbeditortestapp pnanovdbeditor_prebuild)
     add_dependencies(pnanovdbeditortestapp openh264_build)
 
-    # Ensure libopenh264.a has proper symbol index for CI builds
+    # Create a script to ensure libopenh264.a has proper symbol index before linking
+    file(WRITE ${CMAKE_BINARY_DIR}/fix_openh264.sh
+        "#!/bin/bash\n"
+        "set -e\n"
+        "LIB_PATH=\"${CMAKE_BINARY_DIR}/lib/libopenh264.a\"\n"
+        "echo \"Checking openh264 library at: $LIB_PATH\"\n"
+        "if [ -f \"$LIB_PATH\" ]; then\n"
+        "    echo \"File exists, checking symbol table...\"\n"
+        "    if ! nm -s \"$LIB_PATH\" >/dev/null 2>&1; then\n"
+        "        echo \"No symbol table found, running ranlib...\"\n"
+        "        ranlib \"$LIB_PATH\"\n"
+        "        echo \"ranlib completed\"\n"
+        "    else\n"
+        "        echo \"Symbol table exists, running ranlib anyway for safety...\"\n"
+        "        ranlib \"$LIB_PATH\"\n"
+        "    fi\n"
+        "else\n"
+        "    echo \"ERROR: Library file not found at $LIB_PATH\"\n"
+        "    exit 1\n"
+        "fi\n"
+    )
+
+    # Make the script executable and run it before linking
     add_custom_command(
         TARGET pnanovdbeditortestapp PRE_LINK
-        COMMAND ${CMAKE_AR} -s lib/libopenh264.a
-        COMMENT "Indexing libopenh264.a with ranlib"
-        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        COMMAND chmod +x ${CMAKE_BINARY_DIR}/fix_openh264.sh
+        COMMAND ${CMAKE_BINARY_DIR}/fix_openh264.sh
+        COMMENT "Ensuring libopenh264.a has proper symbol index"
+        VERBATIM
     )
 endif()
 
