@@ -111,7 +111,7 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
     ptr->has_uploaded = PNANOVDB_FALSE;
 
     // when single array passed, assume per update shader params
-    if (shader_params_array_count == 1u && shader_params_arrays != nullptr)
+    if (*shader_params_arrays != nullptr && shader_params_array_count == 1u && shader_params_arrays != nullptr)
     {
         ptr->shader_params = (pnanovdb_raster_shader_params_t*)shader_params_arrays[0]->data;
     }

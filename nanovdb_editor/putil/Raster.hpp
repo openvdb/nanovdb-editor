@@ -339,15 +339,13 @@ bool get_gaussian_data(pnanovdb_raster_t* raster,
                        pnanovdb_raster_shader_params_t* raster_params,
                        pnanovdb_raster_context_t** raster_context)
 {
-    // temp array only to pass shader params
-    pnanovdb_compute_array_t* shader_params_array =
-        compute->create_array(raster_params->data_type->element_size, 1, nullptr);
+    // temp array only to pass shader params, does not allocate memory
+    pnanovdb_compute_array_t* shader_params_array = new pnanovdb_compute_array_t();
+    shader_params_array->element_count = 1u;
+    shader_params_array->element_size = raster_params->data_type->element_size;
     shader_params_array->data = (void*)raster_params;
 
-    bool result = raster_gaussians(raster, compute, queue, 0.f, arrays_gaussian, nullptr, gaussian_data, raster_context,
-                                   &shader_params_array, nullptr, nullptr, nullptr);
-    compute->destroy_array(shader_params_array);
-
-    return result;
+    return raster_gaussians(raster, compute, queue, 0.f, arrays_gaussian, nullptr, gaussian_data, raster_context,
+                            &shader_params_array, nullptr, nullptr, nullptr);
 }
 }

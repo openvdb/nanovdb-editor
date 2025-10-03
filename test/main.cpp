@@ -209,7 +209,7 @@ struct NanoVDBEditorArgs : public argparse::Args
 
 int main(int argc, char* argv[])
 {
-#if 1
+#if 0
     test_openh264();
     return 0;
 #endif
@@ -418,10 +418,14 @@ int main(int argc, char* argv[])
     pnanovdb_raster_shader_params_t raster_params = *defaults;
     pnanovdb_raster_shader_params_t raster_params_garden = *defaults;
 
-    pnanovdb_compute_array_t* raster2d_shader_params_array = compute.create_array(data_type->element_size, 1, nullptr);
+    pnanovdb_compute_array_t* raster2d_shader_params_array = new pnanovdb_compute_array_t();
+    raster2d_shader_params_array->element_count = 1u;
+    raster2d_shader_params_array->element_size = data_type->element_size;
     raster2d_shader_params_array->data = (void*)&raster_params;
-    pnanovdb_compute_array_t* raster2d_shader_params_array_garden =
-        compute.create_array(data_type->element_size, 1, nullptr);
+
+    pnanovdb_compute_array_t* raster2d_shader_params_array_garden = new pnanovdb_compute_array_t();
+    raster2d_shader_params_array_garden->element_count = 1u;
+    raster2d_shader_params_array_garden->element_size = data_type->element_size;
     raster2d_shader_params_array_garden->data = (void*)&raster_params_garden;
 
     pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr;

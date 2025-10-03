@@ -927,8 +927,7 @@ static void showWindows(Instance* ptr, float delta_time)
                             const std::string& cameraName = cameraPair.first;
                             IMGUI_CHECKBOX_SYNC(("##Visible" + cameraName).c_str(), camera->is_visible);
                             ImGui::SameLine();
-                            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen |
-                                                       ImGuiTreeNodeFlags_SpanAvailWidth;
+                            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
                             bool isSelected = (ptr->selected_camera_frustum == cameraName);
                             if (isSelected)
                             {
@@ -960,8 +959,7 @@ static void showWindows(Instance* ptr, float delta_time)
                         for (auto& gaussianPair : *ptr->gaussian_views)
                         {
                             const std::string& gaussianName = gaussianPair.first;
-                            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen |
-                                                       ImGuiTreeNodeFlags_SpanAvailWidth;
+                            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
                             bool isSelected = (ptr->selected_gaussian_view == gaussianName);
                             if (isSelected)
                             {
