@@ -34,6 +34,7 @@ typedef struct pnanovdb_raster_shader_params_t
     pnanovdb_uint32_t sh_stride_rgbrgbrgb_override;
 
     const pnanovdb_reflect_data_type_t* data_type;
+    const char* name; // displayed in UI
 } pnanovdb_raster_shader_params_t;
 
 static const pnanovdb_raster_shader_params_t default_shader_params = {
@@ -45,6 +46,7 @@ static const pnanovdb_raster_shader_params_t default_shader_params = {
     0, // sh_degree override, <0 means loaded SH degree
     0, // sh_stride_rgbrgbrgb override, 0 means SH are packed rrr...ggg...bbb
     NULL, // data_type
+    NULL // name
 };
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_raster_shader_params_t
@@ -80,8 +82,8 @@ typedef struct pnanovdb_raster_t
         pnanovdb_compute_array_t* colors,
         pnanovdb_compute_array_t* spherical_harmonics,
         pnanovdb_compute_array_t* opacities,
-        pnanovdb_compute_array_t** shader_params_arrays // expected to be pnanovdb_raster::shader_param_count in length
-    );
+        pnanovdb_compute_array_t** shader_params_arrays,
+        pnanovdb_uint32_t shader_params_array_count); // when ==1, passing per update shader_params
 
     void(PNANOVDB_ABI* upload_gaussian_data)(const pnanovdb_compute_t* compute,
                                              pnanovdb_compute_queue_t* queue,

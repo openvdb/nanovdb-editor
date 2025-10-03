@@ -66,9 +66,7 @@ typedef struct pnanovdb_editor_t
                                           void* params,
                                           const pnanovdb_reflect_data_type_t* data_type);
 
-    void(PNANOVDB_ABI* sync_shader_params)(pnanovdb_editor_t* editor,
-                                           const pnanovdb_reflect_data_type_t* data_type,
-                                           pnanovdb_bool_t set_data);
+    void(PNANOVDB_ABI* sync_shader_params)(pnanovdb_editor_t* editor, void* shader_params, pnanovdb_bool_t set_data);
 
     void* module;
     void* editor_worker;

@@ -95,7 +95,7 @@ struct ProgressBar
 struct WindowState
 {
     bool show_profiler = false;
-    bool show_code_editor = false;
+    bool show_code_editor = true;
     bool show_console = true;
     bool show_viewport_settings = true;
     bool show_render_settings = true;
@@ -153,6 +153,9 @@ struct Instance
     std::string selected_camera_view = "";
     std::string selected_camera_frustum = "";
     std::map<std::string, int> camera_frustum_index; // map of camera view name to state index for frustum overlay
+
+    std::map<std::string, pnanovdb_raster_gaussian_data_t*>* gaussian_views = nullptr;
+    std::string selected_gaussian_view = "";
 
     void set_default_shader(const std::string& shaderName);
 

@@ -30,7 +30,8 @@ class pnanovdb_Raster(Structure):
                 POINTER(pnanovdb_ComputeArray),  # colors
                 POINTER(pnanovdb_ComputeArray),  # spherical_harmonics
                 POINTER(pnanovdb_ComputeArray),  # opacities
-                POINTER(POINTER(pnanovdb_ComputeArray)),
+                POINTER(pnanovdb_ComputeArray),  # shader_params_arrays
+                c_uint32,  # shader_param_count
             ),
         ),  # shader_params_arrays
         (

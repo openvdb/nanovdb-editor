@@ -100,7 +100,8 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
                                                       pnanovdb_compute_array_t* colors,
                                                       pnanovdb_compute_array_t* spherical_harmonics,
                                                       pnanovdb_compute_array_t* opacities,
-                                                      pnanovdb_compute_array_t** shader_params_arrays)
+                                                      pnanovdb_compute_array_t** shader_params_arrays,
+                                                      pnanovdb_uint32_t shader_params_array_count)
 {
     auto ptr = new gaussian_data_t();
 
@@ -108,6 +109,12 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
     ptr->sh_stride = (pnanovdb_uint32_t)(spherical_harmonics->element_count / means->element_count);
 
     ptr->has_uploaded = PNANOVDB_FALSE;
+
+    // when single array passed, assume per update shader params
+    if (shader_params_array_count == 1u && shader_params_arrays != nullptr)
+    {
+        ptr->shader_params = (pnanovdb_raster_shader_params_t*)shader_params_arrays[0]->data;
+    }
 
     ptr->means_cpu_array = compute->create_array(means->element_size, means->element_count, means->data);
     ptr->quaternions_cpu_array =
@@ -122,7 +129,7 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
     for (pnanovdb_uint32_t idx = 0u; idx < shader_param_count; idx++)
     {
         ptr->shader_params_cpu_arrays[idx] = nullptr;
-        if (shader_params_arrays == nullptr || shader_params_arrays[idx] == nullptr)
+        if (shader_params_arrays == nullptr || shader_params_array_count == 1u || shader_params_arrays[idx] == nullptr)
         {
             continue;
         }
@@ -173,7 +180,8 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
     for (pnanovdb_uint32_t idx = 0u; idx < shader_param_count; idx++)
     {
         pnanovdb_compute_buffer_t* buffer = nullptr;
-        if (shader_params_arrays && shader_params_arrays[idx] && shader_params_arrays[idx]->element_count > 0u)
+        if (ptr->shader_params_cpu_arrays[idx] && shader_params_arrays && shader_params_arrays[idx] &&
+            shader_params_arrays[idx]->element_count > 0u)
         {
             buffer = create_and_init_buffer(shader_params_arrays[idx]->data, shader_params_arrays[idx]->element_count *
                                                                                  shader_params_arrays[idx]->element_size);

@@ -20,6 +20,7 @@
 #include "imgui/UploadBuffer.h"
 
 #include "compute/ComputeShader.h"
+#include "raster/Raster.h"
 
 #include "nanovdb_editor/putil/Raster.hpp"
 #include "nanovdb_editor/putil/WorkerThread.hpp"
@@ -110,6 +111,7 @@ struct EditorWorker
 struct EditorView
 {
     std::map<std::string, pnanovdb_camera_view_t*> cameras;
+    std::map<std::string, pnanovdb_raster_gaussian_data_t*> gaussians;
 };
 
 enum class ViewportShader : int
@@ -264,10 +266,17 @@ void add_gaussian_data(pnanovdb_editor_t* editor,
                        pnanovdb_compute_queue_t* queue,
                        pnanovdb_raster_gaussian_data_t* gaussian_data)
 {
+    if (!gaussian_data)
+    {
+        return;
+    }
+    auto ptr = pnanovdb_raster::cast(gaussian_data);
     if (editor->editor_worker)
     {
         EditorWorker* worker = static_cast<EditorWorker*>(editor->editor_worker);
         worker->pending_gaussian_data.set_pending(gaussian_data);
+        worker->pending_shader_params.set_pending(ptr->shader_params);
+        worker->pending_shader_params_data_type.set_pending(ptr->shader_params_data_type);
     }
     else
     {
@@ -276,6 +285,18 @@ void add_gaussian_data(pnanovdb_editor_t* editor,
             raster->destroy_gaussian_data(editor->compute, queue, editor->gaussian_data);
         }
         editor->gaussian_data = gaussian_data;
+        editor->shader_params = ptr->shader_params;
+        editor->shader_params_data_type = ptr->shader_params_data_type;
+    }
+    EditorView* views = static_cast<EditorView*>(editor->views);
+    if (!views)
+    {
+        return;
+    }
+    // replace existing view if name matches
+    if (ptr->shader_params->name)
+    {
+        views->gaussians[ptr->shader_params->name] = gaussian_data;
     }
 }
 
@@ -300,7 +321,10 @@ void add_camera_view(pnanovdb_editor_t* editor, pnanovdb_camera_view_t* camera)
         return;
     }
     // replace existing view if name matches
-    views->cameras[camera->name] = camera;
+    if (camera->name)
+    {
+        views->cameras[camera->name] = camera;
+    }
 }
 
 void add_shader_params(pnanovdb_editor_t* editor, void* params, const pnanovdb_reflect_data_type_t* data_type)
@@ -322,9 +346,13 @@ void add_shader_params(pnanovdb_editor_t* editor, void* params, const pnanovdb_r
     }
 }
 
-void sync_shader_params(pnanovdb_editor_t* editor, const pnanovdb_reflect_data_type_t* data_type, pnanovdb_bool_t set_data)
+void sync_shader_params(pnanovdb_editor_t* editor, void* shader_params, pnanovdb_bool_t set_data)
 {
     if (!editor->editor_worker)
+    {
+        return;
+    }
+    if (editor->shader_params == nullptr || editor->shader_params != shader_params)
     {
         return;
     }
@@ -497,6 +525,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
     // views UI
     imgui_user_instance->camera_views = &(static_cast<EditorView*>(editor->views)->cameras);
+    imgui_user_instance->gaussian_views = &(static_cast<EditorView*>(editor->views)->gaussians);
 
 #ifdef USE_IMGUI_INSTANCE
     ShaderCallback callback =
@@ -620,7 +649,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             {
                 if (editor->shader_params &&
                     pnanovdb_reflect_layout_compare(
-                        editor->shader_params_data_type, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t)))
+                        editor->shader_params_data_type, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t)) ==
+                        PNANOVDB_TRUE)
                 {
                     // init raster shader param's camera from imgui camera
                     pnanovdb_raster_shader_params_t* raster_params =
