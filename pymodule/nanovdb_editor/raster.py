@@ -15,6 +15,7 @@ class pnanovdb_Raster(Structure):
 
     _fields_ = [
         ("raster_interface", c_void_p),  # PNANOVDB_REFLECT_INTERFACE()
+        ("compute", POINTER(pnanovdb_Compute)),
         ("create_context", CFUNCTYPE(c_void_p, POINTER(pnanovdb_Compute), POINTER(pnanovdb_ComputeQueue))),
         ("destroy_context", CFUNCTYPE(None, POINTER(pnanovdb_Compute), POINTER(pnanovdb_ComputeQueue), c_void_p)),
         (
@@ -90,7 +91,6 @@ class pnanovdb_Raster(Structure):
                 c_void_p,
             ),
         ),  # userdata
-        ("compute", POINTER(pnanovdb_Compute)),
     ]
 
 

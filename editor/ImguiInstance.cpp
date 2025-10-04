@@ -1257,11 +1257,9 @@ static void showWindows(Instance* ptr, float delta_time)
                             if (isSet)
                                 hasAnyFlags = true;
 
-                            ImGui::PushStyleColor(ImGuiCol_Text, isSet ? IM_COL32(144, 238, 144, 255) : // Light
-                                                                                                        // green for
-                                                                                                        // enabled
-                                                                     IM_COL32(128, 128, 128, 255)); // Gray for
-                                                                                                    // disabled
+                            // Light green or gray
+                            ImU32 textColor = isSet ? IM_COL32(144, 238, 144, 255) : IM_COL32(128, 128, 128, 255);
+                            ImGui::PushStyleColor(ImGuiCol_Text, textColor);
 
                             ImGui::Text("[%s] %s", isSet ? "X" : " ", flagInfo.name);
                             if (ImGui::IsItemHovered())

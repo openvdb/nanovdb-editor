@@ -65,6 +65,8 @@ typedef struct pnanovdb_raster_t
 {
     PNANOVDB_REFLECT_INTERFACE();
 
+    const pnanovdb_compute_t* compute;
+
     pnanovdb_raster_context_t*(PNANOVDB_ABI* create_context)(const pnanovdb_compute_t* compute,
                                                              pnanovdb_compute_queue_t* queue);
 
@@ -114,25 +116,22 @@ typedef struct pnanovdb_raster_t
                                            pnanovdb_uint64_t nanovdb_word_count,
                                            void* userdata);
 
-    pnanovdb_compute_array_t*(PNANOVDB_ABI* raster_to_nanovdb)(
-        const pnanovdb_compute_t* compute,
-        pnanovdb_compute_queue_t* queue,
-        float voxel_size,
-        pnanovdb_compute_array_t* means,
-        pnanovdb_compute_array_t* quaternions,
-        pnanovdb_compute_array_t* scales,
-        pnanovdb_compute_array_t* colors,
-        pnanovdb_compute_array_t* spherical_harmonics,
-        pnanovdb_compute_array_t* opacities,
-        pnanovdb_compute_array_t** shader_params_arrays, // expected
-                                                         // to be
-                                                         // pnanovdb_raster::shader_param_count
-                                                         // in
-                                                         // length
-        pnanovdb_profiler_report_t profiler_report,
-        void* userdata);
-
-    const pnanovdb_compute_t* compute;
+    pnanovdb_compute_array_t*(PNANOVDB_ABI* raster_to_nanovdb)(const pnanovdb_compute_t* compute,
+                                                               pnanovdb_compute_queue_t* queue,
+                                                               float voxel_size,
+                                                               pnanovdb_compute_array_t* means,
+                                                               pnanovdb_compute_array_t* quaternions,
+                                                               pnanovdb_compute_array_t* scales,
+                                                               pnanovdb_compute_array_t* colors,
+                                                               pnanovdb_compute_array_t* spherical_harmonics,
+                                                               pnanovdb_compute_array_t* opacities,
+                                                               pnanovdb_compute_array_t** shader_params_arrays, // expected
+                                                               // to be
+                                                               // pnanovdb_raster::shader_param_count
+                                                               // in
+                                                               // length
+                                                               pnanovdb_profiler_report_t profiler_report,
+                                                               void* userdata);
 
 } pnanovdb_raster_t;
 

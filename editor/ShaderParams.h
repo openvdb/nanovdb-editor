@@ -144,8 +144,8 @@ public:
         return &params_map_.at(shader_name);
     }
 
-    size_t allocatePoolArray(size_t total_size, const void* initial_data = nullptr); // returns index of the allocated
-                                                                                     // array
+    // returns index of the allocated array
+    size_t allocatePoolArray(size_t total_size, const void* initial_data = nullptr);
     void deallocatePoolArray(size_t pool_index);
     bool getAllocatedPoolArray(ShaderParam& shader_param);
     size_t findEquivalentParamPoolIndex(const ShaderParam& new_param);
@@ -157,8 +157,7 @@ private:
     std::vector<std::vector<char>> shader_params_pool_; // each array corresponds to a shader parameter pool index
     std::map<std::string, std::vector<ShaderParam>> params_map_; // <shader_name, shader_params>
     std::map<size_t, std::pair<std::string, ShaderParam>> group_params_; // <pool_index, <shader_file, ShaderParam>>
-    std::map<std::string, pnanovdb_compute_array_t*> pending_arrays_; // <shader_name, array> - arrays waiting for
-                                                                      // params to be loaded
+    std::map<std::string, pnanovdb_compute_array_t*> pending_arrays_; // <shader_name, array>
 
     void* getValue(ShaderParam& shader_param);
     void createDefaultScalarNParam(const std::string& name,

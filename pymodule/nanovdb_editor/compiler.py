@@ -37,6 +37,7 @@ class pnanovdb_Compiler(Structure):
 
     _fields_ = [
         ("interface_pnanovdb_reflect_data_type", c_void_p),  # PNANOVDB_REFLECT_INTERFACE()
+        ("module", c_void_p),
         ("create_instance", CFUNCTYPE(POINTER(pnanovdb_CompilerInstance))),
         ("set_diagnostic_callback", CFUNCTYPE(None, POINTER(pnanovdb_CompilerInstance), CFUNCTYPE(None, c_char_p))),
         (
@@ -56,7 +57,6 @@ class pnanovdb_Compiler(Structure):
             ),
         ),
         ("destroy_instance", CFUNCTYPE(None, POINTER(pnanovdb_CompilerInstance))),
-        ("module", c_void_p),
     ]
 
 

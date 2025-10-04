@@ -44,6 +44,7 @@ class pnanovdb_Compute(Structure):
 
     _fields_ = [
         ("interface_pnanovdb_reflect_data_type", c_void_p),  # PNANOVDB_REFLECT_INTERFACE()
+        ("module", c_void_p),
         ("compiler", POINTER(pnanovdb_Compiler)),
         ("shader_interface", pnanovdb_ShaderInterface),
         ("device_interface", pnanovdb_DeviceInterface),
@@ -135,7 +136,6 @@ class pnanovdb_Compute(Structure):
                 c_uint32,
             ),
         ),  # channel_count
-        ("module", c_void_p),
     ]
 
 

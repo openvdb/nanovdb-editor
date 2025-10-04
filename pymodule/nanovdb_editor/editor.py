@@ -13,6 +13,7 @@ from ctypes import (
     c_float,
     byref,
     pointer,
+    cast,
 )
 
 from .compute import Compute, pnanovdb_Compute, pnanovdb_ComputeArray
@@ -32,7 +33,7 @@ class pnanovdb_EditorConfig(Structure):
 
     _fields_ = [
         ("ip_address", c_char_p),
-        ("port", c_int),
+        ("port", c_int32),
         ("headless", c_int32),  # pnanovdb_bool_t is int32_t in C
         ("streaming", c_int32),  # pnanovdb_bool_t is int32_t in C
     ]
@@ -117,25 +118,57 @@ class pnanovdb_Editor(Structure):
 
     _fields_ = [
         ("interface_pnanovdb_reflect_data_type", c_void_p),
-        ("compiler", POINTER(pnanovdb_Compiler)),
-        ("compute", POINTER(pnanovdb_Compute)),
+        ("module", c_void_p),
+        ("impl", c_void_p),
         ("init", CFUNCTYPE(None, c_void_p)),
+        (
+            "init_impl",
+            CFUNCTYPE(
+                c_int32,  # pnanovdb_bool_t
+                c_void_p,  # pnanovdb_editor_t*
+                POINTER(pnanovdb_Compute),  # const pnanovdb_compute_t*
+                POINTER(pnanovdb_Compiler),  # const pnanovdb_compiler_t*
+            ),
+        ),
         ("shutdown", CFUNCTYPE(None, c_void_p)),
-        ("show", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Device), POINTER(pnanovdb_EditorConfig))),
-        ("start", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Device), POINTER(pnanovdb_EditorConfig))),
+        (
+            "show",
+            CFUNCTYPE(
+                None,
+                c_void_p,
+                POINTER(pnanovdb_Device),
+                POINTER(pnanovdb_EditorConfig),
+            ),
+        ),
+        (
+            "start",
+            CFUNCTYPE(
+                None,
+                c_void_p,
+                POINTER(pnanovdb_Device),
+                POINTER(pnanovdb_EditorConfig),
+            ),
+        ),
         ("stop", CFUNCTYPE(None, c_void_p)),
-        ("add_nanovdb", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_ComputeArray))),
-        ("add_array", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_ComputeArray))),
+        (
+            "add_nanovdb",
+            CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_ComputeArray)),
+        ),
+        (
+            "add_array",
+            CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_ComputeArray)),
+        ),
         (
             "add_gaussian_data",
             CFUNCTYPE(None, c_void_p, c_void_p, c_void_p, c_void_p),
-        ),  # pnanovdb_raster_t*, queue, pnanovdb_raster_gaussian_data_t*
+        ),  # raster, queue, gaussian
         ("add_camera", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Camera))),
-        ("add_camera_view", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_CameraView))),
         (
-            "add_shader_params",
-            CFUNCTYPE(None, c_void_p, c_void_p, c_void_p),
-        ),  # void* params, const pnanovdb_reflect_data_type_t* data_type
+            "add_camera_view",
+            CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_CameraView)),
+        ),
+        ("add_shader_params", CFUNCTYPE(None, c_void_p, c_void_p, c_void_p)),
+        # params, data_type
         (
             "sync_shader_params",
             CFUNCTYPE(
@@ -144,14 +177,26 @@ class pnanovdb_Editor(Structure):
                 c_void_p,
                 c_int32,
             ),
-        ),  # const pnanovdb_reflect_data_type_t* data_type, pnanovdb_bool_t set_data
+        ),
+    ]
+
+
+class pnanovdb_EditorImpl(Structure):
+    """Mirror of pnanovdb_editor_impl_t for read-only access.
+
+    Access is for reading only and structure must match C++ layout.
+    """
+
+    _fields_ = [
         ("module", c_void_p),
+        ("compiler", POINTER(pnanovdb_Compiler)),
+        ("compute", POINTER(pnanovdb_Compute)),
         ("editor_worker", c_void_p),
         ("nanovdb_array", POINTER(pnanovdb_ComputeArray)),
         ("data_array", POINTER(pnanovdb_ComputeArray)),
-        ("gaussian_data", c_void_p),  # pnanovdb_raster_gaussian_data_t*
+        ("gaussian_data", c_void_p),
         ("camera", POINTER(pnanovdb_Camera)),
-        ("raster_ctx", c_void_p),  # pnanovdb_raster_context_t*
+        ("raster_ctx", c_void_p),
         ("shader_params", c_void_p),
         ("shader_params_data_type", c_void_p),
         ("views", c_void_p),
@@ -175,25 +220,24 @@ class Editor:
         self._compute = compute
         self._compiler = compiler
 
-        # Assign the compute and compiler pointers first
-        compute_ptr = compute.get_compute()
-        self._editor.contents.compute = compute_ptr
-        self._editor.contents.compiler = compiler.get_compiler()
+        # Assign module handle for editor; mirror pnanovdb_editor_load
         self._editor.contents.module = self._lib._handle
-        self._editor.contents.compute.contents.module = compute._lib._handle
 
-        # Initialize all fields to NULL/None as in C implementation
-        self._editor.contents.gaussian_data = None
-        self._editor.contents.nanovdb_array = None
-        self._editor.contents.data_array = None
-        self._editor.contents.camera = None
-        self._editor.contents.raster_ctx = None
-        self._editor.contents.shader_params = None
-        self._editor.contents.shader_params_data_type = None
-        self._editor.contents.editor_worker = None
-
-        init_func = self._editor.contents.init
-        init_func(self._editor)
+        # Try init_impl; fall back to init if not available or returns false
+        init_impl = getattr(self._editor.contents, "init_impl", None)
+        try:
+            if init_impl:
+                result = init_impl(
+                    self._editor,
+                    compute.get_compute(),
+                    compiler.get_compiler(),
+                )
+                if result == 0:
+                    self._editor.contents.init(self._editor)
+            else:
+                self._editor.contents.init(self._editor)
+        except (OSError, ValueError, RuntimeError):
+            self._editor.contents.init(self._editor)
 
     def shutdown(self) -> None:
         shutdown_func = self._editor.contents.shutdown
@@ -221,28 +265,27 @@ class Editor:
         add_shader_params_func = self._editor.contents.add_shader_params
         add_shader_params_func(self._editor, params, data_type)
 
-    def sync_shader_params(self, data_type, set_data: bool) -> None:
-        """Sync shader parameters."""
+    def sync_shader_params(self, params, set_data: bool) -> None:
+        """Sync shader parameters with editor thread.
+
+        params should be a pointer to the same structure previously provided
+        to add_gaussian_data/add_shader_params.
+        """
         sync_shader_params_func = self._editor.contents.sync_shader_params
-        sync_shader_params_func(self._editor, data_type, 1 if set_data else 0)
+        sync_shader_params_func(self._editor, params, 1 if set_data else 0)
 
     def show(self, config=None) -> None:
         show_func = self._editor.contents.show
 
         try:
             if config is None:
-                # Create default config
-                config = pnanovdb_EditorConfig()
-                config.ip_address = b"127.0.0.1"
-                config.port = 8080
-                config.headless = 0  # pnanovdb_bool_t
-                config.streaming = 0  # pnanovdb_bool_t
+                config = pnanovdb_EditorConfig(b"127.0.0.1", 8080, 0, 0)
             show_func(
                 self._editor,
                 self._compute.device_interface().get_device(),
                 byref(config),
             )
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             print(f"Error: Editor runtime error ({e})")
 
     def start(self, config=None) -> None:
@@ -251,18 +294,13 @@ class Editor:
 
         try:
             if config is None:
-                # Create default config
-                config = pnanovdb_EditorConfig()
-                config.ip_address = b"127.0.0.1"
-                config.port = 8080
-                config.headless = 0  # pnanovdb_bool_t
-                config.streaming = 0  # pnanovdb_bool_t
+                config = pnanovdb_EditorConfig(b"127.0.0.1", 8080, 0, 0)
             start_func(
                 self._editor,
                 self._compute.device_interface().get_device(),
                 byref(config),
             )
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             print(f"Error: Editor start error ({e})")
 
     def stop(self) -> None:
@@ -271,15 +309,26 @@ class Editor:
         stop_func(self._editor)
 
     def get_nanovdb(self) -> pnanovdb_ComputeArray:
-        return self._editor.contents.nanovdb_array.contents
+        impl_ptr = cast(
+            self._editor.contents.impl,
+            POINTER(pnanovdb_EditorImpl),
+        )
+        if not impl_ptr or not impl_ptr.contents.nanovdb_array:
+            raise RuntimeError("No NanoVDB array available")
+        return impl_ptr.contents.nanovdb_array.contents
 
     def get_array(self) -> pnanovdb_ComputeArray:
-        return self._editor.contents.data_array.contents
+        impl_ptr = cast(
+            self._editor.contents.impl,
+            POINTER(pnanovdb_EditorImpl),
+        )
+        if not impl_ptr or not impl_ptr.contents.data_array:
+            raise RuntimeError("No data array available")
+        return impl_ptr.contents.data_array.contents
+
+    def add_callable(self, name: str, func) -> None:
+        """Compatibility stub for older API; no-op in current interface."""
+        _ = (name, func)
 
     def __del__(self):
-        try:
-            if self._editor:
-                self.shutdown()
-            self._editor = None
-        except Exception:
-            pass
+        self._editor = None
