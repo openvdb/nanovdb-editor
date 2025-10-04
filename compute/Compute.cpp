@@ -74,7 +74,7 @@ pnanovdb_compute_array_t* load_nanovdb(const char* filepath)
     }
     catch (const std::ios_base::failure& e)
     {
-        printf("Error: Could not open nanovdb '%s'\n", filepath);
+        printf("Could not open nanovdb '%s'\n", filepath);
         return nullptr;
     }
 
@@ -91,7 +91,7 @@ pnanovdb_bool_t save_nanovdb(pnanovdb_compute_array_t* array, const char* filepa
 {
     if (!array || !array->data || array->element_size == 0u || array->element_count == 0u)
     {
-        printf("Error: Could not save nanovdb '%s' (invalid array)\n", filepath);
+        printf("Could not save nanovdb '%s' (invalid array)\n", filepath);
         return PNANOVDB_FALSE;
     }
     nanovdb::HostBuffer buffer(array->element_count * array->element_size);
@@ -104,7 +104,7 @@ pnanovdb_bool_t save_nanovdb(pnanovdb_compute_array_t* array, const char* filepa
     }
     catch (const std::ios_base::failure& e)
     {
-        printf("Error: Could not save nanovdb '%s' (%s)\n", filepath, e.what());
+        printf("Could not save nanovdb '%s' (%s)\n", filepath, e.what());
         return PNANOVDB_FALSE;
     }
     return PNANOVDB_TRUE;

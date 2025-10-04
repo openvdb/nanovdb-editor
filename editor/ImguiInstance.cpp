@@ -131,7 +131,15 @@ static const char* CONSOLE = "Output";
 static const char* SHADER_PARAMS = "Params";
 static const char* BENCHMARK = "Benchmark";
 static const char* FILE_HEADER = "File Header";
-static const char* CAMERA_VIEWS = "Cameras Views";
+static const char* SCENE = "Scene";
+
+enum class ViewsTypes
+{
+    Cameras = 0,
+    GaussianScenes = 1
+};
+
+static ViewsTypes sViewsTypes = ViewsTypes::Cameras;
 
 static const char* getGridTypeName(uint32_t gridType)
 {
@@ -357,7 +365,7 @@ static void initializeDocking()
         float window_height = ImGui::GetIO().DisplaySize.y;
 
         float left_dock_width = window_width * 0.25f;
-        float right_dock_width = window_width * 0.33f;
+        float right_dock_width = window_width * 0.20f;
         float bottom_dock_height = window_height * 0.2f;
 
         // clear existing layout
@@ -370,6 +378,7 @@ static void initializeDocking()
         ImGui::DockBuilderDockWindow(CODE_EDITOR, dock_id_right);
         ImGui::DockBuilderDockWindow(PROFILER, dock_id_right);
         ImGui::DockBuilderDockWindow(FILE_HEADER, dock_id_right);
+        ImGui::DockBuilderDockWindow(SCENE, dock_id_right);
 
         ImGuiID dock_id_bottom = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Down, 0.f, nullptr, &dockspace_id);
         ImGui::DockBuilderSetNodeSize(dock_id_bottom, ImVec2(window_width, bottom_dock_height));
@@ -385,7 +394,6 @@ static void initializeDocking()
             ImGui::DockBuilderSplitNode(dock_id_left, ImGuiDir_Down, 0.f, nullptr, &dock_id_left);
         ImGui::DockBuilderSetNodeSize(dock_id_left_bottom, ImVec2(left_dock_width, window_height));
         ImGui::DockBuilderDockWindow(SHADER_PARAMS, dock_id_left_bottom);
-        ImGui::DockBuilderDockWindow(CAMERA_VIEWS, dock_id_left_bottom);
         ImGui::DockBuilderDockWindow(BENCHMARK, dock_id_left_bottom);
 
         ImGui::DockBuilderFinish(dockspace_id);
@@ -409,7 +417,7 @@ static void createMenu(Instance* ptr)
             ImGui::MenuItem(FILE_HEADER, "", &ptr->window.show_file_header);
             ImGui::MenuItem(CONSOLE, "", &ptr->window.show_console);
             ImGui::MenuItem(SHADER_PARAMS, "", &ptr->window.show_shader_params);
-            ImGui::MenuItem(CAMERA_VIEWS, "", &ptr->window.show_views);
+            ImGui::MenuItem(SCENE, "", &ptr->window.show_scene);
             ImGui::MenuItem(BENCHMARK, "", &ptr->window.show_benchmark);
             ImGui::EndMenu();
         }
@@ -465,6 +473,8 @@ static void showWindows(Instance* ptr, float delta_time)
 
                             // clear selected debug camera when switching to saved camera
                             ptr->selected_camera_view.clear();
+
+                            ImGui::MarkIniSettingsDirty();
                         }
                         if (is_selected)
                         {
@@ -585,17 +595,17 @@ static void showWindows(Instance* ptr, float delta_time)
                     {
                         if (ImGui::Selectable(shader.c_str()))
                         {
-                            ptr->pending.shader_name = shader;
+                            ptr->pending.viewport_shader_name = shader;
                         }
                     }
                     ImGui::EndCombo();
                 }
-                ImGui::InputText("##viewport_shader_name", &ptr->pending.shader_name);
+                ImGui::InputText("##viewport_shader_name", &ptr->pending.viewport_shader_name);
                 ImGui::SameLine();
                 if (ImGui::Button("Update"))
                 {
-                    pnanovdb_editor::CodeEditor::getInstance().setSelectedShader(ptr->pending.shader_name);
-                    ptr->shader_name = ptr->pending.shader_name;
+                    pnanovdb_editor::CodeEditor::getInstance().setSelectedShader(ptr->pending.viewport_shader_name);
+                    ptr->shader_name = ptr->pending.viewport_shader_name;
                     ptr->pending.update_shader = true;
                 }
                 ImGui::EndGroup();
@@ -882,217 +892,296 @@ static void showWindows(Instance* ptr, float delta_time)
         }
     }
 
-    if (ptr->window.show_views)
+    if (ptr->window.show_scene)
     {
-        if (ImGui::Begin(CAMERA_VIEWS, &ptr->window.show_views))
+        if (ImGui::Begin(SCENE, &ptr->window.show_scene))
         {
-            if (ptr->camera_views == nullptr)
+            ImVec2 fullAvail = ImGui::GetContentRegionAvail();
+            static float topHeight = -1.f; // will be initialized on first frame
+            const float minTop = 60.f;
+            const float minBottom = 80.f;
+            if (topHeight < 0.f && fullAvail.y > minTop + minBottom)
             {
-                ImGui::TextDisabled("No camera views available");
+                topHeight = fullAvail.y * 0.333f;
             }
-            else if (ptr->camera_views->empty())
+            topHeight = std::max(minTop, std::min(topHeight, fullAvail.y - minTop));
+
+            // Top: Tree view
+            if (ImGui::BeginChild("##SceneTop", ImVec2(0, topHeight), true))
             {
-                ImGui::TextDisabled("No camera views added");
-            }
-            else
-            {
-                ImVec2 fullAvail = ImGui::GetContentRegionAvail();
-                static float cameraListHeight = 60.f;
-                const float minList = 20.f;
-                const float minProps = 80.f;
-                cameraListHeight = std::max(minList, std::min(cameraListHeight, fullAvail.y - minList));
-
-                if (ImGui::BeginChild("##CameraViewList", ImVec2(0, cameraListHeight), true,
-                                      ImGuiWindowFlags_AlwaysVerticalScrollbar))
+                if (ImGui::TreeNodeEx("Cameras", ImGuiTreeNodeFlags_DefaultOpen))
                 {
-                    for (auto& cameraPair : *ptr->camera_views)
+                    if (!ptr->camera_views)
                     {
-                        pnanovdb_camera_view_t* camera = cameraPair.second;
-                        if (!camera)
-                        {
-                            continue;
-                        }
-
-                        const std::string& cameraName = cameraPair.first;
-                        IMGUI_CHECKBOX_SYNC(("##Visible" + cameraName).c_str(), camera->is_visible);
-                        ImGui::SameLine();
-                        bool isSelected = (ptr->selected_camera_frustum == cameraName);
-                        if (ImGui::Selectable(cameraName.c_str(), isSelected))
-                        {
-                            ptr->selected_camera_frustum = cameraName;
-                        }
+                        ImGui::TextDisabled("No camera views available");
                     }
-
-                    ImVec2 avail = ImGui::GetContentRegionAvail();
-                    if (avail.y > 0.f)
+                    else if (ptr->camera_views->empty())
                     {
-                        if (ImGui::InvisibleButton("##ClearCameraFrustumSelectionArea", avail))
-                        {
-                            ptr->selected_camera_frustum.clear();
-                        }
-                    }
-                }
-                ImGui::EndChild();
-
-                ImRect bb;
-                bb.Min = ImGui::GetWindowPos() + ImGui::GetCursorPos();
-                bb.Min.y += 2.f;
-                bb.Max = bb.Min + ImVec2(fullAvail.x, 2.f);
-                float propsHeight = fullAvail.y - cameraListHeight;
-                ImGui::SplitterBehavior(bb, ImGui::GetID("##CameraViewSplitter"), ImGuiAxis_Y, &cameraListHeight,
-                                        &propsHeight, minList, minProps);
-                ImGui::Spacing();
-
-                if (ImGui::BeginChild("##CameraViewProps", ImVec2(0, 0), true))
-                {
-                    if (ptr->selected_camera_frustum.empty())
-                    {
-                        ImGui::TextDisabled("No camera selected");
+                        ImGui::TextDisabled("No camera views added");
                     }
                     else
                     {
-                        pnanovdb_camera_view_t* camera = ptr->camera_views->at(ptr->selected_camera_frustum);
-                        if (camera)
+                        for (auto& cameraPair : *ptr->camera_views)
                         {
-                            ImGui::Text("Total Cameras: %d", camera->num_cameras);
-                            int maxIndex = (camera->num_cameras > 0) ? ((int)camera->num_cameras - 1) : 0;
-                            if (maxIndex > 0)
+                            pnanovdb_camera_view_t* camera = cameraPair.second;
+                            if (!camera)
                             {
-                                ImGui::SliderInt("Camera Index", &ptr->camera_frustum_index[ptr->selected_camera_frustum],
-                                                 0, maxIndex, "%d");
+                                continue;
                             }
-                            else
+                            const std::string& cameraName = cameraPair.first;
+                            IMGUI_CHECKBOX_SYNC(("##Visible" + cameraName).c_str(), camera->is_visible);
+                            ImGui::SameLine();
+                            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+                            bool isSelected = (ptr->selected_camera_frustum == cameraName);
+                            if (isSelected)
                             {
-                                ImGui::Text("Camera Index: 0");
-                                ImGui::Dummy(ImVec2(0.f, 1.f));
+                                flags |= ImGuiTreeNodeFlags_Selected;
                             }
-                            int cameraIdx = ptr->camera_frustum_index[ptr->selected_camera_frustum];
-                            if (ImGui::Button("Set Viewport Camera"))
+                            ImGui::TreeNodeEx(cameraName.c_str(), flags);
+                            if (ImGui::IsItemClicked())
                             {
-                                pnanovdb_vec3_t& up = camera->states[cameraIdx].eye_up;
-
-                                // keep up direction from the current viewport camera, don't override it
-                                if (camera->states[cameraIdx].eye_up.x != ptr->render_settings->camera_state.eye_up.x ||
-                                    camera->states[cameraIdx].eye_up.y != ptr->render_settings->camera_state.eye_up.y ||
-                                    camera->states[cameraIdx].eye_up.z != ptr->render_settings->camera_state.eye_up.z)
-                                {
-                                    // recompute up vector to be orthogonal to eye_direction if "flipped"
-                                    pnanovdb_vec3_t& dir = camera->states[cameraIdx].eye_direction;
-                                    pnanovdb_vec3_t right = { dir.y * up.z - dir.z * up.y, dir.z * up.x - dir.x * up.z,
-                                                              dir.x * up.y - dir.y * up.x };
-
-                                    up.x = -(right.y * dir.z - right.z * dir.y);
-                                    up.y = -(right.z * dir.x - right.x * dir.z);
-                                    up.z = -(right.x * dir.y - right.y * dir.x);
-
-                                    float len = sqrtf(up.x * up.x + up.y * up.y + up.z * up.z);
-                                    if (len > EPSILON)
-                                    {
-                                        up.x /= len;
-                                        up.y /= len;
-                                        up.z /= len;
-                                    }
-                                }
-                                pnanovdb_vec3_t eyeUp = camera->states[cameraIdx].eye_up;
-
-                                ptr->render_settings->camera_state = camera->states[cameraIdx];
-                                ptr->render_settings->camera_state.eye_up = up;
-                                ptr->render_settings->camera_config = camera->configs[cameraIdx];
-                                ptr->render_settings->is_projection_rh = camera->configs[cameraIdx].is_projection_rh;
-                                ptr->render_settings->is_orthographic = camera->configs[cameraIdx].is_orthographic;
-                                ptr->render_settings->is_reverse_z = camera->configs[cameraIdx].is_reverse_z;
-                                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                                ptr->selected_camera_frustum = cameraName;
+                                sViewsTypes = ViewsTypes::Cameras;
                             }
-
-                            pnanovdb_vec3_t eyePosition =
-                                pnanovdb_camera_get_eye_position_from_state(&camera->states[cameraIdx]);
-
-                            float eyePos[3] = { eyePosition.x, eyePosition.y, eyePosition.z };
-                            if (ImGui::DragFloat3("Origin", eyePos, 0.1f))
-                            {
-                                pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
-                                state->position.x =
-                                    eyePos[0] + state->eye_direction.x * state->eye_distance_from_position;
-                                state->position.y =
-                                    eyePos[1] + state->eye_direction.y * state->eye_distance_from_position;
-                                state->position.z =
-                                    eyePos[2] + state->eye_direction.z * state->eye_distance_from_position;
-                            }
-
-                            pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
-                            float lookAt[3] = { state->position.x, state->position.y, state->position.z };
-                            if (ImGui::DragFloat3("Look At", lookAt, 0.1f))
-                            {
-                                pnanovdb_vec3_t eye = pnanovdb_camera_get_eye_position_from_state(state);
-                                pnanovdb_vec3_t delta = { lookAt[0] - eye.x, lookAt[1] - eye.y, lookAt[2] - eye.z };
-                                float len2 = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
-                                if (len2 > 0.f)
-                                {
-                                    float len = pnanovdb_camera_sqrt(len2);
-                                    pnanovdb_vec3_t dir = { delta.x / len, delta.y / len, delta.z / len };
-                                    state->position.x = lookAt[0];
-                                    state->position.y = lookAt[1];
-                                    state->position.z = lookAt[2];
-                                    state->eye_direction = dir;
-                                    state->eye_distance_from_position = len;
-                                }
-                                else
-                                {
-                                    // Eye and look-at coincide; update position and set distance to zero
-                                    state->position.x = lookAt[0];
-                                    state->position.y = lookAt[1];
-                                    state->position.z = lookAt[2];
-                                    state->eye_distance_from_position = 0.f;
-                                }
-                            }
-                            float upVec[3] = { state->eye_up.x, state->eye_up.y, state->eye_up.z };
-                            if (ImGui::DragFloat3("Up", upVec, 0.1f))
-                            {
-                                state->eye_up.x = upVec[0];
-                                state->eye_up.y = upVec[1];
-                                state->eye_up.z = upVec[2];
-                                float len = sqrtf(state->eye_up.x * state->eye_up.x +
-                                                  state->eye_up.y * state->eye_up.y + state->eye_up.z * state->eye_up.z);
-                                if (len > EPSILON)
-                                {
-                                    state->eye_up.x /= len;
-                                    state->eye_up.y /= len;
-                                    state->eye_up.z /= len;
-                                }
-                            }
-                            ImGui::Separator();
-                            ImGui::DragFloat("Axis Length", &camera->axis_length, 1.f, 0.f, 100.f);
-                            ImGui::DragFloat("Axis Thickness", &camera->axis_thickness, 0.1f, 0.f, 10.f);
-                            ImGui::DragFloat("Frustum Line Width", &camera->frustum_line_width, 0.1f, 0.f, 10.f);
-                            ImGui::DragFloat("Frustum Scale", &camera->frustum_scale, 0.1f, 0.f, 10.f);
-                            float frustumColor[4] = { (float)camera->frustum_color.x, (float)camera->frustum_color.y,
-                                                      (float)camera->frustum_color.z, 1.0f };
-                            if (ImGui::ColorEdit4("Frustum Color", frustumColor))
-                            {
-                                camera->frustum_color.x = frustumColor[0];
-                                camera->frustum_color.y = frustumColor[1];
-                                camera->frustum_color.z = frustumColor[2];
-                            }
-                            ImGui::Separator();
-                            ImGui::DragFloat("Near Plane", &camera->configs[cameraIdx].near_plane, 0.1f, 0.01f, 10000.f);
-                            ImGui::DragFloat("Far Plane", &camera->configs[cameraIdx].far_plane, 10.f, 1.f, 100000.f);
-                            if (camera->configs[cameraIdx].is_orthographic)
-                            {
-                                ImGui::DragFloat(
-                                    "Orthographic Y", &camera->configs[cameraIdx].orthographic_y, 0.1f, 0.f, 100000.f);
-                            }
-                            else
-                            {
-                                ImGui::DragFloat("FOV", &camera->configs[cameraIdx].fov_angle_y, 0.01f, 0.f, M_PI_2);
-                                ImGui::DragFloat(
-                                    "Aspect Ratio", &camera->configs[cameraIdx].aspect_ratio, 0.01f, 0.f, 2.f);
-                            }
-                            // IMGUI_CHECKBOX_SYNC("Orthographic", camera->config.is_orthographic);
                         }
                     }
+                    ImGui::TreePop();
                 }
-                ImGui::EndChild();
+
+                if (ImGui::TreeNodeEx("Gaussian Scenes", ImGuiTreeNodeFlags_DefaultOpen))
+                {
+                    if (!ptr->gaussian_views)
+                    {
+                        ImGui::TextDisabled("No gaussian scenes available");
+                    }
+                    else if (ptr->gaussian_views->empty())
+                    {
+                        ImGui::TextDisabled("No gaussian scenes added");
+                    }
+                    else
+                    {
+                        for (auto& gaussianPair : *ptr->gaussian_views)
+                        {
+                            const std::string& gaussianName = gaussianPair.first;
+                            bool isSelected = (ptr->selected_gaussian_view == gaussianName);
+
+                            if (ImGui::RadioButton(("##Radio" + gaussianName).c_str(), isSelected))
+                            {
+                                ptr->selected_gaussian_view = gaussianName;
+                                sViewsTypes = ViewsTypes::GaussianScenes;
+                            }
+                            ImGui::SameLine();
+
+                            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+                            if (isSelected)
+                            {
+                                flags |= ImGuiTreeNodeFlags_Selected;
+                            }
+                            ImGui::TreeNodeEx(gaussianName.c_str(), flags);
+                            if (ImGui::IsItemClicked())
+                            {
+                                ptr->selected_gaussian_view = gaussianName;
+                                sViewsTypes = ViewsTypes::GaussianScenes;
+                            }
+                        }
+                    }
+                    ImGui::TreePop();
+                }
             }
+            ImGui::EndChild();
+
+            // Splitter
+            ImRect bb;
+            bb.Min = ImGui::GetWindowPos() + ImGui::GetCursorPos();
+            bb.Min.y += 2.f;
+            bb.Max = bb.Min + ImVec2(fullAvail.x, 2.f);
+            float bottomHeight = fullAvail.y - topHeight;
+            ImGui::SplitterBehavior(
+                bb, ImGui::GetID("##SceneSplitter"), ImGuiAxis_Y, &topHeight, &bottomHeight, minTop, minBottom);
+            ImGui::Spacing();
+
+            // Bottom: Property tab
+            if (ImGui::BeginChild("##SceneBottom", ImVec2(0, 0), true))
+            {
+                if (ImGui::BeginTabBar("##ScenePropsTabs"))
+                {
+                    if (ImGui::BeginTabItem("Property"))
+                    {
+                        if (sViewsTypes == ViewsTypes::Cameras)
+                        {
+                            if (ptr->selected_camera_frustum.empty())
+                            {
+                                ImGui::TextDisabled("No camera selected");
+                            }
+                            else
+                            {
+                                auto it = ptr->camera_views ? ptr->camera_views->find(ptr->selected_camera_frustum) :
+                                                              std::map<std::string, pnanovdb_camera_view_t*>().end();
+                                if (it != (ptr->camera_views ? ptr->camera_views->end() :
+                                                               std::map<std::string, pnanovdb_camera_view_t*>().end()))
+                                {
+                                    pnanovdb_camera_view_t* camera = it->second;
+                                    if (camera)
+                                    {
+                                        ImGui::Text("Total Cameras: %d", camera->num_cameras);
+                                        int maxIndex = (camera->num_cameras > 0) ? ((int)camera->num_cameras - 1) : 0;
+                                        if (maxIndex > 0)
+                                        {
+                                            ImGui::SliderInt("Camera Index",
+                                                             &ptr->camera_frustum_index[ptr->selected_camera_frustum],
+                                                             0, maxIndex, "%d");
+                                        }
+                                        else
+                                        {
+                                            ImGui::Text("Camera Index: 0");
+                                            ImGui::Dummy(ImVec2(0.f, 1.f));
+                                        }
+                                        int cameraIdx = ptr->camera_frustum_index[ptr->selected_camera_frustum];
+                                        if (ImGui::Button("Set Viewport Camera"))
+                                        {
+                                            pnanovdb_vec3_t& up = camera->states[cameraIdx].eye_up;
+                                            if (camera->states[cameraIdx].eye_up.x !=
+                                                    ptr->render_settings->camera_state.eye_up.x ||
+                                                camera->states[cameraIdx].eye_up.y !=
+                                                    ptr->render_settings->camera_state.eye_up.y ||
+                                                camera->states[cameraIdx].eye_up.z !=
+                                                    ptr->render_settings->camera_state.eye_up.z)
+                                            {
+                                                pnanovdb_vec3_t& dir = camera->states[cameraIdx].eye_direction;
+                                                pnanovdb_vec3_t right = { dir.y * up.z - dir.z * up.y,
+                                                                          dir.z * up.x - dir.x * up.z,
+                                                                          dir.x * up.y - dir.y * up.x };
+                                                up.x = -(right.y * dir.z - right.z * dir.y);
+                                                up.y = -(right.z * dir.x - right.x * dir.z);
+                                                up.z = -(right.x * dir.y - right.y * dir.x);
+                                                float len = sqrtf(up.x * up.x + up.y * up.y + up.z * up.z);
+                                                if (len > EPSILON)
+                                                {
+                                                    up.x /= len;
+                                                    up.y /= len;
+                                                    up.z /= len;
+                                                }
+                                            }
+                                            ptr->render_settings->camera_state = camera->states[cameraIdx];
+                                            ptr->render_settings->camera_state.eye_up = up;
+                                            ptr->render_settings->camera_config = camera->configs[cameraIdx];
+                                            ptr->render_settings->is_projection_rh =
+                                                camera->configs[cameraIdx].is_projection_rh;
+                                            ptr->render_settings->is_orthographic =
+                                                camera->configs[cameraIdx].is_orthographic;
+                                            ptr->render_settings->is_reverse_z = camera->configs[cameraIdx].is_reverse_z;
+                                            ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                                        }
+
+                                        pnanovdb_vec3_t eyePosition =
+                                            pnanovdb_camera_get_eye_position_from_state(&camera->states[cameraIdx]);
+                                        float eyePos[3] = { eyePosition.x, eyePosition.y, eyePosition.z };
+                                        if (ImGui::DragFloat3("Origin", eyePos, 0.1f))
+                                        {
+                                            pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
+                                            state->position.x =
+                                                eyePos[0] + state->eye_direction.x * state->eye_distance_from_position;
+                                            state->position.y =
+                                                eyePos[1] + state->eye_direction.y * state->eye_distance_from_position;
+                                            state->position.z =
+                                                eyePos[2] + state->eye_direction.z * state->eye_distance_from_position;
+                                        }
+
+                                        pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
+                                        float lookAt[3] = { state->position.x, state->position.y, state->position.z };
+                                        if (ImGui::DragFloat3("Look At", lookAt, 0.1f))
+                                        {
+                                            pnanovdb_vec3_t eye = pnanovdb_camera_get_eye_position_from_state(state);
+                                            pnanovdb_vec3_t delta = { lookAt[0] - eye.x, lookAt[1] - eye.y,
+                                                                      lookAt[2] - eye.z };
+                                            float len2 = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
+                                            if (len2 > 0.f)
+                                            {
+                                                float len = pnanovdb_camera_sqrt(len2);
+                                                pnanovdb_vec3_t dir = { delta.x / len, delta.y / len, delta.z / len };
+                                                state->position.x = lookAt[0];
+                                                state->position.y = lookAt[1];
+                                                state->position.z = lookAt[2];
+                                                state->eye_direction = dir;
+                                                state->eye_distance_from_position = len;
+                                            }
+                                            else
+                                            {
+                                                state->position.x = lookAt[0];
+                                                state->position.y = lookAt[1];
+                                                state->position.z = lookAt[2];
+                                                state->eye_distance_from_position = 0.f;
+                                            }
+                                        }
+                                        float upVec[3] = { state->eye_up.x, state->eye_up.y, state->eye_up.z };
+                                        if (ImGui::DragFloat3("Up", upVec, 0.1f))
+                                        {
+                                            state->eye_up.x = upVec[0];
+                                            state->eye_up.y = upVec[1];
+                                            state->eye_up.z = upVec[2];
+                                            float len = sqrtf(state->eye_up.x * state->eye_up.x +
+                                                              state->eye_up.y * state->eye_up.y +
+                                                              state->eye_up.z * state->eye_up.z);
+                                            if (len > EPSILON)
+                                            {
+                                                state->eye_up.x /= len;
+                                                state->eye_up.y /= len;
+                                                state->eye_up.z /= len;
+                                            }
+                                        }
+                                        ImGui::Separator();
+                                        ImGui::DragFloat("Axis Length", &camera->axis_length, 1.f, 0.f, 100.f);
+                                        ImGui::DragFloat("Axis Thickness", &camera->axis_thickness, 0.1f, 0.f, 10.f);
+                                        ImGui::DragFloat(
+                                            "Frustum Line Width", &camera->frustum_line_width, 0.1f, 0.f, 10.f);
+                                        ImGui::DragFloat("Frustum Scale", &camera->frustum_scale, 0.1f, 0.f, 10.f);
+                                        float frustumColor[4] = { (float)camera->frustum_color.x,
+                                                                  (float)camera->frustum_color.y,
+                                                                  (float)camera->frustum_color.z, 1.0f };
+                                        if (ImGui::ColorEdit4("Frustum Color", frustumColor))
+                                        {
+                                            camera->frustum_color.x = frustumColor[0];
+                                            camera->frustum_color.y = frustumColor[1];
+                                            camera->frustum_color.z = frustumColor[2];
+                                        }
+                                        ImGui::Separator();
+                                        ImGui::DragFloat(
+                                            "Near Plane", &camera->configs[cameraIdx].near_plane, 0.1f, 0.01f, 10000.f);
+                                        ImGui::DragFloat(
+                                            "Far Plane", &camera->configs[cameraIdx].far_plane, 10.f, 1.f, 100000.f);
+                                        if (camera->configs[cameraIdx].is_orthographic)
+                                        {
+                                            ImGui::DragFloat("Orthographic Y", &camera->configs[cameraIdx].orthographic_y,
+                                                             0.1f, 0.f, 100000.f);
+                                        }
+                                        else
+                                        {
+                                            ImGui::DragFloat(
+                                                "FOV", &camera->configs[cameraIdx].fov_angle_y, 0.01f, 0.f, M_PI_2);
+                                            ImGui::DragFloat("Aspect Ratio", &camera->configs[cameraIdx].aspect_ratio,
+                                                             0.01f, 0.f, 2.f);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        else if (sViewsTypes == ViewsTypes::GaussianScenes)
+                        {
+                            if (ptr->selected_gaussian_view.empty())
+                            {
+                                ImGui::TextDisabled("No gaussian scene selected");
+                            }
+                            else
+                            {
+                                ptr->shader_params.renderGroup(imgui_instance_user::s_raster2d_shader_group);
+                            }
+                        }
+                        ImGui::EndTabItem();
+                    }
+                    ImGui::EndTabBar();
+                }
+            }
+            ImGui::EndChild();
 
             ImGui::End();
         }
@@ -1176,11 +1265,9 @@ static void showWindows(Instance* ptr, float delta_time)
                             if (isSet)
                                 hasAnyFlags = true;
 
-                            ImGui::PushStyleColor(ImGuiCol_Text, isSet ? IM_COL32(144, 238, 144, 255) : // Light
-                                                                                                        // green for
-                                                                                                        // enabled
-                                                                     IM_COL32(128, 128, 128, 255)); // Gray for
-                                                                                                    // disabled
+                            // Light green or gray
+                            ImU32 textColor = isSet ? IM_COL32(144, 238, 144, 255) : IM_COL32(128, 128, 128, 255);
+                            ImGui::PushStyleColor(ImGuiCol_Text, textColor);
 
                             ImGui::Text("[%s] %s", isSet ? "X" : " ", flagInfo.name);
                             if (ImGui::IsItemHovered())
@@ -1713,7 +1800,7 @@ static void drawCameraViews(Instance* ptr)
                                    ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoFocusOnAppearing |
                                    ImGuiWindowFlags_NoBringToFrontOnFocus;
 
-    ImGui::Begin("Camera Frustum Overlay", nullptr, windowFlags);
+    ImGui::Begin("CameraFrustumOverlay", nullptr, windowFlags);
     {
         ImVec2 windowPos = ImGui::GetWindowPos();
         ImVec2 windowSize = ImGui::GetWindowSize();
@@ -1924,7 +2011,7 @@ ImDrawData* get_draw_data(pnanovdb_imgui_instance_t* instance)
 void Instance::set_default_shader(const std::string& shaderName)
 {
     shader_name = shaderName;
-    pending.shader_name = shaderName;
+    pending.viewport_shader_name = shaderName;
     pnanovdb_editor::CodeEditor::getInstance().setSelectedShader(shaderName);
 }
 }

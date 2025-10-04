@@ -774,6 +774,7 @@ typedef struct pnanovdb_compute_t
 {
     PNANOVDB_REFLECT_INTERFACE();
 
+    void* module;
     const pnanovdb_compiler_t* compiler;
     pnanovdb_compute_shader_interface_t shader_interface;
     pnanovdb_compute_device_interface_t device_interface;
@@ -834,12 +835,11 @@ typedef struct pnanovdb_compute_t
                                                   const char* name,
                                                   pnanovdb_compute_array_t* arr,
                                                   pnanovdb_uint32_t channel_count);
-
-    void* module;
 } pnanovdb_compute_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_compute_t
 PNANOVDB_REFLECT_BEGIN()
+PNANOVDB_REFLECT_VOID_POINTER(module, 0, 0)
 PNANOVDB_REFLECT_POINTER(pnanovdb_compiler_t, compiler, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_compute_shader_interface_t, shader_interface, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_compute_device_interface_t, device_interface, 0, 0)
@@ -857,7 +857,6 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(destroy_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(map_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(unmap_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(compute_array_print_range, 0, 0)
-PNANOVDB_REFLECT_VOID_POINTER(module, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE

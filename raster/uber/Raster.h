@@ -297,10 +297,10 @@ PNANOVDB_FORCE_INLINE void pnanovdb_raster_and_reduce(pnanovdb_uint32_t vidx_off
                                                       pnanovdb_address_t tmp_addr,
                                                       pnanovdb_buf_t out_key_buf,
                                                       pnanovdb_address_t out_key_addr, // 3u * (bbox_count +
-                                                                                       // key_max_count) * 4u bytes
+                                                      // key_max_count) * 4u bytes
                                                       pnanovdb_buf_t out_val4_buf,
                                                       pnanovdb_address_t out_val4_addr, // 4u * (bbox_count +
-                                                                                        // key_max_count) * 4u bytes
+                                                      // key_max_count) * 4u bytes
                                                       pnanovdb_buf_t out_key_count_buf,
                                                       pnanovdb_address_t out_key_count_addr // 4u bytes
 )

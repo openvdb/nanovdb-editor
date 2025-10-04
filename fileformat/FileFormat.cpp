@@ -449,7 +449,7 @@ static pnanovdb_bool_t load_ingp_file(const char* filename,
     std::ifstream file(filename, std::ios::binary);
     if (!file.is_open())
     {
-        printf("Error: Could not open file: %s\n", filename);
+        printf("Could not open file: %s\n", filename);
         return PNANOVDB_FALSE;
     }
 

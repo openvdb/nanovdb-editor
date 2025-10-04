@@ -167,7 +167,7 @@ CPMAddPackage(
 CPMAddPackage(
     NAME ImGuiColorTextEdit
     GITHUB_REPOSITORY goossens/ImGuiColorTextEdit
-    GIT_TAG eb891897d0c2a086bfb6e974b1564d4cd7543e73    # master
+    GIT_TAG 1b3d30c04498deacd210b143a1d7aa21f006a514    # master
     GIT_SHALLOW TRUE
     VERSION 1.0.0
     DOWNLOAD_ONLY YES

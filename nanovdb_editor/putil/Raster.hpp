@@ -173,7 +173,7 @@ bool raster_gaussians(pnanovdb_raster_t* raster,
         }
         pnanovdb_raster_gaussian_data_t* raster_data =
             raster->create_gaussian_data(raster->compute, queue, raster_ctx, means_arr, quat_arr, scale_arr, color_arr,
-                                         spherical_harmonics_arr, opacity_arr, shader_params_arrays);
+                                         spherical_harmonics_arr, opacity_arr, shader_params_arrays, 1u);
         *gaussian_data = raster_data;
 
         if (raster_context == nullptr)
@@ -339,7 +339,13 @@ bool get_gaussian_data(pnanovdb_raster_t* raster,
                        pnanovdb_raster_shader_params_t* raster_params,
                        pnanovdb_raster_context_t** raster_context)
 {
+    // temp array only to pass shader params, does not allocate memory
+    pnanovdb_compute_array_t* shader_params_array = new pnanovdb_compute_array_t();
+    shader_params_array->element_count = 1u;
+    shader_params_array->element_size = raster_params->data_type->element_size;
+    shader_params_array->data = (void*)raster_params;
+
     return raster_gaussians(raster, compute, queue, 0.f, arrays_gaussian, nullptr, gaussian_data, raster_context,
-                            nullptr, nullptr, nullptr, nullptr);
+                            &shader_params_array, nullptr, nullptr, nullptr);
 }
 }

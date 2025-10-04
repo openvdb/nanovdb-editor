@@ -17,7 +17,7 @@ void remove_shader(const char* filePath)
 {
     if (filePath == nullptr)
     {
-        printf("Error: Could not remove cached shader file, path is empty\n");
+        printf("Could not remove cached shader file, path is empty\n");
         return;
     }
     const std::string shaderFilePath = getShaderCacheFilePath(filePath) + SHADER_EXT;
@@ -30,7 +30,7 @@ bool save_shader(const char* filePath, ShaderData& shader)
 {
     if (filePath == nullptr)
     {
-        printf("Error: Could not save shader to a file, path is empty\n");
+        printf("Could not save shader to a file, path is empty\n");
         return false;
     }
     shader.computeShader.filePath = getShaderFilePath(filePath);
@@ -46,7 +46,7 @@ bool save_shader(const char* filePath, ShaderData& shader)
         }
         else
         {
-            printf("Error: file '%s' could not be saved\n", shaderFilePath.c_str());
+            printf("File '%s' could not be saved\n", shaderFilePath.c_str());
         }
         return true;
     }

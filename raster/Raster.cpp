@@ -584,7 +584,7 @@ pnanovdb_compute_array_t* raster_to_nanovdb(const pnanovdb_compute_t* compute,
     // note: colors duplicate for now, since no SH in interface
     pnanovdb_raster_gaussian_data_t* data =
         create_gaussian_data(compute, queue, cast(ctx), means, quaternions, scales, colors, spherical_harmonics,
-                             opacities, shader_params_arrays);
+                             opacities, shader_params_arrays, shader_param_count);
 
     upload_gaussian_data(compute, queue, cast(ctx), data);
 
