@@ -188,7 +188,6 @@ class pnanovdb_EditorImpl(Structure):
     """
 
     _fields_ = [
-        ("module", c_void_p),
         ("compiler", POINTER(pnanovdb_Compiler)),
         ("compute", POINTER(pnanovdb_Compute)),
         ("editor_worker", c_void_p),
@@ -223,20 +222,13 @@ class Editor:
         # Assign module handle for editor; mirror pnanovdb_editor_load
         self._editor.contents.module = self._lib._handle
 
-        # Try init_impl; fall back to init if not available or returns false
         init_impl = getattr(self._editor.contents, "init_impl", None)
-        try:
-            if init_impl:
-                result = init_impl(
-                    self._editor,
-                    compute.get_compute(),
-                    compiler.get_compiler(),
-                )
-                if result == 0:
-                    self._editor.contents.init(self._editor)
-            else:
-                self._editor.contents.init(self._editor)
-        except (OSError, ValueError, RuntimeError):
+        result = init_impl(
+            self._editor,
+            compute.get_compute(),
+            compiler.get_compiler(),
+        )
+        if result == 0:
             self._editor.contents.init(self._editor)
 
     def shutdown(self) -> None:

@@ -52,7 +52,7 @@ typedef struct pnanovdb_editor_t
     void(PNANOVDB_ABI* add_nanovdb)(pnanovdb_editor_t* editor, pnanovdb_compute_array_t* array);
     void(PNANOVDB_ABI* add_array)(pnanovdb_editor_t* editor, pnanovdb_compute_array_t* array);
     void(PNANOVDB_ABI* add_gaussian_data)(pnanovdb_editor_t* editor,
-                                          pnanovdb_raster_t* raster,
+                                          pnanovdb_raster_context_t* raster_ctx,
                                           pnanovdb_compute_queue_t* queue,
                                           pnanovdb_raster_gaussian_data_t* data);
     void(PNANOVDB_ABI* add_camera)(pnanovdb_editor_t* editor, pnanovdb_camera_t* camera);
@@ -120,7 +120,7 @@ static inline void pnanovdb_editor_load(pnanovdb_editor_t* editor,
 
     editor->module = editor_module;
 
-    if (!editor->init_impl(editor, compute, compiler))
+    if (editor->init_impl(editor, compute, compiler))
     {
         editor->init(editor);
     }
@@ -134,9 +134,6 @@ static inline void pnanovdb_editor_free(pnanovdb_editor_t* editor)
     }
 
     editor->shutdown(editor);
-
-    free(editor->impl);
-    editor->impl = NULL;
 
     pnanovdb_free_library(editor->module);
 }

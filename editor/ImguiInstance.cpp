@@ -131,7 +131,7 @@ static const char* CONSOLE = "Output";
 static const char* SHADER_PARAMS = "Params";
 static const char* BENCHMARK = "Benchmark";
 static const char* FILE_HEADER = "File Header";
-static const char* VIEWS = "Views";
+static const char* SCENE = "Scene";
 
 enum class ViewsTypes
 {
@@ -378,7 +378,7 @@ static void initializeDocking()
         ImGui::DockBuilderDockWindow(CODE_EDITOR, dock_id_right);
         ImGui::DockBuilderDockWindow(PROFILER, dock_id_right);
         ImGui::DockBuilderDockWindow(FILE_HEADER, dock_id_right);
-        ImGui::DockBuilderDockWindow(VIEWS, dock_id_right);
+        ImGui::DockBuilderDockWindow(SCENE, dock_id_right);
 
         ImGuiID dock_id_bottom = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Down, 0.f, nullptr, &dockspace_id);
         ImGui::DockBuilderSetNodeSize(dock_id_bottom, ImVec2(window_width, bottom_dock_height));
@@ -417,7 +417,7 @@ static void createMenu(Instance* ptr)
             ImGui::MenuItem(FILE_HEADER, "", &ptr->window.show_file_header);
             ImGui::MenuItem(CONSOLE, "", &ptr->window.show_console);
             ImGui::MenuItem(SHADER_PARAMS, "", &ptr->window.show_shader_params);
-            ImGui::MenuItem(VIEWS, "", &ptr->window.show_views);
+            ImGui::MenuItem(SCENE, "", &ptr->window.show_scene);
             ImGui::MenuItem(BENCHMARK, "", &ptr->window.show_benchmark);
             ImGui::EndMenu();
         }
@@ -595,17 +595,17 @@ static void showWindows(Instance* ptr, float delta_time)
                     {
                         if (ImGui::Selectable(shader.c_str()))
                         {
-                            ptr->pending.shader_name = shader;
+                            ptr->pending.viewport_shader_name = shader;
                         }
                     }
                     ImGui::EndCombo();
                 }
-                ImGui::InputText("##viewport_shader_name", &ptr->pending.shader_name);
+                ImGui::InputText("##viewport_shader_name", &ptr->pending.viewport_shader_name);
                 ImGui::SameLine();
                 if (ImGui::Button("Update"))
                 {
-                    pnanovdb_editor::CodeEditor::getInstance().setSelectedShader(ptr->pending.shader_name);
-                    ptr->shader_name = ptr->pending.shader_name;
+                    pnanovdb_editor::CodeEditor::getInstance().setSelectedShader(ptr->pending.viewport_shader_name);
+                    ptr->shader_name = ptr->pending.viewport_shader_name;
                     ptr->pending.update_shader = true;
                 }
                 ImGui::EndGroup();
@@ -892,18 +892,22 @@ static void showWindows(Instance* ptr, float delta_time)
         }
     }
 
-    if (ptr->window.show_views)
+    if (ptr->window.show_scene)
     {
-        if (ImGui::Begin(VIEWS, &ptr->window.show_views))
+        if (ImGui::Begin(SCENE, &ptr->window.show_scene))
         {
             ImVec2 fullAvail = ImGui::GetContentRegionAvail();
-            static float topHeight = fullAvail.y * 0.5f; // half of available height
+            static float topHeight = -1.f; // will be initialized on first frame
             const float minTop = 60.f;
             const float minBottom = 80.f;
+            if (topHeight < 0.f && fullAvail.y > minTop + minBottom)
+            {
+                topHeight = fullAvail.y * 0.333f;
+            }
             topHeight = std::max(minTop, std::min(topHeight, fullAvail.y - minTop));
 
             // Top: Tree view
-            if (ImGui::BeginChild("##ViewsTop", ImVec2(0, topHeight), true))
+            if (ImGui::BeginChild("##SceneTop", ImVec2(0, topHeight), true))
             {
                 if (ImGui::TreeNodeEx("Cameras", ImGuiTreeNodeFlags_DefaultOpen))
                 {
@@ -959,8 +963,16 @@ static void showWindows(Instance* ptr, float delta_time)
                         for (auto& gaussianPair : *ptr->gaussian_views)
                         {
                             const std::string& gaussianName = gaussianPair.first;
-                            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
                             bool isSelected = (ptr->selected_gaussian_view == gaussianName);
+
+                            if (ImGui::RadioButton(("##Radio" + gaussianName).c_str(), isSelected))
+                            {
+                                ptr->selected_gaussian_view = gaussianName;
+                                sViewsTypes = ViewsTypes::GaussianScenes;
+                            }
+                            ImGui::SameLine();
+
+                            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
                             if (isSelected)
                             {
                                 flags |= ImGuiTreeNodeFlags_Selected;
@@ -985,13 +997,13 @@ static void showWindows(Instance* ptr, float delta_time)
             bb.Max = bb.Min + ImVec2(fullAvail.x, 2.f);
             float bottomHeight = fullAvail.y - topHeight;
             ImGui::SplitterBehavior(
-                bb, ImGui::GetID("##ViewsSplitter"), ImGuiAxis_Y, &topHeight, &bottomHeight, minTop, minBottom);
+                bb, ImGui::GetID("##SceneSplitter"), ImGuiAxis_Y, &topHeight, &bottomHeight, minTop, minBottom);
             ImGui::Spacing();
 
             // Bottom: Property tab
-            if (ImGui::BeginChild("##ViewsBottom", ImVec2(0, 0), true))
+            if (ImGui::BeginChild("##SceneBottom", ImVec2(0, 0), true))
             {
-                if (ImGui::BeginTabBar("##ViewsPropsTabs"))
+                if (ImGui::BeginTabBar("##ScenePropsTabs"))
                 {
                     if (ImGui::BeginTabItem("Property"))
                     {
@@ -1153,7 +1165,7 @@ static void showWindows(Instance* ptr, float delta_time)
                                 }
                             }
                         }
-                        else // ViewsTypes::GaussianScenes
+                        else if (sViewsTypes == ViewsTypes::GaussianScenes)
                         {
                             if (ptr->selected_gaussian_view.empty())
                             {
@@ -1161,11 +1173,7 @@ static void showWindows(Instance* ptr, float delta_time)
                             }
                             else
                             {
-                                // TODO: select shader group based on the selected gaussian scene
-                                if (ImGui::Button("Show"))
-                                {
-                                }
-                                ptr->shader_params.renderGroup("raster/raster2d_group");
+                                ptr->shader_params.renderGroup(imgui_instance_user::s_raster2d_shader_group);
                             }
                         }
                         ImGui::EndTabItem();
@@ -2003,7 +2011,7 @@ ImDrawData* get_draw_data(pnanovdb_imgui_instance_t* instance)
 void Instance::set_default_shader(const std::string& shaderName)
 {
     shader_name = shaderName;
-    pending.shader_name = shaderName;
+    pending.viewport_shader_name = shaderName;
     pnanovdb_editor::CodeEditor::getInstance().setSelectedShader(shaderName);
 }
 }

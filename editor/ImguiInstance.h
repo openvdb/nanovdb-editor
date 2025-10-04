@@ -32,6 +32,7 @@
 namespace imgui_instance_user
 {
 static const char* s_render_settings_default = "default";
+static const char* s_raster2d_shader_group = "raster/raster2d_group";
 
 enum class ViewportOption : int
 {
@@ -68,7 +69,8 @@ struct PendingState
     bool save_camera = true; // save default camera first
     bool save_render_settings = false;
     bool load_render_settings = false;
-    std::string shader_name = "";
+    std::string viewport_shader_name = "";
+    std::string viewport_gaussian_view = "";
     bool update_memory_stats = false;
     bool update_raster = false;
     bool find_shader_directory = false;
@@ -95,7 +97,7 @@ struct ProgressBar
 struct WindowState
 {
     bool show_profiler = false;
-    bool show_code_editor = true;
+    bool show_code_editor = false;
     bool show_console = true;
     bool show_viewport_settings = true;
     bool show_render_settings = true;
@@ -103,7 +105,7 @@ struct WindowState
     bool show_shader_params = true;
     bool show_benchmark = false;
     bool show_file_header = false;
-    bool show_views = true;
+    bool show_scene = true;
 };
 
 struct UniformState
@@ -132,6 +134,7 @@ struct Instance
     std::string raster_filepath = "";
     float raster_voxels_per_unit = 128.f;
 
+    // Shader Params window
     ShaderParams shader_params;
     std::string shader_group = "";
 
@@ -156,6 +159,8 @@ struct Instance
 
     std::map<std::string, pnanovdb_raster_gaussian_data_t*>* gaussian_views = nullptr;
     std::string selected_gaussian_view = "";
+    std::string raster_shader_group = s_raster2d_shader_group;
+    ShaderParams raster_shader_params;
 
     void set_default_shader(const std::string& shaderName);
 

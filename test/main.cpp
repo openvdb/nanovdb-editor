@@ -37,6 +37,8 @@
 // #define TEST_SVRASTER
 // #define TEST_E57
 #define TEST_CAMERA
+// #define TEST_H264
+
 struct constants_t
 {
     int magic_number;
@@ -45,6 +47,7 @@ struct constants_t
     int pad3;
 };
 
+#ifdef TEST_H264
 #include <wels/codec_api.h>
 #include <wels/codec_app_def.h>
 #include <wels/codec_def.h>
@@ -202,6 +205,7 @@ void pnanovdb_compute_log_print(pnanovdb_compute_log_level_t level, const char* 
 
     va_end(args);
 }
+#endif
 
 struct NanoVDBEditorArgs : public argparse::Args
 {
@@ -209,7 +213,7 @@ struct NanoVDBEditorArgs : public argparse::Args
 
 int main(int argc, char* argv[])
 {
-#if 0
+#ifdef TEST_H264
     test_openh264();
     return 0;
 #endif
@@ -450,12 +454,12 @@ int main(int argc, char* argv[])
     raster_params.name = "ficus";
     pnanovdb_raster::raster_file(&raster, &compute, queue, raster_file, 0.f, nullptr, &gaussian_data, &raster_ctx,
                                  &raster2d_shader_params_array, nullptr, nullptr);
-    editor.add_gaussian_data(&editor, &raster, queue, gaussian_data);
+    editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data);
 
     raster_params_garden.name = "garden";
     pnanovdb_raster::raster_file(&raster, &compute, queue, raster_file_garden, 0.f, nullptr, &gaussian_data_garden,
                                  &raster_ctx, &raster2d_shader_params_array_garden, nullptr, nullptr);
-    editor.add_gaussian_data(&editor, &raster, queue, gaussian_data_garden);
+    editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data_garden);
 #        endif
 
     raster_params.eps2d = 0.5f;
@@ -485,12 +489,12 @@ int main(int argc, char* argv[])
     // }
 
 #    ifdef TEST_RASTER_2D
-    raster.destroy_context(raster.compute, queue, raster_ctx);
-    raster_ctx = nullptr;
     raster.destroy_gaussian_data(raster.compute, queue, gaussian_data);
     gaussian_data = nullptr;
     raster.destroy_gaussian_data(raster.compute, queue, gaussian_data_garden);
     gaussian_data_garden = nullptr;
+    raster.destroy_context(raster.compute, queue, raster_ctx);
+    raster_ctx = nullptr;
 
     pnanovdb_raster_free(&raster);
 #    endif
