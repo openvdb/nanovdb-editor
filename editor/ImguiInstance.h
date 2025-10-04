@@ -53,6 +53,14 @@ struct ViewportSettings
     std::string render_settings_name = s_render_settings_default;
 };
 
+struct GaussianView
+{
+    pnanovdb_raster_gaussian_data_t* gaussian_data;
+    pnanovdb_raster_shader_params_t* shader_params;
+    pnanovdb_raster_context_t* raster_ctx;
+    pnanovdb_imgui_settings_render_t render_settings;
+};
+
 struct PendingState
 {
     std::atomic<bool> update_shader = true; // needs to be initialized with true to map the shader after init
@@ -134,9 +142,8 @@ struct Instance
     std::string raster_filepath = "";
     float raster_voxels_per_unit = 128.f;
 
-    // Shader Params window
     ShaderParams shader_params;
-    std::string shader_group = "";
+    std::string shader_group = "";  // selected group in shader params window
 
     ImVec2 dialog_size{ 768.f, 512.f };
 
@@ -157,10 +164,9 @@ struct Instance
     std::string selected_camera_frustum = "";
     std::map<std::string, int> camera_frustum_index; // map of camera view name to state index for frustum overlay
 
-    std::map<std::string, pnanovdb_raster_gaussian_data_t*>* gaussian_views = nullptr;
+    std::map<std::string, GaussianView>* gaussian_views = nullptr;
     std::string selected_gaussian_view = "";
     std::string raster_shader_group = s_raster2d_shader_group;
-    ShaderParams raster_shader_params;
 
     void set_default_shader(const std::string& shaderName);
 
