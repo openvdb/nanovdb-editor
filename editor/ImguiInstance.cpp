@@ -123,7 +123,7 @@ void destroy(pnanovdb_imgui_instance_t* instance)
 }
 
 static const char* VIEWPORT_SETTINGS = "Viewport";
-static const char* RENDER_SETTINGS = "Render";
+static const char* RENDER_SETTINGS = "Render Settings";
 static const char* COMPILER_SETTINGS = "Compiler";
 static const char* PROFILER = "Profiler";
 static const char* CODE_EDITOR = "Shader Editor";
@@ -808,72 +808,83 @@ static void showWindows(Instance* ptr, float delta_time)
             ImGui::EndGroup();
 
             const std::string& target_name = is_group_mode ? ptr->shader_group : shader_name;
-            if (ptr->shader_params.isJsonLoaded(target_name, is_group_mode))
+            if (!target_name.empty())
             {
-                if (ImGui::Button("Reload JSON"))
+                if (ptr->shader_params.isJsonLoaded(target_name, is_group_mode))
                 {
-                    if (is_group_mode)
+                    if (ImGui::Button("Reload JSON"))
                     {
-                        if (ptr->shader_params.loadGroup(target_name, true))
+                        if (is_group_mode)
                         {
-                            pnanovdb_editor::Console::getInstance().addLog(
-                                "Group params '%s' updated", target_name.c_str());
+                            if (ptr->shader_params.loadGroup(target_name, true))
+                            {
+                                pnanovdb_editor::Console::getInstance().addLog(
+                                    "Group params '%s' updated", target_name.c_str());
+                            }
+                            else
+                            {
+                                pnanovdb_editor::Console::getInstance().addLog(
+                                    "Failed to reload group params '%s'", target_name.c_str());
+                            }
                         }
                         else
                         {
-                            pnanovdb_editor::Console::getInstance().addLog(
-                                "Failed to reload group params '%s'", target_name.c_str());
+                            pnanovdb_editor::CodeEditor::getInstance().saveShaderParams();
+                            if (ptr->shader_params.load(target_name, true))
+                            {
+                                pnanovdb_editor::Console::getInstance().addLog(
+                                    "Shader params for '%s' updated", target_name.c_str());
+                            }
+                            else
+                            {
+                                pnanovdb_editor::Console::getInstance().addLog(
+                                    "Failed to reload shader params for '%s'", target_name.c_str());
+                            }
                         }
                     }
-                    else
-                    {
-                        pnanovdb_editor::CodeEditor::getInstance().saveShaderParams();
-                        if (ptr->shader_params.load(target_name, true))
-                        {
-                            pnanovdb_editor::Console::getInstance().addLog(
-                                "Shader params for '%s' updated", target_name.c_str());
-                        }
-                        else
-                        {
-                            pnanovdb_editor::Console::getInstance().addLog(
-                                "Failed to reload shader params for '%s'", target_name.c_str());
-                        }
-                    }
-                }
-            }
-            else
-            {
-                if (ImGui::Button("Create JSON"))
-                {
-                    if (ptr->pending.shader_selection_mode == ShaderSelectionMode::UseShaderGroup)
-                    {
-                        ptr->shader_params.createGroup(target_name);
-                    }
-                    else
-                    {
-                        ptr->shader_params.create(target_name);
-                        pnanovdb_editor::CodeEditor::getInstance().updateViewer();
-                    }
-                }
-            }
-            ImGui::Separator();
-
-            if (ptr->pending.shader_selection_mode == ShaderSelectionMode::UseShaderGroup)
-            {
-                ptr->shader_params.renderGroup(target_name);
-            }
-            else
-            {
-                if (ptr->shader_params.isJsonLoaded(target_name))
-                {
-                    ptr->shader_params.render(target_name);
                 }
                 else
                 {
-                    ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(191, 97, 106, 255)); // Red color
-                    ImGui::TextWrapped("Shader params JSON is missing");
-                    ImGui::PopStyleColor();
+                    if (ImGui::Button("Create JSON"))
+                    {
+                        if (ptr->pending.shader_selection_mode == ShaderSelectionMode::UseShaderGroup)
+                        {
+                            ptr->shader_params.createGroup(target_name);
+                        }
+                        else
+                        {
+                            ptr->shader_params.create(target_name);
+                            pnanovdb_editor::CodeEditor::getInstance().updateViewer();
+                        }
+                    }
                 }
+            }
+
+            ImGui::Separator();
+
+            if (!target_name.empty())
+            {
+                if (ptr->pending.shader_selection_mode == ShaderSelectionMode::UseShaderGroup)
+                {
+                    ptr->shader_params.renderGroup(target_name);
+                }
+                else
+                {
+                    if (ptr->shader_params.isJsonLoaded(target_name))
+                    {
+                        ptr->shader_params.render(target_name);
+                    }
+                    else
+                    {
+                        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(191, 97, 106, 255)); // Red color
+                        ImGui::TextWrapped("Shader params JSON is missing");
+                        ImGui::PopStyleColor();
+                    }
+                }
+            }
+            else
+            {
+                ImGui::TextDisabled("No shader selected");
             }
 
             ImGui::End();
@@ -890,13 +901,16 @@ static void showWindows(Instance* ptr, float delta_time)
         {
             ImVec2 fullAvail = ImGui::GetContentRegionAvail();
             static float topHeight = -1.f; // will be initialized on first frame
-            const float minTop = 60.f;
+            const float minTop = 100.f;
             const float minBottom = 80.f;
             if (topHeight < 0.f && fullAvail.y > minTop + minBottom)
             {
                 topHeight = fullAvail.y * 0.333f;
             }
-            topHeight = std::max(minTop, std::min(topHeight, fullAvail.y - minTop));
+            else if (fullAvail.y > 0)
+            {
+                topHeight = std::max(minTop, std::min(topHeight, fullAvail.y - minTop));
+            }
 
             // Top: Tree view
             if (ImGui::BeginChild("##SceneTop", ImVec2(0, topHeight), true))
