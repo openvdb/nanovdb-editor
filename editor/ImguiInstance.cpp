@@ -133,14 +133,6 @@ static const char* BENCHMARK = "Benchmark";
 static const char* FILE_HEADER = "File Header";
 static const char* SCENE = "Scene";
 
-enum class ViewsTypes
-{
-    Cameras = 0,
-    GaussianScenes = 1
-};
-
-static ViewsTypes sViewsTypes = ViewsTypes::Cameras;
-
 static const char* getGridTypeName(uint32_t gridType)
 {
     switch (gridType)
@@ -941,7 +933,7 @@ static void showWindows(Instance* ptr, float delta_time)
                             if (ImGui::IsItemClicked())
                             {
                                 ptr->selected_camera_frustum = cameraName;
-                                sViewsTypes = ViewsTypes::Cameras;
+                                ptr->selected_view_type = ViewsTypes::Cameras;
                             }
                         }
                     }
@@ -968,7 +960,7 @@ static void showWindows(Instance* ptr, float delta_time)
                             if (ImGui::RadioButton(("##Radio" + gaussianName).c_str(), isSelected))
                             {
                                 ptr->pending.viewport_gaussian_view = gaussianName;
-                                sViewsTypes = ViewsTypes::GaussianScenes;
+                                ptr->selected_view_type = ViewsTypes::GaussianScenes;
                             }
                             ImGui::SameLine();
 
@@ -981,7 +973,7 @@ static void showWindows(Instance* ptr, float delta_time)
                             if (ImGui::IsItemClicked())
                             {
                                 ptr->pending.viewport_gaussian_view = gaussianName;
-                                sViewsTypes = ViewsTypes::GaussianScenes;
+                                ptr->selected_view_type = ViewsTypes::GaussianScenes;
                             }
                         }
                     }
@@ -1003,7 +995,7 @@ static void showWindows(Instance* ptr, float delta_time)
             // Bottom: Property tab
             if (ImGui::BeginChild("##SceneBottom", ImVec2(0, 0), true))
             {
-                if (sViewsTypes == ViewsTypes::Cameras)
+                if (ptr->selected_view_type == ViewsTypes::Cameras)
                 {
                     if (ptr->selected_camera_frustum.empty())
                     {
@@ -1161,7 +1153,7 @@ static void showWindows(Instance* ptr, float delta_time)
                         }
                     }
                 }
-                else if (sViewsTypes == ViewsTypes::GaussianScenes)
+                else if (ptr->selected_view_type == ViewsTypes::GaussianScenes)
                 {
                     if (ptr->selected_gaussian_view.empty())
                     {

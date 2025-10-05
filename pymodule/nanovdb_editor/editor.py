@@ -162,7 +162,7 @@ class pnanovdb_Editor(Structure):
             "add_gaussian_data",
             CFUNCTYPE(None, c_void_p, c_void_p, c_void_p, c_void_p),
         ),  # raster, queue, gaussian
-        ("add_camera", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Camera))),
+        ("update_camera", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Camera))),
         (
             "add_camera_view",
             CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_CameraView)),
@@ -235,9 +235,9 @@ class Editor:
         shutdown_func = self._editor.contents.shutdown
         shutdown_func(self._editor)
 
-    def add_camera(self, camera: pnanovdb_Camera) -> None:
-        add_camera_func = self._editor.contents.add_camera
-        add_camera_func(self._editor, pointer(camera))
+    def update_camera(self, camera: pnanovdb_Camera) -> None:
+        udpate_camera_func = self._editor.contents.update_camera
+        udpate_camera_func(self._editor, pointer(camera))
 
     def add_nanovdb(self, array: pnanovdb_ComputeArray) -> None:
         add_nanovdb_func = self._editor.contents.add_nanovdb

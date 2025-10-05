@@ -202,7 +202,7 @@ int main(int argc, char* argv[])
     camera.state.eye_direction = { -0.012344, 0.959868, -0.280182 };
     camera.state.eye_up = { 0.000000, 1.000000, 0.000000 };
     camera.state.eye_distance_from_position = -2.111028;
-    editor.add_camera(&editor, &camera);
+    editor.update_camera(&editor, &camera);
 
     const char* raster_file = "../../data/ficus.ply";
     const char* raster_file_garden = "../../data/garden.ply";

@@ -55,7 +55,7 @@ typedef struct pnanovdb_editor_t
                                           pnanovdb_raster_context_t* raster_ctx,
                                           pnanovdb_compute_queue_t* queue,
                                           pnanovdb_raster_gaussian_data_t* data);
-    void(PNANOVDB_ABI* add_camera)(pnanovdb_editor_t* editor, pnanovdb_camera_t* camera);
+    void(PNANOVDB_ABI* update_camera)(pnanovdb_editor_t* editor, pnanovdb_camera_t* camera);
     void(PNANOVDB_ABI* add_camera_view)(pnanovdb_editor_t* editor, pnanovdb_camera_view_t* camera);
     void(PNANOVDB_ABI* add_shader_params)(pnanovdb_editor_t* editor,
                                           void* params,
@@ -76,7 +76,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(stop, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_nanovdb, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_gaussian_data, 0, 0)
-PNANOVDB_REFLECT_FUNCTION_POINTER(add_camera, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(update_camera, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_camera_view, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_shader_params, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(sync_shader_params, 0, 0)

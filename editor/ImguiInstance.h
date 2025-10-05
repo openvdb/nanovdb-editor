@@ -53,12 +53,18 @@ struct ViewportSettings
     std::string render_settings_name = s_render_settings_default;
 };
 
+enum class ViewsTypes
+{
+    Cameras = 0,
+    GaussianScenes = 1
+};
+
 struct GaussianView
 {
     pnanovdb_raster_gaussian_data_t* gaussian_data;
     pnanovdb_raster_shader_params_t* shader_params;
     pnanovdb_raster_context_t* raster_ctx;
-    pnanovdb_imgui_settings_render_t render_settings;
+    pnanovdb_imgui_settings_render_t* render_settings;
 };
 
 struct PendingState
@@ -159,6 +165,8 @@ struct Instance
 
     std::shared_ptr<pnanovdb_compute_array_t> nanovdb_array = nullptr;
 
+    ViewsTypes selected_view_type = ViewsTypes::GaussianScenes;
+
     std::map<std::string, pnanovdb_camera_view_t*>* camera_views = nullptr;
     std::string selected_camera_view = "";
     std::string selected_camera_frustum = "";
@@ -167,6 +175,7 @@ struct Instance
     std::map<std::string, GaussianView>* gaussian_views = nullptr;
     std::string selected_gaussian_view = "";
     std::string raster_shader_group = s_raster2d_shader_group;
+    std::map<std::string, pnanovdb_imgui_settings_render_t> views_render_settings;
 
     void set_default_shader(const std::string& shaderName);
 
