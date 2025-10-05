@@ -66,5 +66,3 @@ TEST(NanoVDBEditor, EditorStartStopHeadless)
 
     SUCCEED();
 }
-
-

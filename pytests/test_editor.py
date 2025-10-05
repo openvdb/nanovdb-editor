@@ -30,4 +30,3 @@ def test_editor_start_stop():
         sleep(0.5)
     finally:
         editor.stop()
-

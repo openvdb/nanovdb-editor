@@ -149,7 +149,7 @@ struct Instance
     float raster_voxels_per_unit = 128.f;
 
     ShaderParams shader_params;
-    std::string shader_group = "";  // selected group in shader params window
+    std::string shader_group = ""; // selected group in shader params window
 
     ImVec2 dialog_size{ 768.f, 512.f };
 

@@ -48,9 +48,9 @@ struct constants_t
 };
 
 #ifdef TEST_H264
-#include <wels/codec_api.h>
-#include <wels/codec_app_def.h>
-#include <wels/codec_def.h>
+#    include <wels/codec_api.h>
+#    include <wels/codec_app_def.h>
+#    include <wels/codec_def.h>
 
 void test_openh264()
 {

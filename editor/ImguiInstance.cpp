@@ -1018,9 +1018,9 @@ static void showWindows(Instance* ptr, float delta_time)
                     else
                     {
                         auto it = ptr->camera_views ? ptr->camera_views->find(ptr->selected_camera_frustum) :
-                                                        std::map<std::string, pnanovdb_camera_view_t*>().end();
+                                                      std::map<std::string, pnanovdb_camera_view_t*>().end();
                         if (it != (ptr->camera_views ? ptr->camera_views->end() :
-                                                        std::map<std::string, pnanovdb_camera_view_t*>().end()))
+                                                       std::map<std::string, pnanovdb_camera_view_t*>().end()))
                         {
                             pnanovdb_camera_view_t* camera = it->second;
                             if (camera)
@@ -1030,8 +1030,8 @@ static void showWindows(Instance* ptr, float delta_time)
                                 if (maxIndex > 0)
                                 {
                                     ImGui::SliderInt("Camera Index",
-                                                        &ptr->camera_frustum_index[ptr->selected_camera_frustum],
-                                                        0, maxIndex, "%d");
+                                                     &ptr->camera_frustum_index[ptr->selected_camera_frustum], 0,
+                                                     maxIndex, "%d");
                                 }
                                 else
                                 {
@@ -1042,17 +1042,14 @@ static void showWindows(Instance* ptr, float delta_time)
                                 if (ImGui::Button("Set Viewport Camera"))
                                 {
                                     pnanovdb_vec3_t& up = camera->states[cameraIdx].eye_up;
-                                    if (camera->states[cameraIdx].eye_up.x !=
-                                            ptr->render_settings->camera_state.eye_up.x ||
-                                        camera->states[cameraIdx].eye_up.y !=
-                                            ptr->render_settings->camera_state.eye_up.y ||
-                                        camera->states[cameraIdx].eye_up.z !=
-                                            ptr->render_settings->camera_state.eye_up.z)
+                                    if (camera->states[cameraIdx].eye_up.x != ptr->render_settings->camera_state.eye_up.x ||
+                                        camera->states[cameraIdx].eye_up.y != ptr->render_settings->camera_state.eye_up.y ||
+                                        camera->states[cameraIdx].eye_up.z != ptr->render_settings->camera_state.eye_up.z)
                                     {
                                         pnanovdb_vec3_t& dir = camera->states[cameraIdx].eye_direction;
                                         pnanovdb_vec3_t right = { dir.y * up.z - dir.z * up.y,
-                                                                    dir.z * up.x - dir.x * up.z,
-                                                                    dir.x * up.y - dir.y * up.x };
+                                                                  dir.z * up.x - dir.x * up.z,
+                                                                  dir.x * up.y - dir.y * up.x };
                                         up.x = -(right.y * dir.z - right.z * dir.y);
                                         up.y = -(right.z * dir.x - right.x * dir.z);
                                         up.z = -(right.x * dir.y - right.y * dir.x);
@@ -1067,10 +1064,8 @@ static void showWindows(Instance* ptr, float delta_time)
                                     ptr->render_settings->camera_state = camera->states[cameraIdx];
                                     ptr->render_settings->camera_state.eye_up = up;
                                     ptr->render_settings->camera_config = camera->configs[cameraIdx];
-                                    ptr->render_settings->is_projection_rh =
-                                        camera->configs[cameraIdx].is_projection_rh;
-                                    ptr->render_settings->is_orthographic =
-                                        camera->configs[cameraIdx].is_orthographic;
+                                    ptr->render_settings->is_projection_rh = camera->configs[cameraIdx].is_projection_rh;
+                                    ptr->render_settings->is_orthographic = camera->configs[cameraIdx].is_orthographic;
                                     ptr->render_settings->is_reverse_z = camera->configs[cameraIdx].is_reverse_z;
                                     ptr->render_settings->sync_camera = PNANOVDB_TRUE;
                                 }
@@ -1094,8 +1089,7 @@ static void showWindows(Instance* ptr, float delta_time)
                                 if (ImGui::DragFloat3("Look At", lookAt, 0.1f))
                                 {
                                     pnanovdb_vec3_t eye = pnanovdb_camera_get_eye_position_from_state(state);
-                                    pnanovdb_vec3_t delta = { lookAt[0] - eye.x, lookAt[1] - eye.y,
-                                                                lookAt[2] - eye.z };
+                                    pnanovdb_vec3_t delta = { lookAt[0] - eye.x, lookAt[1] - eye.y, lookAt[2] - eye.z };
                                     float len2 = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
                                     if (len2 > 0.f)
                                     {
@@ -1121,9 +1115,9 @@ static void showWindows(Instance* ptr, float delta_time)
                                     state->eye_up.x = upVec[0];
                                     state->eye_up.y = upVec[1];
                                     state->eye_up.z = upVec[2];
-                                    float len = sqrtf(state->eye_up.x * state->eye_up.x +
-                                                        state->eye_up.y * state->eye_up.y +
-                                                        state->eye_up.z * state->eye_up.z);
+                                    float len =
+                                        sqrtf(state->eye_up.x * state->eye_up.x + state->eye_up.y * state->eye_up.y +
+                                              state->eye_up.z * state->eye_up.z);
                                     if (len > EPSILON)
                                     {
                                         state->eye_up.x /= len;
@@ -1134,12 +1128,10 @@ static void showWindows(Instance* ptr, float delta_time)
                                 ImGui::Separator();
                                 ImGui::DragFloat("Axis Length", &camera->axis_length, 1.f, 0.f, 100.f);
                                 ImGui::DragFloat("Axis Thickness", &camera->axis_thickness, 0.1f, 0.f, 10.f);
-                                ImGui::DragFloat(
-                                    "Frustum Line Width", &camera->frustum_line_width, 0.1f, 0.f, 10.f);
+                                ImGui::DragFloat("Frustum Line Width", &camera->frustum_line_width, 0.1f, 0.f, 10.f);
                                 ImGui::DragFloat("Frustum Scale", &camera->frustum_scale, 0.1f, 0.f, 10.f);
-                                float frustumColor[4] = { (float)camera->frustum_color.x,
-                                                            (float)camera->frustum_color.y,
-                                                            (float)camera->frustum_color.z, 1.0f };
+                                float frustumColor[4] = { (float)camera->frustum_color.x, (float)camera->frustum_color.y,
+                                                          (float)camera->frustum_color.z, 1.0f };
                                 if (ImGui::ColorEdit4("Frustum Color", frustumColor))
                                 {
                                     camera->frustum_color.x = frustumColor[0];
@@ -1149,19 +1141,17 @@ static void showWindows(Instance* ptr, float delta_time)
                                 ImGui::Separator();
                                 ImGui::DragFloat(
                                     "Near Plane", &camera->configs[cameraIdx].near_plane, 0.1f, 0.01f, 10000.f);
-                                ImGui::DragFloat(
-                                    "Far Plane", &camera->configs[cameraIdx].far_plane, 10.f, 1.f, 100000.f);
+                                ImGui::DragFloat("Far Plane", &camera->configs[cameraIdx].far_plane, 10.f, 1.f, 100000.f);
                                 if (camera->configs[cameraIdx].is_orthographic)
                                 {
-                                    ImGui::DragFloat("Orthographic Y", &camera->configs[cameraIdx].orthographic_y,
-                                                        0.1f, 0.f, 100000.f);
+                                    ImGui::DragFloat("Orthographic Y", &camera->configs[cameraIdx].orthographic_y, 0.1f,
+                                                     0.f, 100000.f);
                                 }
                                 else
                                 {
+                                    ImGui::DragFloat("FOV", &camera->configs[cameraIdx].fov_angle_y, 0.01f, 0.f, M_PI_2);
                                     ImGui::DragFloat(
-                                        "FOV", &camera->configs[cameraIdx].fov_angle_y, 0.01f, 0.f, M_PI_2);
-                                    ImGui::DragFloat("Aspect Ratio", &camera->configs[cameraIdx].aspect_ratio,
-                                                        0.01f, 0.f, 2.f);
+                                        "Aspect Ratio", &camera->configs[cameraIdx].aspect_ratio, 0.01f, 0.f, 2.f);
                                 }
                             }
                         }
