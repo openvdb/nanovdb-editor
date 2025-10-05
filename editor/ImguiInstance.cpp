@@ -1168,6 +1168,10 @@ static void showWindows(Instance* ptr, float delta_time)
                         ptr->shader_params.renderGroup(imgui_instance_user::s_raster2d_shader_group);
                     }
                 }
+                else
+                {
+                    ImGui::TextDisabled("No item selected");
+                }
             }
             ImGui::EndChild();
 

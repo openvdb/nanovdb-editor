@@ -55,8 +55,9 @@ struct ViewportSettings
 
 enum class ViewsTypes
 {
-    Cameras = 0,
-    GaussianScenes = 1
+    Cameras,
+    GaussianScenes,
+    None
 };
 
 struct GaussianView
@@ -165,7 +166,7 @@ struct Instance
 
     std::shared_ptr<pnanovdb_compute_array_t> nanovdb_array = nullptr;
 
-    ViewsTypes selected_view_type = ViewsTypes::GaussianScenes;
+    ViewsTypes selected_view_type = ViewsTypes::None;
 
     std::map<std::string, pnanovdb_camera_view_t*>* camera_views = nullptr;
     std::string selected_camera_view = "";

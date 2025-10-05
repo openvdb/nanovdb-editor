@@ -14,7 +14,6 @@
 
 struct pnanovdb_editor_impl_t
 {
-    void* module;
     const pnanovdb_compiler_t* compiler;
     const pnanovdb_compute_t* compute;
     void* editor_worker;

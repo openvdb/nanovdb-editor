@@ -378,11 +378,12 @@ void sync_shader_params(pnanovdb_editor_t* editor, void* shader_params, pnanovdb
     {
         return;
     }
-    if (editor->impl->shader_params == nullptr || editor->impl->shader_params != shader_params)
+    if (shader_params != editor->impl->shader_params)
     {
+        // only sync current shader params
         return;
     }
-    // TODO don't have set_params and get_params per data_type now
+
     EditorWorker* worker = static_cast<EditorWorker*>(editor->impl->editor_worker);
     if (set_data)
     {
@@ -824,7 +825,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             auto save_current_view_state = [&](const std::string& view_name)
             {
                 auto current_it = views->gaussians.find(view_name);
-                if (current_it == views->gaussians.end())
+                if (current_it == views->gaussians.end() || current_it->second.shader_params != editor->impl->shader_params)
                 {
                     return;
                 }
