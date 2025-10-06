@@ -127,7 +127,7 @@ static const char* RENDER_SETTINGS = "Render Settings";
 static const char* COMPILER_SETTINGS = "Compiler";
 static const char* PROFILER = "Profiler";
 static const char* CODE_EDITOR = "Shader Editor";
-static const char* CONSOLE = "Output";
+static const char* CONSOLE = "Log";
 static const char* SHADER_PARAMS = "Params";
 static const char* BENCHMARK = "Benchmark";
 static const char* FILE_HEADER = "File Header";
@@ -602,6 +602,7 @@ static void showWindows(Instance* ptr, float delta_time)
                 }
                 ImGui::EndGroup();
             }
+            ImGui::Separator();
 
             auto settings = ptr->render_settings;
 
@@ -621,6 +622,8 @@ static void showWindows(Instance* ptr, float delta_time)
             }
             ImGui::DragFloat("Shift Speed Multiplier", &settings->key_translation_shift_multiplier, 0.f, 1.f, 10000.f,
                              "%.1f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
+            ImGui::Separator();
+
             IMGUI_CHECKBOX_SYNC("Video Encode", settings->enable_encoder);
             if (ImGui::BeginCombo("Resolution", "Select..."))
             {
