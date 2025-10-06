@@ -251,8 +251,9 @@ bool raster_file(pnanovdb_raster_t* raster,
     pnanovdb_bool_t loaded_gaussian = fileformat.load_file(filename, 5, array_names_gaussian, arrays_gaussian);
     if (loaded_gaussian == PNANOVDB_TRUE)
     {
-        bool result = raster_gaussians(raster, compute, queue, voxel_size, arrays_gaussian, nanovdb_arr, gaussian_data,
-                                       raster_context, shader_params_arrays, shader_params, profiler_report, userdata, worker);
+        bool result =
+            raster_gaussians(raster, compute, queue, voxel_size, arrays_gaussian, nanovdb_arr, gaussian_data,
+                             raster_context, shader_params_arrays, shader_params, profiler_report, userdata, worker);
         if (result)
         {
             if (log_print)
@@ -314,10 +315,11 @@ bool raster_gaussians_to_nanovdb(pnanovdb_raster_t* raster,
                                  pnanovdb_raster_shader_params_t* raster_params,
                                  pnanovdb_compute_array_t** out_nanovdb_arr)
 {
-    pnanovdb_compute_array_t* shader_params = compute->create_array(sizeof(char), raster_params->data_type->element_size, (void*)raster_params);
+    pnanovdb_compute_array_t* shader_params =
+        compute->create_array(sizeof(char), raster_params->data_type->element_size, (void*)raster_params);
 
-    return raster_gaussians(raster, compute, queue, voxel_size, arrays_gaussian, out_nanovdb_arr, nullptr,
-                                   nullptr, nullptr, shader_params, nullptr, nullptr, nullptr);
+    return raster_gaussians(raster, compute, queue, voxel_size, arrays_gaussian, out_nanovdb_arr, nullptr, nullptr,
+                            nullptr, shader_params, nullptr, nullptr, nullptr);
 }
 
 bool get_gaussian_data(pnanovdb_raster_t* raster,
@@ -328,7 +330,8 @@ bool get_gaussian_data(pnanovdb_raster_t* raster,
                        pnanovdb_raster_shader_params_t* raster_params,
                        pnanovdb_raster_context_t** raster_context)
 {
-    pnanovdb_compute_array_t* shader_params = compute->create_array(sizeof(char), raster_params->data_type->element_size, (void*)raster_params);
+    pnanovdb_compute_array_t* shader_params =
+        compute->create_array(sizeof(char), raster_params->data_type->element_size, (void*)raster_params);
 
     return raster_gaussians(raster, compute, queue, 0.f, arrays_gaussian, nullptr, gaussian_data, raster_context,
                             nullptr, shader_params, nullptr, nullptr, nullptr);

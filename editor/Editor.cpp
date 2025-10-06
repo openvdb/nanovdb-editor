@@ -1014,19 +1014,20 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 loaded->filepaths.push_back(pending_raster_filepath);
                 pending_raster_params->filepath = loaded->filepaths.back().c_str();
                 loaded->filepaths.push_back(filename);
-                ((pnanovdb_raster_shader_params_t*)(pending_raster_params->data))->name = loaded->filepaths.back().c_str();
+                ((pnanovdb_raster_shader_params_t*)(pending_raster_params->data))->name =
+                    loaded->filepaths.back().c_str();
 
                 raster_task_id = raster_worker.enqueue(
                     [&raster_worker](
                         pnanovdb_raster_t* raster, const pnanovdb_compute_t* compute, pnanovdb_compute_queue_t* queue,
                         const char* filepath, float voxel_size, pnanovdb_compute_array_t** nanovdb_array,
                         pnanovdb_raster_gaussian_data_t** gaussian_data, pnanovdb_raster_context_t** raster_context,
-                        pnanovdb_compute_array_t** shader_params_arrays,
-                        pnanovdb_compute_array_t* shader_params, pnanovdb_profiler_report_t profiler) -> bool
+                        pnanovdb_compute_array_t** shader_params_arrays, pnanovdb_compute_array_t* shader_params,
+                        pnanovdb_profiler_report_t profiler) -> bool
                     {
                         return pnanovdb_raster::raster_file(raster, compute, queue, filepath, voxel_size, nanovdb_array,
-                                                            gaussian_data, raster_context, shader_params_arrays, shader_params,
-                                                            profiler, (void*)(&raster_worker));
+                                                            gaussian_data, raster_context, shader_params_arrays,
+                                                            shader_params, profiler, (void*)(&raster_worker));
                     },
                     &raster, raster.compute, compute_queue, pending_raster_filepath.c_str(), pending_voxel_size,
                     imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::NanoVDB ?
@@ -1038,9 +1039,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                     imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::Raster2D ?
                         &pending_raster_ctx :
                         nullptr,
-                    pending_shader_params_arrays,
-                    pending_raster_params,
-                    pnanovdb_editor::Profiler::report_callback);
+                    pending_shader_params_arrays, pending_raster_params, pnanovdb_editor::Profiler::report_callback);
 
                 pnanovdb_editor::Console::getInstance().addLog(
                     "Running rasterization: '%s'...", pending_raster_filepath.c_str());
@@ -1071,10 +1070,9 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                     {
                         auto ptr = pnanovdb_raster::cast(pending_gaussian_data);
                         EditorLoaded* loaded = static_cast<EditorLoaded*>(editor->impl->loaded);
-                        loaded->gaussian_views.push_back({
-                            pending_gaussian_data, (pnanovdb_raster_shader_params_t*)ptr->shader_params->data, pending_raster_ctx,
-                            nullptr
-                        });
+                        loaded->gaussian_views.push_back({ pending_gaussian_data,
+                                                           (pnanovdb_raster_shader_params_t*)ptr->shader_params->data,
+                                                           pending_raster_ctx, nullptr });
 
                         editor->add_gaussian_data(editor, pending_raster_ctx, compute_queue, pending_gaussian_data);
                     }

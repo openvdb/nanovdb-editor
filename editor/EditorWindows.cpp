@@ -36,7 +36,7 @@
     }
 
 #ifndef M_PI_2
-#define M_PI_2 1.57079632679489661923
+#    define M_PI_2 1.57079632679489661923
 #endif
 
 namespace imgui_instance_user
@@ -290,7 +290,8 @@ void showSceneWindow(Instance* ptr)
             ImGui::TreePop();
         }
 
-        auto renderSceneItems = [ptr](const auto& itemMap, const char* treeLabel, auto& pendingField, const std::string& radioPrefix)
+        auto renderSceneItems =
+            [ptr](const auto& itemMap, const char* treeLabel, auto& pendingField, const std::string& radioPrefix)
         {
             if (ImGui::TreeNodeEx(treeLabel, ImGuiTreeNodeFlags_DefaultOpen))
             {
@@ -326,12 +327,14 @@ void showSceneWindow(Instance* ptr)
 
         if (ptr->nanovdb_arrays && !ptr->nanovdb_arrays->empty())
         {
-            renderSceneItems(*ptr->nanovdb_arrays, "NanoVDB Scenes", ptr->pending.viweport_nanovdb_array, "##RadioNanoVDB");
+            renderSceneItems(
+                *ptr->nanovdb_arrays, "NanoVDB Scenes", ptr->pending.viweport_nanovdb_array, "##RadioNanoVDB");
         }
 
         if (ptr->gaussian_views && !ptr->gaussian_views->empty())
         {
-            renderSceneItems(*ptr->gaussian_views, "Gaussian Views", ptr->pending.viewport_gaussian_view, "##RadioGaussian");
+            renderSceneItems(
+                *ptr->gaussian_views, "Gaussian Views", ptr->pending.viewport_gaussian_view, "##RadioGaussian");
         }
     }
     ImGui::End();
@@ -350,8 +353,8 @@ void showCameraViewWindow(Instance* ptr)
         {
             auto it = ptr->camera_views ? ptr->camera_views->find(ptr->selected_camera_frustum) :
                                           std::map<std::string, pnanovdb_camera_view_t*>().end();
-            if (it != (ptr->camera_views ? ptr->camera_views->end() :
-                                           std::map<std::string, pnanovdb_camera_view_t*>().end()))
+            if (it !=
+                (ptr->camera_views ? ptr->camera_views->end() : std::map<std::string, pnanovdb_camera_view_t*>().end()))
             {
                 pnanovdb_camera_view_t* camera = it->second;
                 if (camera)
@@ -360,8 +363,7 @@ void showCameraViewWindow(Instance* ptr)
                     int maxIndex = (camera->num_cameras > 0) ? ((int)camera->num_cameras - 1) : 0;
                     if (maxIndex > 0)
                     {
-                        ImGui::SliderInt("Camera Index",
-                                         &ptr->camera_frustum_index[ptr->selected_camera_frustum], 0,
+                        ImGui::SliderInt("Camera Index", &ptr->camera_frustum_index[ptr->selected_camera_frustum], 0,
                                          maxIndex, "%d");
                     }
                     else
@@ -378,8 +380,7 @@ void showCameraViewWindow(Instance* ptr)
                             camera->states[cameraIdx].eye_up.z != ptr->render_settings->camera_state.eye_up.z)
                         {
                             pnanovdb_vec3_t& dir = camera->states[cameraIdx].eye_direction;
-                            pnanovdb_vec3_t right = { dir.y * up.z - dir.z * up.y,
-                                                      dir.z * up.x - dir.x * up.z,
+                            pnanovdb_vec3_t right = { dir.y * up.z - dir.z * up.y, dir.z * up.x - dir.x * up.z,
                                                       dir.x * up.y - dir.y * up.x };
                             up.x = -(right.y * dir.z - right.z * dir.y);
                             up.y = -(right.z * dir.x - right.x * dir.z);
@@ -401,18 +402,14 @@ void showCameraViewWindow(Instance* ptr)
                         ptr->render_settings->sync_camera = PNANOVDB_TRUE;
                     }
 
-                    pnanovdb_vec3_t eyePosition =
-                        pnanovdb_camera_get_eye_position_from_state(&camera->states[cameraIdx]);
+                    pnanovdb_vec3_t eyePosition = pnanovdb_camera_get_eye_position_from_state(&camera->states[cameraIdx]);
                     float eyePos[3] = { eyePosition.x, eyePosition.y, eyePosition.z };
                     if (ImGui::DragFloat3("Origin", eyePos, 0.1f))
                     {
                         pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
-                        state->position.x =
-                            eyePos[0] + state->eye_direction.x * state->eye_distance_from_position;
-                        state->position.y =
-                            eyePos[1] + state->eye_direction.y * state->eye_distance_from_position;
-                        state->position.z =
-                            eyePos[2] + state->eye_direction.z * state->eye_distance_from_position;
+                        state->position.x = eyePos[0] + state->eye_direction.x * state->eye_distance_from_position;
+                        state->position.y = eyePos[1] + state->eye_direction.y * state->eye_distance_from_position;
+                        state->position.z = eyePos[2] + state->eye_direction.z * state->eye_distance_from_position;
                     }
 
                     pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
@@ -446,9 +443,8 @@ void showCameraViewWindow(Instance* ptr)
                         state->eye_up.x = upVec[0];
                         state->eye_up.y = upVec[1];
                         state->eye_up.z = upVec[2];
-                        float len =
-                            sqrtf(state->eye_up.x * state->eye_up.x + state->eye_up.y * state->eye_up.y +
-                                  state->eye_up.z * state->eye_up.z);
+                        float len = sqrtf(state->eye_up.x * state->eye_up.x + state->eye_up.y * state->eye_up.y +
+                                          state->eye_up.z * state->eye_up.z);
                         if (len > EPSILON)
                         {
                             state->eye_up.x /= len;
@@ -470,19 +466,17 @@ void showCameraViewWindow(Instance* ptr)
                         camera->frustum_color.z = frustumColor[2];
                     }
                     ImGui::Separator();
-                    ImGui::DragFloat(
-                        "Near Plane", &camera->configs[cameraIdx].near_plane, 0.1f, 0.01f, 10000.f);
+                    ImGui::DragFloat("Near Plane", &camera->configs[cameraIdx].near_plane, 0.1f, 0.01f, 10000.f);
                     ImGui::DragFloat("Far Plane", &camera->configs[cameraIdx].far_plane, 10.f, 1.f, 100000.f);
                     if (camera->configs[cameraIdx].is_orthographic)
                     {
-                        ImGui::DragFloat("Orthographic Y", &camera->configs[cameraIdx].orthographic_y, 0.1f,
-                                         0.f, 100000.f);
+                        ImGui::DragFloat(
+                            "Orthographic Y", &camera->configs[cameraIdx].orthographic_y, 0.1f, 0.f, 100000.f);
                     }
                     else
                     {
                         ImGui::DragFloat("FOV", &camera->configs[cameraIdx].fov_angle_y, 0.01f, 0.f, M_PI_2);
-                        ImGui::DragFloat(
-                            "Aspect Ratio", &camera->configs[cameraIdx].aspect_ratio, 0.01f, 0.f, 2.f);
+                        ImGui::DragFloat("Aspect Ratio", &camera->configs[cameraIdx].aspect_ratio, 0.01f, 0.f, 2.f);
                     }
                 }
             }
@@ -648,8 +642,7 @@ void showViewportSettingsWindow(Instance* ptr)
                 if (ImGui::Button("Show##NanoVDB"))
                 {
                     // TODO: does it need to be on a worker thread?
-                    pnanovdb_editor::Console::getInstance().addLog(
-                        "Opening file '%s'", ptr->nanovdb_filepath.c_str());
+                    pnanovdb_editor::Console::getInstance().addLog("Opening file '%s'", ptr->nanovdb_filepath.c_str());
                     ptr->pending.load_nvdb = true;
                 }
                 ImGui::EndGroup();
@@ -781,8 +774,7 @@ void showCompilerSettingsWindow(Instance* ptr)
                     std::string dirToRemove = ptr->additional_shader_directories[i];
                     pnanovdb_editor::ShaderMonitor::getInstance().removePath(dirToRemove);
                     ptr->additional_shader_directories.erase(ptr->additional_shader_directories.begin() + i);
-                    pnanovdb_editor::Console::getInstance().addLog(
-                        "Removed shader directory: %s", dirToRemove.c_str());
+                    pnanovdb_editor::Console::getInstance().addLog("Removed shader directory: %s", dirToRemove.c_str());
                     ImGui::MarkIniSettingsDirty();
                     i--;
                 }
@@ -1158,16 +1150,28 @@ void showFileHeaderWindow(Instance* ptr)
                         const char* className = "Unknown";
                         switch (dataClass)
                         {
-                        case 0: className = "Unknown"; break;
-                        case 1: className = "Index Array"; break;
-                        case 2: className = "Attribute Array"; break;
-                        case 3: className = "Grid Name"; break;
-                        case 4: className = "Channel Array"; break;
-                        default: className = "Invalid"; break;
+                        case 0:
+                            className = "Unknown";
+                            break;
+                        case 1:
+                            className = "Index Array";
+                            break;
+                        case 2:
+                            className = "Attribute Array";
+                            break;
+                        case 3:
+                            className = "Grid Name";
+                            break;
+                        case 4:
+                            className = "Channel Array";
+                            break;
+                        default:
+                            className = "Invalid";
+                            break;
                         }
 
-                        ImGui::Text("Entry %u: %s (%u values, %u bytes each)", i, className, (unsigned)valueCount,
-                                    valueSize);
+                        ImGui::Text(
+                            "Entry %u: %s (%u values, %u bytes each)", i, className, (unsigned)valueCount, valueSize);
                     }
                     if (blindMetadataCount > 10)
                     {
@@ -1183,8 +1187,8 @@ void showFileHeaderWindow(Instance* ptr)
 
             if (ImGui::CollapsingHeader("Memory Usage"))
             {
-                ImGui::Text("Total Buffer Size: %llu bytes", (unsigned long long)(ptr->nanovdb_array->element_count *
-                                                                                  ptr->nanovdb_array->element_size));
+                ImGui::Text("Total Buffer Size: %llu bytes",
+                            (unsigned long long)(ptr->nanovdb_array->element_count * ptr->nanovdb_array->element_size));
                 ImGui::Text("Element Size: %llu bytes", (unsigned long long)ptr->nanovdb_array->element_size);
                 ImGui::Text("Element Count: %llu", (unsigned long long)ptr->nanovdb_array->element_count);
             }
@@ -1205,8 +1209,7 @@ void showCodeEditorWindow(Instance* ptr)
 
     pnanovdb_editor::CodeEditor::getInstance().setup(
         &ptr->shader_name, &ptr->pending.update_shader, ptr->dialog_size, ptr->run_shader);
-    if (ImGui::Begin(
-            CODE_EDITOR, &ptr->window.show_code_editor, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_MenuBar))
+    if (ImGui::Begin(CODE_EDITOR, &ptr->window.show_code_editor, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_MenuBar))
     {
         if (!pnanovdb_editor::CodeEditor::getInstance().render())
         {

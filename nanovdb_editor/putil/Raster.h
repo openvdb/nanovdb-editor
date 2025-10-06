@@ -74,18 +74,17 @@ typedef struct pnanovdb_raster_t
                                         pnanovdb_compute_queue_t* queue,
                                         pnanovdb_raster_context_t* context);
 
-    pnanovdb_raster_gaussian_data_t*(PNANOVDB_ABI* create_gaussian_data)(
-        const pnanovdb_compute_t* compute,
-        pnanovdb_compute_queue_t* queue,
-        pnanovdb_raster_context_t* context,
-        pnanovdb_compute_array_t* means,
-        pnanovdb_compute_array_t* quaternions,
-        pnanovdb_compute_array_t* scales,
-        pnanovdb_compute_array_t* colors,
-        pnanovdb_compute_array_t* spherical_harmonics,
-        pnanovdb_compute_array_t* opacities,
-        pnanovdb_compute_array_t** shader_params_arrays,
-        pnanovdb_compute_array_t* shader_params);
+    pnanovdb_raster_gaussian_data_t*(PNANOVDB_ABI* create_gaussian_data)(const pnanovdb_compute_t* compute,
+                                                                         pnanovdb_compute_queue_t* queue,
+                                                                         pnanovdb_raster_context_t* context,
+                                                                         pnanovdb_compute_array_t* means,
+                                                                         pnanovdb_compute_array_t* quaternions,
+                                                                         pnanovdb_compute_array_t* scales,
+                                                                         pnanovdb_compute_array_t* colors,
+                                                                         pnanovdb_compute_array_t* spherical_harmonics,
+                                                                         pnanovdb_compute_array_t* opacities,
+                                                                         pnanovdb_compute_array_t** shader_params_arrays,
+                                                                         pnanovdb_compute_array_t* shader_params);
 
     void(PNANOVDB_ABI* upload_gaussian_data)(const pnanovdb_compute_t* compute,
                                              pnanovdb_compute_queue_t* queue,

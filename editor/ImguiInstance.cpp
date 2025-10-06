@@ -125,7 +125,8 @@ static void initializeDocking()
         ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
 
         // create dock spaces for various windows, the order matters!
-        ImGuiID dock_id_right_far = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.f, nullptr, &dockspace_id);
+        ImGuiID dock_id_right_far =
+            ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.f, nullptr, &dockspace_id);
         ImGui::DockBuilderSetNodeSize(dock_id_right_far, ImVec2(right_dock_width, window_height));
         ImGui::DockBuilderDockWindow(CODE_EDITOR, dock_id_right_far);
         ImGui::DockBuilderDockWindow(PROFILER, dock_id_right_far);
