@@ -827,8 +827,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             auto save_current_view_state = [&](const std::string& view_name)
             {
                 auto current_it = views->gaussians.find(view_name);
-                if (current_it == views->gaussians.end() ||
-                    current_it->second.shader_params != editor->impl->shader_params)
+                if (current_it == views->gaussians.end())
                 {
                     return;
                 }
@@ -1005,9 +1004,9 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                     imgui_user_instance->shader_params.get_compute_array_for_shader<ShaderParams>(
                         "raster/gaussian_frag_color.slang", editor->impl->compute);
 
-                // create new array which is passed to pending_gaussian_data and saved in editor's loaded
+                // create new array which is passed to pending_gaussian_data and saved in editor's loaded scenes
                 pending_raster_params = editor->impl->compute->create_array(
-                    raster2d_shader_params_array->element_size, 1u, raster2d_shader_params_array->data);
+                    raster_shader_params_data_type->element_size, 1u, &init_raster_shader_params);
 
                 std::filesystem::path fsPath(pending_raster_filepath);
                 std::string filename = fsPath.stem().string();
@@ -1193,9 +1192,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 raster.raster_gaussian_2d(raster.compute, device_queue, editor->impl->raster_ctx,
                                           editor->impl->gaussian_data, background_image, image_width, image_height,
                                           &view, &projection, raster_shader_params);
-
-                editor->impl->compute->destroy_array(raster2d_shader_params_array);
-                raster2d_shader_params_array = nullptr;
             }
             else
             {
@@ -1289,6 +1285,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     {
         auto ptr = pnanovdb_raster::cast(it.gaussian_data);
         editor->impl->compute->destroy_array(ptr->shader_params);
+
         raster.destroy_gaussian_data(raster.compute, compute_queue, it.gaussian_data);
         raster.destroy_context(raster.compute, compute_queue, it.raster_ctx);
     }

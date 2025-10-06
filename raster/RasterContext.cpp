@@ -245,7 +245,6 @@ void destroy_gaussian_data(const pnanovdb_compute_t* compute,
             compute->destroy_array(ptr->shader_params_cpu_arrays[idx]);
         }
     }
-    compute->destroy_array(ptr->shader_params);
 
     delete ptr;
 }
