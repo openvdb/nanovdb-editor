@@ -5,6 +5,8 @@
 #include "PNanoVDB.h"
 #include "PNanoVDBExt.h"
 
+#define RAY_TRACE_TEST 0
+
 struct EditorParams
 {
     float4 view_inv_x;
@@ -534,29 +536,7 @@ void tidx_to_ray(int2 tidx, out float3 rayOrigin, out float3 rayDir, out float3 
         -2.f * ((float(tidx.y) + 0.5f) / float(editor_params.height)) + 1.f
     );
 
-#if 0
-    float4 pos_d0 = mat_mul(float4(ndc.xy, 0.f, 1.f),
-                            editor_params.projection_inv_x, editor_params.projection_inv_y,
-                            editor_params.projection_inv_z, editor_params.projection_inv_w);
-    float4 pos_d1 = mat_mul(float4(ndc.xy, 1.f, 1.f),
-                            editor_params.projection_inv_x, editor_params.projection_inv_y,
-                            editor_params.projection_inv_z, editor_params.projection_inv_w);
-
-    float z_d0 = pos_d0.z * (1.f / pos_d0.w);
-    float z_d1 = pos_d1.z * (1.f / pos_d1.w);
-    bool is_reverse_z = abs(z_d0) > abs(z_d1);
-    float4 ray_dir_near = is_reverse_z ? pos_d1 : pos_d0;
-
-    float4 ray_dir_far = ray_dir_near + mat_mul(float4(0.f, 0.f, 1.f, 0.f),
-                                                editor_params.projection_inv_x, editor_params.projection_inv_y,
-                                                editor_params.projection_inv_z, editor_params.projection_inv_w);
-    rayDir = normalize((ray_dir_far.xyz / ray_dir_far.w) - (ray_dir_near.xyz / ray_dir_near.w));
-    if (is_reverse_z)
-    {
-        rayDir = -rayDir;
-    }
-
-#else
+#if RAY_TRACE_TEST
     bool is_reverse_z = true;
     float4 pos_d0 = float4(0.f, 0.f, 0.f, 1.f);
     float4 pos_d1 = float4(0.f, 0.f, 0.f, 1.f);
@@ -578,6 +558,27 @@ void tidx_to_ray(int2 tidx, out float3 rayOrigin, out float3 rayDir, out float3 
     //rayDir.z = -1.f;
     //rayDir.x = sin(0.9f * 3.14f / 2.f * ndc.x);
     //rayDir.y = sin(0.9f * 3.14f / 2.f * ndc.y * float(editor_params.height) / float(editor_params.width));
+#else
+    float4 pos_d0 = mat_mul(float4(ndc.xy, 0.f, 1.f),
+                            editor_params.projection_inv_x, editor_params.projection_inv_y,
+                            editor_params.projection_inv_z, editor_params.projection_inv_w);
+    float4 pos_d1 = mat_mul(float4(ndc.xy, 1.f, 1.f),
+                            editor_params.projection_inv_x, editor_params.projection_inv_y,
+                            editor_params.projection_inv_z, editor_params.projection_inv_w);
+
+    float z_d0 = pos_d0.z * (1.f / pos_d0.w);
+    float z_d1 = pos_d1.z * (1.f / pos_d1.w);
+    bool is_reverse_z = abs(z_d0) > abs(z_d1);
+    float4 ray_dir_near = is_reverse_z ? pos_d1 : pos_d0;
+
+    float4 ray_dir_far = ray_dir_near + mat_mul(float4(0.f, 0.f, 1.f, 0.f),
+                                                editor_params.projection_inv_x, editor_params.projection_inv_y,
+                                                editor_params.projection_inv_z, editor_params.projection_inv_w);
+    rayDir = normalize((ray_dir_far.xyz / ray_dir_far.w) - (ray_dir_near.xyz / ray_dir_near.w));
+    if (is_reverse_z)
+    {
+        rayDir = -rayDir;
+    }
 #endif
 
     rayDir = mat_mul(float4(rayDir, 0.f),
@@ -706,10 +707,12 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
     float noise_val = ray_march_noise_from_dir(rayDir);
 
     bool is_primary = true;
+#if RAY_TRACE_TEST
     if (dot(rayDir, rayDir_center) < 0.75f + 0.1f * (2.f * noise_val - 1.f))
     {
         is_primary = false;
     }
+#endif
 
     float4 sum = float4(0.f, 0.f, 0.f, 1.f);
     float nominalT = 0.f;
@@ -729,6 +732,7 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
         nominalT
     );
 
+#if RAY_TRACE_TEST
     float test_t = 1e9f;
     if (sum.a < 1.f)
     {
@@ -755,6 +759,7 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
             nominalT
         );
     }
+#endif
 
     float4 value = sum;
     // Note: BGRA target

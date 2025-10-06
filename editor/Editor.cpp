@@ -460,6 +460,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     std::string capture_filename = "./data/pnanovdbeditor_capture.bmp";
 
     pnanovdb_shader_context_t* shader_context = nullptr;
+    pnanovdb_shader_context_t* shader_context_sortpass = nullptr;
     pnanovdb_shader_context_t* shader_context_prepass = nullptr;
     pnanovdb_compute_buffer_t* nanovdb_buffer = nullptr;
     pnanovdb_compute_array_t* viewport_shader_params_array = nullptr;
@@ -869,6 +870,15 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                     dispatch_shader = true;
                 }
             }
+            if (!shader_context_sortpass)
+            {
+                shader_context_sortpass = editor->compute->create_shader_context("editor/nanovdb_sortpass.slang");
+                editor->compute->init_shader(
+                    editor->compute,
+                    device_queue,
+                    shader_context_sortpass,
+                    &imgui_user_instance->compiler_settings);
+            }
             if (!shader_context_prepass)
             {
                 shader_context_prepass = editor->compute->create_shader_context("editor/nanovdb_prepass.slang");
@@ -934,6 +944,22 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                     nanovdb_buffer = nullptr;
                 }
 
+                if (shader_context_sortpass)
+                {
+                    editor->compute->dispatch_shader_on_nanovdb_array(
+                        editor->compute,
+                        device,
+                        shader_context_sortpass,
+                        editor->nanovdb_array,
+                        image_width,
+                        image_height,
+                        background_image,
+                        upload_transient,
+                        shader_upload_transient,
+                        &nanovdb_buffer,
+                        &readback_transient
+                    );
+                }
                 if (shader_context_prepass)
                 {
                     editor->compute->dispatch_shader_on_nanovdb_array(
@@ -1200,6 +1226,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
     editor->compute->destroy_shader(
         compute_interface, &editor->compute->shader_interface, compute_context, shader_context);
+    editor->compute->destroy_shader(
+        compute_interface, &editor->compute->shader_interface, compute_context, shader_context_sortpass);
     editor->compute->destroy_shader(
         compute_interface, &editor->compute->shader_interface, compute_context, shader_context_prepass);
     editor->compiler->destroy_instance(compiler_inst);
