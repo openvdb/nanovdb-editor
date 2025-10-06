@@ -131,4 +131,6 @@ pnanovdb_raster_t* raster_file(const pnanovdb_compute_t* compute,
                                pnanovdb_raster_context_t** raster_context,
                                const pnanovdb_compute_array_t* shader_params_arr,
                                pnanovdb_profiler_report_t profiler_report);
+
+void raster_octree_build(pnanovdb_raster_gaussian_data_t* data);
 }
