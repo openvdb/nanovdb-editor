@@ -34,6 +34,19 @@ namespace imgui_instance_user
 static const char* s_render_settings_default = "default";
 static const char* s_raster2d_shader_group = "raster/raster2d_group";
 
+static const char* VIEWPORT_SETTINGS = "Viewport";
+static const char* RENDER_SETTINGS = "Render Settings";
+static const char* COMPILER_SETTINGS = "Compiler";
+static const char* PROFILER = "Profiler";
+static const char* CODE_EDITOR = "Shader Editor";
+static const char* CONSOLE = "Log";
+static const char* SHADER_PARAMS = "Params";
+static const char* BENCHMARK = "Benchmark";
+static const char* FILE_HEADER = "File Header";
+static const char* SCENE = "Scene";
+static const char* CAMERA_VIEW = "Camera View";
+static const char* PROPERTIES = "Properties";
+
 enum class ViewportOption : int
 {
     NanoVDB,
@@ -121,6 +134,8 @@ struct WindowState
     bool show_benchmark = false;
     bool show_file_header = false;
     bool show_scene = true;
+    bool show_camera_view = true;
+    bool show_scene_properties = true;
 };
 
 struct UniformState

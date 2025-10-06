@@ -111,9 +111,10 @@ struct EditorWorker
 
 struct EditorView
 {
-    std::string selected;
     std::map<std::string, pnanovdb_camera_view_t*> cameras;
+    std::string selected_view_scene;
     std::map<std::string, imgui_instance_user::GaussianView> gaussians;
+    // TODO add points
 };
 
 enum class ViewportShader : int
@@ -303,7 +304,7 @@ void add_gaussian_data(pnanovdb_editor_t* editor,
     EditorView* views = static_cast<EditorView*>(editor->impl->views);
     if (views && ptr->shader_params->name)
     {
-        views->selected = ptr->shader_params->name;
+        views->selected_view_scene = ptr->shader_params->name;
         views->gaussians[ptr->shader_params->name] = { gaussian_data, ptr->shader_params, raster_ctx, nullptr };
     }
 }
@@ -880,7 +881,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
                 // Update both editor and UI to the new selection
                 const auto& new_view_name = imgui_user_instance->pending.viewport_gaussian_view;
-                views->selected = new_view_name;
+                views->selected_view_scene = new_view_name;
                 imgui_user_instance->selected_gaussian_view = new_view_name;
 
                 load_view_into_editor_and_ui(new_view_name);
@@ -888,15 +889,14 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 imgui_user_instance->pending.viewport_gaussian_view.clear();
             }
             // Handle editor-driven selection change (only if no pending UI change)
-            else if (views->selected != imgui_user_instance->selected_gaussian_view)
+            else if (views->selected_view_scene != imgui_user_instance->selected_gaussian_view)
             {
                 save_current_view_state(imgui_user_instance->selected_gaussian_view);
 
                 // Update UI to match editor's selection
-                imgui_user_instance->selected_gaussian_view = views->selected;
-                imgui_user_instance->selected_view_type = imgui_instance_user::ViewsTypes::GaussianScenes;
+                imgui_user_instance->selected_gaussian_view = views->selected_view_scene;
 
-                load_view_into_editor_and_ui(views->selected);
+                load_view_into_editor_and_ui(views->selected_view_scene);
             }
 
             if (editor->impl->gaussian_data && editor->impl->raster_ctx)
@@ -1000,8 +1000,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 pending_voxel_size = 1.f / imgui_user_instance->raster_voxels_per_unit;
 
                 // get user params for the raster shader
-                editor->impl->compute->destroy_array(
-                    pending_shader_params_arrays[pnanovdb_raster::gaussian_frag_color_slang]);
                 pending_shader_params_arrays[pnanovdb_raster::gaussian_frag_color_slang] =
                     imgui_user_instance->shader_params.get_compute_array_for_shader<ShaderParams>(
                         "raster/gaussian_frag_color.slang", editor->impl->compute);
