@@ -18,7 +18,6 @@
 #include <stdlib.h>
 #include <cstring>
 #include <math.h>
-#include <cstring>
 #include <vector>
 #include <future>
 
@@ -101,7 +100,7 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
                                                       pnanovdb_compute_array_t* spherical_harmonics,
                                                       pnanovdb_compute_array_t* opacities,
                                                       pnanovdb_compute_array_t** shader_params_arrays,
-                                                      pnanovdb_uint32_t shader_params_array_count)
+                                                      pnanovdb_compute_array_t* shader_params)
 {
     auto ptr = new gaussian_data_t();
 
@@ -111,9 +110,9 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
     ptr->has_uploaded = PNANOVDB_FALSE;
 
     // when single array passed, assume per update shader params
-    if (*shader_params_arrays != nullptr && shader_params_array_count == 1u && shader_params_arrays != nullptr)
+    if (shader_params)
     {
-        ptr->shader_params = (pnanovdb_raster_shader_params_t*)shader_params_arrays[0]->data;
+        ptr->shader_params = shader_params;
     }
 
     ptr->means_cpu_array = compute->create_array(means->element_size, means->element_count, means->data);
@@ -129,7 +128,7 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
     for (pnanovdb_uint32_t idx = 0u; idx < shader_param_count; idx++)
     {
         ptr->shader_params_cpu_arrays[idx] = nullptr;
-        if (shader_params_arrays == nullptr || shader_params_array_count == 1u || shader_params_arrays[idx] == nullptr)
+        if (shader_params_arrays == nullptr || shader_params_arrays[idx] == nullptr)
         {
             continue;
         }
@@ -246,6 +245,7 @@ void destroy_gaussian_data(const pnanovdb_compute_t* compute,
             compute->destroy_array(ptr->shader_params_cpu_arrays[idx]);
         }
     }
+    compute->destroy_array(ptr->shader_params);
 
     delete ptr;
 }

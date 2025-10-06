@@ -198,6 +198,7 @@ class pnanovdb_EditorImpl(Structure):
         ("raster_ctx", c_void_p),
         ("shader_params", c_void_p),
         ("shader_params_data_type", c_void_p),
+        ("loaded", c_void_p),
         ("views", c_void_p),
     ]
 

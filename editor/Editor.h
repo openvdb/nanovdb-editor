@@ -24,6 +24,7 @@ struct pnanovdb_editor_impl_t
     pnanovdb_raster_context_t* raster_ctx;
     void* shader_params;
     const pnanovdb_reflect_data_type_t* shader_params_data_type;
+    void* loaded;
     void* views;
 };
 

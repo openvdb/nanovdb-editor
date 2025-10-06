@@ -99,6 +99,7 @@ struct PendingState
     bool load_render_settings = false;
     std::string viewport_shader_name = "";
     std::string viewport_gaussian_view = "";
+    std::string viweport_nanovdb_array = "";
     bool update_memory_stats = false;
     bool update_raster = false;
     bool find_shader_directory = false;
@@ -188,8 +189,9 @@ struct Instance
     std::string selected_camera_frustum = "";
     std::map<std::string, int> camera_frustum_index; // map of camera view name to state index for frustum overlay
 
+    std::string selected_scene_view = "";
+    std::map<std::string, pnanovdb_compute_array_t>* nanovdb_arrays = nullptr;
     std::map<std::string, GaussianView>* gaussian_views = nullptr;
-    std::string selected_gaussian_view = "";
     std::string raster_shader_group = s_raster2d_shader_group;
     std::map<std::string, pnanovdb_imgui_settings_render_t> views_render_settings;
 

@@ -261,66 +261,47 @@ void showSceneWindow(Instance* ptr)
 
     if (ImGui::Begin(SCENE, &ptr->window.show_scene))
     {
-        if (ImGui::TreeNodeEx("Cameras", ImGuiTreeNodeFlags_DefaultOpen))
+        if (!ptr->camera_views->empty() && ImGui::TreeNodeEx("Cameras", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            if (!ptr->camera_views)
+            for (auto& cameraPair : *ptr->camera_views)
             {
-                ImGui::TextDisabled("No camera views available");
-            }
-            else if (ptr->camera_views->empty())
-            {
-                ImGui::TextDisabled("No camera views added");
-            }
-            else
-            {
-                for (auto& cameraPair : *ptr->camera_views)
+                pnanovdb_camera_view_t* camera = cameraPair.second;
+                if (!camera)
                 {
-                    pnanovdb_camera_view_t* camera = cameraPair.second;
-                    if (!camera)
-                    {
-                        continue;
-                    }
-                    const std::string& cameraName = cameraPair.first;
-                    IMGUI_CHECKBOX_SYNC(("##Visible" + cameraName).c_str(), camera->is_visible);
-                    ImGui::SameLine();
-                    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-                    bool isSelected = (ptr->selected_camera_frustum == cameraName);
-                    if (isSelected)
-                    {
-                        flags |= ImGuiTreeNodeFlags_Selected;
-                    }
-                    ImGui::TreeNodeEx(cameraName.c_str(), flags);
-                    if (ImGui::IsItemClicked())
-                    {
-                        ptr->selected_camera_frustum = cameraName;
-                        ptr->window.show_camera_view = true;
-                        ImGui::SetWindowFocus(CAMERA_VIEW);
-                    }
+                    continue;
+                }
+                const std::string& cameraName = cameraPair.first;
+                IMGUI_CHECKBOX_SYNC(("##Visible" + cameraName).c_str(), camera->is_visible);
+                ImGui::SameLine();
+                ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+                bool isSelected = (ptr->selected_camera_frustum == cameraName);
+                if (isSelected)
+                {
+                    flags |= ImGuiTreeNodeFlags_Selected;
+                }
+                ImGui::TreeNodeEx(cameraName.c_str(), flags);
+                if (ImGui::IsItemClicked())
+                {
+                    ptr->selected_camera_frustum = cameraName;
+                    ptr->window.show_camera_view = true;
+                    ImGui::SetWindowFocus(CAMERA_VIEW);
                 }
             }
             ImGui::TreePop();
         }
 
-        if (ImGui::TreeNodeEx("Gaussian Scenes", ImGuiTreeNodeFlags_DefaultOpen))
+        auto renderSceneItems = [ptr](const auto& itemMap, const char* treeLabel, auto& pendingField, const std::string& radioPrefix)
         {
-            if (!ptr->gaussian_views)
+            if (ImGui::TreeNodeEx(treeLabel, ImGuiTreeNodeFlags_DefaultOpen))
             {
-                ImGui::TextDisabled("No gaussian scenes available");
-            }
-            else if (ptr->gaussian_views->empty())
-            {
-                ImGui::TextDisabled("No gaussian scenes added");
-            }
-            else
-            {
-                for (auto& gaussianPair : *ptr->gaussian_views)
+                for (auto& pair : itemMap)
                 {
-                    const std::string& gaussianName = gaussianPair.first;
-                    bool isSelected = (ptr->selected_gaussian_view == gaussianName);
+                    const std::string& name = pair.first;
+                    bool isSelected = (ptr->selected_scene_view == name);
 
-                    if (ImGui::RadioButton(("##Radio" + gaussianName).c_str(), isSelected))
+                    if (ImGui::RadioButton((radioPrefix + name).c_str(), isSelected))
                     {
-                        ptr->pending.viewport_gaussian_view = gaussianName;
+                        pendingField = name;
                         ptr->window.show_scene_properties = true;
                         ImGui::SetWindowFocus(PROPERTIES);
                     }
@@ -331,16 +312,26 @@ void showSceneWindow(Instance* ptr)
                     {
                         flags |= ImGuiTreeNodeFlags_Selected;
                     }
-                    ImGui::TreeNodeEx(gaussianName.c_str(), flags);
+                    ImGui::TreeNodeEx(name.c_str(), flags);
                     if (ImGui::IsItemClicked())
                     {
-                        ptr->pending.viewport_gaussian_view = gaussianName;
+                        pendingField = name;
                         ptr->window.show_scene_properties = true;
                         ImGui::SetWindowFocus(PROPERTIES);
                     }
                 }
+                ImGui::TreePop();
             }
-            ImGui::TreePop();
+        };
+
+        if (ptr->nanovdb_arrays && !ptr->nanovdb_arrays->empty())
+        {
+            renderSceneItems(*ptr->nanovdb_arrays, "NanoVDB Scenes", ptr->pending.viweport_nanovdb_array, "##RadioNanoVDB");
+        }
+
+        if (ptr->gaussian_views && !ptr->gaussian_views->empty())
+        {
+            renderSceneItems(*ptr->gaussian_views, "Gaussian Views", ptr->pending.viewport_gaussian_view, "##RadioGaussian");
         }
     }
     ImGui::End();
@@ -498,7 +489,7 @@ void showCameraViewWindow(Instance* ptr)
         }
         else
         {
-            ImGui::TextDisabled("Select a camera from the Scene tab");
+            ImGui::TextDisabled("Select a camera from the Scene window");
         }
     }
     ImGui::End();
@@ -513,13 +504,13 @@ void showPropertiesWindow(Instance* ptr)
 
     if (ImGui::Begin(PROPERTIES, &ptr->window.show_scene_properties))
     {
-        if (!ptr->selected_gaussian_view.empty())
+        if (!ptr->selected_scene_view.empty())
         {
             ptr->shader_params.renderGroup(imgui_instance_user::s_raster2d_shader_group);
         }
         else
         {
-            ImGui::TextDisabled("Select a scene from the Scene tab");
+            ImGui::TextDisabled("Select a scene from the Scene window");
         }
     }
     ImGui::End();

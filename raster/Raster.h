@@ -75,7 +75,7 @@ struct gaussian_data_t
     compute_gpu_array_t* opacities_gpu_array;
     compute_gpu_array_t** shader_params_gpu_arrays;
 
-    pnanovdb_raster_shader_params_t* shader_params = nullptr; // optional for shader params updated per frame
+    pnanovdb_compute_array_t* shader_params = nullptr; // optional for shader params updated per frame
     const pnanovdb_reflect_data_type_t* shader_params_data_type =
         PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t);
 };
@@ -98,7 +98,7 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
                                                       pnanovdb_compute_array_t* spherical_harmonics,
                                                       pnanovdb_compute_array_t* opacities,
                                                       pnanovdb_compute_array_t** shader_params_arrays,
-                                                      pnanovdb_uint32_t shader_params_array_count);
+                                                      pnanovdb_compute_array_t* shader_params);
 
 void upload_gaussian_data(const pnanovdb_compute_t* compute,
                           pnanovdb_compute_queue_t* queue,

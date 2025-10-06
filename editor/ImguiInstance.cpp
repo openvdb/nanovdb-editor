@@ -206,8 +206,8 @@ static void showWindows(Instance* ptr, float delta_time)
     showBenchmarkWindow(ptr);
 
     showSceneWindow(ptr);
-    showCameraViewWindow(ptr);
     showPropertiesWindow(ptr);
+    showCameraViewWindow(ptr);
 
     showFileHeaderWindow(ptr);
     showCodeEditorWindow(ptr);
