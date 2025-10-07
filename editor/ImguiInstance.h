@@ -81,11 +81,18 @@ struct GaussianDataContext
     pnanovdb_imgui_settings_render_t* render_settings;
 };
 
+struct GaussianDataLoadedContext
+{
+    std::shared_ptr<pnanovdb_raster_gaussian_data_t> gaussian_data;
+    pnanovdb_raster_shader_params_t* shader_params;
+    pnanovdb_raster_context_t* raster_ctx;
+    pnanovdb_imgui_settings_render_t* render_settings;
+};
 struct EditorLoaded
 {
     std::vector<std::string> filenames;
     std::vector<pnanovdb_compute_array_t*> nanovdb_arrays;
-    std::vector<GaussianDataContext> gaussian_views;
+    std::vector<GaussianDataLoadedContext> gaussian_views;
 };
 
 struct PendingState

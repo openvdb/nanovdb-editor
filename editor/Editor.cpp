@@ -300,12 +300,6 @@ void add_gaussian_data(pnanovdb_editor_t* editor,
         worker->pending_raster_ctx.set_pending(raster_ctx);
         worker->pending_shader_params.set_pending(ptr->shader_params);
         worker->pending_shader_params_data_type.set_pending(ptr->shader_params_data_type);
-
-        // wait until the data is processed so they can be released by the caller after this function returns
-        while (worker->pending_gaussian_data.pending_data.load() != nullptr)
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
     }
     else
     {
@@ -322,8 +316,7 @@ void add_gaussian_data(pnanovdb_editor_t* editor,
         if (it != views->gaussians.end())
         {
             // replace existing view if name matches
-            views->gaussians[raster_params->name] = { gaussian_data, raster_params, raster_ctx, nullptr };
-            return;
+            views->gaussians.erase(it);
         }
         views->gaussians[raster_params->name] = { gaussian_data, raster_params, raster_ctx, nullptr };
     }
@@ -699,6 +692,9 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             break;
         }
 
+        // pending raster data deleted next frame after being replaced
+        std::shared_ptr<pnanovdb_raster_gaussian_data_t> oldData;
+
         // create background image texture
         pnanovdb_compute_texture_desc_t tex_desc = {};
         tex_desc.texture_type = PNANOVDB_COMPUTE_TEXTURE_TYPE_2D;
@@ -1014,6 +1010,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 std::string filename = fsPath.stem().string();
                 imgui_user_instance->loaded.filenames.push_back(filename);
                 pending_raster_params->name = imgui_user_instance->loaded.filenames.back().c_str();
+                pending_raster_params->data_type = raster_shader_params_data_type;
 
                 raster_task_id = raster_worker.enqueue(
                     [&raster_worker](
@@ -1067,10 +1064,34 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                     else if (imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::Raster2D)
                     {
                         auto ptr = pnanovdb_raster::cast(pending_gaussian_data);
-                        imgui_user_instance->loaded.gaussian_views.push_back(
-                            { pending_gaussian_data, (pnanovdb_raster_shader_params_t*)ptr->shader_params->data,
-                              pending_raster_ctx, nullptr });
 
+                        pnanovdb_raster_shader_params_t* raster_params =
+                            (pnanovdb_raster_shader_params_t*)ptr->shader_params->data;
+
+                        for (auto itPrev = imgui_user_instance->loaded.gaussian_views.begin();
+                             itPrev != imgui_user_instance->loaded.gaussian_views.end(); ++itPrev)
+                        {
+                            if (pending_raster_params->name == itPrev->shader_params->name)
+                            {
+                                oldData = itPrev->gaussian_data;
+                                imgui_user_instance->loaded.gaussian_views.erase(itPrev);
+                                break;
+                            }
+                        }
+
+                        auto& it = imgui_user_instance->loaded.gaussian_views.emplace_back();
+                        it.gaussian_data = std::shared_ptr<pnanovdb_raster_gaussian_data_t>(
+                            pending_gaussian_data,
+                            [&](pnanovdb_raster_gaussian_data_t* ptr) mutable
+                            {
+                                raster.destroy_gaussian_data(raster.compute, compute_queue, ptr);
+                                printf("Destroyed gaussian data - %p\n", ptr);
+                            });
+                        it.raster_ctx = pending_raster_ctx;
+                        it.shader_params = pending_raster_params;
+                        it.render_settings = nullptr;
+
+                        printf("Created gaussian data - %p\n", pending_gaussian_data);
                         editor->add_gaussian_data(editor, pending_raster_ctx, compute_queue, pending_gaussian_data);
                     }
                     pnanovdb_editor::Console::getInstance().addLog(
@@ -1182,11 +1203,13 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         {
             if (editor->impl->gaussian_data && editor->impl->raster_ctx)
             {
-                pnanovdb_raster_shader_params_t* raster_shader_params =
+                const pnanovdb_raster_shader_params_t* raster_shader_params =
                     (pnanovdb_raster_shader_params_t*)raster2d_shader_params_array->data;
-                raster.raster_gaussian_2d(raster.compute, device_queue, editor->impl->raster_ctx,
-                                          editor->impl->gaussian_data, background_image, image_width, image_height,
-                                          &view, &projection, raster_shader_params);
+                pnanovdb_raster_gaussian_data_t* current_gaussian_data = editor->impl->gaussian_data;
+
+                raster.raster_gaussian_2d(raster.compute, device_queue, editor->impl->raster_ctx, current_gaussian_data,
+                                          background_image, image_width, image_height, &view, &projection,
+                                          raster_shader_params);
             }
             else
             {
@@ -1275,11 +1298,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     {
         editor->impl->compute->destroy_array(it);
     }
-    for (auto& it : imgui_user_instance->loaded.gaussian_views)
-    {
-        raster.destroy_gaussian_data(raster.compute, compute_queue, it.gaussian_data);
-        raster.destroy_context(raster.compute, compute_queue, it.raster_ctx);
-    }
+
+    imgui_user_instance->loaded.gaussian_views.clear();
 
     delete pending_raster_params;
 
