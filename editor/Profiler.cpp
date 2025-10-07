@@ -15,7 +15,6 @@
 
 namespace pnanovdb_editor
 {
-
 int Profiler::s_id = 0;
 
 Profiler& Profiler::getInstance()
