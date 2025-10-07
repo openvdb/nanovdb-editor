@@ -21,15 +21,23 @@
 namespace pnanovdb_editor
 {
 
-struct ProfilerEntry
+struct ProfilerEntryValue
 {
-    pnanovdb_compute_profiler_entry_t entry = {};
-    pnanovdb_uint64_t capture_id = 0llu;
-    ProfilerEntry()
+    pnanovdb_compute_profiler_entry_t entry;
+    pnanovdb_uint64_t capture_id;
+    ProfilerEntryValue()
     {
     }
-    ProfilerEntry(const pnanovdb_compute_profiler_entry_t& entry, pnanovdb_uint64_t capture_id)
-        : entry(entry), capture_id(capture_id)
+    ProfilerEntryValue(const pnanovdb_compute_profiler_entry_t& entry, pnanovdb_uint64_t capture_id):
+        entry(entry), capture_id(capture_id)
+    {
+    }
+};
+
+struct ProfilerEntry
+{
+    std::vector<ProfilerEntryValue> entries;
+    ProfilerEntry()
     {
     }
 };
@@ -61,8 +69,8 @@ private:
 
     void render_profiler_table(pnanovdb_uint64_t capture_id,
                                const std::map<std::string, ProfilerEntry>& entries,
-                               const std::unordered_map<std::string, std::vector<pnanovdb_compute_profiler_entry_t>>& history,
-                               bool show_avg);
+                               bool show_avg,
+                               uint32_t history_depth);
 
     static int s_id;
 
@@ -73,9 +81,9 @@ private:
 
     std::atomic<bool> profiler_paused_ = true;
     bool show_averages_ = false;
+    uint32_t history_depth_ = 10u;
 
     std::unordered_map<std::string, pnanovdb_uint64_t> profiler_capture_ids_;
     std::unordered_map<std::string, std::map<std::string, ProfilerEntry>> profiler_entries_;
-    std::unordered_map<std::string, std::unordered_map<std::string, std::vector<pnanovdb_compute_profiler_entry_t>>> label_history_;
 };
 } // namespace pnanovdb_editor
