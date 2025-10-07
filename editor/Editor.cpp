@@ -631,6 +631,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             {
                 imgui_user_instance->viewport_option = imgui_instance_user::ViewportOption::NanoVDB;
             }
+            // TODO remove when handled in loaded data
             if (old_nanovdb_array)
             {
                 editor->impl->compute->destroy_array(old_nanovdb_array);
@@ -650,11 +651,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             if (updated)
             {
                 imgui_user_instance->viewport_option = imgui_instance_user::ViewportOption::Raster2D;
-            }
-            if (old_gaussian_data)
-            {
-                raster.destroy_gaussian_data(editor->impl->compute, compute_queue, old_gaussian_data);
-                old_gaussian_data = nullptr;
             }
             pnanovdb_camera_t* old_camera = nullptr;
             updated = worker->pending_camera.process_pending(editor->impl->camera, old_camera);

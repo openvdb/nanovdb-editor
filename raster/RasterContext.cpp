@@ -228,6 +228,11 @@ void destroy_gaussian_data(const pnanovdb_compute_t* compute,
                            pnanovdb_compute_queue_t* queue,
                            pnanovdb_raster_gaussian_data_t* data)
 {
+    if (!data)
+    {
+        return;
+    }
+
     auto ptr = cast(data);
 
     gpu_array_destroy(compute, queue, ptr->means_gpu_array);
@@ -236,6 +241,13 @@ void destroy_gaussian_data(const pnanovdb_compute_t* compute,
     gpu_array_destroy(compute, queue, ptr->colors_gpu_array);
     gpu_array_destroy(compute, queue, ptr->spherical_harmonics_gpu_array);
     gpu_array_destroy(compute, queue, ptr->opacities_gpu_array);
+
+    compute->destroy_array(ptr->means_cpu_array);
+    compute->destroy_array(ptr->quaternions_cpu_array);
+    compute->destroy_array(ptr->scales_cpu_array);
+    compute->destroy_array(ptr->colors_cpu_array);
+    compute->destroy_array(ptr->spherical_harmonics_cpu_array);
+    compute->destroy_array(ptr->opacities_cpu_array);
 
     for (pnanovdb_uint32_t idx = 0u; idx < shader_param_count; idx++)
     {

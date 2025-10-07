@@ -105,7 +105,6 @@ class pnanovdb_CameraView(Structure):
         ("num_cameras", c_uint32),
         ("axis_length", c_float),
         ("axis_thickness", c_float),
-        ("axis_scale", c_float),
         ("frustum_line_width", c_float),
         ("frustum_scale", c_float),
         ("frustum_color", pnanovdb_Vec3),

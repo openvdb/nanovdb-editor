@@ -14,6 +14,7 @@
 // #define TEST_FILE_FORMAT
 // #define FORMAT_INGP
 #define FORMAT_PLY
+#define TEST_TRAINIG
 
 void pnanovdb_compute_log_print(pnanovdb_compute_log_level_t level, const char* format, ...)
 {
@@ -214,7 +215,11 @@ int main(int argc, char* argv[])
     const pnanovdb_reflect_data_type_t* data_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t);
     const pnanovdb_raster_shader_params_t* defaults = (const pnanovdb_raster_shader_params_t*)data_type->default_value;
     pnanovdb_raster_shader_params_t raster_params = *defaults;
+    raster_params.data_type = data_type;
+    raster_params.name = "ficus";
     pnanovdb_raster_shader_params_t raster_params_garden = *defaults;
+    raster_params_garden.data_type = data_type;
+    raster_params_garden.name = "garden";
 
     pnanovdb_compute_array_t* raster2d_shader_params_array = new pnanovdb_compute_array_t();
     raster2d_shader_params_array->element_count = 1u;
@@ -230,17 +235,28 @@ int main(int argc, char* argv[])
     pnanovdb_raster_gaussian_data_t* gaussian_data_garden = nullptr;
     pnanovdb_raster_context_t* raster_ctx = nullptr;
 
-    raster_params.name = "ficus";
-    pnanovdb_raster::raster_file(&raster, &compute, queue, raster_file, 0.f, nullptr, &gaussian_data, &raster_ctx,
-                                 nullptr, &raster_params, nullptr, nullptr);
-    editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data);
+#        ifdef TEST_TRAINIG
+    int N = 100;
+#        else
+    int N = 1;
+#        endif
+    for (int i = 0; i < N; i++)
+    {
+        raster.destroy_gaussian_data(raster.compute, queue, gaussian_data);
+        raster.destroy_gaussian_data(raster.compute, queue, gaussian_data_garden);
 
-    runEditorLoop(5);
+        pnanovdb_raster::raster_file(&raster, &compute, queue, raster_file, 0.f, nullptr, &gaussian_data, &raster_ctx,
+                                     nullptr, &raster_params, nullptr, nullptr);
+        editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data);
 
-    raster_params_garden.name = "garden";
-    pnanovdb_raster::raster_file(&raster, &compute, queue, raster_file_garden, 0.f, nullptr, &gaussian_data_garden,
-                                 &raster_ctx, nullptr, &raster_params_garden, nullptr, nullptr);
-    editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data_garden);
+        runEditorLoop(5);
+
+        pnanovdb_raster::raster_file(&raster, &compute, queue, raster_file_garden, 0.f, nullptr, &gaussian_data_garden,
+                                     &raster_ctx, nullptr, &raster_params_garden, nullptr, nullptr);
+        editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data_garden);
+
+        runEditorLoop(5);
+    }
 
     raster_params.eps2d = 0.5f;
     printf("Updating shader param eps2d to %f\n", raster_params.eps2d);
