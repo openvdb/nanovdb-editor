@@ -129,7 +129,7 @@ int main(int argc, char* argv[])
     pnanovdb_editor_config_t config = {};
     config.headless = PNANOVDB_TRUE;
     config.streaming = PNANOVDB_TRUE;
-    config.ip_address = "127.0.0.1";
+    config.ip_address = "192.168.0.6";
     config.port = 8080;
     editor.start(&editor, device, &config);
 
@@ -232,14 +232,14 @@ int main(int argc, char* argv[])
 
     raster_params.name = "ficus";
     pnanovdb_raster::raster_file(&raster, &compute, queue, raster_file, 0.f, nullptr, &gaussian_data, &raster_ctx,
-                                 nullptr, raster2d_shader_params_array, nullptr, nullptr);
+                                 nullptr, &raster_params, nullptr, nullptr);
     editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data);
 
     runEditorLoop(5);
 
     raster_params_garden.name = "garden";
     pnanovdb_raster::raster_file(&raster, &compute, queue, raster_file_garden, 0.f, nullptr, &gaussian_data_garden,
-                                 &raster_ctx, nullptr, raster2d_shader_params_array_garden, nullptr, nullptr);
+                                 &raster_ctx, nullptr, &raster_params_garden, nullptr, nullptr);
     editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data_garden);
 
     raster_params.eps2d = 0.5f;
@@ -286,10 +286,6 @@ int main(int argc, char* argv[])
     gaussian_data_garden = nullptr;
     raster.destroy_context(raster.compute, queue, raster_ctx);
     raster_ctx = nullptr;
-    raster.compute->destroy_array(raster2d_shader_params_array);
-    raster2d_shader_params_array = nullptr;
-    raster.compute->destroy_array(raster2d_shader_params_array_garden);
-    raster2d_shader_params_array_garden = nullptr;
 #endif
 
     compute.device_interface.destroy_device(device_manager, device);

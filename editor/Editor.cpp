@@ -109,18 +109,12 @@ struct EditorWorker
     ConstPendingData<pnanovdb_reflect_data_type_t> pending_shader_params_data_type;
 };
 
-struct EditorLoaded
-{
-    std::vector<std::string> filepaths;
-    std::vector<pnanovdb_compute_array_t*> nanovdb_arrays;
-    std::vector<imgui_instance_user::GaussianView> gaussian_views;
-};
-
+// views representing a loaded scene via editor's API, does not own the data
 struct EditorView
 {
     std::map<std::string, pnanovdb_camera_view_t*> cameras;
-    std::string selected_view_scene;
-    std::map<std::string, imgui_instance_user::GaussianView> gaussians;
+    std::string current_view_scene;
+    std::map<std::string, imgui_instance_user::GaussianDataContext> gaussians;
     // TODO add points
 };
 
@@ -234,16 +228,11 @@ static pnanovdb_bool_t init_impl(pnanovdb_editor_t* editor,
 
 void init(pnanovdb_editor_t* editor)
 {
-    editor->impl->loaded = new EditorLoaded();
     editor->impl->views = new EditorView();
 }
 
 void shutdown(pnanovdb_editor_t* editor)
 {
-    if (editor->impl->loaded)
-    {
-        delete static_cast<EditorLoaded*>(editor->impl->loaded);
-    }
     if (editor->impl->views)
     {
         delete static_cast<EditorView*>(editor->impl->views);
@@ -322,7 +311,14 @@ void add_gaussian_data(pnanovdb_editor_t* editor,
     EditorView* views = static_cast<EditorView*>(editor->impl->views);
     if (views && raster_params->name)
     {
-        views->selected_view_scene = raster_params->name;
+        views->current_view_scene = raster_params->name;
+        auto it = views->gaussians.find(raster_params->name);
+        if (it != views->gaussians.end())
+        {
+            // replace existing view if name matches
+            views->gaussians[raster_params->name] = { gaussian_data, raster_params, raster_ctx, nullptr };
+            return;
+        }
         views->gaussians[raster_params->name] = { gaussian_data, raster_params, raster_ctx, nullptr };
     }
 }
@@ -525,7 +521,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     float pending_voxel_size = 1.f / 128.f;
     pnanovdb_raster_gaussian_data_t* pending_gaussian_data = nullptr;
     pnanovdb_raster_context_t* pending_raster_ctx = nullptr;
-    pnanovdb_compute_array_t* pending_raster_params = nullptr;
+    pnanovdb_raster_shader_params_t* pending_raster_params = nullptr;
     pnanovdb_compute_array_t* pending_nanovdb_array = nullptr;
     pnanovdb_compute_array_t* pending_shader_params_arrays[pnanovdb_raster::shader_param_count];
     for (pnanovdb_uint32_t idx = 0u; idx < pnanovdb_raster::shader_param_count; idx++)
@@ -654,6 +650,11 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             if (updated)
             {
                 imgui_user_instance->viewport_option = imgui_instance_user::ViewportOption::Raster2D;
+            }
+            if (old_gaussian_data)
+            {
+                raster.destroy_gaussian_data(editor->impl->compute, compute_queue, old_gaussian_data);
+                old_gaussian_data = nullptr;
             }
             pnanovdb_camera_t* old_camera = nullptr;
             updated = worker->pending_camera.process_pending(editor->impl->camera, old_camera);
@@ -898,7 +899,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
                 // Update both editor and UI to the new selection
                 const auto& new_view_name = imgui_user_instance->pending.viewport_gaussian_view;
-                views->selected_view_scene = new_view_name;
+                views->current_view_scene = new_view_name;
                 imgui_user_instance->selected_scene_view = new_view_name;
 
                 load_view_into_editor_and_ui(new_view_name);
@@ -906,14 +907,14 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 imgui_user_instance->pending.viewport_gaussian_view.clear();
             }
             // Handle editor-driven selection change (only if no pending UI change)
-            else if (views->selected_view_scene != imgui_user_instance->selected_scene_view)
+            else if (views->current_view_scene != imgui_user_instance->selected_scene_view)
             {
                 save_current_view_state(imgui_user_instance->selected_scene_view);
 
                 // Update UI to match editor's selection
-                imgui_user_instance->selected_scene_view = views->selected_view_scene;
+                imgui_user_instance->selected_scene_view = views->current_view_scene;
 
-                load_view_into_editor_and_ui(views->selected_view_scene);
+                load_view_into_editor_and_ui(views->current_view_scene);
             }
 
             if (editor->impl->gaussian_data && editor->impl->raster_ctx)
@@ -1004,30 +1005,25 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                     imgui_user_instance->shader_params.get_compute_array_for_shader<ShaderParams>(
                         "raster/gaussian_frag_color.slang", editor->impl->compute);
 
-                // create new array which is passed to pending_gaussian_data and saved in editor's loaded scenes
-                pending_raster_params = editor->impl->compute->create_array(
-                    raster_shader_params_data_type->element_size, 1u, &init_raster_shader_params);
+                // create new default params
+                pending_raster_params = &init_raster_shader_params;
 
                 std::filesystem::path fsPath(pending_raster_filepath);
                 std::string filename = fsPath.stem().string();
-                EditorLoaded* loaded = static_cast<EditorLoaded*>(editor->impl->loaded);
-                loaded->filepaths.push_back(pending_raster_filepath);
-                pending_raster_params->filepath = loaded->filepaths.back().c_str();
-                loaded->filepaths.push_back(filename);
-                ((pnanovdb_raster_shader_params_t*)(pending_raster_params->data))->name =
-                    loaded->filepaths.back().c_str();
+                imgui_user_instance->loaded.filenames.push_back(filename);
+                pending_raster_params->name = imgui_user_instance->loaded.filenames.back().c_str();
 
                 raster_task_id = raster_worker.enqueue(
                     [&raster_worker](
                         pnanovdb_raster_t* raster, const pnanovdb_compute_t* compute, pnanovdb_compute_queue_t* queue,
                         const char* filepath, float voxel_size, pnanovdb_compute_array_t** nanovdb_array,
                         pnanovdb_raster_gaussian_data_t** gaussian_data, pnanovdb_raster_context_t** raster_context,
-                        pnanovdb_compute_array_t** shader_params_arrays, pnanovdb_compute_array_t* shader_params,
+                        pnanovdb_compute_array_t** shader_params_arrays, pnanovdb_raster_shader_params_t* raster_params,
                         pnanovdb_profiler_report_t profiler) -> bool
                     {
                         return pnanovdb_raster::raster_file(raster, compute, queue, filepath, voxel_size, nanovdb_array,
                                                             gaussian_data, raster_context, shader_params_arrays,
-                                                            shader_params, profiler, (void*)(&raster_worker));
+                                                            raster_params, profiler, (void*)(&raster_worker));
                     },
                     &raster, raster.compute, compute_queue, pending_raster_filepath.c_str(), pending_voxel_size,
                     imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::NanoVDB ?
@@ -1069,10 +1065,9 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                     else if (imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::Raster2D)
                     {
                         auto ptr = pnanovdb_raster::cast(pending_gaussian_data);
-                        EditorLoaded* loaded = static_cast<EditorLoaded*>(editor->impl->loaded);
-                        loaded->gaussian_views.push_back({ pending_gaussian_data,
-                                                           (pnanovdb_raster_shader_params_t*)ptr->shader_params->data,
-                                                           pending_raster_ctx, nullptr });
+                        imgui_user_instance->loaded.gaussian_views.push_back(
+                            { pending_gaussian_data, (pnanovdb_raster_shader_params_t*)ptr->shader_params->data,
+                              pending_raster_ctx, nullptr });
 
                         editor->add_gaussian_data(editor, pending_raster_ctx, compute_queue, pending_gaussian_data);
                     }
@@ -1274,16 +1269,12 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     editor->impl->compute->destroy_array(viewport_shader_params_array);
     editor->impl->compute->destroy_array(raster2d_shader_params_array);
 
-    EditorLoaded* loaded = static_cast<EditorLoaded*>(editor->impl->loaded);
-    for (auto& it : loaded->nanovdb_arrays)
+    for (auto& it : imgui_user_instance->loaded.nanovdb_arrays)
     {
         editor->impl->compute->destroy_array(it);
     }
-    for (auto& it : loaded->gaussian_views)
+    for (auto& it : imgui_user_instance->loaded.gaussian_views)
     {
-        auto ptr = pnanovdb_raster::cast(it.gaussian_data);
-        editor->impl->compute->destroy_array(ptr->shader_params);
-
         raster.destroy_gaussian_data(raster.compute, compute_queue, it.gaussian_data);
         raster.destroy_context(raster.compute, compute_queue, it.raster_ctx);
     }

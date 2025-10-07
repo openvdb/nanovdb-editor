@@ -422,16 +422,6 @@ int main(int argc, char* argv[])
     pnanovdb_raster_shader_params_t raster_params = *defaults;
     pnanovdb_raster_shader_params_t raster_params_garden = *defaults;
 
-    pnanovdb_compute_array_t* raster2d_shader_params_array = new pnanovdb_compute_array_t();
-    raster2d_shader_params_array->element_count = 1u;
-    raster2d_shader_params_array->element_size = data_type->element_size;
-    raster2d_shader_params_array->data = (void*)&raster_params;
-
-    pnanovdb_compute_array_t* raster2d_shader_params_array_garden = new pnanovdb_compute_array_t();
-    raster2d_shader_params_array_garden->element_count = 1u;
-    raster2d_shader_params_array_garden->element_size = data_type->element_size;
-    raster2d_shader_params_array_garden->data = (void*)&raster_params_garden;
-
     pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr;
     pnanovdb_raster_gaussian_data_t* gaussian_data_garden = nullptr;
     pnanovdb_raster_context_t* raster_ctx = nullptr;
@@ -453,12 +443,12 @@ int main(int argc, char* argv[])
 #        else
     raster_params.name = "ficus";
     pnanovdb_raster::raster_file(&raster, &compute, queue, raster_file, 0.f, nullptr, &gaussian_data, &raster_ctx,
-                                 nullptr, raster2d_shader_params_array, nullptr, nullptr);
+                                 nullptr, &raster_params, nullptr, nullptr);
     editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data);
 
     raster_params_garden.name = "garden";
     pnanovdb_raster::raster_file(&raster, &compute, queue, raster_file_garden, 0.f, nullptr, &gaussian_data_garden,
-                                 &raster_ctx, nullptr, raster2d_shader_params_array_garden, nullptr, nullptr);
+                                 &raster_ctx, nullptr, &raster_params_garden, nullptr, nullptr);
     editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data_garden);
 #        endif
 
@@ -495,10 +485,6 @@ int main(int argc, char* argv[])
     gaussian_data_garden = nullptr;
     raster.destroy_context(raster.compute, queue, raster_ctx);
     raster_ctx = nullptr;
-    raster.compute->destroy_array(raster2d_shader_params_array);
-    raster2d_shader_params_array = nullptr;
-    raster.compute->destroy_array(raster2d_shader_params_array_garden);
-    raster2d_shader_params_array_garden = nullptr;
 
     pnanovdb_raster_free(&raster);
 #    endif

@@ -73,12 +73,19 @@ enum class ViewsTypes
     None
 };
 
-struct GaussianView
+struct GaussianDataContext
 {
     pnanovdb_raster_gaussian_data_t* gaussian_data;
     pnanovdb_raster_shader_params_t* shader_params;
     pnanovdb_raster_context_t* raster_ctx;
     pnanovdb_imgui_settings_render_t* render_settings;
+};
+
+struct EditorLoaded
+{
+    std::vector<std::string> filenames;
+    std::vector<pnanovdb_compute_array_t*> nanovdb_arrays;
+    std::vector<GaussianDataContext> gaussian_views;
 };
 
 struct PendingState
@@ -182,6 +189,7 @@ struct Instance
 
     std::shared_ptr<pnanovdb_compute_array_t> nanovdb_array = nullptr;
 
+    EditorLoaded loaded;
     ViewsTypes selected_view_type = ViewsTypes::None;
 
     std::map<std::string, pnanovdb_camera_view_t*>* camera_views = nullptr;
@@ -191,7 +199,7 @@ struct Instance
 
     std::string selected_scene_view = "";
     std::map<std::string, pnanovdb_compute_array_t>* nanovdb_arrays = nullptr;
-    std::map<std::string, GaussianView>* gaussian_views = nullptr;
+    std::map<std::string, GaussianDataContext>* gaussian_views = nullptr;
     std::string raster_shader_group = s_raster2d_shader_group;
     std::map<std::string, pnanovdb_imgui_settings_render_t> views_render_settings;
 

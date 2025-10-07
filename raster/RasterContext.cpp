@@ -100,7 +100,7 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
                                                       pnanovdb_compute_array_t* spherical_harmonics,
                                                       pnanovdb_compute_array_t* opacities,
                                                       pnanovdb_compute_array_t** shader_params_arrays,
-                                                      pnanovdb_compute_array_t* shader_params)
+                                                      pnanovdb_raster_shader_params_t* raster_params)
 {
     auto ptr = new gaussian_data_t();
 
@@ -109,10 +109,10 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
 
     ptr->has_uploaded = PNANOVDB_FALSE;
 
-    // when single array passed, assume per update shader params
-    if (shader_params)
+    if (raster_params)
     {
-        ptr->shader_params = shader_params;
+        ptr->shader_params =
+            compute->create_array(sizeof(char), raster_params->data_type->element_size, (void*)raster_params);
     }
 
     ptr->means_cpu_array = compute->create_array(means->element_size, means->element_count, means->data);
@@ -245,6 +245,8 @@ void destroy_gaussian_data(const pnanovdb_compute_t* compute,
             compute->destroy_array(ptr->shader_params_cpu_arrays[idx]);
         }
     }
+
+    compute->destroy_array(ptr->shader_params);
 
     delete ptr;
 }
