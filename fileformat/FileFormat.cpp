@@ -233,19 +233,28 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
         arr_scales.push_back(element[prop_scale_2]);
         // put in rrrgggbbb convention
         arr_sh.push_back(element[prop_f_dc_0]);
-        for (unsigned int idx = 0u; idx < 15u; idx++)
+        if (prop_f_rest_0 != ~0u)
         {
-            arr_sh.push_back(element[prop_f_rest_0 + idx]);
+            for (unsigned int idx = 0u; idx < 15u; idx++)
+            {
+                arr_sh.push_back(element[prop_f_rest_0 + idx]);
+            }
         }
         arr_sh.push_back(element[prop_f_dc_1]);
-        for (unsigned int idx = 0u; idx < 15u; idx++)
+        if (prop_f_rest_0 != ~0u)
         {
-            arr_sh.push_back(element[prop_f_rest_0 + 15u + idx]);
+            for (unsigned int idx = 0u; idx < 15u; idx++)
+            {
+                arr_sh.push_back(element[prop_f_rest_0 + 15u + idx]);
+            }
         }
         arr_sh.push_back(element[prop_f_dc_2]);
-        for (unsigned int idx = 0u; idx < 15u; idx++)
+        if (prop_f_rest_0 != ~0u)
         {
-            arr_sh.push_back(element[prop_f_rest_0 + 30u + idx]);
+            for (unsigned int idx = 0u; idx < 15u; idx++)
+            {
+                arr_sh.push_back(element[prop_f_rest_0 + 30u + idx]);
+            }
         }
     }
 
