@@ -300,6 +300,12 @@ void add_gaussian_data(pnanovdb_editor_t* editor,
         worker->pending_raster_ctx.set_pending(raster_ctx);
         worker->pending_shader_params.set_pending(ptr->shader_params);
         worker->pending_shader_params_data_type.set_pending(ptr->shader_params_data_type);
+
+        // wait until the data is processed so they can be released by the caller after this function returns
+        while (worker->pending_gaussian_data.pending_data.load() != nullptr)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
     }
     else
     {
