@@ -129,24 +129,11 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
                      {
                          // printf("/index.html !!!!\n");
 
-                         std::string response_str(INDEX_HTML);
-
-                         size_t serveraddress_pos = response_str.find("$serveraddress");
-                         if (serveraddress_pos != std::string::npos)
-                         {
-                             response_str.replace(serveraddress_pos, 14u, g_server_instance->serveraddress);
-                         }
-                         size_t port_pos = response_str.find("$port");
-                         if (port_pos != std::string::npos)
-                         {
-                             response_str.replace(port_pos, 5u, std::to_string(g_server_instance->port));
-                         }
-
                          return req->create_response()
                              .append_header(restinio::http_field::server, "NanoVDB Editor Server")
                              .append_header_date_field()
                              .append_header(restinio::http_field::content_type, "text/html")
-                             .set_body(std::move(response_str))
+                             .set_body(INDEX_HTML)
                              .done();
                      });
 
