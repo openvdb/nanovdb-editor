@@ -16,7 +16,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-latest, windows-latest]
 
     steps:
     - uses: actions/checkout@v4
@@ -26,14 +26,21 @@ jobs:
     - name: Build wheels
       uses: pypa/cibuildwheel@v2.16.2
       env:
-        CIBW_BUILD: cp38-* cp39-* cp310-* cp311-* cp312-*
-        CIBW_SKIP: "*-win32 *-manylinux_i686 pp*"
+        CIBW_BUILD: cp311-*
+        CIBW_SKIP: "*-manylinux_i686 pp* *-win32 *-macosx*"
         CIBW_ARCHS_LINUX: x86_64
+        CIBW_ARCHS_WINDOWS: AMD64
         CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
 
-        # For manylinux_2_28 (AlmaLinux 8 based)
+        # Linux dependencies
         CIBW_BEFORE_ALL_LINUX: |
           dnf install -y cmake git
+          cmake --version
+
+        # Windows dependencies
+        CIBW_BEFORE_ALL_WINDOWS: |
+          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System'
+          refreshenv
           cmake --version
 
         # Install test dependencies before testing
@@ -75,13 +82,8 @@ jobs:
     steps:
     - uses: actions/download-artifact@v4
       with:
-        pattern: wheels-*
+        pattern: "*"
         merge-multiple: true
-        path: dist/
-
-    - uses: actions/download-artifact@v4
-      with:
-        name: sdist
         path: dist/
 
     - uses: pypa/gh-action-pypi-publish@release/v1
@@ -89,7 +91,7 @@ jobs:
         password: ${{ secrets.TEST_PYPI_API_TOKEN }}
         repository-url: https://test.pypi.org/legacy/
 
-  # Production upload for version tags (with OIDC when workflow is on main)
+  # Production upload for version tags
   upload_pypi:
     needs: [build_wheels, build_sdist]
     runs-on: ubuntu-latest
@@ -98,13 +100,8 @@ jobs:
     steps:
     - uses: actions/download-artifact@v4
       with:
-        pattern: wheels-*
+        pattern: "*"
         merge-multiple: true
-        path: dist/
-
-    - uses: actions/download-artifact@v4
-      with:
-        name: sdist
         path: dist/
 
     - uses: pypa/gh-action-pypi-publish@release/v1

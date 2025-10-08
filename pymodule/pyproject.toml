@@ -16,6 +16,7 @@ license = {text = "Apache-2.0"}
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
+    "numpy>=1.19.0",
 ]
 
 [project.urls]
@@ -35,6 +36,9 @@ source-dir = ".."
 args = [
     "-DSKBUILD=ON",
 ]
+
+[tool.scikit-build.wheel]
+py-api = "py3"
 
 [tool.scikit-build.metadata.version]
 provider = "scikit_build_core.metadata.regex"
