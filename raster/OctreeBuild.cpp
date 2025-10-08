@@ -801,7 +801,7 @@ void raster_octree_build(pnanovdb_raster_gaussian_data_t* data_in)
 
     nanovdb::tools::CreateNanoGrid<nanovdb::tools::build::UInt32Grid> grid_built(grid);
 
-    grid_built.addBlindData("gaussian_headers",
+    grid_built.addBlindData("gaussian_flat_headers",
         nanovdb::GridBlindDataSemantic::Unknown,
         nanovdb::GridBlindDataClass::Unknown,
         nanovdb::GridType::UInt32, (sizeof(header_flat_t) / 4u) * flat_headers.size(), 4u);
@@ -881,19 +881,19 @@ void raster_octree_build(pnanovdb_raster_gaussian_data_t* data_in)
         nanovdb::GridBlindDataSemantic::Unknown,
         nanovdb::GridBlindDataClass::Unknown,
         nanovdb::GridType::Float, 3u * data->point_count, 4u);
+    grid_built.addBlindData("gaussians_headers",
+        nanovdb::GridBlindDataSemantic::Unknown,
+        nanovdb::GridBlindDataClass::Unknown,
+        nanovdb::GridType::UInt32, 5u * key_headers.size(), 4u);
 
     nanovdb::GridHandle<nanovdb::HostBuffer> grid_handle = grid_built.getHandle<uint32_t>();
 
     auto grid_ptr = grid_handle.grid<uint32_t>();
 
-    uint32_t* blind_headers = grid_ptr->getBlindData<uint32_t>(0u);
+    uint32_t* blind_flat_headers = grid_ptr->getBlindData<uint32_t>(0u);
     for (size_t idx = 0u; idx < key_headers.size(); idx++)
     {
-        memcpy(blind_headers + (sizeof(header_flat_t) / 4u) * idx, &flat_headers[idx], sizeof(header_flat_t));
-        //blind_headers[4u * idx + 0u] = (uint32_t)key_headers[idx].begin_idx;
-        //blind_headers[4u * idx + 1u] = (uint32_t)key_headers[idx].count;
-        //blind_headers[4u * idx + 2u] = (uint32_t)key_headers[idx].parent_idx;
-        //blind_headers[4u * idx + 3u] = (uint32_t)(key_headers[idx].key >> 48u);
+        memcpy(blind_flat_headers + (sizeof(header_flat_t) / 4u) * idx, &flat_headers[idx], sizeof(header_flat_t));
     }
     uint32_t* blind_ids = grid_ptr->getBlindData<uint32_t>(1u);
     for (size_t idx = 0u; idx < keys.size(); idx++)
@@ -989,6 +989,15 @@ void raster_octree_build(pnanovdb_raster_gaussian_data_t* data_in)
     for (size_t idx = 0u; idx < 3u * data->point_count; idx++)
     {
         blind_conics_z[idx] = conics_axis[2][idx];
+    }
+    uint32_t* blind_headers = grid_ptr->getBlindData<uint32_t>(20u);
+    for (size_t idx = 0u; idx < key_headers.size(); idx++)
+    {
+        blind_headers[5u * idx + 0u] = (uint32_t)key_headers[idx].begin_idx;
+        blind_headers[5u * idx + 1u] = (uint32_t)key_headers[idx].count;
+        blind_headers[5u * idx + 2u] = (uint32_t)(key_headers[idx].key);
+        blind_headers[5u * idx + 3u] = (uint32_t)(key_headers[idx].key >> 32u);
+        blind_headers[5u * idx + 4u] = (uint32_t)key_headers[idx].parent_idx;
     }
 
     static const char* vdb_path = "./data/octree.nvdb";

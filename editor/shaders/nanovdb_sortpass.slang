@@ -205,25 +205,16 @@ uint get_gaussian_sort_key(pnanovdb_address_t means, float3 ray_dir, uint id)
     return float_to_sort_key(t);
 }
 
-bool is_in_window(uint block_idx, pnanovdb_address_t headers, uint header_idx, inout uint last_header_idx)
+bool is_in_window(uint block_idx, pnanovdb_address_t addr_headers, uint header_idx, inout uint last_header_idx)
 {
     uint window_min = 1024u * block_idx;
     uint window_max = window_min + 1023u;
 
     // find first non-zero count
-    pnanovdb_uint32_t begin_idx = 0u;
-    pnanovdb_uint32_t count = 0u;
-    for (uint level = 0u; level < 12u; level++)
-    {
-        begin_idx = pnanovdb_read_uint32(buf,
-            pnanovdb_address_offset_product(headers, 18u * header_idx + level, 4u));
-        count = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(headers, 18u * header_idx + (level >> 1u) + 12u, 4u));
-        count = (count >> ((level & 1) << 4u)) & 0xFFFF;
-        if (count != 0u)
-        {
-            break;
-        }
-    }
+    pnanovdb_uint32_t begin_idx = pnanovdb_read_uint32(buf,
+            pnanovdb_address_offset_product(addr_headers, 5u * header_idx + 0u, 4u));
+    pnanovdb_uint32_t count = pnanovdb_read_uint32(buf,
+            pnanovdb_address_offset_product(addr_headers, 5u * header_idx + 1u, 4u));
 
     if (begin_idx >= window_min && begin_idx <= window_max &&
         begin_idx + count > window_max)
@@ -264,7 +255,7 @@ void main(uint3 workgroup_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     pnanovdb_gridblindmetadata_handle_t metadata = pnanovdb_grid_get_gridblindmetadata(buf, grid, 1u);
     uint ids_count = uint(pnanovdb_gridblindmetadata_get_value_count(buf, metadata));
 
-    pnanovdb_address_t addr_headers = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 0u);
+    pnanovdb_address_t addr_headers = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 20u);
     pnanovdb_address_t addr_ids = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
     pnanovdb_address_t addr_means = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
     pnanovdb_address_t addr_gaussian_header_ids = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 7u);
@@ -342,19 +333,10 @@ void main(uint3 workgroup_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         if (s_last_header_idx != ~0u)
         {
             // find first non-zero count
-            pnanovdb_uint32_t begin_idx = 0u;
-            pnanovdb_uint32_t count = 0u;
-            for (uint level = 0u; level < 12u; level++)
-            {
-                begin_idx = pnanovdb_read_uint32(buf,
-                    pnanovdb_address_offset_product(addr_headers, 18u * s_last_header_idx + level, 4u));
-                count = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(addr_headers, 18u * s_last_header_idx + (level >> 1u) + 12u, 4u));
-                count = (count >> ((level & 1) << 4u)) & 0xFFFF;
-                if (count != 0u)
-                {
-                    break;
-                }
-            }
+            pnanovdb_uint32_t begin_idx = pnanovdb_read_uint32(buf,
+                    pnanovdb_address_offset_product(addr_headers, 5u * s_last_header_idx + 0u, 4u));
+            pnanovdb_uint32_t count = pnanovdb_read_uint32(buf,
+                    pnanovdb_address_offset_product(addr_headers, 5u * s_last_header_idx + 1u, 4u));
 
             ids = uint4(
                 (4u * thread_idx1d + 0u >= count) ? ~0u : pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(addr_ids, begin_idx + 4u * thread_idx1d + 0u, 4u)),
