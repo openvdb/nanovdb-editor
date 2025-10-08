@@ -35,6 +35,7 @@ class pnanovdb_EditorConfig(Structure):
         ("port", c_int),
         ("headless", c_int32),  # pnanovdb_bool_t is int32_t in C
         ("streaming", c_int32),  # pnanovdb_bool_t is int32_t in C
+        ("stream_to_file", c_int32),  # pnanovdb_bool_t is int32_t in C
     ]
 
 
@@ -237,6 +238,7 @@ class Editor:
                 config.port = 8080
                 config.headless = 0  # pnanovdb_bool_t
                 config.streaming = 0  # pnanovdb_bool_t
+                config.stream_to_file = 0 # pnanovdb_bool_t
             show_func(
                 self._editor,
                 self._compute.device_interface().get_device(),
@@ -257,6 +259,7 @@ class Editor:
                 config.port = 8080
                 config.headless = 0  # pnanovdb_bool_t
                 config.streaming = 0  # pnanovdb_bool_t
+                config.stream_to_file = 0 # pnanovdb_bool_t
             start_func(
                 self._editor,
                 self._compute.device_interface().get_device(),

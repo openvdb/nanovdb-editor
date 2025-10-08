@@ -74,6 +74,7 @@ typedef struct pnanovdb_imgui_settings_render_t
     pnanovdb_bool_t is_upside_down = false;
     pnanovdb_bool_t vsync = true;
     pnanovdb_bool_t enable_encoder = false;
+    pnanovdb_bool_t encode_to_file = false;
     pnanovdb_int32_t encode_width = -1;
     pnanovdb_int32_t encode_height = -1;
     char server_address[256u] = { 'l', 'o', 'c', 'a', 'l', 'h', 'o', 's', 't', '\0' };
@@ -94,6 +95,7 @@ PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, is_y_up, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, is_upside_down, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, vsync, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, enable_encoder, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, encode_to_file, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_int32_t, encode_width, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_int32_t, encode_height, 0, 0)
 PNANOVDB_REFLECT_VALUE(char, server_address[0], 0, 0)
