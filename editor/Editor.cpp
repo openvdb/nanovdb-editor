@@ -997,8 +997,9 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 pending_raster_filepath = imgui_user_instance->raster_filepath;
                 pending_voxel_size = 1.f / imgui_user_instance->raster_voxels_per_unit;
 
-                 // get user params for the raster shader
-                editor->impl->compute->destroy_array(pending_shader_params_arrays[pnanovdb_raster::gaussian_frag_color_slang]);
+                // get user params for the raster shader
+                editor->impl->compute->destroy_array(
+                    pending_shader_params_arrays[pnanovdb_raster::gaussian_frag_color_slang]);
                 pending_shader_params_arrays[pnanovdb_raster::gaussian_frag_color_slang] =
                     imgui_user_instance->shader_params.get_compute_array_for_shader<ShaderParams>(
                         "raster/gaussian_frag_color.slang", editor->impl->compute);
@@ -1021,8 +1022,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                         pnanovdb_profiler_report_t profiler) -> bool
                     {
                         return raster->raster_file(raster, compute, queue, filepath, voxel_size, nanovdb_array,
-                                                            gaussian_data, raster_context, shader_params_arrays,
-                                                            raster_params, profiler, (void*)(&raster_worker));
+                                                   gaussian_data, raster_context, shader_params_arrays, raster_params,
+                                                   profiler, (void*)(&raster_worker));
                     },
                     &raster, raster.compute, compute_queue, pending_raster_filepath.c_str(), pending_voxel_size,
                     imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::NanoVDB ?
@@ -1085,7 +1086,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                         it.raster_ctx = pending_raster_ctx;
                         it.gaussian_data = std::shared_ptr<pnanovdb_raster_gaussian_data_t>(
                             pending_gaussian_data,
-                            [destroy_fn = raster.destroy_gaussian_data, compute = raster.compute, queue = compute_queue](pnanovdb_raster_gaussian_data_t* ptr)
+                            [destroy_fn = raster.destroy_gaussian_data, compute = raster.compute,
+                             queue = compute_queue](pnanovdb_raster_gaussian_data_t* ptr)
                             {
                                 destroy_fn(compute, queue, ptr);
                                 // printf("Destroyed gaussian data - %p\n", ptr);

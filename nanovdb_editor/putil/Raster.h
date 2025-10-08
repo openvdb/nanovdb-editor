@@ -129,34 +129,42 @@ typedef struct pnanovdb_raster_t
                                                                void* userdata);
 
     pnanovdb_bool_t(PNANOVDB_ABI* raster_file)(pnanovdb_raster_t* raster,
-                                    const pnanovdb_compute_t* compute,
-                                    pnanovdb_compute_queue_t* queue,
-                                    const char* filename,
-                                    float voxel_size,
-                                    pnanovdb_compute_array_t** nanovdb_arr,
-                                    pnanovdb_raster_gaussian_data_t** gaussian_data,
-                                    pnanovdb_raster_context_t** raster_context,
-                                    pnanovdb_compute_array_t** shader_params_arrays,
-                                    pnanovdb_raster_shader_params_t* raster_params,
-                                    pnanovdb_profiler_report_t profiler_report,
-                                    void* userdata);
+                                               const pnanovdb_compute_t* compute,
+                                               pnanovdb_compute_queue_t* queue,
+                                               const char* filename,
+                                               float voxel_size,
+                                               pnanovdb_compute_array_t** nanovdb_arr,
+                                               pnanovdb_raster_gaussian_data_t** gaussian_data,
+                                               pnanovdb_raster_context_t** raster_context,
+                                               pnanovdb_compute_array_t** shader_params_arrays,
+                                               pnanovdb_raster_shader_params_t* raster_params,
+                                               pnanovdb_profiler_report_t profiler_report,
+                                               void* userdata);
 
     pnanovdb_bool_t(PNANOVDB_ABI* raster_to_nanovdb_from_arrays)(pnanovdb_raster_t* raster,
-                                                    const pnanovdb_compute_t* compute,
-                                                    pnanovdb_compute_queue_t* queue,
-                                                    float voxel_size,
-                                                    pnanovdb_compute_array_t** arrays_gaussian, // means, opacities, quats, scales, sh
-                                                    pnanovdb_uint32_t array_count,
-                                                    pnanovdb_compute_array_t** out_nanovdb_arr);
+                                                                 const pnanovdb_compute_t* compute,
+                                                                 pnanovdb_compute_queue_t* queue,
+                                                                 float voxel_size,
+                                                                 pnanovdb_compute_array_t** arrays_gaussian, // means,
+                                                                                                             // opacities,
+                                                                                                             // quats,
+                                                                                                             // scales,
+                                                                                                             // sh
+                                                                 pnanovdb_uint32_t array_count,
+                                                                 pnanovdb_compute_array_t** out_nanovdb_arr);
 
     pnanovdb_bool_t(PNANOVDB_ABI* create_gaussian_data_from_arrays)(pnanovdb_raster_t* raster,
-                                            const pnanovdb_compute_t* compute,
-                                            pnanovdb_compute_queue_t* queue,
-                                            pnanovdb_compute_array_t** arrays_gaussian, // means, opacities, quats, scales, sh
-                                            pnanovdb_uint32_t array_count,
-                                            pnanovdb_raster_gaussian_data_t** gaussian_data,
-                                            pnanovdb_raster_shader_params_t* raster_params,
-                                            pnanovdb_raster_context_t** raster_context);
+                                                                    const pnanovdb_compute_t* compute,
+                                                                    pnanovdb_compute_queue_t* queue,
+                                                                    pnanovdb_compute_array_t** arrays_gaussian, // means,
+                                                                                                                // opacities,
+                                                                                                                // quats,
+                                                                                                                // scales,
+                                                                                                                // sh
+                                                                    pnanovdb_uint32_t array_count,
+                                                                    pnanovdb_raster_gaussian_data_t** gaussian_data,
+                                                                    pnanovdb_raster_shader_params_t* raster_params,
+                                                                    pnanovdb_raster_context_t** raster_context);
 } pnanovdb_raster_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_raster_t
