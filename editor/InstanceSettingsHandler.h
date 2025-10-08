@@ -53,6 +53,13 @@ static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* ent
         {
             instance->additional_shader_directories.push_back(buffer);
         }
+        else if (sscanf(line, "SelectedRenderSettingsName=%[^\n]", buffer) == 1)
+        {
+            instance->render_settings_name = buffer;
+            instance->viewport_settings[(int)instance->viewport_option].render_settings_name =
+                instance->render_settings_name;
+            instance->pending.load_camera = true;
+        }
     }
 }
 
@@ -62,6 +69,7 @@ static void WriteAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler, ImGuiText
 
     buf->appendf("[%s][Settings]\n", handler->TypeName);
     buf->appendf("GroupName=%s\n", instance->shader_group.c_str());
+    buf->appendf("SelectedRenderSettingsName=%s\n", instance->render_settings_name.c_str());
 
     for (const auto& directory : instance->additional_shader_directories)
     {

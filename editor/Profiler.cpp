@@ -42,6 +42,7 @@ bool Profiler::render(bool* update_memory_stats, float delta_time)
 
     pnanovdb_compute_device_memory_stats_t stats;
     bool show_avg = false;
+    uint32_t history_depth = 0u;
     std::vector<std::string> profiler_names;
     bool has_any_data = false;
 
@@ -49,6 +50,7 @@ bool Profiler::render(bool* update_memory_stats, float delta_time)
         std::lock_guard<std::mutex> lock(mutex_);
         stats = memory_stats_;
         show_avg = show_averages_;
+        history_depth = history_depth_;
 
         for (const auto& device_entry : profiler_entries_)
         {
@@ -120,7 +122,15 @@ bool Profiler::render(bool* update_memory_stats, float delta_time)
                 std::lock_guard<std::mutex> lock(mutex_);
                 profiler_capture_ids_.clear();
                 profiler_entries_.clear();
-                label_history_.clear();
+            }
+
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(50.f);
+            int temp_history_depth = (int)history_depth;
+            if (ImGui::DragInt("History Depth", &temp_history_depth, 1.f, 0, 1000))
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                history_depth_ = (uint32_t)temp_history_depth;
             }
 
             const char* label_averages = "Show Averages";
@@ -141,7 +151,6 @@ bool Profiler::render(bool* update_memory_stats, float delta_time)
                 if (ImGui::CollapsingHeader(profile_name.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
                 {
                     std::map<std::string, ProfilerEntry> entries_copy;
-                    std::unordered_map<std::string, std::vector<pnanovdb_compute_profiler_entry_t>> history_copy;
 
                     pnanovdb_uint64_t capture_id = 0u;
                     {
@@ -156,14 +165,9 @@ bool Profiler::render(bool* update_memory_stats, float delta_time)
                         {
                             entries_copy = profiler_entries_[profile_name];
                         }
-
-                        if (show_averages_ && label_history_.find(profile_name) != label_history_.end())
-                        {
-                            history_copy = label_history_[profile_name];
-                        }
                     }
 
-                    render_profiler_table(capture_id, entries_copy, history_copy, show_avg);
+                    render_profiler_table(capture_id, entries_copy, show_avg, history_depth);
                 }
             }
         }
@@ -182,83 +186,186 @@ bool Profiler::render(bool* update_memory_stats, float delta_time)
 void Profiler::render_profiler_table(
     pnanovdb_uint64_t capture_id,
     const std::map<std::string, ProfilerEntry>& entries,
-    const std::unordered_map<std::string, std::vector<pnanovdb_compute_profiler_entry_t>>& history,
-    bool show_avg)
+    bool show_avg,
+    uint32_t history_depth)
 {
-    if (ImGui::BeginTable("ProfilerTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+    if (show_avg)
     {
-        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("CPU (ms)", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-        ImGui::TableSetupColumn("GPU (ms)", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-        ImGui::TableHeadersRow();
+        if (ImGui::BeginTable("ProfilerTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+        {
+            ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Count", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableSetupColumn("CPU (ms)", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableSetupColumn("GPU (ms)", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableHeadersRow();
 
-        float total_cpu_time = 0.0f;
-        float total_gpu_time = 0.0f;
+            for (const auto& pair : entries)
+            {
+                const auto& label = pair.first;
+                const auto& entry = pair.second;
 
+                float cpu_sum = 0.0f;
+                float gpu_sum = 0.0f;
+                size_t count = 0u;
+                for (size_t idx = entry.entries.size() - 1u; idx < entry.entries.size(); idx--)
+                {
+                    cpu_sum += entry.entries[idx].entry.cpu_delta_time * 1000.0f;
+                    gpu_sum += entry.entries[idx].entry.gpu_delta_time * 1000.0f;
+                    count++;
+                }
+                cpu_sum = count == 0u ? 0.f : cpu_sum / (float)count;
+                gpu_sum = count == 0u ? 0.f : gpu_sum / (float)count;
+
+                if (cpu_sum == 0.f && gpu_sum == 0.f)
+                {
+                    continue;
+                }
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("%s", label.c_str());
+                ImGui::TableNextColumn();
+                ImGui::Text("%zu", count);
+                ImGui::TableNextColumn();
+                ImGui::Text("%.3f", cpu_sum);
+                ImGui::TableNextColumn();
+                ImGui::Text("%.3f", gpu_sum);
+            }
+            ImGui::EndTable();
+        }
+
+        return;
+    }
+
+    std::vector<pnanovdb_uint64_t> capture_hash(history_depth);
+    for (auto& hash : capture_hash)
+    {
+        hash = 0llu;
+    }
+    float global_total_cpu_time = 0.0f;
+    float global_total_gpu_time = 0.0f;
+    float total_cpu_time = 0.0f;
+    float total_gpu_time = 0.0f;
+
+    for (uint64_t capture_id_offset = 0llu; capture_id_offset < history_depth; capture_id_offset++)
+    {
+        if (capture_id < capture_id_offset)
+        {
+            break;
+        }
+        uint64_t cmp_capture_id = capture_id - capture_id_offset;
+
+        // compute hash, check for redundancy
+        uint32_t hash_idx = 0u;
+        uint64_t match_count = 0llu;
         for (const auto& pair : entries)
         {
             const auto& label = pair.first;
             const auto& entry = pair.second;
 
-            ImGui::TableNextRow();
-
-            ImGui::TableNextColumn();
-            ImGui::Text("%s", label.c_str());
-
-            ImGui::TableNextColumn();
-            float cpu_ms;
-            if (show_avg && history.find(label) != history.end() && !history.at(label).empty())
+            for (size_t idx = entry.entries.size() - 1u; idx < entry.entries.size(); idx--)
             {
-                float sum = 0.0f;
-                for (const auto& hist_entry : history.at(label))
+                if (entry.entries[idx].capture_id == cmp_capture_id)
                 {
-                    sum += hist_entry.cpu_delta_time * 1000.0f;
-                }
-                cpu_ms = sum / history.at(label).size();
-            }
-            else
-            {
-                cpu_ms = entry.entry.cpu_delta_time * 1000.0f;
-                if (entry.capture_id != capture_id)
-                {
-                    cpu_ms = 0.f;
+                    capture_hash[capture_id_offset] ^= (1llu << (hash_idx & 63u));
+                    match_count++;
                 }
             }
-            ImGui::Text("%.3f", cpu_ms);
-            total_cpu_time += cpu_ms;
-
-            ImGui::TableNextColumn();
-            float gpu_ms;
-            if (show_avg && history.find(label) != history.end() && !history.at(label).empty())
+            hash_idx++;
+        }
+        bool found_redundant = false;
+        for (uint64_t compare_idx = 0u; compare_idx < capture_id_offset; compare_idx++)
+        {
+            if (capture_hash[compare_idx] == capture_hash[capture_id_offset])
             {
-                float sum = 0.0f;
-                for (const auto& hist_entry : history.at(label))
-                {
-                    sum += hist_entry.gpu_delta_time * 1000.0f;
-                }
-                gpu_ms = sum / history.at(label).size();
+                found_redundant = true;
+                break;
             }
-            else
-            {
-                gpu_ms = entry.entry.gpu_delta_time * 1000.0f;
-                if (entry.capture_id != capture_id)
-                {
-                    gpu_ms = 0.f;
-                }
-            }
-            ImGui::Text("%.3f", gpu_ms);
-            total_gpu_time += gpu_ms;
+        }
+        if (found_redundant || match_count == 0llu)
+        {
+            continue;
         }
 
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::TextUnformatted("Total");
-        ImGui::TableNextColumn();
-        ImGui::Text("%.3f", total_cpu_time);
-        ImGui::TableNextColumn();
-        ImGui::Text("%.3f", total_gpu_time);
+        if (ImGui::BeginTable("ProfilerTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+        {
+            ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("CPU (ms)", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableSetupColumn("GPU (ms)", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableHeadersRow();
 
-        ImGui::EndTable();
+            total_cpu_time = 0.0f;
+            total_gpu_time = 0.0f;
+
+            for (const auto& pair : entries)
+            {
+                const auto& label = pair.first;
+                const auto& entry = pair.second;
+
+                float cpu_ms = 0.f;
+                float gpu_ms = 0.f;
+                for (size_t idx = entry.entries.size() - 1u; idx < entry.entries.size(); idx--)
+                {
+                    if (entry.entries[idx].capture_id == cmp_capture_id)
+                    {
+                        cpu_ms += entry.entries[idx].entry.cpu_delta_time * 1000.0f;
+                        gpu_ms += entry.entries[idx].entry.gpu_delta_time * 1000.0f;
+                    }
+                }
+                if (cpu_ms == 0.f && gpu_ms == 0.f)
+                {
+                    continue;
+                }
+
+                total_cpu_time += cpu_ms;
+                total_gpu_time += gpu_ms;
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("%s", label.c_str());
+                ImGui::TableNextColumn();
+                ImGui::Text("%.3f", cpu_ms);
+                ImGui::TableNextColumn();
+                ImGui::Text("%.3f", gpu_ms);
+            }
+
+            if (!show_avg) // summing up average is misleading
+            {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted("Total");
+                ImGui::TableNextColumn();
+                ImGui::Text("%.3f", total_cpu_time);
+                ImGui::TableNextColumn();
+                ImGui::Text("%.3f", total_gpu_time);
+            }
+
+            global_total_cpu_time += total_cpu_time;
+            global_total_gpu_time += total_gpu_time;
+
+            ImGui::EndTable();
+        }
+    }
+    // if blobal time is unique, show it
+    if (global_total_cpu_time != total_cpu_time || global_total_gpu_time != total_gpu_time)
+    {
+        if (ImGui::BeginTable("ProfilerTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+        {
+            ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("CPU (ms)", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableSetupColumn("GPU (ms)", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableHeadersRow();
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted("Global Total");
+            ImGui::TableNextColumn();
+            ImGui::Text("%.3f", global_total_cpu_time);
+            ImGui::TableNextColumn();
+            ImGui::Text("%.3f", global_total_gpu_time);
+
+            ImGui::EndTable();
+        }
     }
 }
 
@@ -284,30 +391,36 @@ void Profiler::report_callback(void* userdata,
 
     profiler->profiler_capture_ids_[name] = captureID;
 
+    // cleanup
+    auto& profiler_entries = profiler->profiler_entries_[name];
+    for (auto& pair : profiler_entries)
+    {
+        const auto& label = pair.first;
+        auto& entry = pair.second;
+        if (!entry.entries.empty() && captureID >= profiler->history_depth_)
+        {
+            size_t write_idx = 0u;
+            for (size_t read_idx = 0u; read_idx < entry.entries.size(); read_idx++)
+            {
+                if (entry.entries[read_idx].capture_id > captureID - profiler->history_depth_)
+                {
+                    entry.entries[write_idx] = entry.entries[read_idx];
+                    write_idx++;
+                }
+            }
+            entry.entries.resize(write_idx);
+        }
+    }
+
+    // add new
     for (pnanovdb_uint32_t i = 0; i < numEntries; ++i)
     {
         if (entries[i].label && entries[i].label[0] != '\0')
         {
             std::string label = entries[i].label;
-            // merge entries with a common captureID
             auto& profiler_entry = profiler->profiler_entries_[name][label];
-            if (profiler_entry.capture_id == captureID)
-            {
-                profiler_entry.entry.cpu_delta_time += entries[i].cpu_delta_time;
-                profiler_entry.entry.gpu_delta_time += entries[i].gpu_delta_time;
-            }
-            else
-            {
-                profiler_entry = ProfilerEntry{ entries[i], captureID };
-            }
 
-            const size_t MAX_HISTORY_PER_LABEL = 100;
-            auto& history = profiler->label_history_[name][label];
-            history.push_back(entries[i]);
-            if (history.size() > MAX_HISTORY_PER_LABEL)
-            {
-                history.erase(history.begin());
-            }
+            profiler_entry.entries.push_back({entries[i], captureID});
         }
     }
 }
