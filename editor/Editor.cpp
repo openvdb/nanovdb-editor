@@ -1088,12 +1088,12 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                             [destroy_fn = raster.destroy_gaussian_data, compute = raster.compute, queue = compute_queue](pnanovdb_raster_gaussian_data_t* ptr)
                             {
                                 destroy_fn(compute, queue, ptr);
-                                printf("Destroyed gaussian data - %p\n", ptr);
+                                // printf("Destroyed gaussian data - %p\n", ptr);
                             });
                         it.shader_params = pending_raster_params;
                         it.render_settings = nullptr;
+                        // printf("Created gaussian data - %p\n", pending_gaussian_data);
 
-                        printf("Created gaussian data - %p\n", pending_gaussian_data);
                         editor->add_gaussian_data(editor, pending_raster_ctx, compute_queue, pending_gaussian_data);
                     }
                     pnanovdb_editor::Console::getInstance().addLog(

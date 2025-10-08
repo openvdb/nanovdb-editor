@@ -599,15 +599,19 @@ void context_flushNodes(Context* context)
         auto ptr = cast(context->deferredReleaseBuffers[idx]);
         if (ptr)
         {
-            if (ptr->memory_type != PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE &&
+            // If minLifetime is 0, force process all buffers (explicit immediate cleanup request)
+            // Otherwise, only process UPLOAD buffers if lastActive <= lastFenceCompleted
+            if (context->minLifetime != 0 &&
+                ptr->memory_type != PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE &&
                 ptr->lastActive > context->deviceQueue->lastFenceCompleted)
             {
-                continue;
+                continue;  // Don't process yet, but also don't erase - keep in deferred list
             }
             ptr->refCount--;
             ptr->lastActive = context->deviceQueue->nextFenceValue;
+            // Only erase if we actually processed it
+            context->deferredReleaseBuffers.erase(context->deferredReleaseBuffers.begin() + idx);
         }
-        context->deferredReleaseBuffers.erase(context->deferredReleaseBuffers.begin() + idx);
     }
     // apply deferred destroyTexture
     for (pnanovdb_uint32_t idx = context->deferredReleaseTextures.size() - 1u;

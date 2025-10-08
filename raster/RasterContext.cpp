@@ -234,6 +234,10 @@ void destroy_gaussian_data(const pnanovdb_compute_t* compute,
     }
 
     auto ptr = cast(data);
+    auto context = compute->device_interface.get_compute_context(queue);
+
+    // Set minLifetime to 0 so buffers are freed immediately
+    compute->device_interface.set_resource_min_lifetime(context, 0u);
 
     gpu_array_destroy(compute, queue, ptr->means_gpu_array);
     gpu_array_destroy(compute, queue, ptr->quaternions_gpu_array);
@@ -260,10 +264,19 @@ void destroy_gaussian_data(const pnanovdb_compute_t* compute,
 
     delete[] ptr->shader_params_gpu_arrays;
     delete[] ptr->shader_params_cpu_arrays;
-    
+
     compute->destroy_array(ptr->shader_params);
 
     delete ptr;
+
+    // Flush->wait->flush to ensure deferred cleanup and pool cleanup run while minLifetime=0
+    pnanovdb_uint64_t flushed_frame = 0llu;
+    compute->device_interface.flush(queue, &flushed_frame, nullptr, nullptr);
+    compute->device_interface.wait_idle(queue);
+    compute->device_interface.flush(queue, &flushed_frame, nullptr, nullptr);
+
+    // Restore original minLifetime
+    compute->device_interface.set_resource_min_lifetime(context, 60u);
 }
 
 }
