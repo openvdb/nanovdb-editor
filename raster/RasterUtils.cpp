@@ -9,8 +9,6 @@
     \brief
 */
 
-#pragma once
-
 #include <nanovdb_editor/putil/Raster.h>
 #include <nanovdb_editor/putil/WorkerThread.hpp>
 #include <nanovdb_editor/putil/FileFormat.h>
