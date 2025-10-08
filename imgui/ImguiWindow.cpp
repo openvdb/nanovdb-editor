@@ -290,6 +290,11 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
 
         compute->device_interface.destroy_encoder(ptr->encoder);
         ptr->encoder = nullptr;
+        if (ptr->encode_file)
+        {
+            fclose(ptr->encode_file);
+            ptr->encode_file = nullptr;
+        }
 
         if (ptr->window_glfw)
         {
