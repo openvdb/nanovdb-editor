@@ -6,7 +6,7 @@ requires = [
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "nanovdb_editor"
+name = "nanovdb-editor"
 dynamic = ["version"]
 description = "NanoVDB Editor Python Module"
 authors = [
