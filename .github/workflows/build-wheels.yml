@@ -35,7 +35,7 @@ jobs:
         CIBW_SKIP: "*-manylinux_i686 pp* *-win32 *-macosx*"
         CIBW_ARCHS_LINUX: x86_64
         CIBW_ARCHS_WINDOWS: AMD64
-        CIBW_MANYLINUX_X86_64_IMAGE: manylinux1
+        CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
         # Linux dependencies
         CIBW_BEFORE_ALL_LINUX: |
           dnf install -y cmake git
@@ -45,6 +45,9 @@ jobs:
         CIBW_BEFORE_ALL_WINDOWS: |
           python -m pip install cmake
           cmake --version
+
+        CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
+          auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs || cp {wheel} {dest_dir}/
 
         # Install test dependencies before testing
         CIBW_TEST_REQUIRES: numpy
