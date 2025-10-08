@@ -48,7 +48,7 @@ jobs:
           cmake --version
 
         CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
-          auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs || cp {wheel} {dest_dir}/
+          auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs
 
         # Install test dependencies before testing
         CIBW_TEST_REQUIRES: numpy
@@ -57,6 +57,14 @@ jobs:
         CIBW_TEST_COMMAND: python -c "import nanovdb_editor; print('Import successful')"
       with:
         package-dir: pymodule
+
+    - name: Filter out unsupported wheels
+      run: |
+        ls -la wheelhouse/
+        # Remove wheels with linux_x86_64 tag
+        rm -f wheelhouse/*-linux_x86_64.whl
+        ls -la wheelhouse/
+      shell: bash
 
     - uses: actions/upload-artifact@v4
       with:
@@ -104,7 +112,7 @@ jobs:
         password: ${{ secrets.TEST_PYPI_API_TOKEN }}
         repository-url: https://test.pypi.org/legacy/
         verbose: true
-        skip-existing: true  # Skip if version already exists
+        skip-existing: true
 
   # Production upload for version tags
   upload_pypi:
