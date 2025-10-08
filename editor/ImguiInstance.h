@@ -28,6 +28,7 @@
 #include <map>
 #include <mutex>
 #include <memory>
+#include <set>
 
 namespace imgui_instance_user
 {
@@ -91,7 +92,7 @@ struct GaussianDataLoadedContext
 };
 struct EditorLoaded
 {
-    std::vector<std::string> filenames;
+    std::set<std::string> filenames; // TODO add some cleanup
     std::vector<pnanovdb_compute_array_t*> nanovdb_arrays;
     std::vector<GaussianDataLoadedContext> gaussian_views;
 };

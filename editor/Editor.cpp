@@ -1009,9 +1009,13 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
                 std::filesystem::path fsPath(pending_raster_filepath);
                 std::string filename = fsPath.stem().string();
-                imgui_user_instance->loaded.filenames.push_back(filename);
-                pending_raster_params->name = imgui_user_instance->loaded.filenames.back().c_str();
+                imgui_user_instance->loaded.filenames.insert(filename);
+                pending_raster_params->name = (*imgui_user_instance->loaded.filenames.rbegin()).c_str();
                 pending_raster_params->data_type = raster_shader_params_data_type;
+
+                pnanovdb_compute_queue_t* worker_queue =
+                    imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::NanoVDB ? compute_queue :
+                                                                                                           device_queue;
 
                 raster_task_id = raster_worker.enqueue(
                     [&raster_worker](
@@ -1025,7 +1029,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                                                    gaussian_data, raster_context, shader_params_arrays, raster_params,
                                                    profiler, (void*)(&raster_worker));
                     },
-                    &raster, raster.compute, compute_queue, pending_raster_filepath.c_str(), pending_voxel_size,
+                    &raster, raster.compute, worker_queue, pending_raster_filepath.c_str(), pending_voxel_size,
                     imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::NanoVDB ?
                         &pending_nanovdb_array :
                         nullptr,
@@ -1087,7 +1091,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                         it.gaussian_data = std::shared_ptr<pnanovdb_raster_gaussian_data_t>(
                             pending_gaussian_data,
                             [destroy_fn = raster.destroy_gaussian_data, compute = raster.compute,
-                             queue = compute_queue](pnanovdb_raster_gaussian_data_t* ptr)
+                             queue = device_queue](pnanovdb_raster_gaussian_data_t* ptr)
                             {
                                 destroy_fn(compute, queue, ptr);
                                 // printf("Destroyed gaussian data - %p\n", ptr);
@@ -1096,7 +1100,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                         it.render_settings = nullptr;
                         // printf("Created gaussian data - %p\n", pending_gaussian_data);
 
-                        editor->add_gaussian_data(editor, pending_raster_ctx, compute_queue, pending_gaussian_data);
+                        editor->add_gaussian_data(editor, pending_raster_ctx, device_queue, pending_gaussian_data);
                     }
                     pnanovdb_editor::Console::getInstance().addLog(
                         "Rasterization of '%s' was successful", pending_raster_filepath.c_str());
@@ -1304,8 +1308,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     // }
 
     imgui_user_instance->loaded.gaussian_views.clear();
-
-    delete pending_raster_params;
 
     pnanovdb_raster_free(&raster);
 
