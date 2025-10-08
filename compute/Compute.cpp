@@ -245,7 +245,6 @@ pnanovdb_bool_t dispatch_shader_on_nanovdb_array(const pnanovdb_compute_t* compu
     pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
     pnanovdb_compute_context_t* compute_context = compute->device_interface.get_compute_context(queue);
 
-    pnanovdb_compute_buffer_t* nanovdb_upload_buffer = nullptr;
     if (nanovdb_array && *nanovdb_buffer == nullptr)
     {
         // nanovdb buffer to upload
@@ -283,6 +282,9 @@ pnanovdb_bool_t dispatch_shader_on_nanovdb_array(const pnanovdb_compute_t* compu
         upload_params.dst = compute_interface->register_buffer_as_transient(compute_context, *nanovdb_buffer);
         upload_params.debug_label = "dispatch_shader_on_nanovdb_array_upload";
         compute_interface->copy_buffer(compute_context, &upload_params);
+
+        // free upload buffer
+        compute_interface->destroy_buffer(compute_context, nanovdb_upload_buffer);
     }
 
     pnanovdb_compute_buffer_desc_t image_buf_desc = {};
