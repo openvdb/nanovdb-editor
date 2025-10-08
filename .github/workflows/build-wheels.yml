@@ -31,10 +31,10 @@ jobs:
         CIBW_ARCHS_LINUX: x86_64
         CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
 
-        # Install dependencies
-        CIBW_BEFORE_ALL_LINUX: >
-          yum install -y cmake3 git &&
-          ln -sf /usr/bin/cmake3 /usr/bin/cmake
+        # For manylinux_2_28 (AlmaLinux 8 based)
+        CIBW_BEFORE_ALL_LINUX: |
+          dnf install -y cmake git
+          cmake --version
 
         # Test the wheels
         CIBW_TEST_COMMAND: python -c "import nanovdb_editor; print('Import successful')"
