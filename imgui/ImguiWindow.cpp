@@ -19,6 +19,8 @@
 #include "Socket.h"
 #include <server/Server.h>
 
+#include <stdlib.h>
+
 namespace pnanovdb_imgui_window_default
 {
 
@@ -64,6 +66,7 @@ struct Window
     pnanovdb_compute_log_print_t log_print = nullptr;
 
     pnanovdb_compute_encoder_t* encoder = nullptr;
+    FILE* encode_file = nullptr;
     pnanovdb_socket_t* socket = nullptr;
     pnanovdb_server_instance_t* server = nullptr;
 
@@ -247,6 +250,11 @@ void destroy(const pnanovdb_compute_t* compute,
             pnanovdb_get_server()->destroy_instance(ptr->server);
             ptr->server = nullptr;
         }
+        if (ptr->encode_file)
+        {
+            fclose(ptr->encode_file);
+            ptr->encode_file = nullptr;
+        }
     }
 
     if (ptr->window_glfw)
@@ -323,6 +331,10 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         encoder_desc.fps = 30;
 
         ptr->encoder = ptr->device_interface.create_encoder(compute_queue, &encoder_desc);
+        if (user_settings->encode_to_file)
+        {
+            ptr->encode_file = fopen("capture_stream.h264", "wb");
+        }
 #if 0
             if (!ptr->socket)
             {
@@ -440,6 +452,10 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         if (ptr->server)
         {
             pnanovdb_get_server()->push_h264(ptr->server, encoder_data, encoder_data_size);
+        }
+        if (ptr->encode_file)
+        {
+            fwrite(encoder_data, 1u, encoder_data_size, ptr->encode_file);
         }
         ptr->device_interface.unmap_encoder_data(ptr->encoder);
     }
