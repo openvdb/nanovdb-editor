@@ -36,6 +36,9 @@ jobs:
           dnf install -y cmake git
           cmake --version
 
+        # Install test dependencies before testing
+        CIBW_TEST_REQUIRES: numpy
+
         # Test the wheels
         CIBW_TEST_COMMAND: python -c "import nanovdb_editor; print('Import successful')"
       with:
