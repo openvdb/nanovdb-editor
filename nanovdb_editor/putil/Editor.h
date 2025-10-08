@@ -26,6 +26,7 @@ typedef struct pnanovdb_editor_config_t
     int port;
     pnanovdb_bool_t headless;
     pnanovdb_bool_t streaming;
+    pnanovdb_bool_t stream_to_file;
 } pnanovdb_editor_config_t;
 
 typedef struct pnanovdb_editor_t
