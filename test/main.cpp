@@ -12,7 +12,6 @@
 #include <nanovdb_editor/putil/Raster.h>
 #include <nanovdb_editor/putil/Editor.h>
 #include <nanovdb_editor/putil/FileFormat.h>
-#include <nanovdb_editor/putil/Raster.hpp>
 #include <nanovdb_editor/putil/Reflect.h>
 
 #include <nanovdb/io/IO.h>
@@ -260,7 +259,7 @@ int main(int argc, char* argv[])
 
     pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
 
-    pnanovdb_raster::raster_file(
+    raster.raster_file
         &raster, &compute, queue, npy_file, voxel_size, &data_nanovdb, nullptr, nullptr, nullptr, nullptr, nullptr);
 
     compute.save_nanovdb(data_nanovdb, "./data/splats.nvdb");
@@ -275,7 +274,7 @@ int main(int argc, char* argv[])
 
     pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
 
-    pnanovdb_raster::raster_file(
+    raster.raster_file
         &raster, &compute, queue, npy_file, voxel_size, &data_nanovdb, nullptr, nullptr, nullptr, nullptr, nullptr);
 
     compute.save_nanovdb(data_nanovdb, "./data/splats.nvdb");
@@ -410,8 +409,8 @@ int main(int argc, char* argv[])
     camera.state.eye_distance_from_position = -2.111028;
     editor.update_camera(&editor, &camera);
 
-    const char* raster_file = "data/ficus.ply";
-    const char* raster_file_garden = "data/garden.ply";
+    const char* raster_file = "./data/ficus.ply";
+    const char* raster_file_garden = "./data/garden.ply";
     pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
 
     pnanovdb_raster_t raster = {};
@@ -441,17 +440,17 @@ int main(int argc, char* argv[])
 
     shader_params_arrays[pnanovdb_raster::shader_param_count] = params_array;
 
-    pnanovdb_raster::raster_file(&raster, &compute, queue, raster_file, 0.f, nullptr, &editor.gaussian_data,
+    raster.raster_file(&raster, &compute, queue, raster_file, 0.f, nullptr, &editor.gaussian_data,
                                  &editor.raster_ctx, shader_params_arrays, nullptr, nullptr, nullptr);
 
 #        else
     raster_params.name = "ficus";
-    pnanovdb_raster::raster_file(&raster, &compute, queue, raster_file, 0.f, nullptr, &gaussian_data, &raster_ctx,
+    raster.raster_file(&raster, &compute, queue, raster_file, 0.f, nullptr, &gaussian_data, &raster_ctx,
                                  nullptr, &raster_params, nullptr, nullptr);
     editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data);
 
     raster_params_garden.name = "garden";
-    pnanovdb_raster::raster_file(&raster, &compute, queue, raster_file_garden, 0.f, nullptr, &gaussian_data_garden,
+    raster.raster_file(&raster, &compute, queue, raster_file_garden, 0.f, nullptr, &gaussian_data_garden,
                                  &raster_ctx, nullptr, &raster_params_garden, nullptr, nullptr);
     editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data_garden);
 #        endif

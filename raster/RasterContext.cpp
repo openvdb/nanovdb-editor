@@ -258,6 +258,9 @@ void destroy_gaussian_data(const pnanovdb_compute_t* compute,
         }
     }
 
+    delete[] ptr->shader_params_gpu_arrays;
+    delete[] ptr->shader_params_cpu_arrays;
+    
     compute->destroy_array(ptr->shader_params);
 
     delete ptr;

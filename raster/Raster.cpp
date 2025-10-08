@@ -830,6 +830,9 @@ pnanovdb_raster_t* pnanovdb_get_raster()
     raster.raster_gaussian_3d = pnanovdb_raster::raster_gaussian_3d;
     raster.raster_gaussian_2d = pnanovdb_raster::raster_gaussian_2d;
     raster.raster_to_nanovdb = pnanovdb_raster::raster_to_nanovdb;
+    raster.raster_file = pnanovdb_raster::raster_file;
+    raster.raster_to_nanovdb_from_arrays = pnanovdb_raster::raster_to_nanovdb_from_arrays;
+    raster.create_gaussian_data_from_arrays = pnanovdb_raster::create_gaussian_data_from_arrays;
 
     return &raster;
 }

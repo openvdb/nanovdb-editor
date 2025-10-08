@@ -3,7 +3,6 @@
 
 #include <nanovdb_editor/putil/Editor.h>
 #include <nanovdb_editor/putil/FileFormat.h>
-#include <nanovdb_editor/putil/Raster.hpp>
 
 #include <cstdarg>
 
@@ -67,7 +66,7 @@ int main(int argc, char* argv[])
 
     pnanovdb_raster_context_t* raster_context = nullptr;
 
-    pnanovdb_raster::raster_file(&raster, &compute, queue, raster_file, voxel_size, &data_nanovdb, nullptr,
+    raster.raster_file&raster, &compute, queue, raster_file, voxel_size, &data_nanovdb, nullptr,
                                  &raster_context, nullptr, nullptr, nullptr, nullptr);
 
     if (data_nanovdb)
@@ -243,7 +242,7 @@ int main(int argc, char* argv[])
     for (int i = 0; i < N; i++)
     {
         pnanovdb_raster_gaussian_data_t* gaussian_data_old = gaussian_data;
-        pnanovdb_raster::raster_file(&raster, &compute, queue, raster_file, 0.f, nullptr, &gaussian_data, &raster_ctx,
+        raster.raster_file&raster, &compute, queue, raster_file, 0.f, nullptr, &gaussian_data, &raster_ctx,
                                      nullptr, &raster_params, nullptr, nullptr);
         editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data);
         raster.destroy_gaussian_data(raster.compute, queue, gaussian_data_old);
@@ -251,7 +250,7 @@ int main(int argc, char* argv[])
         runEditorLoop(5);
 
         gaussian_data_old = gaussian_data_garden;
-        pnanovdb_raster::raster_file(&raster, &compute, queue, raster_file_garden, 0.f, nullptr, &gaussian_data_garden,
+        raster.raster_file&raster, &compute, queue, raster_file_garden, 0.f, nullptr, &gaussian_data_garden,
                                      &raster_ctx, nullptr, &raster_params_garden, nullptr, nullptr);
         editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data_garden);
         raster.destroy_gaussian_data(raster.compute, queue, gaussian_data_old);

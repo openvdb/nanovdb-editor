@@ -22,7 +22,6 @@
 #include "compute/ComputeShader.h"
 #include "raster/Raster.h"
 
-#include "nanovdb_editor/putil/Raster.hpp"
 #include "nanovdb_editor/putil/WorkerThread.hpp"
 
 #include <nanovdb/io/IO.h>
@@ -998,7 +997,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 pending_raster_filepath = imgui_user_instance->raster_filepath;
                 pending_voxel_size = 1.f / imgui_user_instance->raster_voxels_per_unit;
 
-                // get user params for the raster shader
+                 // get user params for the raster shader
+                editor->impl->compute->destroy_array(pending_shader_params_arrays[pnanovdb_raster::gaussian_frag_color_slang]);
                 pending_shader_params_arrays[pnanovdb_raster::gaussian_frag_color_slang] =
                     imgui_user_instance->shader_params.get_compute_array_for_shader<ShaderParams>(
                         "raster/gaussian_frag_color.slang", editor->impl->compute);
@@ -1020,7 +1020,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                         pnanovdb_compute_array_t** shader_params_arrays, pnanovdb_raster_shader_params_t* raster_params,
                         pnanovdb_profiler_report_t profiler) -> bool
                     {
-                        return pnanovdb_raster::raster_file(raster, compute, queue, filepath, voxel_size, nanovdb_array,
+                        return raster->raster_file(raster, compute, queue, filepath, voxel_size, nanovdb_array,
                                                             gaussian_data, raster_context, shader_params_arrays,
                                                             raster_params, profiler, (void*)(&raster_worker));
                     },
@@ -1054,6 +1054,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                     if (imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::NanoVDB)
                     {
                         // TODO replace with editor->add_nanovdb_array()
+                        editor->impl->nanovdb_array = pending_nanovdb_array;
+
                         if (imgui_user_instance->shader_name != s_raster_shader)
                         {
                             imgui_user_instance->shader_name = s_raster_shader;
@@ -1080,14 +1082,14 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                         }
 
                         auto& it = imgui_user_instance->loaded.gaussian_views.emplace_back();
+                        it.raster_ctx = pending_raster_ctx;
                         it.gaussian_data = std::shared_ptr<pnanovdb_raster_gaussian_data_t>(
                             pending_gaussian_data,
-                            [&](pnanovdb_raster_gaussian_data_t* ptr) mutable
+                            [destroy_fn = raster.destroy_gaussian_data, compute = raster.compute, queue = compute_queue](pnanovdb_raster_gaussian_data_t* ptr)
                             {
-                                raster.destroy_gaussian_data(raster.compute, compute_queue, ptr);
+                                destroy_fn(compute, queue, ptr);
                                 printf("Destroyed gaussian data - %p\n", ptr);
                             });
-                        it.raster_ctx = pending_raster_ctx;
                         it.shader_params = pending_raster_params;
                         it.render_settings = nullptr;
 
