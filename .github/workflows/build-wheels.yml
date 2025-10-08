@@ -1,13 +1,20 @@
 name: Build and publish Python wheels
 
+# Intended workflow to release new version:
+# - prepare your changes on develop branch
+# - first publish new version from develop to test PyPi, triggered by version change
+# - test the new package
+# - merge develop to main when happy with changes
+# - push new version tag to trigger publish to prod PyPi
+
 on:
   push:
     tags:
       - 'v*'
     branches:
       - develop  # For testing
-  pull_request:
-    branches: [ main ]
+#   pull_request:
+#     branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -92,29 +99,29 @@ jobs:
         path: pymodule/dist/*.tar.gz
 
   # Test upload from develop branch
-# upload_test_pypi:
-#   name: Upload wheel to test pypi
-#   needs: [build_wheels, build_sdist]
-#   runs-on: ubuntu-latest
-#   if: github.ref == 'refs/heads/develop'
-#
-#   steps:
-#   - uses: actions/download-artifact@v4
-#     with:
-#       pattern: "*"
-#       merge-multiple: true
-#       path: dist/
-#
-#   - uses: pypa/gh-action-pypi-publish@release/v1
-#     with:
-#       password: ${{ secrets.TEST_PYPI_API_TOKEN }}
-#       repository-url: https://test.pypi.org/legacy/
-#       verbose: true
-#       skip-existing: true
+  upload_test_pypi:
+    name: Upload wheel to test PyPi
+    needs: [build_wheels, build_sdist]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        pattern: "*"
+        merge-multiple: true
+        path: dist/
+
+    - uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+        repository-url: https://test.pypi.org/legacy/
+        verbose: true
+        skip-existing: true
 
   # Production upload for version tags
   upload_pypi:
-    name: Upload wheel to pypi
+    name: Upload wheel to PyPi
     needs: [build_wheels, build_sdist]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
@@ -128,5 +135,5 @@ jobs:
 
     - uses: pypa/gh-action-pypi-publish@release/v1
       with:
-        password: ${{ secrets.TEST_PYPI_API_TOKEN }}
-        repository-url: https://test.pypi.org/legacy/
+        password: ${{ secrets.PYPI_API_TOKEN }}
+        # repository-url: https://test.pypi.org/legacy/
