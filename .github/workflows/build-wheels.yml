@@ -35,8 +35,7 @@ jobs:
         CIBW_SKIP: "*-manylinux_i686 pp* *-win32 *-macosx*"
         CIBW_ARCHS_LINUX: x86_64
         CIBW_ARCHS_WINDOWS: AMD64
-        CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
-
+        CIBW_MANYLINUX_X86_64_IMAGE: manylinux1
         # Linux dependencies
         CIBW_BEFORE_ALL_LINUX: |
           dnf install -y cmake git
