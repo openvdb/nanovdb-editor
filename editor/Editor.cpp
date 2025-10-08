@@ -288,7 +288,7 @@ void add_gaussian_data(pnanovdb_editor_t* editor,
     auto ptr = pnanovdb_raster::cast(gaussian_data);
     if (!ptr->shader_params->data)
     {
-        // TODO: set defaults in Raster.hpp
+        // TODO: set defaults
         return;
     }
     pnanovdb_raster_shader_params_t* raster_params = (pnanovdb_raster_shader_params_t*)ptr->shader_params->data;
@@ -317,7 +317,7 @@ void add_gaussian_data(pnanovdb_editor_t* editor,
             // replace existing view if name matches
             views->gaussians.erase(it);
         }
-        views->gaussians[raster_params->name] = { gaussian_data, raster_params, raster_ctx, nullptr };
+        views->gaussians[raster_params->name] = { raster_ctx, gaussian_data, raster_params, nullptr };
     }
 }
 
@@ -692,7 +692,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         }
 
         // pending raster data deleted next frame after being replaced
-        std::shared_ptr<pnanovdb_raster_gaussian_data_t> oldData;
+        std::shared_ptr<pnanovdb_raster_gaussian_data_t> old_gaussian_data_ptr = nullptr;
 
         // create background image texture
         pnanovdb_compute_texture_desc_t tex_desc = {};
@@ -1076,7 +1076,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                         {
                             if (pending_raster_params->name == itPrev->shader_params->name)
                             {
-                                oldData = itPrev->gaussian_data;
+                                old_gaussian_data_ptr = itPrev->gaussian_data;
                                 imgui_user_instance->loaded.gaussian_views.erase(itPrev);
                                 break;
                             }
@@ -1298,10 +1298,10 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     editor->impl->compute->destroy_array(viewport_shader_params_array);
     editor->impl->compute->destroy_array(raster2d_shader_params_array);
 
-    for (auto& it : imgui_user_instance->loaded.nanovdb_arrays)
-    {
-        editor->impl->compute->destroy_array(it);
-    }
+    // for (auto& it : imgui_user_instance->loaded.nanovdb_arrays)
+    // {
+    //     editor->impl->compute->destroy_array(it);
+    // }
 
     imgui_user_instance->loaded.gaussian_views.clear();
 
