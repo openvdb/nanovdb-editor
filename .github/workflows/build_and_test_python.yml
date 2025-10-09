@@ -65,7 +65,7 @@ jobs:
           set -e
           python -m pip install numpy
           sudo apt-get update
-          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
+          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools libxcb1-dev libxcb-keysyms1-dev libxcb-randr0-dev libxcb-xinerama0-dev libx11-xcb-dev libxrandr-dev
 
       - name: Build NanoVDB Editor C tests
         run: |
