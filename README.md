@@ -85,12 +85,9 @@ Run the build script with `-h` for available build options.
 ```
 
 #### Windows
-First, rename the config file `config` next to the build script to `config.ini` and fill in the required environment variable:
+Optionally, rename the config file `config` next to the build script to `config.ini` and fill in the environment variables:
 ```
 MSVS_VERSION="Visual Studio 17 2022"
-```
-##### Optional variables:
-```
 USE_VCPKG=ON
 VCPKG_ROOT=path/to/vcpkg
 ```
@@ -104,63 +101,28 @@ Then, run the build script:
 ./build.bat
 ```
 
-### Editor Applications
+### Editor Application
 After building, run the editor app:
 ```sh
 ./build/Release/pnanovdbeditorapp
-```
-
-You can run the editor from Python without pip installing the package (test local files):
-```sh
-python3 pymodule/test.py
-```
-
-### Tests
-
-There are multiple simple applications testing the compilation of a single shader and showing the editor:
-
-#### C++ Test App
-After the build, run:
-```sh
-./build/Release/pnanovdbeditortestapp
-```
-
-#### C Test App
-Build and run with:
-```sh
-cd test_c
-./build.sh
-./build/pnanovdbeditortestcapp
 ```
 
 ### Python
 
 The libraries can be bundled into a Python package with a wrapper for the C-type functions. The following script will automatically install scikit-build, wheel, and build dependencies:
 
-#### Windows
-Build `./build.bat` with `-p` to build and install the local `nanovdb_editor` package.
+Build with `-p` to build and install the `nanovdb_editor` package.
 
-#### Linux
-Build `./build.sh` with `-p` to build and install the local `nanovdb_editor` wheel package.
+#### Python Test Apps
 
-To install the built python module from local wheel in conda environment:
 ```sh
-conda env create -f environment.yml
-# conda env update -f environment.yml --prune
-conda activate nanovdb_editor
-python3 -m pip install ./pymodule/dist/*.whl --force-reinstall
-```
-
-#### Python Test App
-Run the test app with:
-```sh
+./build.sh -p
 python3 test/test_editor.py
 ```
 
-#### Python Raster Test
 ```sh
 ./build.sh -p
-python3 raster/test_raster.py
+python3 test/test_streaming.py
 ```
 
 #### Debugging
@@ -181,8 +143,6 @@ With GDB:
 gdb -p <PID>
 ```
 
-##### Windows
-In your favorite IDE.
 
 ## NanoVDB Editor GUI
 
