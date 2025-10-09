@@ -279,7 +279,7 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
     return router;
 }
 
-pnanovdb_server_instance_t* create_instance(const char* serveraddress, int port, pnanovdb_compute_log_print_t log_print)
+pnanovdb_server_instance_t* create_instance(const char* serveraddress, int port, int max_attempts, pnanovdb_compute_log_print_t log_print)
 {
     auto ptr = new server_instance_t();
 
@@ -295,7 +295,17 @@ pnanovdb_server_instance_t* create_instance(const char* serveraddress, int port,
         restinio_address = ptr->serveraddress.c_str();
     }
 
-    static const int max_attempts = 32;
+    // always try at least once
+    if (max_attempts < 1)
+    {
+        max_attempts = 1;
+    }
+    // there can only be 65535 ports anyways
+    if (max_attempts > 65535)
+    {
+        max_attempts = 65535;
+    }
+
     int attempt = 0;
     for (; attempt < max_attempts; attempt++)
     {

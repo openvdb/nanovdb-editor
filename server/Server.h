@@ -53,6 +53,7 @@ typedef struct pnanovdb_server_t
 
     pnanovdb_server_instance_t*(PNANOVDB_ABI* create_instance)(const char* serveraddress,
                                                                int port,
+                                                               int max_attempts,
                                                                pnanovdb_compute_log_print_t log_print);
 
     void(PNANOVDB_ABI* push_h264)(pnanovdb_server_instance_t* instance, const void* data, pnanovdb_uint64_t data_size);
