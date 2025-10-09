@@ -2,7 +2,7 @@ name: Build and publish Python wheels
 
 # Intended workflow to release new version:
 # - prepare your changes on develop branch
-# - first publish new version from develop to test PyPi, triggered by version change
+# - manually trigger workflow_dispatch to build and publish to test PyPi when version is bumped
 # - test the new package
 # - merge develop to main when happy with changes
 # - push new version tag to trigger publish to prod PyPi
@@ -11,10 +11,10 @@ on:
   push:
     tags:
       - 'v*'
-    branches:
-      - develop  # For testing
-#   pull_request:
-#     branches: [ main ]
+  #   branches:
+  #     - develop
+  # pull_request:
+  #   branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -46,7 +46,7 @@ jobs:
         CIBW_BEFORE_ALL_LINUX: |
           dnf install -y cmake git
           cmake --version
-          yum install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel libXrandr-devel wayland-protocols-devel
+          yum install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel wayland-protocols-devel
 
         # Windows dependencies
         CIBW_BEFORE_ALL_WINDOWS: |
@@ -63,14 +63,6 @@ jobs:
         CIBW_TEST_COMMAND: python -c "import nanovdb_editor; print('Import successful')"
       with:
         package-dir: pymodule
-
-    - name: Filter out unsupported wheels
-      run: |
-        ls -la wheelhouse/
-        # Remove wheels with linux_x86_64 tag
-        rm -f wheelhouse/*-linux_x86_64.whl
-        ls -la wheelhouse/
-      shell: bash
 
     - uses: actions/upload-artifact@v4
       with:
@@ -137,4 +129,3 @@ jobs:
     - uses: pypa/gh-action-pypi-publish@release/v1
       with:
         password: ${{ secrets.PYPI_API_TOKEN }}
-        # repository-url: https://test.pypi.org/legacy/
