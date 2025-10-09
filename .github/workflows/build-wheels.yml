@@ -30,6 +30,13 @@ jobs:
       with:
         submodules: recursive
 
+    - name: Install Vulkan Loader dependencies
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        set -e
+        sudo apt-get update
+        sudo apt-get install -y libxcb1-dev libxcb-keysyms1-dev libxcb-randr0-dev libxcb-xinerama0-dev libx11-xcb-dev libxrandr-dev libwayland-dev wayland-protocols libdirectfb-dev
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
