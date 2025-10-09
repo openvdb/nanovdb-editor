@@ -37,6 +37,7 @@ class pnanovdb_EditorConfig(Structure):
         ("headless", c_int32),  # pnanovdb_bool_t is int32_t in C
         ("streaming", c_int32),  # pnanovdb_bool_t is int32_t in C
         ("stream_to_file", c_int32),  # pnanovdb_bool_t is int32_t in C
+        ("ui_profile_name", c_char_p),
     ]
 
 
@@ -229,7 +230,7 @@ class Editor:
             compute.get_compute(),
             compiler.get_compiler(),
         )
-        if result == 0:
+        if result != 0:
             self._editor.contents.init(self._editor)
 
     def shutdown(self) -> None:

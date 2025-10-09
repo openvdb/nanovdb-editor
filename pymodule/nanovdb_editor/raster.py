@@ -14,7 +14,7 @@ class pnanovdb_Raster(Structure):
     """Definition equivalent to pnanovdb_raster_t."""
 
     _fields_ = [
-        ("raster_interface", c_void_p),  # PNANOVDB_REFLECT_INTERFACE()
+        ("interface_pnanovdb_reflect_data_type", c_void_p),  # PNANOVDB_REFLECT_INTERFACE()
         ("compute", POINTER(pnanovdb_Compute)),
         ("create_context", CFUNCTYPE(c_void_p, POINTER(pnanovdb_Compute), POINTER(pnanovdb_ComputeQueue))),
         ("destroy_context", CFUNCTYPE(None, POINTER(pnanovdb_Compute), POINTER(pnanovdb_ComputeQueue), c_void_p)),

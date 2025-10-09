@@ -9,6 +9,9 @@ from .utils import load_library
 
 COMPILER_LIB = "pnanovdbcompiler"
 
+# Match pnanovdb_bool_t (int32_t)
+pnanovdb_bool_t = c_int32
+
 
 class pnanovdb_CompileTarget(Enum):
     UNDEFINED = 0
@@ -37,26 +40,33 @@ class pnanovdb_Compiler(Structure):
 
     _fields_ = [
         ("interface_pnanovdb_reflect_data_type", c_void_p),  # PNANOVDB_REFLECT_INTERFACE()
-        ("module", c_void_p),
         ("create_instance", CFUNCTYPE(POINTER(pnanovdb_CompilerInstance))),
         ("set_diagnostic_callback", CFUNCTYPE(None, POINTER(pnanovdb_CompilerInstance), CFUNCTYPE(None, c_char_p))),
         (
             "compile_shader_from_file",
             CFUNCTYPE(
-                c_bool,
+                pnanovdb_bool_t,
                 POINTER(pnanovdb_CompilerInstance),
                 c_char_p,
                 POINTER(pnanovdb_CompilerSettings),
-                POINTER(c_bool),
+                POINTER(pnanovdb_bool_t),
             ),
         ),
         (
             "execute_cpu",
             CFUNCTYPE(
-                c_bool, POINTER(pnanovdb_CompilerInstance), c_char_p, c_uint32, c_uint32, c_uint32, c_void_p, c_void_p
+                pnanovdb_bool_t,
+                POINTER(pnanovdb_CompilerInstance),
+                c_char_p,
+                c_uint32,
+                c_uint32,
+                c_uint32,
+                c_void_p,
+                c_void_p,
             ),
         ),
         ("destroy_instance", CFUNCTYPE(None, POINTER(pnanovdb_CompilerInstance))),
+        ("module", c_void_p),
     ]
 
 

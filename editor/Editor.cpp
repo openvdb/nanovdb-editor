@@ -401,7 +401,7 @@ void sync_shader_params(pnanovdb_editor_t* editor, void* shader_params, pnanovdb
 pnanovdb_int32_t editor_get_external_active_count(void* external_active_count)
 {
     auto editor = static_cast<pnanovdb_editor_t*>(external_active_count);
-    if (!editor->impl->editor_worker)
+    if (!editor->impl || !editor->impl->editor_worker)
     {
         return 0;
     }
