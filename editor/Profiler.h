@@ -34,27 +34,6 @@ struct ProfilerEntryValue
     }
 };
 
-struct ProfilerEntryValue
-{
-    pnanovdb_compute_profiler_entry_t entry;
-    pnanovdb_uint64_t capture_id;
-    ProfilerEntryValue()
-    {
-    }
-    ProfilerEntryValue(const pnanovdb_compute_profiler_entry_t& entry, pnanovdb_uint64_t capture_id)
-        : entry(entry), capture_id(capture_id)
-    {
-    }
-};
-
-struct ProfilerEntryValue
-{
-    std::vector<ProfilerEntryValue> entries;
-    ProfilerEntry()
-    {
-    }
-};
-
 struct ProfilerEntry
 {
     std::vector<ProfilerEntryValue> entries;

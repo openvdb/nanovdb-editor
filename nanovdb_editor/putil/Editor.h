@@ -27,6 +27,7 @@ typedef struct pnanovdb_editor_config_t
     pnanovdb_bool_t headless;
     pnanovdb_bool_t streaming;
     pnanovdb_bool_t stream_to_file;
+    const char* ui_profile_name;
 } pnanovdb_editor_config_t;
 
 struct pnanovdb_editor_impl_t;
