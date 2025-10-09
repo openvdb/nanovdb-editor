@@ -46,6 +46,12 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install Vulkan Loader dependencies
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y libxcb1-dev libxcb-keysyms1-dev libxcb-randr0-dev libxcb-xinerama0-dev libx11-xcb-dev libxrandr-dev libwayland-dev wayland-protocols libdirectfb-dev
+
       - name: Build NanoVDB Editor Python module
         run: |
           set -e
@@ -63,9 +69,9 @@ jobs:
       - name: Set up Python environment
         run: |
           set -e
-          python -m pip install numpy
           sudo apt-get update
-          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools libxcb1-dev libxcb-keysyms1-dev libxcb-randr0-dev libxcb-xinerama0-dev libx11-xcb-dev libxrandr-dev
+          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
+          sudo apt-get install -y libxcb1-dev libxcb-keysyms1-dev libxcb-randr0-dev libxcb-xinerama0-dev libx11-xcb-dev libxrandr-dev libwayland-dev wayland-protocols libdirectfb-dev
 
       - name: Build NanoVDB Editor C tests
         run: |
