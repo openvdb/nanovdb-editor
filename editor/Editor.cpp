@@ -459,7 +459,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     }
 
     // Automatically enable encoder when streaming is requested
-    if (config->streaming)
+    if (config->streaming || config->stream_to_file)
     {
         imgui_user_settings->enable_encoder = PNANOVDB_TRUE;
         if (config->ip_address != nullptr)
@@ -468,6 +468,10 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                      config->ip_address);
         }
         imgui_user_settings->server_port = config->port;
+        if (config->stream_to_file)
+        {
+            imgui_user_settings->encode_to_file = PNANOVDB_TRUE;
+        }
     }
 
 #ifdef USE_IMGUI_INSTANCE
