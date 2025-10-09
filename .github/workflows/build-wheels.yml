@@ -46,7 +46,7 @@ jobs:
         CIBW_BEFORE_ALL_LINUX: |
           dnf install -y cmake git
           cmake --version
-          yum install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libX11-xcb-devel libXinerama-devel libXrandr-devel libwayland-devel wayland-protocols-devel
+          yum install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel libXrandr-devel wayland-protocols-devel
 
         # Windows dependencies
         CIBW_BEFORE_ALL_WINDOWS: |
