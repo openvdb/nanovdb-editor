@@ -295,13 +295,19 @@ pnanovdb_server_instance_t* create_instance(const char* serveraddress, int port,
     ptr->port = port;
     ptr->log_print = log_print;
 
+    const char* restinio_address = "127.0.0.1";
+    if (!ptr->serveraddress.empty())
+    {
+        restinio_address = ptr->serveraddress.c_str();
+    }
+
     g_ioctx = ptr->ioctx.get();
     try
     {
         ptr->server = restinio::run_async<traits_t>(ptr->ioctx,
                                                     restinio::server_settings_t<traits_t>{}
                                                         .port(ptr->port)
-                                                        .address("0.0.0.0")
+                                                        .address(restinio_address)
                                                         .request_handler(server_handler(*(ptr->ioctx.get())))
                                                         //.read_next_http_message_timelimit(10s)
                                                         //.write_http_response_timelimit(1s)
