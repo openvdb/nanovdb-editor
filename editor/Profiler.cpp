@@ -183,11 +183,10 @@ bool Profiler::render(bool* update_memory_stats, float delta_time)
     return true;
 }
 
-void Profiler::render_profiler_table(
-    pnanovdb_uint64_t capture_id,
-    const std::map<std::string, ProfilerEntry>& entries,
-    bool show_avg,
-    uint32_t history_depth)
+void Profiler::render_profiler_table(pnanovdb_uint64_t capture_id,
+                                     const std::map<std::string, ProfilerEntry>& entries,
+                                     bool show_avg,
+                                     uint32_t history_depth)
 {
     if (show_avg)
     {
@@ -420,7 +419,7 @@ void Profiler::report_callback(void* userdata,
             std::string label = entries[i].label;
             auto& profiler_entry = profiler->profiler_entries_[name][label];
 
-            profiler_entry.entries.push_back({entries[i], captureID});
+            profiler_entry.entries.push_back({ entries[i], captureID });
         }
     }
 }

@@ -865,10 +865,10 @@ void ShaderParams::renderParams(const std::string& shader_name, ShaderParam& sha
             }
         }
     }
-    if (ImGui::IsItemHovered())
-    {
-        ImGui::SetTooltip("%s", shader_name.c_str());
-    }
+    // if (ImGui::IsItemHovered())
+    // {
+    //     ImGui::SetTooltip("%s", shader_name.c_str());
+    // }
 }
 
 void ShaderParams::processPendingArrays(const std::string& shader_name)

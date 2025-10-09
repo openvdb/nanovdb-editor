@@ -1,4 +1,4 @@
-name: Build and Test
+name: Build and test
 
 on:
   push:
@@ -41,11 +41,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Vulkan runtime (headless)
+      - name: Install Vulkan dependencies
         run: |
           set -e
           sudo apt-get update
           sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
+          sudo apt-get install -y libxcb1-dev libxcb-keysyms1-dev libxcb-randr0-dev libxcb-xinerama0-dev libx11-xcb-dev libxrandr-dev libwayland-dev wayland-protocols libdirectfb-dev
 
       - name: Build NanoVDB Editor
         run: |

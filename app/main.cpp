@@ -89,8 +89,6 @@ int main(int argc, char* argv[])
     pnanovdb_editor_t editor = {};
     pnanovdb_editor_load(&editor, &compute, &compiler);
 
-    editor.compute = &compute;
-
     pnanovdb_compute_array_t* data_in = compute.load_nanovdb(file);
     editor.add_nanovdb(&editor, data_in);
 

@@ -406,7 +406,7 @@ void wait_until_active(pnanovdb_server_instance_t* instance,
 
     if (ptr->log_print)
     {
-        ptr->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Server stream going inactive.");
+        ptr->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Server stream going inactive.");
     }
     bool is_active = false;
     while (!is_active)
@@ -429,7 +429,7 @@ void wait_until_active(pnanovdb_server_instance_t* instance,
         {
             if (ptr->log_print)
             {
-                ptr->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Server stream going active.");
+                ptr->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Server stream going active.");
             }
             break;
         }

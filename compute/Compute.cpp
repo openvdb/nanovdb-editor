@@ -74,7 +74,7 @@ pnanovdb_compute_array_t* load_nanovdb(const char* filepath)
     }
     catch (const std::ios_base::failure& e)
     {
-        printf("Error: Could not open nanovdb '%s'\n", filepath);
+        printf("Could not open nanovdb '%s'\n", filepath);
         return nullptr;
     }
 
@@ -91,7 +91,7 @@ pnanovdb_bool_t save_nanovdb(pnanovdb_compute_array_t* array, const char* filepa
 {
     if (!array || !array->data || array->element_size == 0u || array->element_count == 0u)
     {
-        printf("Error: Could not save nanovdb '%s' (invalid array)\n", filepath);
+        printf("Could not save nanovdb '%s' (invalid array)\n", filepath);
         return PNANOVDB_FALSE;
     }
     nanovdb::HostBuffer buffer(array->element_count * array->element_size);
@@ -104,7 +104,7 @@ pnanovdb_bool_t save_nanovdb(pnanovdb_compute_array_t* array, const char* filepa
     }
     catch (const std::ios_base::failure& e)
     {
-        printf("Error: Could not save nanovdb '%s' (%s)\n", filepath, e.what());
+        printf("Could not save nanovdb '%s' (%s)\n", filepath, e.what());
         return PNANOVDB_FALSE;
     }
     return PNANOVDB_TRUE;
@@ -151,12 +151,12 @@ pnanovdb_bool_t init_shader(const pnanovdb_compute_t* compute,
 
     if (log_print)
     {
-        log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "shader(%s) descriptor_write_count(%d) byte_code_size(%d)",
+        log_print(PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "shader(%s) descriptor_write_count(%d) byte_code_size(%d)",
                   shader_ctx->shader_build->debug_label, shader_ctx->shader_build->descriptor_write_count,
                   (pnanovdb_uint32_t)shader_ctx->shader_build->pipeline_desc.bytecode.size_in_bytes);
         for (uint32_t idx = 0u; idx < shader_ctx->shader_build->descriptor_write_count; idx++)
         {
-            log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "resource[%d] name(%s)", idx,
+            log_print(PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "resource[%d] name(%s)", idx,
                       shader_ctx->shader_build->resource_names[idx]);
         }
     }
@@ -620,7 +620,7 @@ void compute_array_print_range(const pnanovdb_compute_t* compute,
                 print_count++;
                 if (log_print)
                 {
-                    log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "array(%s) val(%e,%e,%e)", name, mapped_val[idx],
+                    log_print(PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "array(%s) val(%e,%e,%e)", name, mapped_val[idx],
                               mapped_val[idx + 1], mapped_val[idx + 2]);
                 }
             }
@@ -644,16 +644,16 @@ void compute_array_print_range(const pnanovdb_compute_t* compute,
         val_ave[channel_idx] /= (double)(arr->element_count / channel_count);
         if (log_print)
         {
-            log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "array(%s) channel(%d) min(%f) max(%f) ave(%f)", name,
+            log_print(PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "array(%s) channel(%d) min(%f) max(%f) ave(%f)", name,
                       channel_idx, val_min[channel_idx], val_max[channel_idx], val_ave[channel_idx]);
         }
     }
     val_ave_anisotropy /= (double)(arr->element_count / channel_count);
     if (log_print)
     {
-        log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "array(%s) min_anisotropy(%f) max_anisotropy(%f) ave_anisotropy(%f)",
+        log_print(PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "array(%s) min_anisotropy(%f) max_anisotropy(%f) ave_anisotropy(%f)",
                   name, val_min_anisotropy, val_max_anisotropy, val_ave_anisotropy);
-        log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "array(%s) aniso_type_count(%d,%d,%d,%d)", name, aniso_type[0],
+        log_print(PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "array(%s) aniso_type_count(%d,%d,%d,%d)", name, aniso_type[0],
                   aniso_type[1], aniso_type[2], aniso_type[3]);
     }
 }

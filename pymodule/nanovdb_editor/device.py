@@ -8,6 +8,9 @@ from .utils import load_library
 
 COMPUTE_LIB = "pnanovdbcompute"
 
+# Match pnanovdb_bool_t (int32_t)
+pnanovdb_bool_t = c_int32
+
 
 class LogLevel(c_uint32):
     ERROR = 0
@@ -32,7 +35,7 @@ def pnanovdb_compute_log_print(level, format_str):
 class pnanovdb_DeviceDesc(Structure):
     """Definition equivalent to pnanovdb_compute_device_desc_t."""
 
-    _fields_ = [("device_index", c_uint32), ("enable_external_usage", c_bool), ("log_print", LOG_FUNC)]
+    _fields_ = [("device_index", c_uint32), ("enable_external_usage", pnanovdb_bool_t), ("log_print", LOG_FUNC)]
 
 
 class pnanovdb_Device(Structure):
@@ -54,7 +57,7 @@ class pnanovdb_DeviceInterface(Structure):
         ("interface_pnanovdb_reflect_data_type", c_void_p),  # PNANOVDB_REFLECT_INTERFACE()
         ("create_device_manager", CFUNCTYPE(POINTER(pnanovdb_DeviceManager), c_bool)),
         ("destroy_device_manager", CFUNCTYPE(None, POINTER(pnanovdb_DeviceManager))),
-        ("enumerate_devices", CFUNCTYPE(c_bool, POINTER(pnanovdb_DeviceManager), c_uint32, POINTER(c_void_p))),
+        ("enumerate_devices", CFUNCTYPE(pnanovdb_bool_t, POINTER(pnanovdb_DeviceManager), c_uint32, POINTER(c_void_p))),
         (
             "create_device",
             CFUNCTYPE(POINTER(pnanovdb_Device), POINTER(pnanovdb_DeviceManager), POINTER(pnanovdb_DeviceDesc)),
@@ -76,11 +79,11 @@ class pnanovdb_DeviceInterface(Structure):
         ("create_swapchain", CFUNCTYPE(c_void_p, POINTER(pnanovdb_Device), POINTER(c_void_p))),
         ("destroy_swapchain", CFUNCTYPE(None, POINTER(pnanovdb_Device))),
         ("resize_swapchain", CFUNCTYPE(None, POINTER(pnanovdb_Device), c_uint32, c_uint32)),
-        ("present_swapchain", CFUNCTYPE(c_int, POINTER(pnanovdb_Device), c_bool, POINTER(c_uint64))),
+        ("present_swapchain", CFUNCTYPE(c_int, POINTER(pnanovdb_Device), pnanovdb_bool_t, POINTER(c_uint64))),
         ("get_swapchain_front_texture", CFUNCTYPE(c_void_p, POINTER(pnanovdb_Device))),
         ("create_encoder", CFUNCTYPE(POINTER(c_void_p), POINTER(pnanovdb_Device), POINTER(c_void_p))),
         ("destroy_encoder", CFUNCTYPE(None, POINTER(pnanovdb_Device))),
-        ("present_encoder", CFUNCTYPE(c_int, POINTER(pnanovdb_Device), c_bool, POINTER(c_uint64))),
+        ("present_encoder", CFUNCTYPE(c_int, POINTER(pnanovdb_Device), pnanovdb_bool_t, POINTER(c_uint64))),
         ("get_encoder_front_texture", CFUNCTYPE(c_void_p, POINTER(pnanovdb_Device))),
         ("map_encoder_data", CFUNCTYPE(c_void_p, POINTER(pnanovdb_Device), POINTER(c_uint64))),
         ("unmap_encoder_data", CFUNCTYPE(None, POINTER(pnanovdb_Device))),
