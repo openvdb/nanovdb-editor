@@ -691,6 +691,11 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
         if (editor->impl->editor_worker && static_cast<EditorWorker*>(editor->impl->editor_worker)->should_stop.load())
         {
+            auto log_print = compute_interface->get_log_print(compute_context);
+            if (log_print)
+            {
+                log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Stopped\n");
+            }
             should_run = false;
             break;
         }

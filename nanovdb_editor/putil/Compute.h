@@ -316,6 +316,7 @@ typedef pnanovdb_uint32_t pnanovdb_compute_log_level_t;
 #define PNANOVDB_COMPUTE_LOG_LEVEL_ERROR 0
 #define PNANOVDB_COMPUTE_LOG_LEVEL_WARNING 1
 #define PNANOVDB_COMPUTE_LOG_LEVEL_INFO 2
+#define PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG 3
 
 typedef void(PNANOVDB_ABI* pnanovdb_compute_log_print_t)(pnanovdb_compute_log_level_t level, const char* format, ...);
 

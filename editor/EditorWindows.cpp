@@ -527,14 +527,16 @@ void showViewportSettingsWindow(Instance* ptr)
             {
                 ptr->viewport_option = ViewportOption::NanoVDB;
                 ptr->render_settings_name = ptr->viewport_settings[(int)ptr->viewport_option].render_settings_name;
-                ptr->pending.load_camera = true;
+                // TODO: disable before profiles are set up, Viewer does not have camera override
+                // ptr->pending.load_camera = true;
             }
             ImGui::SameLine();
             if (ImGui::RadioButton("Raster2D", selectedOption == ViewportOption::Raster2D))
             {
                 ptr->viewport_option = ViewportOption::Raster2D;
                 ptr->render_settings_name = ptr->viewport_settings[(int)ptr->viewport_option].render_settings_name;
-                ptr->pending.load_camera = true;
+                // TODO: disable before profiles are set up, Viewer does not have camera override
+                // ptr->pending.load_camera = true;
             }
             ImGui::EndGroup();
         }

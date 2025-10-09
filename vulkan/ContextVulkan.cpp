@@ -647,7 +647,7 @@ void context_flushNodes(Context* context)
             ptr = context->pool_buffers[idx].release();
             buffer_destroy(context, ptr);
 
-            context->logPrint(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Vulkan destroy pool buffer %d", idx);
+            context->logPrint(PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Vulkan destroy pool buffer %d", idx);
 
             context->pool_buffers.erase(context->pool_buffers.begin() + idx);
         }
@@ -660,7 +660,7 @@ void context_flushNodes(Context* context)
             ptr = context->pool_textures[idx].release();
             texture_destroy(context, ptr);
 
-            context->logPrint(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Vulkan destroy pool texture %d", idx);
+            context->logPrint(PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Vulkan destroy pool texture %d", idx);
 
             context->pool_textures.erase(context->pool_textures.begin() + idx);
         }

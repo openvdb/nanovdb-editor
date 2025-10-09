@@ -177,7 +177,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
             is_fvdb_gs = true;
         }
     }
-    printf("vertex_count(%llu)\n", (unsigned long long int)vertex_count);
+    // printf("vertex_count(%llu)\n", (unsigned long long int)vertex_count);
 
     std::vector<float> arr_means;
     std::vector<float> arr_opacities;

@@ -219,13 +219,13 @@ pnanovdb_compute_encoder_t* create_encoder(pnanovdb_compute_queue_t* queue, cons
         {
             if (ctx->logPrint)
             {
-                ctx->logPrint(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Encode memory doesn't support device local");
+                ctx->logPrint(PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Encode memory doesn't support device local");
             }
             memTypeIdx = context_getMemoryType(ctx, memTypeBits, 0);
         }
         if (ctx->logPrint)
         {
-            ctx->logPrint(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Encode memory[%d] memTypeBits(%d) memTypeIdx(%d)", memIdx,
+            ctx->logPrint(PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Encode memory[%d] memTypeBits(%d) memTypeIdx(%d)", memIdx,
                           memTypeBits, memTypeIdx);
         }
 
