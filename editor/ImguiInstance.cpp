@@ -238,7 +238,7 @@ void update(pnanovdb_imgui_instance_t* instance)
 
     initializeDocking();
 
-    drawCameraFrustums(ptr);
+    pnanovdb_editor::CameraFrustum::getInstance().render(ptr);
 
     createMenu(ptr);
 
