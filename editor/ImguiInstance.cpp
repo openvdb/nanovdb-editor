@@ -21,8 +21,6 @@
 #include "RenderSettingsHandler.h"
 #include "InstanceSettingsHandler.h"
 
-#include <ImGuiFileDialog.h>
-
 #include <stdio.h>
 #include <imgui_internal.h> // for the docking branch
 #include "misc/cpp/imgui_stdlib.h" // for std::string text input
@@ -249,123 +247,9 @@ void update(pnanovdb_imgui_instance_t* instance)
 
     showWindows(ptr, delta_time);
 
-    if (ptr->pending.update_generated)
-    {
-        pnanovdb_editor::CodeEditor::getInstance().updateViewer();
-        ptr->pending.update_generated = false;
-    }
+    saveLoadSettings(ptr);
 
-    if (ptr->pending.save_render_settings)
-    {
-        ptr->pending.save_render_settings = false;
-
-        // Mark settings as dirty to trigger save
-        ImGui::MarkIniSettingsDirty();
-
-        pnanovdb_editor::Console::getInstance().addLog("Render settings '%s' saved", ptr->render_settings_name.c_str());
-    }
-    if (ptr->pending.load_render_settings)
-    {
-        ptr->pending.load_render_settings = false;
-
-        auto it = ptr->saved_render_settings.find(ptr->render_settings_name);
-        if (it != ptr->saved_render_settings.end())
-        {
-            // Copy saved camera state to current camera state
-            ptr->render_settings_name = it->first;
-            // pnanovdb_editor::Console::getInstance().addLog("Render settings '%s' loaded",
-            // ptr->render_settings_name.c_str());
-        }
-        else
-        {
-            pnanovdb_editor::Console::getInstance().addLog(
-                "Render settings '%s' not found", ptr->render_settings_name.c_str());
-        }
-    }
-
-    if (ptr->pending.open_file)
-    {
-        ptr->pending.open_file = false;
-
-        IGFD::FileDialogConfig config;
-        config.path = ".";
-
-        ImGuiFileDialog::Instance()->OpenDialog(
-            "OpenNvdbFileDlgKey", "Open NanoVDB File", "NanoVDB Files (*.nvdb){.nvdb}", config);
-    }
-    if (ptr->pending.save_file)
-    {
-        ptr->pending.save_file = false;
-
-        IGFD::FileDialogConfig config;
-        config.path = ".";
-
-        ImGuiFileDialog::Instance()->OpenDialog(
-            "SaveNvdbFileDlgKey", "Save NanoVDB File", "NanoVDB Files (*.nvdb){.nvdb}", config);
-    }
-    if (ptr->pending.find_shader_directory)
-    {
-        ptr->pending.find_shader_directory = false;
-
-        IGFD::FileDialogConfig config;
-        config.path = ".";
-
-        ImGuiFileDialog::Instance()->OpenDialog(
-            "SelectShaderDirectoryDlgKey", "Select Shader Directory", nullptr, config);
-    }
-    if (ptr->pending.find_raster_file)
-    {
-        ptr->pending.find_raster_file = false;
-
-        IGFD::FileDialogConfig config;
-        config.path = ".";
-
-        ImGuiFileDialog::Instance()->OpenDialog(
-            "OpenRasterFileDlgKey", "Open Gaussian File", "Gaussian Files (*.npy *.npz *.ply){.npy,.npz,.ply}", config);
-    }
-
-    if (ImGuiFileDialog::Instance()->IsOpened())
-    {
-        ImGui::SetNextWindowSize(ptr->dialog_size, ImGuiCond_Appearing);
-        if (ImGuiFileDialog::Instance()->Display("OpenNvdbFileDlgKey"))
-        {
-            if (ImGuiFileDialog::Instance()->IsOk())
-            {
-                ptr->nanovdb_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
-                // ptr->nanovdb_path = ImGuiFileDialog::Instance()->GetCurrentPath();
-                pnanovdb_editor::Console::getInstance().addLog("Opening file '%s'", ptr->nanovdb_filepath.c_str());
-                ptr->pending.load_nvdb = true;
-            }
-            ImGuiFileDialog::Instance()->Close();
-        }
-        else if (ImGuiFileDialog::Instance()->Display("OpenRasterFileDlgKey"))
-        {
-            if (ImGuiFileDialog::Instance()->IsOk())
-            {
-                ptr->raster_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
-                ptr->pending.find_raster_file = false;
-            }
-            ImGuiFileDialog::Instance()->Close();
-        }
-        else if (ImGuiFileDialog::Instance()->Display("SaveNvdbFileDlgKey"))
-        {
-            if (ImGuiFileDialog::Instance()->IsOk())
-            {
-                ptr->nanovdb_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
-                pnanovdb_editor::Console::getInstance().addLog("Saving file '%s'...", ptr->nanovdb_filepath.c_str());
-                ptr->pending.save_nanovdb = true;
-            }
-            ImGuiFileDialog::Instance()->Close();
-        }
-        else if (ImGuiFileDialog::Instance()->Display("SelectShaderDirectoryDlgKey"))
-        {
-            if (ImGuiFileDialog::Instance()->IsOk())
-            {
-                ptr->pending_shader_directory = ImGuiFileDialog::Instance()->GetCurrentPath();
-            }
-            ImGuiFileDialog::Instance()->Close();
-        }
-    }
+    showFileDialogs(ptr);
 
     ImGui::Render();
 }

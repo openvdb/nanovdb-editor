@@ -474,6 +474,12 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         }
     }
 
+    if (config->ui_profile_name != nullptr)
+    {
+        snprintf(imgui_user_settings->ui_profile_name, sizeof(imgui_user_settings->ui_profile_name), "%s",
+                 config->ui_profile_name);
+    }
+
 #ifdef USE_IMGUI_INSTANCE
     if (!imgui_user_instance)
     {
