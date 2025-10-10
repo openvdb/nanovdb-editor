@@ -279,47 +279,79 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
     return router;
 }
 
-pnanovdb_server_instance_t* create_instance(const char* serveraddress, int port, pnanovdb_compute_log_print_t log_print)
+pnanovdb_server_instance_t* create_instance(const char* serveraddress, int port, int max_attempts, pnanovdb_compute_log_print_t log_print)
 {
     auto ptr = new server_instance_t();
 
     ptr->buffers.resize(ring_buffer_size);
 
-    std::lock_guard<std::mutex> guard(g_mutex);
-
-    using namespace std::chrono;
-
-    ptr->ioctx = std::make_shared<restinio::asio_ns::io_context>();
-
     ptr->serveraddress = serveraddress;
     ptr->port = port;
     ptr->log_print = log_print;
 
-    g_ioctx = ptr->ioctx.get();
-    try
+    const char* restinio_address = "127.0.0.1";
+    if (!ptr->serveraddress.empty())
     {
-        ptr->server = restinio::run_async<traits_t>(ptr->ioctx,
-                                                    restinio::server_settings_t<traits_t>{}
-                                                        .port(ptr->port)
-                                                        .address("0.0.0.0")
-                                                        .request_handler(server_handler(*(ptr->ioctx.get())))
-                                                        //.read_next_http_message_timelimit(10s)
-                                                        //.write_http_response_timelimit(1s)
-                                                        //.handle_request_timeout(1s)
-                                                        .cleanup_func([&]() { ws_registry.clear(); }),
-                                                    1u);
+        restinio_address = ptr->serveraddress.c_str();
     }
-    catch (const std::system_error& e)
+
+    // always try at least once
+    if (max_attempts < 1)
     {
-        if (ptr->log_print)
+        max_attempts = 1;
+    }
+    // there can only be 65535 ports anyways
+    if (max_attempts > 65535)
+    {
+        max_attempts = 65535;
+    }
+
+    int attempt = 0;
+    for (; attempt < max_attempts; attempt++)
+    {
+        std::lock_guard<std::mutex> guard(g_mutex);
+
+        using namespace std::chrono;
+
+        ptr->ioctx = std::make_shared<restinio::asio_ns::io_context>();
+
+        g_ioctx = ptr->ioctx.get();
+        bool success = true;
+        try
         {
-            ptr->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_ERROR, "Error starting server - %s", e.what());
+            ptr->server = restinio::run_async<traits_t>(ptr->ioctx,
+                                                        restinio::server_settings_t<traits_t>{}
+                                                            .port(ptr->port)
+                                                            .address(restinio_address)
+                                                            .request_handler(server_handler(*(ptr->ioctx.get())))
+                                                            //.read_next_http_message_timelimit(10s)
+                                                            //.write_http_response_timelimit(1s)
+                                                            //.handle_request_timeout(1s)
+                                                            .cleanup_func([&]() { ws_registry.clear(); }),
+                                                        1u);
         }
+        catch (const std::system_error& e)
+        {
+            if (ptr->log_print)
+            {
+                ptr->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_ERROR, "Error starting server - %s", e.what());
+            }
+            success = false;
+        }
+        if (success)
+        {
+            g_server_instance = ptr;
+            break;
+        }
+        ptr->port++;
+    }
+    if (attempt == max_attempts)
+    {
+        ptr->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_ERROR, "Server create failed after %d attempts", max_attempts);
         delete ptr;
         return nullptr;
     }
-
-    g_server_instance = ptr;
+    ptr->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Server created on port(%d)", ptr->port);
 
     return cast(ptr);
 }
@@ -374,7 +406,7 @@ void wait_until_active(pnanovdb_server_instance_t* instance,
 
     if (ptr->log_print)
     {
-        ptr->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Server stream going inactive.");
+        ptr->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Server stream going inactive.");
     }
     bool is_active = false;
     while (!is_active)
@@ -397,7 +429,7 @@ void wait_until_active(pnanovdb_server_instance_t* instance,
         {
             if (ptr->log_print)
             {
-                ptr->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Server stream going active.");
+                ptr->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Server stream going active.");
             }
             break;
         }

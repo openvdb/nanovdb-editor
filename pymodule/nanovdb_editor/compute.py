@@ -11,8 +11,19 @@ from .compiler import Compiler, pnanovdb_Compiler
 
 COMPUTE_LIB = "pnanovdbcompute"
 
+# Match pnanovdb_bool_t (int32_t)
+pnanovdb_bool_t = c_int32
+
 VULKAN_API = 1
 PNANOVDB_TRUE = 1
+
+
+class pnanovdb_ComputeShaderSource(Structure):
+    pass
+
+
+class pnanovdb_ComputeShaderBuild(Structure):
+    pass
 
 
 class pnanovdb_ShaderInterface(Structure):
@@ -20,8 +31,8 @@ class pnanovdb_ShaderInterface(Structure):
 
     _fields_ = [
         ("interface_pnanovdb_reflect_data_type", c_void_p),  # PNANOVDB_REFLECT_INTERFACE()
-        ("create_shader", CFUNCTYPE(c_void_p, POINTER(c_void_p))),
-        ("map_shader_build", CFUNCTYPE(c_bool, c_void_p, POINTER(POINTER(c_void_p)))),
+        ("create_shader", CFUNCTYPE(c_void_p, POINTER(pnanovdb_ComputeShaderSource))),
+        ("map_shader_build", CFUNCTYPE(pnanovdb_bool_t, c_void_p, POINTER(POINTER(pnanovdb_ComputeShaderBuild)))),
         ("destroy_shader", CFUNCTYPE(None, c_void_p)),
     ]
 
@@ -44,17 +55,18 @@ class pnanovdb_Compute(Structure):
 
     _fields_ = [
         ("interface_pnanovdb_reflect_data_type", c_void_p),  # PNANOVDB_REFLECT_INTERFACE()
+        ("module", c_void_p),
         ("compiler", POINTER(pnanovdb_Compiler)),
         ("shader_interface", pnanovdb_ShaderInterface),
         ("device_interface", pnanovdb_DeviceInterface),
         ("load_nanovdb", CFUNCTYPE(POINTER(pnanovdb_ComputeArray), c_char_p)),
-        ("save_nanovdb", CFUNCTYPE(c_bool, POINTER(pnanovdb_ComputeArray), c_char_p)),
+        ("save_nanovdb", CFUNCTYPE(pnanovdb_bool_t, POINTER(pnanovdb_ComputeArray), c_char_p)),
         ("create_shader_context", CFUNCTYPE(c_void_p, c_char_p)),
         ("destroy_shader_context", CFUNCTYPE(None, c_void_p)),
         (
             "init_shader",
             CFUNCTYPE(
-                c_int,
+                pnanovdb_bool_t,
                 c_void_p,  # POINTER(pnanovdb_Compute)
                 c_void_p,  # pnanovdb_compute_queue_t*
                 c_void_p,  # pnanovdb_shader_context_t*
@@ -88,7 +100,7 @@ class pnanovdb_Compute(Structure):
         (
             "dispatch_shader_on_array",
             CFUNCTYPE(
-                c_int,
+                pnanovdb_bool_t,
                 c_void_p,  # POINTER(pnanovdb_Compute)
                 POINTER(pnanovdb_Device),
                 c_char_p,
@@ -106,7 +118,7 @@ class pnanovdb_Compute(Structure):
         (
             "dispatch_shader_on_nanovdb_array",
             CFUNCTYPE(
-                c_int,
+                pnanovdb_bool_t,
                 c_void_p,  # POINTER(pnanovdb_Compute)
                 c_void_p,  # const pnanovdb_compute_device_t*
                 c_void_p,  # const pnanovdb_shader_context_t*
@@ -135,7 +147,6 @@ class pnanovdb_Compute(Structure):
                 c_uint32,
             ),
         ),  # channel_count
-        ("module", c_void_p),
     ]
 
 

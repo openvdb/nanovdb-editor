@@ -34,6 +34,10 @@ inline void pnanovdb_compute_log_print(pnanovdb_compute_log_level_t level, const
     {
         prefix = "Info";
     }
+    else if (level == PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG)
+    {
+        prefix = "Debug";
+    }
     printf("%s: ", prefix);
     vprintf(format, args);
     printf("\n");

@@ -68,7 +68,7 @@ void ShaderMonitor::addPath(const std::string& path, ShaderCallback callback)
                     }
                     lastEventTime[filePathStr] = now;
 
-                    std::cout << "Shader to recompile: " << filePathStr << std::endl;
+                    // std::cout << "Shader to recompile: " << filePathStr << std::endl;
                     if (callback)
                     {
                         std::thread workerThread(callback, filePathStr);
@@ -76,7 +76,7 @@ void ShaderMonitor::addPath(const std::string& path, ShaderCallback callback)
                     }
                 }
             });
-        std::cout << "Started monitoring: " << path << std::endl;
+        // std::cout << "Started monitoring: " << path << std::endl;
     }
 
     // recursively check for symlinks in the path

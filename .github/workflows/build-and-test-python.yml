@@ -1,4 +1,4 @@
-name: Build and Test Python
+name: Build and test Python
 
 on:
   push:
@@ -45,6 +45,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Install Vulkan Loader dependencies
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y libxcb1-dev libxcb-keysyms1-dev libxcb-randr0-dev libxcb-xinerama0-dev libx11-xcb-dev libxrandr-dev libwayland-dev wayland-protocols libdirectfb-dev
 
       - name: Build NanoVDB Editor Python module
         run: |

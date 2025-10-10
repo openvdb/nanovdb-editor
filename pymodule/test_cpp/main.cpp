@@ -3,9 +3,10 @@
 
 #include <nanovdb_editor/putil/Editor.h>
 #include <nanovdb_editor/putil/FileFormat.h>
-#include <nanovdb_editor/putil/Raster.hpp>
 
 #include <cstdarg>
+#include <thread>
+#include <chrono>
 
 #define TEST_EDITOR
 // #define TEST_RASTER
@@ -14,6 +15,7 @@
 // #define TEST_FILE_FORMAT
 // #define FORMAT_INGP
 #define FORMAT_PLY
+#define TEST_TRAINIG
 
 void pnanovdb_compute_log_print(pnanovdb_compute_log_level_t level, const char* format, ...)
 {
@@ -66,8 +68,8 @@ int main(int argc, char* argv[])
 
     pnanovdb_raster_context_t* raster_context = nullptr;
 
-    pnanovdb_raster::raster_file(&raster, &compute, queue, raster_file, voxel_size, &data_nanovdb, nullptr,
-                                 &raster_context, nullptr, nullptr, nullptr);
+    raster.raster_file&raster, &compute, queue, raster_file, voxel_size, &data_nanovdb, nullptr,
+                                 &raster_context, nullptr, nullptr, nullptr, nullptr);
 
     if (data_nanovdb)
     {
@@ -129,7 +131,7 @@ int main(int argc, char* argv[])
     pnanovdb_editor_config_t config = {};
     config.headless = PNANOVDB_TRUE;
     config.streaming = PNANOVDB_TRUE;
-    config.ip_address = "127.0.0.1";
+    config.ip_address = "192.168.0.6";
     config.port = 8080;
     editor.start(&editor, device, &config);
 
@@ -161,6 +163,7 @@ int main(int argc, char* argv[])
     pnanovdb_debug_camera_default(&debug_camera);
     debug_camera.name = "test_10";
     debug_camera.num_cameras = 10;
+    debug_camera.is_visible = PNANOVDB_FALSE;
     debug_camera.states = new pnanovdb_camera_state_t[debug_camera.num_cameras];
     debug_camera.configs = new pnanovdb_camera_config_t[debug_camera.num_cameras];
 
@@ -196,49 +199,90 @@ int main(int argc, char* argv[])
 #    ifdef TEST_RASTER_2D
     pnanovdb_camera_t camera;
     pnanovdb_camera_init(&camera);
+
     camera.state.position = { 0.358805, 0.725740, -0.693701 };
     camera.state.eye_direction = { -0.012344, 0.959868, -0.280182 };
     camera.state.eye_up = { 0.000000, 1.000000, 0.000000 };
     camera.state.eye_distance_from_position = -2.111028;
-    editor.add_camera(&editor, &camera);
+    editor.update_camera(&editor, &camera);
 
     const char* raster_file = "../../data/ficus.ply";
+    const char* raster_file_garden = "../../data/garden.ply";
     pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
 
     pnanovdb_raster_t raster = {};
     pnanovdb_raster_load(&raster, &compute);
 
-    editor.raster_ctx = raster.create_context(&compute, queue);
-
     const pnanovdb_reflect_data_type_t* data_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t);
     const pnanovdb_raster_shader_params_t* defaults = (const pnanovdb_raster_shader_params_t*)data_type->default_value;
     pnanovdb_raster_shader_params_t raster_params = *defaults;
+    raster_params.data_type = data_type;
+    raster_params.name = "ficus";
+    pnanovdb_raster_shader_params_t raster_params_garden = *defaults;
+    raster_params_garden.data_type = data_type;
+    raster_params_garden.name = "garden";
+
+    pnanovdb_compute_array_t* raster2d_shader_params_array = new pnanovdb_compute_array_t();
+    raster2d_shader_params_array->element_count = 1u;
+    raster2d_shader_params_array->element_size = data_type->element_size;
+    raster2d_shader_params_array->data = (void*)&raster_params;
+
+    pnanovdb_compute_array_t* raster2d_shader_params_array_garden = new pnanovdb_compute_array_t();
+    raster2d_shader_params_array_garden->element_count = 1u;
+    raster2d_shader_params_array_garden->element_size = data_type->element_size;
+    raster2d_shader_params_array_garden->data = (void*)&raster_params_garden;
 
     pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr;
-    pnanovdb_raster::raster_file(&raster, &compute, queue, raster_file, 0.f, nullptr, &gaussian_data,
-                                 &editor.raster_ctx, nullptr, nullptr, nullptr);
+    pnanovdb_raster_gaussian_data_t* gaussian_data_garden = nullptr;
+    pnanovdb_raster_context_t* raster_ctx = nullptr;
 
-    editor.add_gaussian_data(&editor, &raster, queue, gaussian_data);
-    editor.add_shader_params(&editor, &raster_params, data_type);
+#        ifdef TEST_TRAINIG
+    int N = 100;
+#        else
+    int N = 1;
+#        endif
+    for (int i = 0; i < N; i++)
+    {
+        pnanovdb_raster_gaussian_data_t* gaussian_data_old = gaussian_data;
+        raster.raster_file(&raster, &compute, queue, raster_file, 0.f, nullptr, &gaussian_data, &raster_ctx, nullptr,
+                           &raster_params, nullptr, nullptr);
+        editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data);
+        raster.destroy_gaussian_data(raster.compute, queue, gaussian_data_old);
 
-    runEditorLoop(5);
+        runEditorLoop(5);
+
+        gaussian_data_old = gaussian_data_garden;
+        raster.raster_file(&raster, &compute, queue, raster_file_garden, 0.f, nullptr, &gaussian_data_garden,
+                           &raster_ctx, nullptr, &raster_params_garden, nullptr, nullptr);
+        editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data_garden);
+        raster.destroy_gaussian_data(raster.compute, queue, gaussian_data_old);
+
+        runEditorLoop(5);
+    }
 
     raster_params.eps2d = 0.5f;
     printf("Updating shader param eps2d to %f\n", raster_params.eps2d);
-    editor.sync_shader_params(&editor, data_type, PNANOVDB_TRUE);
+    editor.sync_shader_params(&editor, &raster_params, PNANOVDB_TRUE);
+
+    raster_params_garden.sh_degree_override = 3;
+    editor.sync_shader_params(&editor, &raster_params_garden, PNANOVDB_TRUE);
+    printf("Updating shader param sh_degree to %d\n", raster_params_garden.sh_degree_override);
 
     default_camera.is_visible = PNANOVDB_FALSE;
 
-    runEditorLoop(10);
+    runEditorLoop(5);
 
-    editor.sync_shader_params(&editor, data_type, PNANOVDB_FALSE);
-
-    debug_camera.is_visible = PNANOVDB_FALSE;
+    editor.sync_shader_params(&editor, &raster_params, PNANOVDB_FALSE);
 
     printf("Updated shader params:\n");
     printf("eps2d: %f\n", raster_params.eps2d);
     printf("near_plane: %f\n", raster_params.near_plane_override);
     printf("far_plane: %f\n", raster_params.far_plane_override);
+
+    editor.sync_shader_params(&editor, &raster_params_garden, PNANOVDB_FALSE);
+
+    printf("Updated shader params:\n");
+    printf("sh_degree: %d\n", raster_params_garden.sh_degree_override);
 #    endif
 
     runEditorLoop(1000);
@@ -254,7 +298,12 @@ int main(int argc, char* argv[])
 #endif
 
 #ifdef TEST_RASTER_2D
-    pnanovdb_raster_free(&raster);
+    raster.destroy_gaussian_data(raster.compute, queue, gaussian_data);
+    gaussian_data = nullptr;
+    raster.destroy_gaussian_data(raster.compute, queue, gaussian_data_garden);
+    gaussian_data_garden = nullptr;
+    raster.destroy_context(raster.compute, queue, raster_ctx);
+    raster_ctx = nullptr;
 #endif
 
     compute.device_interface.destroy_device(device_manager, device);

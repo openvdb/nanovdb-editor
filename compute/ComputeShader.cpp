@@ -18,7 +18,7 @@ bool load_shader(const char* filePath, pnanovdb_shader::ShaderData* shader)
     using namespace pnanovdb_shader;
     if (filePath == nullptr)
     {
-        printf("Error: Could not load shader from a file, path is empty\n");
+        printf("Could not load shader from a file, path is empty\n");
         return false;
     }
     nlohmann::json json;

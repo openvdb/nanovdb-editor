@@ -150,7 +150,7 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
     if (result == VK_SUCCESS)
     {
         context->deviceQueue->device->logPrint(
-            PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Buffer mem allocate %lld bytes", bufMemReq.size);
+            PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Buffer mem allocate %lld bytes", bufMemReq.size);
     }
     else
     {
@@ -159,12 +159,12 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
         if (result == VK_SUCCESS)
         {
             context->deviceQueue->device->logPrint(
-                PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Buffer sysmem fallback allocate %lld bytes", bufMemReq.size);
+                PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Buffer sysmem fallback allocate %lld bytes", bufMemReq.size);
         }
         else
         {
             context->deviceQueue->device->logPrint(
-                PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Buffer allocate failed %lld bytes", bufMemReq.size);
+                PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Buffer allocate failed %lld bytes", bufMemReq.size);
         }
     }
 

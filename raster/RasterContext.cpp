@@ -18,7 +18,6 @@
 #include <stdlib.h>
 #include <cstring>
 #include <math.h>
-#include <cstring>
 #include <vector>
 #include <future>
 
@@ -100,7 +99,8 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
                                                       pnanovdb_compute_array_t* colors,
                                                       pnanovdb_compute_array_t* spherical_harmonics,
                                                       pnanovdb_compute_array_t* opacities,
-                                                      pnanovdb_compute_array_t** shader_params_arrays)
+                                                      pnanovdb_compute_array_t** shader_params_arrays,
+                                                      pnanovdb_raster_shader_params_t* raster_params)
 {
     auto ptr = new gaussian_data_t();
 
@@ -108,6 +108,12 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
     ptr->sh_stride = (pnanovdb_uint32_t)(spherical_harmonics->element_count / means->element_count);
 
     ptr->has_uploaded = PNANOVDB_FALSE;
+
+    if (raster_params)
+    {
+        ptr->shader_params =
+            compute->create_array(sizeof(char), raster_params->data_type->element_size, (void*)raster_params);
+    }
 
     ptr->means_cpu_array = compute->create_array(means->element_size, means->element_count, means->data);
     ptr->quaternions_cpu_array =
@@ -176,7 +182,8 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
     for (pnanovdb_uint32_t idx = 0u; idx < shader_param_count; idx++)
     {
         pnanovdb_compute_buffer_t* buffer = nullptr;
-        if (shader_params_arrays && shader_params_arrays[idx] && shader_params_arrays[idx]->element_count > 0u)
+        if (ptr->shader_params_cpu_arrays[idx] && shader_params_arrays && shader_params_arrays[idx] &&
+            shader_params_arrays[idx]->element_count > 0u)
         {
             buffer = create_and_init_buffer(shader_params_arrays[idx]->data, shader_params_arrays[idx]->element_count *
                                                                                  shader_params_arrays[idx]->element_size);
@@ -224,7 +231,16 @@ void destroy_gaussian_data(const pnanovdb_compute_t* compute,
                            pnanovdb_compute_queue_t* queue,
                            pnanovdb_raster_gaussian_data_t* data)
 {
+    if (!data)
+    {
+        return;
+    }
+
     auto ptr = cast(data);
+    auto context = compute->device_interface.get_compute_context(queue);
+
+    // Set minLifetime to 0 so buffers are freed immediately
+    compute->device_interface.set_resource_min_lifetime(context, 0u);
 
     gpu_array_destroy(compute, queue, ptr->means_gpu_array);
     gpu_array_destroy(compute, queue, ptr->quaternions_gpu_array);
@@ -232,6 +248,13 @@ void destroy_gaussian_data(const pnanovdb_compute_t* compute,
     gpu_array_destroy(compute, queue, ptr->colors_gpu_array);
     gpu_array_destroy(compute, queue, ptr->spherical_harmonics_gpu_array);
     gpu_array_destroy(compute, queue, ptr->opacities_gpu_array);
+
+    compute->destroy_array(ptr->means_cpu_array);
+    compute->destroy_array(ptr->quaternions_cpu_array);
+    compute->destroy_array(ptr->scales_cpu_array);
+    compute->destroy_array(ptr->colors_cpu_array);
+    compute->destroy_array(ptr->spherical_harmonics_cpu_array);
+    compute->destroy_array(ptr->opacities_cpu_array);
 
     for (pnanovdb_uint32_t idx = 0u; idx < shader_param_count; idx++)
     {
@@ -242,7 +265,21 @@ void destroy_gaussian_data(const pnanovdb_compute_t* compute,
         }
     }
 
+    delete[] ptr->shader_params_gpu_arrays;
+    delete[] ptr->shader_params_cpu_arrays;
+
+    compute->destroy_array(ptr->shader_params);
+
     delete ptr;
+
+    // Flush->wait->flush to ensure deferred cleanup and pool cleanup run while minLifetime=0
+    pnanovdb_uint64_t flushed_frame = 0llu;
+    compute->device_interface.flush(queue, &flushed_frame, nullptr, nullptr);
+    compute->device_interface.wait_idle(queue);
+    compute->device_interface.flush(queue, &flushed_frame, nullptr, nullptr);
+
+    // Restore original minLifetime
+    compute->device_interface.set_resource_min_lifetime(context, 60u);
 }
 
 }

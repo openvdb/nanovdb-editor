@@ -349,7 +349,8 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         if (!ptr->server)
         {
             ptr->server = pnanovdb_get_server()->create_instance(
-                user_settings->server_address, user_settings->server_port, log_print);
+                user_settings->server_address, user_settings->server_port,
+                user_settings->server_create_max_attempts, log_print);
             if (!ptr->server)
             {
                 if (log_print)
@@ -359,6 +360,11 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
                 ptr->device_interface.destroy_encoder(ptr->encoder);
                 ptr->encoder = nullptr;
                 return PNANOVDB_FALSE;
+            }
+            if (log_print)
+            {
+                log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Running on server %s:%d", user_settings->server_address,
+                          user_settings->server_port);
             }
         }
 #endif
