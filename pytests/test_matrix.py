@@ -4,7 +4,7 @@
 from nanovdb_editor import (
     Compiler,
     Compute,
-    pnanovdb_CompileTarget,
+    CompileTarget,
     MemoryBuffer,
 )
 from ctypes import Structure, c_float, c_void_p, addressof
@@ -40,14 +40,14 @@ array_dtype_out = np.dtype(np.int32)
 
 
 TEST_CASES = [
-    ("out_vk_col", TEST_SHADER, pnanovdb_CompileTarget.VULKAN, False),
-    ("out_vk_row", TEST_SHADER, pnanovdb_CompileTarget.VULKAN, True),
-    ("out_cpu_col", TEST_SHADER, pnanovdb_CompileTarget.CPU, False),
-    ("out_cpu_row", TEST_SHADER, pnanovdb_CompileTarget.CPU, True),
-    ("in_vk_col", TEST_SHADER_IN, pnanovdb_CompileTarget.VULKAN, False),
-    ("in_vk_row", TEST_SHADER_IN, pnanovdb_CompileTarget.VULKAN, True),
-    ("in_cpu_col", TEST_SHADER_IN, pnanovdb_CompileTarget.CPU, False),
-    ("in_cpu_row", TEST_SHADER_IN, pnanovdb_CompileTarget.CPU, True),
+    ("out_vk_col", TEST_SHADER, CompileTarget.VULKAN, False),
+    ("out_vk_row", TEST_SHADER, CompileTarget.VULKAN, True),
+    ("out_cpu_col", TEST_SHADER, CompileTarget.CPU, False),
+    ("out_cpu_row", TEST_SHADER, CompileTarget.CPU, True),
+    ("in_vk_col", TEST_SHADER_IN, CompileTarget.VULKAN, False),
+    ("in_vk_row", TEST_SHADER_IN, CompileTarget.VULKAN, True),
+    ("in_cpu_col", TEST_SHADER_IN, CompileTarget.CPU, False),
+    ("in_cpu_row", TEST_SHADER_IN, CompileTarget.CPU, True),
 ]
 
 
@@ -79,7 +79,7 @@ class TestMatrix(unittest.TestCase):
 
     @parameterized.expand(TEST_CASES)
     def test_matrix(self, _case_name, test_shader, target, is_row_major):
-        if target == pnanovdb_CompileTarget.VULKAN:
+        if target == CompileTarget.VULKAN:
             input_data = np.zeros(len(constants_data), dtype=array_dtype_out)
             output_data = np.zeros(len(constants_data), dtype=array_dtype_out)
 
@@ -111,14 +111,14 @@ class TestMatrix(unittest.TestCase):
                 self.compute.destroy_array(constants_array)
                 self.compute.destroy_array(output_array)
 
-        elif target == pnanovdb_CompileTarget.CPU:
+        elif target == CompileTarget.CPU:
             input_data = np.zeros(len(constants_data), dtype=array_dtype_out)
             output_data = np.zeros(len(constants_data), dtype=array_dtype_out)
 
             self.compiler.compile_shader(
                 test_shader,
                 entry_point_name="computeMain",
-                compile_target=pnanovdb_CompileTarget.CPU,
+                compile_target=CompileTarget.CPU,
                 is_row_major=is_row_major,
             )
 

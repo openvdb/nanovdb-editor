@@ -1,7 +1,7 @@
 # Copyright Contributors to the OpenVDB Project
 # SPDX-License-Identifier: Apache-2.0
 #
-from nanovdb_editor import Compiler, Compute, pnanovdb_CompileTarget, MemoryBuffer
+from nanovdb_editor import Compiler, Compute, CompileTarget, MemoryBuffer
 from ctypes import *
 
 import os
@@ -59,7 +59,7 @@ class TestDispatch(unittest.TestCase):
     def test_cpu_dispatch(self):
 
         self.compiler.compile_shader(
-            TEST_SHADER, entry_point_name="computeMain", compile_target=pnanovdb_CompileTarget.CPU
+            TEST_SHADER, entry_point_name="computeMain", compile_target=CompileTarget.CPU
         )
 
         class Constants(Structure):

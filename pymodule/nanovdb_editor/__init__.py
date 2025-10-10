@@ -4,10 +4,10 @@
 import os
 import sys
 
-from .compiler import Compiler, pnanovdb_CompileTarget, MemoryBuffer
+from .compiler import Compiler, CompileTarget, MemoryBuffer
 from .compute import Compute
 from .device import DeviceInterface
-from .editor import Editor, pnanovdb_EditorConfig
+from .editor import Editor, EditorConfig
 from .raster import Raster
 
 if sys.platform == "win32":
@@ -24,7 +24,7 @@ __all__ = [
     "DeviceInterface",
     "Editor",
     "Raster",
-    "pnanovdb_CompileTarget",
+    "CompileTarget",
     "MemoryBuffer",
-    "pnanovdb_EditorConfig",
+    "EditorConfig",
 ]

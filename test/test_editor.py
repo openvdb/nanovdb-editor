@@ -1,7 +1,7 @@
 # Copyright Contributors to the OpenVDB Project
 # SPDX-License-Identifier: Apache-2.0
 
-from nanovdb_editor import Compiler, Compute, Editor, pnanovdb_EditorConfig
+from nanovdb_editor import Compiler, Compute, Editor, EditorConfig
 
 import os
 
@@ -23,7 +23,7 @@ if __name__ == "__main__":
     editor = Editor(compute, compiler)
     editor.add_nanovdb(nvdb_array)
 
-    config = pnanovdb_EditorConfig()
+    config = EditorConfig()
     config.ip_address = b"127.0.0.1"
     config.port = 8080
     config.headless = 0

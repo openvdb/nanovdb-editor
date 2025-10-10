@@ -18,7 +18,7 @@ def test_editor_start_stop():
 
     editor = nve.Editor(compute, compiler)
 
-    config = nve.pnanovdb_EditorConfig()
+    config = nve.EditorConfig()
     config.ip_address = b"127.0.0.1"
     config.port = 8080
     config.headless = 1
