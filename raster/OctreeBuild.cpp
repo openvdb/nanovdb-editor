@@ -608,6 +608,8 @@ void raster_octree_build(pnanovdb_raster_gaussian_data_t* data_in)
     };
     std::vector<header_flat_t> flat_headers(key_headers.size());
 
+    uint64_t flat_list_count = 0u;
+    uint64_t split_list_count = 0u;
     std::map<uint64_t, uint64_t> parent_counts;
     for (size_t idx = 0u; idx < key_headers.size(); idx++)
     {
@@ -631,6 +633,12 @@ void raster_octree_build(pnanovdb_raster_gaussian_data_t* data_in)
         }
         parent_counts[parent_count]++;
 
+        for(uint32_t level = 0u; level < 12u; level++)
+        {
+            flat_list_count += flat.counts[level];
+        }
+        split_list_count += key_headers[idx].count;
+
         flat_headers[idx] = flat;
     }
     for (auto& parent_count : parent_counts)
@@ -638,6 +646,7 @@ void raster_octree_build(pnanovdb_raster_gaussian_data_t* data_in)
         printf("key_header parent_count(%llu) instances(%llu):\n",
             (unsigned long long int)parent_count.first, (unsigned long long int)parent_count.second);
     }
+    printf("split_list_count(%zu) flat_list_count(%zu) ratio(%f)\n", split_list_count, flat_list_count, (double)flat_list_count / (double)split_list_count);
 
     std::vector<std::pair<uint64_t, uint64_t>> tmp_keys;
     std::vector<uint32_t> gaussian_ids_axis[3];
