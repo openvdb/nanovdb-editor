@@ -408,7 +408,8 @@ pnanovdb_int32_t editor_get_external_active_count(void* external_active_count)
 
     auto worker = static_cast<EditorWorker*>(editor->impl->editor_worker);
     pnanovdb_int32_t count = 0;
-    if (worker->set_params.load() > 0 || worker->get_params.load() > 0)
+    if (worker->set_params.load() > 0 || worker->get_params.load() > 0 ||
+        worker->should_stop.load())
     {
         count = 1;
     }
