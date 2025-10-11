@@ -136,10 +136,10 @@ SlangCompiler::SlangCompiler()
     // printf("Slang LLVM path: %s\n", slangLlvmPath);
 
     hasSlangLlvm_ = SLANG_SUCCEEDED(globalSession_->checkPassThroughSupport(SLANG_PASS_THROUGH_LLVM));
-    if (!hasSlangLlvm_)
-    {
-        printf("Warning: Slang LLVM not found\n");
-    }
+    // if (!hasSlangLlvm_)
+    // {
+    //     printf("Warning: Slang LLVM not found\n");
+    // }
 }
 
 SlangCompiler::~SlangCompiler()

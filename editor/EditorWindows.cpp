@@ -188,7 +188,7 @@ void showCameraViews(Instance* ptr)
     bool isViewportCamera = (ptr->selected_scene_item == VIEWPORT_CAMERA);
     if (isViewportCamera)
     {
-        if (ImGui::Button("Reset"))
+        if (ImGui::Button("Reset Viewport Camera"))
         {
             pnanovdb_camera_state_t default_state = {};
             pnanovdb_camera_state_default(&default_state, PNANOVDB_FALSE);
@@ -409,7 +409,7 @@ void showPropertiesWindow(Instance* ptr)
         }
         else if (ptr->selected_view_type == imgui_instance_user::ViewsTypes::NanoVDBs)
         {
-            ptr->shader_params.renderGroup(ptr->shader_name);
+            ptr->shader_params.render(ptr->shader_name);
         }
         else if (ptr->selected_view_type == imgui_instance_user::ViewsTypes::Cameras)
         {
@@ -934,7 +934,16 @@ void showFileHeaderWindow(Instance* ptr)
 
     if (ImGui::Begin(FILE_HEADER, &ptr->window.show_file_header))
     {
-        (void)pnanovdb_editor::FileHeaderInfo::getInstance().render(ptr->nanovdb_array.get());
+        pnanovdb_compute_array_t* current_array = nullptr;
+        if (ptr->selected_view_type == ViewsTypes::NanoVDBs && ptr->nanovdb_arrays)
+        {
+            auto it = ptr->nanovdb_arrays->find(ptr->selected_scene_item);
+            if (it != ptr->nanovdb_arrays->end())
+            {
+                current_array = it->second.nanovdb_array;
+            }
+        }
+        pnanovdb_editor::FileHeaderInfo::getInstance().render(current_array);
     }
     ImGui::End();
 }
