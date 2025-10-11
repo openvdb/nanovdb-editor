@@ -357,8 +357,8 @@ void drawCameraFrustums(Instance* ptr)
             if (camera->is_visible)
             {
                 bool isViewSelected =
-                    (!ptr->selected_camera_frustum.empty() && ptr->selected_camera_frustum == cameraPair.first);
-                int selected = isViewSelected ? ptr->camera_frustum_index[ptr->selected_camera_frustum] : -1;
+                    (!ptr->selected_scene_item.empty() && ptr->selected_scene_item == cameraPair.first);
+                int selected = isViewSelected ? ptr->camera_frustum_index[ptr->selected_scene_item] : -1;
                 // first draw non-selected cameras with lower alpha
                 for (int i = 0; i < camera->num_cameras; i++)
                 {

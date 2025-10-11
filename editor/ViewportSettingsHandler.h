@@ -1,10 +1,13 @@
 // Copyright Contributors to the OpenVDB Project
 // SPDX-License-Identifier: Apache-2.0
 
-/*!\file   nanovdb_editor/editor/ViewportSettingsHandler.h
- * \author Petra Hapalova
- * \brief  ImGui settings handler for Viewport UI state.
- */
+/*!
+    \file   nanovdb_editor/editor/ViewportSettingsHandler.h
+
+    \author Petra Hapalova
+
+    \brief  ImGui settings handler for Viewport UI state
+*/
 
 #pragma once
 
@@ -19,12 +22,11 @@ namespace ViewportSettingsHandler
 static void ClearAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler)
 {
     Instance* instance = (Instance*)handler->UserData;
-    instance->selected_camera_frustum.clear();
+    instance->selected_scene_item.clear();
 }
 
 static void* ReadOpen(ImGuiContext* ctx, ImGuiSettingsHandler* handler, const char* name)
 {
-    // Only one section for now: [ViewportSettings][Settings]
     if (strcmp(name, "Settings") == 0)
     {
         return (void*)name;
@@ -39,22 +41,6 @@ static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* ent
     {
         return;
     }
-
-    Instance* instance = (Instance*)handler->UserData;
-
-    char buffer[1024] = {};
-    int indexValue = 0;
-    if (sscanf(line, "SelectedCameraFrustum=%1023[^\n]", buffer) == 1)
-    {
-        instance->selected_camera_frustum = buffer;
-    }
-    else if (sscanf(line, "SelectedCameraIndex=%d", &indexValue) == 1)
-    {
-        if (!instance->selected_camera_frustum.empty())
-        {
-            instance->camera_frustum_index[instance->selected_camera_frustum] = indexValue;
-        }
-    }
 }
 
 static void WriteAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler, ImGuiTextBuffer* buf)
@@ -62,17 +48,6 @@ static void WriteAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler, ImGuiText
     Instance* instance = (Instance*)handler->UserData;
 
     buf->appendf("[%s][Settings]\n", handler->TypeName);
-    buf->appendf("SelectedCameraFrustum=%s\n", instance->selected_camera_frustum.c_str());
-    int index = 0;
-    if (!instance->selected_camera_frustum.empty())
-    {
-        auto it = instance->camera_frustum_index.find(instance->selected_camera_frustum);
-        if (it != instance->camera_frustum_index.end())
-        {
-            index = it->second;
-        }
-    }
-    buf->appendf("SelectedCameraIndex=%d\n", index);
     buf->append("\n");
 }
 
