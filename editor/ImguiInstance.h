@@ -28,12 +28,15 @@
 #include <map>
 #include <mutex>
 #include <memory>
-#include <set>
+#include <deque>
 
 namespace imgui_instance_user
 {
 static const char* s_render_settings_default = "default";
 static const char* s_raster2d_shader_group = "raster/raster2d_group";
+
+// TODO: make unique label and save scene items in a map with unique keys rather than strings
+static const char* VIEWPORT_CAMERA = "Viewport Camera";
 
 static const char* VIEWPORT_SETTINGS = "Viewport";
 static const char* RENDER_SETTINGS = "Render Settings";
@@ -92,7 +95,7 @@ struct GaussianDataLoadedContext
 };
 struct EditorLoaded
 {
-    std::set<std::string> filenames; // TODO add some cleanup
+    std::deque<std::string> filenames;
     std::vector<pnanovdb_compute_array_t*> nanovdb_arrays;
     std::vector<GaussianDataLoadedContext> gaussian_views;
 };
@@ -143,7 +146,7 @@ struct WindowState
 {
     bool show_profiler = false;
     bool show_code_editor = false;
-    bool show_console = true;
+    bool show_console = false;
     bool show_viewport_settings = true;
     bool show_render_settings = true;
     bool show_compiler_settings = false;
@@ -207,6 +210,10 @@ struct Instance
     std::map<std::string, GaussianDataContext>* gaussian_views = nullptr;
     std::string raster_shader_group = s_raster2d_shader_group;
     std::map<std::string, pnanovdb_imgui_settings_render_t> views_render_settings;
+
+    pnanovdb_camera_view_t default_camera_view; // default camera view that syncs with viewport
+    pnanovdb_camera_config_t default_camera_view_config;
+    pnanovdb_camera_state_t default_camera_view_state;
 
     void set_default_shader(const std::string& shaderName);
 

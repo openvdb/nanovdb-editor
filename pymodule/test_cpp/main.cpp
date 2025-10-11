@@ -160,7 +160,7 @@ int main(int argc, char* argv[])
     debug_config.far_plane = 100.0f;
 
     pnanovdb_camera_view_t debug_camera;
-    pnanovdb_debug_camera_default(&debug_camera);
+    pnanovdb_camera_view_default(&debug_camera);
     debug_camera.name = "test_10";
     debug_camera.num_cameras = 10;
     debug_camera.is_visible = PNANOVDB_FALSE;
@@ -186,7 +186,7 @@ int main(int argc, char* argv[])
     pnanovdb_camera_state_default(&default_state, PNANOVDB_FALSE);
 
     pnanovdb_camera_view_t default_camera;
-    pnanovdb_debug_camera_default(&default_camera);
+    pnanovdb_camera_view_default(&default_camera);
     default_camera.name = "default";
     default_camera.num_cameras = 1;
     default_camera.states = new pnanovdb_camera_state_t[default_camera.num_cameras];

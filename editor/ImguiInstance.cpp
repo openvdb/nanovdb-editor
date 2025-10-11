@@ -205,9 +205,9 @@ static void showWindows(Instance* ptr, float delta_time)
     showCompilerSettingsWindow(ptr);
 
     // dock left bottom
-    showPropertiesWindow(ptr);
-    showShaderParamsWindow(ptr);
     showBenchmarkWindow(ptr);
+    showShaderParamsWindow(ptr);
+    showPropertiesWindow(ptr);
 
     // dock right
     showFileHeaderWindow(ptr);
