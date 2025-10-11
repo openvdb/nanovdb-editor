@@ -337,9 +337,17 @@ int main(int argc, char* argv[])
     pnanovdb_editor_load(&editor, &compute, &compiler);
 
 #    ifdef TEST_CAMERA
+    pnanovdb_camera_config_t default_config = {};
+    pnanovdb_camera_config_default(&default_config);
+    default_config.near_plane = 0.1f;
+    default_config.far_plane = 100.0f;
+
+    pnanovdb_camera_state_t default_state = {};
+    pnanovdb_camera_state_default(&default_state, PNANOVDB_FALSE);
+
     pnanovdb_camera_state_t debug_state = {};
     pnanovdb_camera_state_default(&debug_state, PNANOVDB_FALSE);
-    debug_state.position = { 0.632428, 0.930241, -0.005193 };
+    debug_state.position = { 0.632428, -0.930241, -0.005193 };
     debug_state.eye_direction = { -0.012344, 0.959868, -0.280182 };
     debug_state.eye_up = { 0.000000, 1.000000, 0.000000 };
     debug_state.eye_distance_from_position = 41.431084;
@@ -350,8 +358,24 @@ int main(int argc, char* argv[])
     debug_config.far_plane = 100.0f;
     debug_config.aspect_ratio = 2.0f;
 
+    pnanovdb_camera_state_t test_state = default_state;
+    test_state.eye_distance_from_position = 3.f;
+    test_state.eye_up = { 0.000000, 0.000000, -1.000000 };
+    pnanovdb_camera_config_t test_config = default_config;
+
+    pnanovdb_camera_view_t test_camera;
+    pnanovdb_camera_view_default(&test_camera);
+    test_camera.name = "test";
+    test_camera.num_cameras = 1;
+    test_camera.states = new pnanovdb_camera_state_t[test_camera.num_cameras];
+    test_camera.states[0] = test_state;
+    test_camera.configs = new pnanovdb_camera_config_t[test_camera.num_cameras];
+    test_camera.configs[0] = test_config;
+    test_camera.is_visible = PNANOVDB_FALSE;
+    editor.add_camera_view(&editor, &test_camera);
+
     pnanovdb_camera_view_t debug_camera;
-    pnanovdb_debug_camera_default(&debug_camera);
+    pnanovdb_camera_view_default(&debug_camera);
     debug_camera.name = "test_10";
     debug_camera.num_cameras = 10;
     debug_camera.states = new pnanovdb_camera_state_t[debug_camera.num_cameras];
@@ -368,17 +392,9 @@ int main(int argc, char* argv[])
     }
     editor.add_camera_view(&editor, &debug_camera);
 
-    pnanovdb_camera_config_t default_config = {};
-    pnanovdb_camera_config_default(&default_config);
-    default_config.near_plane = 0.1f;
-    default_config.far_plane = 100.0f;
-
-    pnanovdb_camera_state_t default_state = {};
-    pnanovdb_camera_state_default(&default_state, PNANOVDB_FALSE);
-
     pnanovdb_camera_view_t default_camera;
-    pnanovdb_debug_camera_default(&default_camera);
-    default_camera.name = "default";
+    pnanovdb_camera_view_default(&default_camera);
+    default_camera.name = "test_default";
     default_camera.num_cameras = 1;
     default_camera.states = new pnanovdb_camera_state_t[default_camera.num_cameras];
     default_camera.states[0] = default_state;

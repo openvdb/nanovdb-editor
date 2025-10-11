@@ -166,7 +166,7 @@ struct pnanovdb_camera_view_t
 };
 PNANOVDB_STRUCT_TYPEDEF(pnanovdb_camera_view_t)
 
-PNANOVDB_FORCE_INLINE void pnanovdb_debug_camera_default(PNANOVDB_INOUT(pnanovdb_camera_view_t) ptr)
+PNANOVDB_FORCE_INLINE void pnanovdb_camera_view_default(PNANOVDB_INOUT(pnanovdb_camera_view_t) ptr)
 {
     PNANOVDB_DEREF(ptr).configs = NULL;
     PNANOVDB_DEREF(ptr).states = NULL;

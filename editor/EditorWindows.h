@@ -17,7 +17,7 @@ struct Instance;
 
 // Window rendering functions
 void showSceneWindow(Instance* ptr);
-void showCameraViewWindow(Instance* ptr);
+void showCameraViews(Instance* ptr);
 void showPropertiesWindow(Instance* ptr);
 void showViewportSettingsWindow(Instance* ptr);
 void showRenderSettingsWindow(Instance* ptr);

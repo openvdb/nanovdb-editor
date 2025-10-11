@@ -408,7 +408,8 @@ pnanovdb_int32_t editor_get_external_active_count(void* external_active_count)
 
     auto worker = static_cast<EditorWorker*>(editor->impl->editor_worker);
     pnanovdb_int32_t count = 0;
-    if (worker->set_params.load() > 0 || worker->get_params.load() > 0)
+    if (worker->set_params.load() > 0 || worker->get_params.load() > 0 ||
+        worker->should_stop.load())
     {
         count = 1;
     }
@@ -560,6 +561,28 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     // views UI
     imgui_user_instance->camera_views = &(static_cast<EditorView*>(editor->impl->views)->cameras);
     imgui_user_instance->gaussian_views = &(static_cast<EditorView*>(editor->impl->views)->gaussians);
+
+    // Initialize default camera view that syncs with viewport
+    pnanovdb_camera_view_default(&imgui_user_instance->default_camera_view);
+    imgui_user_instance->default_camera_view.name = imgui_instance_user::VIEWPORT_CAMERA;
+    imgui_user_instance->default_camera_view.configs = &imgui_user_instance->default_camera_view_config;
+    imgui_user_instance->default_camera_view.states = &imgui_user_instance->default_camera_view_state;
+    imgui_user_instance->default_camera_view.num_cameras = 1;
+    imgui_user_instance->default_camera_view.is_visible = PNANOVDB_FALSE;
+
+    if (editor->impl->camera)
+    {
+        imgui_user_instance->default_camera_view_config = editor->impl->camera->config;
+        imgui_user_instance->default_camera_view_state = editor->impl->camera->state;
+    }
+    else
+    {
+        pnanovdb_camera_config_default(&imgui_user_instance->default_camera_view_config);
+        pnanovdb_camera_state_default(&imgui_user_instance->default_camera_view_state, PNANOVDB_FALSE);
+    }
+
+    imgui_user_instance->camera_views->insert(
+        { imgui_instance_user::VIEWPORT_CAMERA, &imgui_user_instance->default_camera_view });
 
     ShaderCallback callback =
         pnanovdb_editor::get_shader_recompile_callback(imgui_user_instance, editor->impl->compiler, compiler_inst);
@@ -903,28 +926,53 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 }
             };
 
-            // Handle pending UI selection change
+            // Handle pending UI selection change (Gaussian views only)
             if (!imgui_user_instance->pending.viewport_gaussian_view.empty() &&
-                imgui_user_instance->pending.viewport_gaussian_view != imgui_user_instance->selected_scene_view)
+                imgui_user_instance->pending.viewport_gaussian_view != imgui_user_instance->selected_scene_item)
             {
-                save_current_view_state(imgui_user_instance->selected_scene_view);
+                pnanovdb_camera_state_t captured_camera_state = {};
+                pnanovdb_camera_config_t captured_camera_config = {};
+                imgui_window_iface->get_camera(imgui_window, &captured_camera_state, &captured_camera_config);
+
+                // Update default camera view to preserve viewport camera changes
+                imgui_user_instance->default_camera_view_state = captured_camera_state;
+                imgui_user_instance->default_camera_view_config = captured_camera_config;
+
+                save_current_view_state(imgui_user_instance->selected_scene_item);
 
                 // Update both editor and UI to the new selection
                 const auto& new_view_name = imgui_user_instance->pending.viewport_gaussian_view;
                 views->current_view_scene = new_view_name;
-                imgui_user_instance->selected_scene_view = new_view_name;
+                imgui_user_instance->selected_scene_item = new_view_name;
+                imgui_user_instance->selected_view_type = imgui_instance_user::ViewsTypes::GaussianScenes;
 
                 load_view_into_editor_and_ui(new_view_name);
+
+                // This preserves viewport camera changes when switching views
+                imgui_user_settings->camera_state = captured_camera_state;
+                imgui_user_settings->camera_config = captured_camera_config;
+                imgui_user_settings->sync_camera = PNANOVDB_TRUE;
 
                 imgui_user_instance->pending.viewport_gaussian_view.clear();
             }
             // Handle editor-driven selection change (only if no pending UI change)
-            else if (views->current_view_scene != imgui_user_instance->selected_scene_view)
+            // Do not override when the user has explicitly selected a camera in the Scene window
+            else if (views->current_view_scene != imgui_user_instance->selected_scene_item &&
+                     imgui_user_instance->selected_view_type != imgui_instance_user::ViewsTypes::Cameras)
             {
-                save_current_view_state(imgui_user_instance->selected_scene_view);
+                save_current_view_state(imgui_user_instance->selected_scene_item);
 
                 // Update UI to match editor's selection
-                imgui_user_instance->selected_scene_view = views->current_view_scene;
+                imgui_user_instance->selected_scene_item = views->current_view_scene;
+
+                if (editor->impl->nanovdb_array)
+                {
+                     imgui_user_instance->selected_view_type = imgui_instance_user::ViewsTypes::NanoVDBs;
+                }
+                else if (editor->impl->gaussian_data)
+                {
+                    imgui_user_instance->selected_view_type = imgui_instance_user::ViewsTypes::GaussianScenes;
+                }
 
                 load_view_into_editor_and_ui(views->current_view_scene);
             }
@@ -1024,8 +1072,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
                 std::filesystem::path fsPath(pending_raster_filepath);
                 std::string filename = fsPath.stem().string();
-                imgui_user_instance->loaded.filenames.insert(filename);
-                pending_raster_params->name = (*imgui_user_instance->loaded.filenames.rbegin()).c_str();
+                imgui_user_instance->loaded.filenames.push_back(filename);
+                pending_raster_params->name = imgui_user_instance->loaded.filenames.back().c_str();
                 pending_raster_params->data_type = raster_shader_params_data_type;
 
                 pnanovdb_compute_queue_t* worker_queue =
@@ -1290,6 +1338,10 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         }
 #endif
         imgui_window_iface->update_camera(imgui_window, imgui_user_settings);
+
+        // update default camera view to sync with viewport camera to preserve changes when switching views
+        imgui_user_instance->default_camera_view_state = imgui_user_settings->camera_state;
+        imgui_user_instance->default_camera_view_config = imgui_user_settings->camera_config;
 
         // update viewport image
         should_run = imgui_window_iface->update(
