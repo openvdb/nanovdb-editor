@@ -14,7 +14,18 @@
 namespace imgui_instance_user
 {
 struct Instance;
+}
 
-void drawCameraFrustums(Instance* ptr);
+namespace pnanovdb_editor
+{
+class CameraFrustum
+{
+public:
+    static CameraFrustum& getInstance();
 
-} // namespace imgui_instance_user
+    void render(imgui_instance_user::Instance* ptr);
+
+private:
+    CameraFrustum() = default;
+};
+}

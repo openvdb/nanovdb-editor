@@ -84,6 +84,7 @@ typedef struct pnanovdb_imgui_settings_render_t
     pnanovdb_camera_state_t camera_state = {};
     pnanovdb_camera_config_t camera_config = {};
     float key_translation_shift_multiplier = 100.f;
+    char ui_profile_name[256u] = { 'd', 'e', 'f', 'a', 'u', 'l', 't', '\0' };
 
 } pnanovdb_imgui_settings_render_t;
 

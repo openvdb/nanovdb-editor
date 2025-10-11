@@ -191,6 +191,33 @@ endif()
 
 ### PNanoVDB Editor
 
+# Read version from VERSION.txt
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/pymodule/VERSION.txt" NANOVDB_EDITOR_VERSION)
+string(STRIP "${NANOVDB_EDITOR_VERSION}" NANOVDB_EDITOR_VERSION)
+
+# Check if NANOVDB_EDITOR_COMMIT_HASH is already defined (e.g., passed via cmake -D)
+if(NOT DEFINED NANOVDB_EDITOR_COMMIT_HASH OR NANOVDB_EDITOR_COMMIT_HASH STREQUAL "")
+    # Get git commit hash from the nanovdb-editor repository
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+        execute_process(
+            COMMAND git rev-parse --short HEAD
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            OUTPUT_VARIABLE NANOVDB_EDITOR_COMMIT_HASH
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
+            RESULT_VARIABLE GIT_RESULT
+        )
+        if(NOT GIT_RESULT EQUAL 0)
+            set(NANOVDB_EDITOR_COMMIT_HASH "Unknown")
+        endif()
+    else()
+        set(NANOVDB_EDITOR_COMMIT_HASH "Unknown")
+    endif()
+endif()
+
+message(STATUS "NanoVDB Editor Version: ${NANOVDB_EDITOR_VERSION}")
+message(STATUS "NanoVDB Editor Commit Hash: ${NANOVDB_EDITOR_COMMIT_HASH}")
+
 file(GLOB EDITOR_SOURCE_FILES "editor/*.cpp")
 file(GLOB SERVER_SOURCE_FILES "server/*.cpp")
 file(GLOB VULKAN_IMGUI_SOURCE_FILES "imgui/*.cpp")
@@ -227,6 +254,8 @@ create_nanovdb_library(pnanovdbeditor
     DEFINITIONS
         NOMINMAX
         COMPILED_SHADERS_DIR=${COMPILED_SHADERS_DIR}
+        NANOVDB_EDITOR_VERSION="${NANOVDB_EDITOR_VERSION}"
+        NANOVDB_EDITOR_COMMIT_HASH="${NANOVDB_EDITOR_COMMIT_HASH}"
 )
 
 if(NANOVDB_EDITOR_USE_GLFW)

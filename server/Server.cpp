@@ -279,7 +279,10 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
     return router;
 }
 
-pnanovdb_server_instance_t* create_instance(const char* serveraddress, int port, int max_attempts, pnanovdb_compute_log_print_t log_print)
+pnanovdb_server_instance_t* create_instance(const char* serveraddress,
+                                            int port,
+                                            int max_attempts,
+                                            pnanovdb_compute_log_print_t log_print)
 {
     auto ptr = new server_instance_t();
 

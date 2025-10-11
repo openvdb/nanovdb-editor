@@ -6,10 +6,11 @@
 
     \author Petra Hapalova
 
-    \brief  Frustum rendering functions for the ImGui editor
+    \brief  Frustum rendering functions for the viewport
 */
 
 #include "ImguiInstance.h"
+#include "CameraFrustum.h"
 
 #include "nanovdb_editor/putil/Camera.h"
 
@@ -20,7 +21,7 @@
 #    define M_PI_2 1.57079632679489661923
 #endif
 
-namespace imgui_instance_user
+namespace pnanovdb_editor
 {
 const float EPSILON = 1e-6f;
 
@@ -187,8 +188,12 @@ static void calculateFrustumCorners(pnanovdb_camera_state_t& camera_state,
                    farCenter.z - right.z * farWidth * 0.5f + up.z * farHeight * 0.5f };
 }
 
-static void drawCameraFrustum(
-    Instance* ptr, ImVec2 windowPos, ImVec2 windowSize, pnanovdb_camera_view_t& camera, int cameraIdx, float alpha = 1.f)
+static void drawCameraFrustum(imgui_instance_user::Instance* ptr,
+                              ImVec2 windowPos,
+                              ImVec2 windowSize,
+                              pnanovdb_camera_view_t& camera,
+                              int cameraIdx,
+                              float alpha = 1.f)
 {
     ImDrawList* drawList = ImGui::GetWindowDrawList();
 
@@ -319,7 +324,13 @@ static void drawCameraFrustum(
     }
 }
 
-void drawCameraFrustums(Instance* ptr)
+CameraFrustum& CameraFrustum::getInstance()
+{
+    static CameraFrustum instance;
+    return instance;
+}
+
+void CameraFrustum::render(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->camera_views)
     {
@@ -378,4 +389,5 @@ void drawCameraFrustums(Instance* ptr)
     }
     ImGui::End();
 }
-}
+
+} // namespace pnanovdb_editor
