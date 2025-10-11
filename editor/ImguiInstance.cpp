@@ -190,6 +190,11 @@ static void createMenu(Instance* ptr)
             ImGui::MenuItem(COMPILER_SETTINGS, "", &ptr->window.show_compiler_settings);
             ImGui::EndMenu();
         }
+        if (ImGui::BeginMenu("Help"))
+        {
+            ImGui::MenuItem("About", "", &ptr->window.show_about);
+            ImGui::EndMenu();
+        }
         ImGui::EndMainMenuBar();
     }
 }
@@ -214,6 +219,9 @@ static void showWindows(Instance* ptr, float delta_time)
 
     // dock bottom
     showConsoleWindow(ptr);
+
+    // modal windows
+    showAboutWindow(ptr);
 }
 
 void update(pnanovdb_imgui_instance_t* instance)

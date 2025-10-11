@@ -155,6 +155,7 @@ struct WindowState
     bool show_file_header = false;
     bool show_scene = true;
     bool show_scene_properties = true;
+    bool show_about = false;
 };
 
 struct UniformState

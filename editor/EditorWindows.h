@@ -28,6 +28,7 @@ void showFileHeaderWindow(Instance* ptr);
 void showCodeEditorWindow(Instance* ptr);
 void showProfilerWindow(Instance* ptr, float delta_time);
 void showConsoleWindow(Instance* ptr);
+void showAboutWindow(Instance* ptr);
 
 void showFileDialogs(Instance* ptr);
 void saveLoadSettings(Instance* ptr);

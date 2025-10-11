@@ -1123,4 +1123,41 @@ void saveLoadSettings(Instance* ptr)
     }
 }
 
+void showAboutWindow(Instance* ptr)
+{
+    if (!ptr->window.show_about)
+    {
+        return;
+    }
+
+    // Center the window on first use
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(400, 160), ImGuiCond_Appearing);
+
+    if (ImGui::Begin("About", &ptr->window.show_about, ImGuiWindowFlags_NoResize))
+    {
+        ImGui::Text("NanoVDB Editor");
+        ImGui::Separator();
+
+        // Display version from VERSION.txt
+#ifndef NANOVDB_EDITOR_VERSION
+#define NANOVDB_EDITOR_VERSION "Unknown"
+#endif
+        ImGui::Text("Version: %s", NANOVDB_EDITOR_VERSION);
+
+        // Display git hash from CMake
+#ifndef NANOVDB_EDITOR_COMMIT_HASH
+#define NANOVDB_EDITOR_COMMIT_HASH "Unknown"
+#endif
+        ImGui::Text("Build: %s", NANOVDB_EDITOR_COMMIT_HASH);
+
+        ImGui::Separator();
+        ImGui::Text("Copyright Contributors to the OpenVDB Project");
+        ImGui::Text("SPDX-License-Identifier: Apache-2.0");
+
+        ImGui::Spacing();
+    }
+    ImGui::End();
+}
+
 } // imgui_instance_user
