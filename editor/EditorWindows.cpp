@@ -613,7 +613,7 @@ void showRenderSettingsWindow(Instance* ptr)
 
             IMGUI_CHECKBOX_SYNC("Upside down", settings->is_upside_down);
         }
-        ImGui::DragFloat("Shift Speed Multiplier", &settings->key_translation_shift_multiplier, 0.f, 1.f, 10000.f,
+        ImGui::DragFloat("Camera Speed Multiplier", &settings->camera_speed_multiplier, 0.f, 1.f, 10000.f,
                          "%.1f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
         ImGui::Separator();
 
@@ -940,7 +940,7 @@ void showFileHeaderWindow(Instance* ptr)
             auto it = ptr->nanovdb_arrays->find(ptr->selected_scene_item);
             if (it != ptr->nanovdb_arrays->end())
             {
-                current_array = it->second.nanovdb_array;
+                //current_array = it->second.nanovdb_array;
             }
         }
         pnanovdb_editor::FileHeaderInfo::getInstance().render(current_array);

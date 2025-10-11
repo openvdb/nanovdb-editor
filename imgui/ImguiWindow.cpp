@@ -87,7 +87,8 @@ struct Window
     pnanovdb_bool_t prev_is_upside_down = PNANOVDB_FALSE;
 
     float key_translation_rate_base = 1.f;
-    float shift_speed_multiplier;
+    float camera_speed_multiplier = 1.f;
+    float shift_speed_multiplier = 10.f;
 };
 
 PNANOVDB_CAST_PAIR(pnanovdb_imgui_window_t, Window)
@@ -213,7 +214,7 @@ pnanovdb_imgui_window_t* create(const pnanovdb_compute_t* compute,
 
     // initialize local speed state
     ptr->key_translation_rate_base = ptr->camera.config.key_translation_rate;
-    ptr->shift_speed_multiplier = settings->key_translation_shift_multiplier;
+    ptr->camera_speed_multiplier = settings->camera_speed_multiplier;
 
     return cast(ptr);
 }
@@ -610,7 +611,7 @@ void update_camera(pnanovdb_imgui_window_t* window, pnanovdb_imgui_settings_rend
 {
     auto ptr = cast(window);
 
-    ptr->shift_speed_multiplier = user_settings->key_translation_shift_multiplier;
+    ptr->camera_speed_multiplier = user_settings->camera_speed_multiplier;
 
     if (user_settings->sync_camera)
     {
@@ -805,12 +806,12 @@ void keyboardWindow(Window* ptr, ImGuiKey key, int scanCode, bool is_pressed, bo
     }
     if (shift)
     {
-        ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base * ptr->shift_speed_multiplier;
+        ptr->camera.config.key_translation_rate =
+            ptr->key_translation_rate_base * ptr->camera_speed_multiplier * ptr->shift_speed_multiplier;
     }
     else
     {
-        // restore previous (base) rate
-        ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base;
+        ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base * ptr->camera_speed_multiplier;
     }
     // always report key release, conditional on key down
     if ((zeroWantCaptureKeyboard && zeroWantCaptureMouse) || !is_pressed)
@@ -880,15 +881,14 @@ void mouseMoveWindow(Window* ptr, double mouseX, double mouseY)
             zeroWantCaptureMouse = false;
         }
 
-        // apply transient rate scaling here too for mouse-driven motion
         if (io.KeyShift)
         {
-            ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base * ptr->shift_speed_multiplier;
+            ptr->camera.config.key_translation_rate =
+                ptr->key_translation_rate_base * ptr->camera_speed_multiplier * ptr->shift_speed_multiplier;
         }
         else
         {
-            // restore previous (base) rate
-            ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base;
+            ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base * ptr->camera_speed_multiplier;
         }
     }
     if (zeroWantCaptureMouse)
@@ -923,17 +923,6 @@ void mouseButtonWindow(Window* ptr, int button, bool is_pressed, int modifiers)
             {
                 ptr->mouse_pressed[button] = PNANOVDB_FALSE;
             }
-        }
-
-        // apply transient rate scaling for wheel zoom behavior
-        if (io.KeyShift)
-        {
-            ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base * ptr->shift_speed_multiplier;
-        }
-        else
-        {
-            // restore previous (base) rate
-            ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base;
         }
     }
     if (zeroWantCaptureMouse)
@@ -977,6 +966,17 @@ void mouseWheelWindow(Window* ptr, double scrollX, double scrollY)
         if (io.WantCaptureMouse)
         {
             zeroWantCaptureMouse = false;
+        }
+
+        if (io.KeyShift)
+        {
+            scrollX *= ptr->camera_speed_multiplier * ptr->shift_speed_multiplier;
+            scrollY *= ptr->camera_speed_multiplier * ptr->shift_speed_multiplier;
+        }
+        else
+        {
+            scrollX *= ptr->camera_speed_multiplier;
+            scrollY *= ptr->camera_speed_multiplier;
         }
 
         io.MouseWheelH += (float)scrollX;
