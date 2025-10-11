@@ -274,7 +274,7 @@ void showSceneWindow(Instance* ptr)
                 IMGUI_CHECKBOX_SYNC(("##Visible" + cameraName).c_str(), camera->is_visible);
                 ImGui::SameLine();
                 ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-                bool isSelected = (ptr->selected_camera_frustum == cameraName);
+                bool isSelected = (ptr->selected_scene_item == cameraName);
                 if (isSelected)
                 {
                     flags |= ImGuiTreeNodeFlags_Selected;
@@ -282,28 +282,27 @@ void showSceneWindow(Instance* ptr)
                 ImGui::TreeNodeEx(cameraName.c_str(), flags);
                 if (ImGui::IsItemClicked())
                 {
-                    ptr->selected_camera_frustum = cameraName;
-                    ptr->window.show_camera_view = true;
-                    ImGui::SetWindowFocus(CAMERA_VIEW);
+                    ptr->selected_scene_item = cameraName;
+                    ptr->selected_view_type = ViewsTypes::Cameras;
+                    ImGui::SetWindowFocus(PROPERTIES);
                 }
             }
             ImGui::TreePop();
         }
 
-        auto renderSceneItems =
-            [ptr](const auto& itemMap, const char* treeLabel, auto& pendingField, const std::string& radioPrefix)
+        auto renderSceneItems = [ptr](const auto& itemMap, const char* treeLabel, auto& pendingField,
+                                      ViewsTypes viewType, const std::string& radioPrefix)
         {
             if (ImGui::TreeNodeEx(treeLabel, ImGuiTreeNodeFlags_DefaultOpen))
             {
                 for (auto& pair : itemMap)
                 {
                     const std::string& name = pair.first;
-                    bool isSelected = (ptr->selected_scene_view == name);
-
+                    bool isSelected = (ptr->selected_scene_item == name);
                     if (ImGui::RadioButton((radioPrefix + name).c_str(), isSelected))
                     {
                         pendingField = name;
-                        ptr->window.show_scene_properties = true;
+                        ptr->selected_view_type = viewType;
                         ImGui::SetWindowFocus(PROPERTIES);
                     }
                     ImGui::SameLine();
@@ -317,7 +316,7 @@ void showSceneWindow(Instance* ptr)
                     if (ImGui::IsItemClicked())
                     {
                         pendingField = name;
-                        ptr->window.show_scene_properties = true;
+                        ptr->selected_view_type = viewType;
                         ImGui::SetWindowFocus(PROPERTIES);
                     }
                 }
@@ -327,166 +326,154 @@ void showSceneWindow(Instance* ptr)
 
         if (ptr->nanovdb_arrays && !ptr->nanovdb_arrays->empty())
         {
-            renderSceneItems(
-                *ptr->nanovdb_arrays, "NanoVDB Scenes", ptr->pending.viweport_nanovdb_array, "##RadioNanoVDB");
+            renderSceneItems(*ptr->nanovdb_arrays, "NanoVDB Scenes", ptr->pending.viweport_nanovdb_array,
+                             ViewsTypes::NanoVDBs, "##RadioNanoVDB");
         }
 
         if (ptr->gaussian_views && !ptr->gaussian_views->empty())
         {
-            renderSceneItems(
-                *ptr->gaussian_views, "Gaussian Views", ptr->pending.viewport_gaussian_view, "##RadioGaussian");
+            renderSceneItems(*ptr->gaussian_views, "Gaussian Views", ptr->pending.viewport_gaussian_view,
+                             ViewsTypes::GaussianScenes, "##RadioGaussian");
         }
     }
     ImGui::End();
 }
 
-void showCameraViewWindow(Instance* ptr)
+void showCameraViews(Instance* ptr)
 {
-    if (!ptr->window.show_camera_view)
+    if (!ptr->camera_views)
+    {
+        return;
+    }
+    auto it = ptr->camera_views->find(ptr->selected_scene_item);
+    if (it == ptr->camera_views->end())
+    {
+        return;
+    }
+    pnanovdb_camera_view_t* camera = it->second;
+    if (!camera)
     {
         return;
     }
 
-    if (ImGui::Begin(CAMERA_VIEW, &ptr->window.show_camera_view))
+    ImGui::Text("Total Cameras: %d", camera->num_cameras);
+    int maxIndex = (camera->num_cameras > 0) ? ((int)camera->num_cameras - 1) : 0;
+    if (maxIndex > 0)
     {
-        if (!ptr->selected_camera_frustum.empty())
+        ImGui::SliderInt("Camera Index", &ptr->camera_frustum_index[ptr->selected_scene_item], 0,
+                            maxIndex, "%d");
+    }
+    else
+    {
+        ImGui::Dummy(ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetFrameHeight()));
+    }
+    int cameraIdx = ptr->camera_frustum_index[ptr->selected_scene_item];
+    if (ImGui::Button("Set Viewport Camera"))
+    {
+        pnanovdb_vec3_t& up = camera->states[cameraIdx].eye_up;
+        if (camera->states[cameraIdx].eye_up.x != ptr->render_settings->camera_state.eye_up.x ||
+            camera->states[cameraIdx].eye_up.y != ptr->render_settings->camera_state.eye_up.y ||
+            camera->states[cameraIdx].eye_up.z != ptr->render_settings->camera_state.eye_up.z)
         {
-            auto it = ptr->camera_views ? ptr->camera_views->find(ptr->selected_camera_frustum) :
-                                          std::map<std::string, pnanovdb_camera_view_t*>().end();
-            if (it !=
-                (ptr->camera_views ? ptr->camera_views->end() : std::map<std::string, pnanovdb_camera_view_t*>().end()))
+            pnanovdb_vec3_t& dir = camera->states[cameraIdx].eye_direction;
+            pnanovdb_vec3_t right = { dir.y * up.z - dir.z * up.y, dir.z * up.x - dir.x * up.z,
+                                        dir.x * up.y - dir.y * up.x };
+            up.x = -(right.y * dir.z - right.z * dir.y);
+            up.y = -(right.z * dir.x - right.x * dir.z);
+            up.z = -(right.x * dir.y - right.y * dir.x);
+            float len = sqrtf(up.x * up.x + up.y * up.y + up.z * up.z);
+            if (len > EPSILON)
             {
-                pnanovdb_camera_view_t* camera = it->second;
-                if (camera)
-                {
-                    ImGui::Text("Total Cameras: %d", camera->num_cameras);
-                    int maxIndex = (camera->num_cameras > 0) ? ((int)camera->num_cameras - 1) : 0;
-                    if (maxIndex > 0)
-                    {
-                        ImGui::SliderInt("Camera Index", &ptr->camera_frustum_index[ptr->selected_camera_frustum], 0,
-                                         maxIndex, "%d");
-                    }
-                    else
-                    {
-                        ImGui::Text("Camera Index: 0");
-                        ImGui::Dummy(ImVec2(0.f, 1.f));
-                    }
-                    int cameraIdx = ptr->camera_frustum_index[ptr->selected_camera_frustum];
-                    if (ImGui::Button("Set Viewport Camera"))
-                    {
-                        pnanovdb_vec3_t& up = camera->states[cameraIdx].eye_up;
-                        if (camera->states[cameraIdx].eye_up.x != ptr->render_settings->camera_state.eye_up.x ||
-                            camera->states[cameraIdx].eye_up.y != ptr->render_settings->camera_state.eye_up.y ||
-                            camera->states[cameraIdx].eye_up.z != ptr->render_settings->camera_state.eye_up.z)
-                        {
-                            pnanovdb_vec3_t& dir = camera->states[cameraIdx].eye_direction;
-                            pnanovdb_vec3_t right = { dir.y * up.z - dir.z * up.y, dir.z * up.x - dir.x * up.z,
-                                                      dir.x * up.y - dir.y * up.x };
-                            up.x = -(right.y * dir.z - right.z * dir.y);
-                            up.y = -(right.z * dir.x - right.x * dir.z);
-                            up.z = -(right.x * dir.y - right.y * dir.x);
-                            float len = sqrtf(up.x * up.x + up.y * up.y + up.z * up.z);
-                            if (len > EPSILON)
-                            {
-                                up.x /= len;
-                                up.y /= len;
-                                up.z /= len;
-                            }
-                        }
-                        ptr->render_settings->camera_state = camera->states[cameraIdx];
-                        ptr->render_settings->camera_state.eye_up = up;
-                        ptr->render_settings->camera_config = camera->configs[cameraIdx];
-                        ptr->render_settings->is_projection_rh = camera->configs[cameraIdx].is_projection_rh;
-                        ptr->render_settings->is_orthographic = camera->configs[cameraIdx].is_orthographic;
-                        ptr->render_settings->is_reverse_z = camera->configs[cameraIdx].is_reverse_z;
-                        ptr->render_settings->sync_camera = PNANOVDB_TRUE;
-                    }
-
-                    pnanovdb_vec3_t eyePosition = pnanovdb_camera_get_eye_position_from_state(&camera->states[cameraIdx]);
-                    float eyePos[3] = { eyePosition.x, eyePosition.y, eyePosition.z };
-                    if (ImGui::DragFloat3("Origin", eyePos, 0.1f))
-                    {
-                        pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
-                        state->position.x = eyePos[0] + state->eye_direction.x * state->eye_distance_from_position;
-                        state->position.y = eyePos[1] + state->eye_direction.y * state->eye_distance_from_position;
-                        state->position.z = eyePos[2] + state->eye_direction.z * state->eye_distance_from_position;
-                    }
-
-                    pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
-                    float lookAt[3] = { state->position.x, state->position.y, state->position.z };
-                    if (ImGui::DragFloat3("Look At", lookAt, 0.1f))
-                    {
-                        pnanovdb_vec3_t eye = pnanovdb_camera_get_eye_position_from_state(state);
-                        pnanovdb_vec3_t delta = { lookAt[0] - eye.x, lookAt[1] - eye.y, lookAt[2] - eye.z };
-                        float len2 = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
-                        if (len2 > 0.f)
-                        {
-                            float len = pnanovdb_camera_sqrt(len2);
-                            pnanovdb_vec3_t dir = { delta.x / len, delta.y / len, delta.z / len };
-                            state->position.x = lookAt[0];
-                            state->position.y = lookAt[1];
-                            state->position.z = lookAt[2];
-                            state->eye_direction = dir;
-                            state->eye_distance_from_position = len;
-                        }
-                        else
-                        {
-                            state->position.x = lookAt[0];
-                            state->position.y = lookAt[1];
-                            state->position.z = lookAt[2];
-                            state->eye_distance_from_position = 0.f;
-                        }
-                    }
-                    float upVec[3] = { state->eye_up.x, state->eye_up.y, state->eye_up.z };
-                    if (ImGui::DragFloat3("Up", upVec, 0.1f))
-                    {
-                        state->eye_up.x = upVec[0];
-                        state->eye_up.y = upVec[1];
-                        state->eye_up.z = upVec[2];
-                        float len = sqrtf(state->eye_up.x * state->eye_up.x + state->eye_up.y * state->eye_up.y +
-                                          state->eye_up.z * state->eye_up.z);
-                        if (len > EPSILON)
-                        {
-                            state->eye_up.x /= len;
-                            state->eye_up.y /= len;
-                            state->eye_up.z /= len;
-                        }
-                    }
-                    ImGui::Separator();
-                    ImGui::DragFloat("Axis Length", &camera->axis_length, 1.f, 0.f, 100.f);
-                    ImGui::DragFloat("Axis Thickness", &camera->axis_thickness, 0.1f, 0.f, 10.f);
-                    ImGui::DragFloat("Frustum Line Width", &camera->frustum_line_width, 0.1f, 0.f, 10.f);
-                    ImGui::DragFloat("Frustum Scale", &camera->frustum_scale, 0.1f, 0.f, 10.f);
-                    float frustumColor[4] = { (float)camera->frustum_color.x, (float)camera->frustum_color.y,
-                                              (float)camera->frustum_color.z, 1.0f };
-                    if (ImGui::ColorEdit4("Frustum Color", frustumColor))
-                    {
-                        camera->frustum_color.x = frustumColor[0];
-                        camera->frustum_color.y = frustumColor[1];
-                        camera->frustum_color.z = frustumColor[2];
-                    }
-                    ImGui::Separator();
-                    ImGui::DragFloat("Near Plane", &camera->configs[cameraIdx].near_plane, 0.1f, 0.01f, 10000.f);
-                    ImGui::DragFloat("Far Plane", &camera->configs[cameraIdx].far_plane, 10.f, 1.f, 100000.f);
-                    if (camera->configs[cameraIdx].is_orthographic)
-                    {
-                        ImGui::DragFloat(
-                            "Orthographic Y", &camera->configs[cameraIdx].orthographic_y, 0.1f, 0.f, 100000.f);
-                    }
-                    else
-                    {
-                        ImGui::DragFloat("FOV", &camera->configs[cameraIdx].fov_angle_y, 0.01f, 0.f, M_PI_2);
-                        ImGui::DragFloat("Aspect Ratio", &camera->configs[cameraIdx].aspect_ratio, 0.01f, 0.f, 2.f);
-                    }
-                }
+                up.x /= len;
+                up.y /= len;
+                up.z /= len;
             }
+        }
+        ptr->render_settings->camera_state = camera->states[cameraIdx];
+        ptr->render_settings->camera_state.eye_up = up;
+        ptr->render_settings->camera_config = camera->configs[cameraIdx];
+        ptr->render_settings->is_projection_rh = camera->configs[cameraIdx].is_projection_rh;
+        ptr->render_settings->is_orthographic = camera->configs[cameraIdx].is_orthographic;
+        ptr->render_settings->is_reverse_z = camera->configs[cameraIdx].is_reverse_z;
+        ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+    }
+
+    pnanovdb_vec3_t eyePosition = pnanovdb_camera_get_eye_position_from_state(&camera->states[cameraIdx]);
+    float eyePos[3] = { eyePosition.x, eyePosition.y, eyePosition.z };
+    if (ImGui::DragFloat3("Origin", eyePos, 0.1f))
+    {
+        pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
+        state->position.x = eyePos[0] + state->eye_direction.x * state->eye_distance_from_position;
+        state->position.y = eyePos[1] + state->eye_direction.y * state->eye_distance_from_position;
+        state->position.z = eyePos[2] + state->eye_direction.z * state->eye_distance_from_position;
+    }
+
+    pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
+    float lookAt[3] = { state->position.x, state->position.y, state->position.z };
+    if (ImGui::DragFloat3("Look At", lookAt, 0.1f))
+    {
+        pnanovdb_vec3_t eye = pnanovdb_camera_get_eye_position_from_state(state);
+        pnanovdb_vec3_t delta = { lookAt[0] - eye.x, lookAt[1] - eye.y, lookAt[2] - eye.z };
+        float len2 = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
+        if (len2 > 0.f)
+        {
+            float len = pnanovdb_camera_sqrt(len2);
+            pnanovdb_vec3_t dir = { delta.x / len, delta.y / len, delta.z / len };
+            state->position.x = lookAt[0];
+            state->position.y = lookAt[1];
+            state->position.z = lookAt[2];
+            state->eye_direction = dir;
+            state->eye_distance_from_position = len;
         }
         else
         {
-            ImGui::TextDisabled("Select a camera from the Scene window");
+            state->position.x = lookAt[0];
+            state->position.y = lookAt[1];
+            state->position.z = lookAt[2];
+            state->eye_distance_from_position = 0.f;
         }
     }
-    ImGui::End();
+    float upVec[3] = { state->eye_up.x, state->eye_up.y, state->eye_up.z };
+    if (ImGui::DragFloat3("Up", upVec, 0.1f))
+    {
+        state->eye_up.x = upVec[0];
+        state->eye_up.y = upVec[1];
+        state->eye_up.z = upVec[2];
+        float len = sqrtf(state->eye_up.x * state->eye_up.x + state->eye_up.y * state->eye_up.y +
+                            state->eye_up.z * state->eye_up.z);
+        if (len > EPSILON)
+        {
+            state->eye_up.x /= len;
+            state->eye_up.y /= len;
+            state->eye_up.z /= len;
+        }
+    }
+    ImGui::Separator();
+    ImGui::DragFloat("Axis Length", &camera->axis_length, 1.f, 0.f, 100.f);
+    ImGui::DragFloat("Axis Thickness", &camera->axis_thickness, 0.1f, 0.f, 10.f);
+    ImGui::DragFloat("Frustum Line Width", &camera->frustum_line_width, 0.1f, 0.f, 10.f);
+    ImGui::DragFloat("Frustum Scale", &camera->frustum_scale, 0.1f, 0.f, 10.f);
+    float frustumColor[4] = { (float)camera->frustum_color.x, (float)camera->frustum_color.y,
+                                (float)camera->frustum_color.z, 1.0f };
+    if (ImGui::ColorEdit4("Frustum Color", frustumColor))
+    {
+        camera->frustum_color.x = frustumColor[0];
+        camera->frustum_color.y = frustumColor[1];
+        camera->frustum_color.z = frustumColor[2];
+    }
+    ImGui::Separator();
+    ImGui::DragFloat("Near Plane", &camera->configs[cameraIdx].near_plane, 0.1f, 0.01f, 10000.f);
+    ImGui::DragFloat("Far Plane", &camera->configs[cameraIdx].far_plane, 10.f, 1.f, 100000.f);
+    if (camera->configs[cameraIdx].is_orthographic)
+    {
+        ImGui::DragFloat(
+            "Orthographic Y", &camera->configs[cameraIdx].orthographic_y, 0.1f, 0.f, 100000.f);
+    }
+    else
+    {
+        ImGui::DragFloat("FOV", &camera->configs[cameraIdx].fov_angle_y, 0.01f, 0.f, M_PI_2);
+        ImGui::DragFloat("Aspect Ratio", &camera->configs[cameraIdx].aspect_ratio, 0.01f, 0.f, 2.f);
+    }
 }
 
 void showPropertiesWindow(Instance* ptr)
@@ -496,15 +483,24 @@ void showPropertiesWindow(Instance* ptr)
         return;
     }
 
+    if (ptr->selected_scene_item.empty() || ptr->selected_view_type == imgui_instance_user::ViewsTypes::None)
+    {
+        return;
+    }
+
     if (ImGui::Begin(PROPERTIES, &ptr->window.show_scene_properties))
     {
-        if (!ptr->selected_scene_view.empty())
+        if (ptr->selected_view_type == imgui_instance_user::ViewsTypes::GaussianScenes)
         {
             ptr->shader_params.renderGroup(imgui_instance_user::s_raster2d_shader_group);
         }
-        else
+        else if (ptr->selected_view_type == imgui_instance_user::ViewsTypes::NanoVDBs)
         {
-            ImGui::TextDisabled("Select a scene from the Scene window");
+            ptr->shader_params.renderGroup(ptr->shader_name);
+        }
+        else if (ptr->selected_view_type == imgui_instance_user::ViewsTypes::Cameras)
+        {
+            showCameraViews(ptr);
         }
     }
     ImGui::End();
@@ -554,8 +550,7 @@ void showViewportSettingsWindow(Instance* ptr)
                             ptr->render_settings_name;
                         ptr->pending.load_camera = true;
 
-                        // clear selected debug camera when switching to saved camera
-                        ptr->selected_camera_view.clear();
+                        // TODO: clear selected debug camera when switching to saved camera
 
                         ImGui::MarkIniSettingsDirty();
                     }

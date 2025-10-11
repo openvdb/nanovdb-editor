@@ -45,7 +45,6 @@ static const char* SHADER_PARAMS = "Params";
 static const char* BENCHMARK = "Benchmark";
 static const char* FILE_HEADER = "File Header";
 static const char* SCENE = "Scene";
-static const char* CAMERA_VIEW = "Camera View";
 static const char* PROPERTIES = "Properties";
 
 enum class ViewportOption : int
@@ -71,6 +70,7 @@ enum class ViewsTypes
 {
     Cameras,
     GaussianScenes,
+    NanoVDBs,
     None
 };
 
@@ -151,7 +151,6 @@ struct WindowState
     bool show_benchmark = false;
     bool show_file_header = false;
     bool show_scene = true;
-    bool show_camera_view = true;
     bool show_scene_properties = true;
 };
 
@@ -199,14 +198,11 @@ struct Instance
     std::shared_ptr<pnanovdb_compute_array_t> nanovdb_array = nullptr;
 
     EditorLoaded loaded;
+    std::string selected_scene_item = "";
     ViewsTypes selected_view_type = ViewsTypes::None;
 
     std::map<std::string, pnanovdb_camera_view_t*>* camera_views = nullptr;
-    std::string selected_camera_view = "";
-    std::string selected_camera_frustum = "";
     std::map<std::string, int> camera_frustum_index; // map of camera view name to state index for frustum overlay
-
-    std::string selected_scene_view = "";
     std::map<std::string, pnanovdb_compute_array_t>* nanovdb_arrays = nullptr;
     std::map<std::string, GaussianDataContext>* gaussian_views = nullptr;
     std::string raster_shader_group = s_raster2d_shader_group;

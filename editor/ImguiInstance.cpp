@@ -139,23 +139,23 @@ static void initializeDocking()
         ImGuiID dock_id_right_bottom =
             ImGui::DockBuilderSplitNode(dock_id_right_top, ImGuiDir_Down, 0.6f, nullptr, &dock_id_right_top);
 
-        ImGui::DockBuilderDockWindow(SCENE, dock_id_right_top);
-        ImGui::DockBuilderDockWindow(PROPERTIES, dock_id_right_bottom);
-        ImGui::DockBuilderDockWindow(CAMERA_VIEW, dock_id_right_bottom);
-
         ImGuiID dock_id_bottom = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Down, 0.f, nullptr, &dockspace_id);
         ImGui::DockBuilderSetNodeSize(dock_id_bottom, ImVec2(window_width, bottom_dock_height));
         ImGui::DockBuilderDockWindow(CONSOLE, dock_id_bottom);
 
         ImGuiID dock_id_left = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.f, nullptr, &dockspace_id);
         ImGui::DockBuilderSetNodeSize(dock_id_left, ImVec2(left_dock_width, window_height));
-        ImGui::DockBuilderDockWindow(VIEWPORT_SETTINGS, dock_id_left);
-        ImGui::DockBuilderDockWindow(RENDER_SETTINGS, dock_id_left);
-        ImGui::DockBuilderDockWindow(COMPILER_SETTINGS, dock_id_left);
+
+        ImGuiID dock_id_left_top = dock_id_left;
+        ImGui::DockBuilderDockWindow(SCENE, dock_id_left_top);
+        ImGui::DockBuilderDockWindow(VIEWPORT_SETTINGS, dock_id_left_top);
+        ImGui::DockBuilderDockWindow(RENDER_SETTINGS, dock_id_left_top);
+        ImGui::DockBuilderDockWindow(COMPILER_SETTINGS, dock_id_left_top);
 
         ImGuiID dock_id_left_bottom =
-            ImGui::DockBuilderSplitNode(dock_id_left, ImGuiDir_Down, 0.f, nullptr, &dock_id_left);
+            ImGui::DockBuilderSplitNode(dock_id_left_top, ImGuiDir_Down, 0.f, nullptr, &dock_id_left_top);
         ImGui::DockBuilderSetNodeSize(dock_id_left_bottom, ImVec2(left_dock_width, window_height));
+        ImGui::DockBuilderDockWindow(PROPERTIES, dock_id_left_bottom);
         ImGui::DockBuilderDockWindow(SHADER_PARAMS, dock_id_left_bottom);
         ImGui::DockBuilderDockWindow(BENCHMARK, dock_id_left_bottom);
 
@@ -181,7 +181,6 @@ static void createMenu(Instance* ptr)
             ImGui::MenuItem(CONSOLE, "", &ptr->window.show_console);
             ImGui::MenuItem(SHADER_PARAMS, "", &ptr->window.show_shader_params);
             ImGui::MenuItem(SCENE, "", &ptr->window.show_scene);
-            ImGui::MenuItem(CAMERA_VIEW, "", &ptr->window.show_camera_view);
             ImGui::MenuItem(PROPERTIES, "", &ptr->window.show_scene_properties);
             ImGui::MenuItem(BENCHMARK, "", &ptr->window.show_benchmark);
             ImGui::EndMenu();
@@ -199,21 +198,23 @@ static void createMenu(Instance* ptr)
 
 static void showWindows(Instance* ptr, float delta_time)
 {
+    // dock left top
+    showSceneWindow(ptr);
     showViewportSettingsWindow(ptr);
     showRenderSettingsWindow(ptr);
     showCompilerSettingsWindow(ptr);
 
+    // dock left bottom
+    showPropertiesWindow(ptr);
     showShaderParamsWindow(ptr);
     showBenchmarkWindow(ptr);
 
-    showSceneWindow(ptr);
-    showPropertiesWindow(ptr);
-    showCameraViewWindow(ptr);
-
+    // dock right
     showFileHeaderWindow(ptr);
     showCodeEditorWindow(ptr);
     showProfilerWindow(ptr, delta_time);
 
+    // dock bottom
     showConsoleWindow(ptr);
 }
 

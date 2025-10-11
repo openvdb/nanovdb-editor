@@ -898,28 +898,40 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 }
             };
 
-            // Handle pending UI selection change
+            // Handle pending UI selection change (Gaussian views only)
             if (!imgui_user_instance->pending.viewport_gaussian_view.empty() &&
-                imgui_user_instance->pending.viewport_gaussian_view != imgui_user_instance->selected_scene_view)
+                imgui_user_instance->pending.viewport_gaussian_view != imgui_user_instance->selected_scene_item)
             {
-                save_current_view_state(imgui_user_instance->selected_scene_view);
+                save_current_view_state(imgui_user_instance->selected_scene_item);
 
                 // Update both editor and UI to the new selection
                 const auto& new_view_name = imgui_user_instance->pending.viewport_gaussian_view;
                 views->current_view_scene = new_view_name;
-                imgui_user_instance->selected_scene_view = new_view_name;
+                imgui_user_instance->selected_scene_item = new_view_name;
+                imgui_user_instance->selected_view_type = imgui_instance_user::ViewsTypes::GaussianScenes;
 
                 load_view_into_editor_and_ui(new_view_name);
 
                 imgui_user_instance->pending.viewport_gaussian_view.clear();
             }
             // Handle editor-driven selection change (only if no pending UI change)
-            else if (views->current_view_scene != imgui_user_instance->selected_scene_view)
+            // Do not override when the user has explicitly selected a camera in the Scene window
+            else if (views->current_view_scene != imgui_user_instance->selected_scene_item &&
+                     imgui_user_instance->selected_view_type != imgui_instance_user::ViewsTypes::Cameras)
             {
-                save_current_view_state(imgui_user_instance->selected_scene_view);
+                save_current_view_state(imgui_user_instance->selected_scene_item);
 
                 // Update UI to match editor's selection
-                imgui_user_instance->selected_scene_view = views->current_view_scene;
+                imgui_user_instance->selected_scene_item = views->current_view_scene;
+
+                if (editor->impl->nanovdb_array)
+                {
+                     imgui_user_instance->selected_view_type = imgui_instance_user::ViewsTypes::NanoVDBs;
+                }
+                else if (editor->impl->gaussian_data)
+                {
+                    imgui_user_instance->selected_view_type = imgui_instance_user::ViewsTypes::GaussianScenes;
+                }
 
                 load_view_into_editor_and_ui(views->current_view_scene);
             }
