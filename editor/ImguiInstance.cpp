@@ -95,21 +95,42 @@ void destroy(pnanovdb_imgui_instance_t* instance)
 {
     auto ptr = cast(instance);
 
+    // Persist settings on shutdown if possible
+    if (ImGui::GetCurrentContext())
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        if (io.IniFilename && *io.IniFilename)
+        {
+            ImGui::SaveIniSettingsToDisk(io.IniFilename);
+        }
+    }
+
     ImGui::DestroyContext();
 
     delete ptr;
 }
 
-static void initializeDocking()
+static void initializeDocking(Instance* ptr)
 {
     ImGuiID dockspace_id = 1u;
     ImGui::DockSpaceOverViewport(dockspace_id, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
 
-    static bool is_docking_setup = false;
-    if (!is_docking_setup)
+    bool has_ini_on_disk = false;
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.IniFilename && *io.IniFilename)
+    {
+        FILE* f = fopen(io.IniFilename, "rb");
+        if (f)
+        {
+            has_ini_on_disk = true;
+            fclose(f);
+        }
+    }
+
+    if (!has_ini_on_disk  && !ptr->is_docking_setup)
     {
         // setup docking once
-        is_docking_setup = true;
+        ptr->is_docking_setup = true;
 
         float window_width = ImGui::GetIO().DisplaySize.x;
         float window_height = ImGui::GetIO().DisplaySize.y;
@@ -159,6 +180,9 @@ static void initializeDocking()
 
         ImGui::DockBuilderFinish(dockspace_id);
     }
+
+    //// Host dockspace every frame
+    //ImGui::DockSpaceOverViewport(dockspace_id, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
 }
 
 static void createMenu(Instance* ptr)
@@ -169,6 +193,22 @@ static void createMenu(Instance* ptr)
         {
             ImGui::MenuItem("Open...", "", &ptr->pending.open_file);
             ImGui::MenuItem("Save...", "", &ptr->pending.save_file);
+            if (ImGui::MenuItem("Save Layout"))
+            {
+                ImGuiIO& io = ImGui::GetIO();
+                if (io.IniFilename && *io.IniFilename)
+                {
+                    ImGui::SaveIniSettingsToDisk(io.IniFilename);
+                }
+            }
+            if (ImGui::MenuItem("Reload Layout"))
+            {
+                ImGuiIO& io = ImGui::GetIO();
+                if (io.IniFilename && *io.IniFilename)
+                {
+                    ImGui::LoadIniSettingsFromDisk(io.IniFilename);
+                }
+            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Window"))
@@ -224,6 +264,38 @@ static void showWindows(Instance* ptr, float delta_time)
     showAboutWindow(ptr);
 }
 
+static void markIniDirtyIfNewWindowsAppeared(Instance* /*ptr*/)
+{
+    bool need_dirty = false;
+    auto ensure_entry = [&](const char* name)
+    {
+        if (ImGui::FindWindowSettingsByID(ImHashStr(name)) == nullptr)
+        {
+            if (ImGui::FindWindowByName(name) != nullptr)
+            {
+                need_dirty = true;
+            }
+        }
+    };
+
+    ensure_entry(CODE_EDITOR);
+    ensure_entry(PROFILER);
+    ensure_entry(FILE_HEADER);
+    ensure_entry(CONSOLE);
+    ensure_entry(SHADER_PARAMS);
+    ensure_entry(SCENE);
+    ensure_entry(PROPERTIES);
+    ensure_entry(BENCHMARK);
+    ensure_entry(VIEWPORT_SETTINGS);
+    ensure_entry(RENDER_SETTINGS);
+    ensure_entry(COMPILER_SETTINGS);
+
+    if (need_dirty)
+    {
+        ImGui::MarkIniSettingsDirty();
+    }
+}
+
 void update(pnanovdb_imgui_instance_t* instance)
 {
     auto ptr = cast(instance);
@@ -245,7 +317,21 @@ void update(pnanovdb_imgui_instance_t* instance)
 
     ImGui::NewFrame();
 
-    initializeDocking();
+    // Ensure ini is loaded before building default docking (defensive)
+    {
+        static bool s_loaded_ini_once = false;
+        if (!s_loaded_ini_once)
+        {
+            ImGuiIO& io = ImGui::GetIO();
+            if (io.IniFilename && *io.IniFilename)
+            {
+                ImGui::LoadIniSettingsFromDisk(io.IniFilename);
+            }
+            s_loaded_ini_once = true;
+        }
+    }
+
+    initializeDocking(ptr);
 
     pnanovdb_editor::CameraFrustum::getInstance().render(ptr);
 
@@ -255,6 +341,9 @@ void update(pnanovdb_imgui_instance_t* instance)
     // ImGui::ShowDemoWindow(&show_demo_window);
 
     showWindows(ptr, delta_time);
+
+    // If new windows appeared (not present in ini yet), mark settings dirty so they get saved
+    markIniDirtyIfNewWindowsAppeared(ptr);
 
     saveLoadSettings(ptr);
 

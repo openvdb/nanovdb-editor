@@ -216,6 +216,8 @@ struct Instance
     pnanovdb_camera_config_t default_camera_view_config;
     pnanovdb_camera_state_t default_camera_view_state;
 
+    bool is_docking_setup = false;
+
     void set_default_shader(const std::string& shaderName);
 
     pnanovdb_shader::run_shader_func_t run_shader = [this](const char* shaderName,

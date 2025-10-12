@@ -61,6 +61,22 @@ static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* ent
             // TODO: disable before profiles are set up, Viewer does not have camera override
             // instance->pending.load_camera = true;
         }
+        else
+        {
+            int value = 0;
+            if (sscanf(line, "ShowProfiler=%d", &value) == 1) { instance->window.show_profiler = (value != 0); }
+            else if (sscanf(line, "ShowCodeEditor=%d", &value) == 1) { instance->window.show_code_editor = (value != 0); }
+            else if (sscanf(line, "ShowConsole=%d", &value) == 1) { instance->window.show_console = (value != 0); }
+            else if (sscanf(line, "ShowViewportSettings=%d", &value) == 1) { instance->window.show_viewport_settings = (value != 0); }
+            else if (sscanf(line, "ShowRenderSettings=%d", &value) == 1) { instance->window.show_render_settings = (value != 0); }
+            else if (sscanf(line, "ShowCompilerSettings=%d", &value) == 1) { instance->window.show_compiler_settings = (value != 0); }
+            else if (sscanf(line, "ShowShaderParams=%d", &value) == 1) { instance->window.show_shader_params = (value != 0); }
+            else if (sscanf(line, "ShowBenchmark=%d", &value) == 1) { instance->window.show_benchmark = (value != 0); }
+            else if (sscanf(line, "ShowFileHeader=%d", &value) == 1) { instance->window.show_file_header = (value != 0); }
+            else if (sscanf(line, "ShowScene=%d", &value) == 1) { instance->window.show_scene = (value != 0); }
+            else if (sscanf(line, "ShowSceneProperties=%d", &value) == 1) { instance->window.show_scene_properties = (value != 0); }
+            else if (sscanf(line, "ShowAbout=%d", &value) == 1) { instance->window.show_about = (value != 0); }
+        }
     }
 }
 
@@ -71,6 +87,20 @@ static void WriteAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler, ImGuiText
     buf->appendf("[%s][Settings]\n", handler->TypeName);
     buf->appendf("GroupName=%s\n", instance->shader_group.c_str());
     buf->appendf("SelectedRenderSettingsName=%s\n", instance->render_settings_name.c_str());
+
+    // Persist window visibility flags
+    buf->appendf("ShowProfiler=%d\n", instance->window.show_profiler ? 1 : 0);
+    buf->appendf("ShowCodeEditor=%d\n", instance->window.show_code_editor ? 1 : 0);
+    buf->appendf("ShowConsole=%d\n", instance->window.show_console ? 1 : 0);
+    buf->appendf("ShowViewportSettings=%d\n", instance->window.show_viewport_settings ? 1 : 0);
+    buf->appendf("ShowRenderSettings=%d\n", instance->window.show_render_settings ? 1 : 0);
+    buf->appendf("ShowCompilerSettings=%d\n", instance->window.show_compiler_settings ? 1 : 0);
+    buf->appendf("ShowShaderParams=%d\n", instance->window.show_shader_params ? 1 : 0);
+    buf->appendf("ShowBenchmark=%d\n", instance->window.show_benchmark ? 1 : 0);
+    buf->appendf("ShowFileHeader=%d\n", instance->window.show_file_header ? 1 : 0);
+    buf->appendf("ShowScene=%d\n", instance->window.show_scene ? 1 : 0);
+    buf->appendf("ShowSceneProperties=%d\n", instance->window.show_scene_properties ? 1 : 0);
+    buf->appendf("ShowAbout=%d\n", instance->window.show_about ? 1 : 0);
 
     for (const auto& directory : instance->additional_shader_directories)
     {
