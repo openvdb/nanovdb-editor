@@ -13,20 +13,24 @@
 
 namespace imgui_instance_user
 {
-struct Instance;
+    struct Instance;
+}
+
+namespace pnanovdb_editor
+{
 
 // Window rendering functions
-void showSceneWindow(Instance* ptr);
-void showCameraViews(Instance* ptr);
-void showPropertiesWindow(Instance* ptr);
-void showViewportSettingsWindow(Instance* ptr);
-void showRenderSettingsWindow(Instance* ptr);
-void showCompilerSettingsWindow(Instance* ptr);
-void showShaderParamsWindow(Instance* ptr);
-void showBenchmarkWindow(Instance* ptr);
-void showFileHeaderWindow(Instance* ptr);
-void showCodeEditorWindow(Instance* ptr);
-void showProfilerWindow(Instance* ptr, float delta_time);
-void showConsoleWindow(Instance* ptr);
+void showSceneWindow(imgui_instance_user::Instance* ptr);
+void showCameraViews(imgui_instance_user::Instance* ptr);
+void showPropertiesWindow(imgui_instance_user::Instance* ptr);
+void showViewportSettingsWindow(imgui_instance_user::Instance* ptr);
+void showRenderSettingsWindow(imgui_instance_user::Instance* ptr);
+void showCompilerSettingsWindow(imgui_instance_user::Instance* ptr);
+void showShaderParamsWindow(imgui_instance_user::Instance* ptr);
+void showBenchmarkWindow(imgui_instance_user::Instance* ptr);
+void showFileHeaderWindow(imgui_instance_user::Instance* ptr);
+void showCodeEditorWindow(imgui_instance_user::Instance* ptr);
+void showProfilerWindow(imgui_instance_user::Instance* ptr, float delta_time);
+void showConsoleWindow(imgui_instance_user::Instance* ptr);
 
-} // namespace imgui_instance_user
+} // namespace pnanovdb_editor

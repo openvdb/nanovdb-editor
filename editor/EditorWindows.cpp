@@ -39,8 +39,10 @@
 #    define M_PI_2 1.57079632679489661923
 #endif
 
-namespace imgui_instance_user
+namespace pnanovdb_editor
 {
+using namespace imgui_instance_user;
+
 const float EPSILON = 1e-6f;
 
 static const char* getGridTypeName(uint32_t gridType)
@@ -252,7 +254,7 @@ static std::string getVersionString(uint32_t version)
     return std::string(versionStr);
 }
 
-void showSceneWindow(Instance* ptr)
+void showSceneWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_scene)
     {
@@ -290,8 +292,11 @@ void showSceneWindow(Instance* ptr)
         // Show loaded camera views in tree
         if (!ptr->camera_views->empty())
         {
-            if (ImGui::TreeNodeEx("Camera Views", ImGuiTreeNodeFlags_DefaultOpen))
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0, 0, 0, 0));
+            if (ImGui::TreeNodeEx("Camera Views", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth))
             {
+                ImGui::PopStyleColor(2);
                 for (auto& cameraPair : *ptr->camera_views)
                 {
                     pnanovdb_camera_view_t* camera = cameraPair.second;
@@ -325,13 +330,20 @@ void showSceneWindow(Instance* ptr)
                 }
                 ImGui::TreePop();
             }
+            else
+            {
+                ImGui::PopStyleColor(2);
+            }
         }
 
         auto renderSceneItems = [ptr](const auto& itemMap, const char* treeLabel, auto& pendingField,
                                       ViewsTypes viewType, const std::string& radioPrefix)
         {
-            if (ImGui::TreeNodeEx(treeLabel, ImGuiTreeNodeFlags_DefaultOpen))
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0, 0, 0, 0));
+            if (ImGui::TreeNodeEx(treeLabel, ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth))
             {
+                ImGui::PopStyleColor(2);
                 for (auto& pair : itemMap)
                 {
                     // dummy for alignment with camera views
@@ -355,11 +367,15 @@ void showSceneWindow(Instance* ptr)
                 }
                 ImGui::TreePop();
             }
+            else
+            {
+                ImGui::PopStyleColor(2);
+            }
         };
 
         if (ptr->nanovdb_arrays && !ptr->nanovdb_arrays->empty())
         {
-            renderSceneItems(*ptr->nanovdb_arrays, "NanoVDB Scenes", ptr->pending.viweport_nanovdb_array,
+            renderSceneItems(*ptr->nanovdb_arrays, "NanoVDB Files", ptr->pending.viweport_nanovdb_array,
                              ViewsTypes::NanoVDBs, "##RadioNanoVDB");
         }
 
@@ -372,7 +388,7 @@ void showSceneWindow(Instance* ptr)
     ImGui::End();
 }
 
-void showCameraViews(Instance* ptr)
+void showCameraViews(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->camera_views)
     {
@@ -390,20 +406,101 @@ void showCameraViews(Instance* ptr)
     }
 
     int cameraIdx = ptr->camera_frustum_index[ptr->selected_scene_item];
+    pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
 
     bool isViewportCamera = (ptr->selected_scene_item == VIEWPORT_CAMERA);
     if (isViewportCamera)
     {
-        if (ImGui::Button("Reset"))
+        // Projection mode: Perspective vs Orthographic
+        {
+            if (ImGui::RadioButton("Perspective", ptr->render_settings->is_orthographic == PNANOVDB_FALSE))
+            {
+                ptr->render_settings->is_orthographic = PNANOVDB_FALSE;
+                ptr->render_settings->camera_config.is_orthographic = PNANOVDB_FALSE;
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Orthographic", ptr->render_settings->is_orthographic == PNANOVDB_TRUE))
+            {
+                ptr->render_settings->is_orthographic = PNANOVDB_TRUE;
+                ptr->render_settings->camera_config.is_orthographic = PNANOVDB_TRUE;
+            }
+        }
+
+        // View preset buttons
+        {
+            auto setLookUp = [&](float up_x, float up_y, float up_z) {
+                ptr->render_settings->camera_state.eye_up.x = up_x;
+                ptr->render_settings->camera_state.eye_up.y = up_y;
+                ptr->render_settings->camera_state.eye_up.z = up_z;
+            };
+
+            auto setDirection = [&](float dir_x, float dir_y, float dir_z) {
+                ptr->render_settings->camera_state.eye_direction.x = dir_x;
+                ptr->render_settings->camera_state.eye_direction.y = dir_y;
+                ptr->render_settings->camera_state.eye_direction.z = dir_z;
+                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+            };
+
+            bool isYUp = (ptr->render_settings->is_y_up == PNANOVDB_TRUE);
+
+            if (ImGui::Button("Top"))
+            {
+                if (isYUp)
+                {
+                    setDirection(0.0f, -1.0f, 0.0f);  // Look down -Y
+                    setLookUp(0.0f, 0.0f, 1.0f); // Screen up is +Z (forward)
+                }
+                else
+                {
+                    setDirection(0.0f, 0.0f, -1.0f);  // Look down -Z
+                    setLookUp(0.0f, 1.0f, 0.0f); // Screen up is +Y (forward)
+                }
+                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Front"))
+            {
+                if (isYUp)
+                {
+                    setDirection(0.0f, 0.0f, 1.0f);  // Look along +Z (forward)
+                    setLookUp(0.0f, 1.0f, 0.0f);
+                }
+                else
+                {
+                    setDirection(0.0f, 1.0f, 0.0f);  // Look along +Y (forward)
+                    setLookUp(0.0f, 0.0f, 1.0f);
+                }
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Right"))
+            {
+                setDirection(1.0f, 0.0f, 0.0f);
+                if (isYUp)
+                {
+                    setLookUp(0.0f, 1.0f, 0.0f);
+                }
+                else
+                {
+                    setLookUp(0.0f, 0.0f, 1.0f);
+                }
+            }
+        }
+
+        if (ImGui::Button("Reset Viewport Camera"))
         {
             pnanovdb_camera_state_t default_state = {};
-            pnanovdb_camera_state_default(&default_state, PNANOVDB_FALSE);
+            pnanovdb_camera_state_default(&default_state, ptr->render_settings->is_y_up);
 
             pnanovdb_camera_config_t default_config = {};
             pnanovdb_camera_config_default(&default_config);
 
             ptr->render_settings->camera_state = default_state;
             ptr->render_settings->camera_config = default_config;
+            ptr->render_settings->is_projection_rh = default_config.is_projection_rh;
+            ptr->render_settings->is_orthographic = default_config.is_orthographic;
+            ptr->render_settings->is_reverse_z = default_config.is_reverse_z;
             ptr->render_settings->sync_camera = PNANOVDB_TRUE;
         }
     }
@@ -422,12 +519,12 @@ void showCameraViews(Instance* ptr)
         }
         if (ImGui::Button("Set Viewport Camera"))
         {
-            pnanovdb_vec3_t& up = camera->states[cameraIdx].eye_up;
-            if (camera->states[cameraIdx].eye_up.x != ptr->render_settings->camera_state.eye_up.x ||
-                camera->states[cameraIdx].eye_up.y != ptr->render_settings->camera_state.eye_up.y ||
-                camera->states[cameraIdx].eye_up.z != ptr->render_settings->camera_state.eye_up.z)
+            pnanovdb_vec3_t& up = state->eye_up;
+            if (state->eye_up.x != ptr->render_settings->camera_state.eye_up.x ||
+                state->eye_up.y != ptr->render_settings->camera_state.eye_up.y ||
+                state->eye_up.z != ptr->render_settings->camera_state.eye_up.z)
             {
-                pnanovdb_vec3_t& dir = camera->states[cameraIdx].eye_direction;
+                pnanovdb_vec3_t& dir = state->eye_direction;
                 pnanovdb_vec3_t right = { dir.y * up.z - dir.z * up.y, dir.z * up.x - dir.x * up.z,
                                           dir.x * up.y - dir.y * up.x };
                 up.x = -(right.y * dir.z - right.z * dir.y);
@@ -441,7 +538,7 @@ void showCameraViews(Instance* ptr)
                     up.z /= len;
                 }
             }
-            ptr->render_settings->camera_state = camera->states[cameraIdx];
+            ptr->render_settings->camera_state = *state;
             ptr->render_settings->camera_state.eye_up = up;
             ptr->render_settings->camera_config = camera->configs[cameraIdx];
             ptr->render_settings->is_projection_rh = camera->configs[cameraIdx].is_projection_rh;
@@ -451,12 +548,10 @@ void showCameraViews(Instance* ptr)
         }
     }
 
-    pnanovdb_vec3_t eyePosition = pnanovdb_camera_get_eye_position_from_state(&camera->states[cameraIdx]);
+    pnanovdb_vec3_t eyePosition = pnanovdb_camera_get_eye_position_from_state(state);
     float eyePos[3] = { eyePosition.x, eyePosition.y, eyePosition.z };
     if (ImGui::DragFloat3("Origin", eyePos, 0.1f))
     {
-        pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
-
         // Keep look-at point fixed, recalculate direction and distance from new eye position
         pnanovdb_vec3_t delta = { state->position.x - eyePos[0], state->position.y - eyePos[1], state->position.z - eyePos[2] };
         float len2 = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
@@ -479,8 +574,6 @@ void showCameraViews(Instance* ptr)
             ptr->render_settings->sync_camera = PNANOVDB_TRUE;
         }
     }
-
-    pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
     float lookAt[3] = { state->position.x, state->position.y, state->position.z };
     if (ImGui::DragFloat3("Look At", lookAt, 0.1f))
     {
@@ -505,7 +598,6 @@ void showCameraViews(Instance* ptr)
             state->eye_distance_from_position = 0.f;
         }
 
-        // Sync to viewport if editing viewport camera
         if (isViewportCamera)
         {
             ptr->render_settings->camera_state = *state;
@@ -549,33 +641,6 @@ void showCameraViews(Instance* ptr)
             camera->frustum_color.z = frustumColor[2];
         }
         ImGui::Separator();
-        if (ImGui::DragFloat("Near Plane", &camera->configs[cameraIdx].near_plane, 0.1f, 0.01f, 10000.f))
-        {
-            if (isViewportCamera)
-            {
-                ptr->render_settings->camera_config = camera->configs[cameraIdx];
-                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
-            }
-        }
-        if (ImGui::DragFloat("Far Plane", &camera->configs[cameraIdx].far_plane, 10.f, 1.f, 100000.f))
-        {
-            if (isViewportCamera)
-            {
-                ptr->render_settings->camera_config = camera->configs[cameraIdx];
-                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
-            }
-        }
-        if (camera->configs[cameraIdx].is_orthographic)
-        {
-            if (ImGui::DragFloat("Orthographic Y", &camera->configs[cameraIdx].orthographic_y, 0.1f, 0.f, 100000.f))
-            {
-                if (isViewportCamera)
-                {
-                    ptr->render_settings->camera_config = camera->configs[cameraIdx];
-                    ptr->render_settings->sync_camera = PNANOVDB_TRUE;
-                }
-            }
-        }
         if (ImGui::DragFloat("Aspect Ratio", &camera->configs[cameraIdx].aspect_ratio, 0.01f, 0.f, 2.f))
         {
             if (isViewportCamera)
@@ -593,9 +658,36 @@ void showCameraViews(Instance* ptr)
             ptr->render_settings->sync_camera = PNANOVDB_TRUE;
         }
     }
+    if (ImGui::DragFloat("Near Plane", &camera->configs[cameraIdx].near_plane, 0.1f, 0.01f, 10000.f))
+    {
+        if (isViewportCamera)
+        {
+            ptr->render_settings->camera_config = camera->configs[cameraIdx];
+            ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+        }
+    }
+    if (ImGui::DragFloat("Far Plane", &camera->configs[cameraIdx].far_plane, 10.f, 1.f, 100000.f))
+    {
+        if (isViewportCamera)
+        {
+            ptr->render_settings->camera_config = camera->configs[cameraIdx];
+            ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+        }
+    }
+    if (camera->configs[cameraIdx].is_orthographic)
+    {
+        if (ImGui::DragFloat("Orthographic Y", &camera->configs[cameraIdx].orthographic_y, 0.1f, 0.f, 100000.f))
+        {
+            if (isViewportCamera)
+            {
+                ptr->render_settings->camera_config = camera->configs[cameraIdx];
+                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+            }
+        }
+    }
 }
 
-void showPropertiesWindow(Instance* ptr)
+void showPropertiesWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_scene_properties)
     {
@@ -625,7 +717,7 @@ void showPropertiesWindow(Instance* ptr)
     ImGui::End();
 }
 
-void showViewportSettingsWindow(Instance* ptr)
+void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_viewport_settings)
     {
@@ -655,6 +747,52 @@ void showViewportSettingsWindow(Instance* ptr)
             }
             ImGui::EndGroup();
         }
+
+        ImGui::Text("Gaussian File");
+        {
+            ImGui::BeginGroup();
+            ImGui::InputText("##viewport_raster_file", &ptr->raster_filepath);
+            ImGui::SameLine();
+            if (ImGui::Button("...##open_raster_file"))
+            {
+                ptr->pending.find_raster_file = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Show##Gaussian"))
+            {
+                // runs rasterization on a worker thread first
+                ptr->pending.update_raster = true;
+            }
+            if (ptr->viewport_option == ViewportOption::NanoVDB)
+            {
+                ImGui::InputFloat("VoxelsPerUnit", &ptr->raster_voxels_per_unit);
+            }
+            ImGui::EndGroup();
+        }
+
+        if (ptr->viewport_option == ViewportOption::NanoVDB)
+        {
+            ImGui::Text("NanoVDB File");
+            {
+                ImGui::BeginGroup();
+                ImGui::InputText("##viewport_nanovdb_file", &ptr->nanovdb_filepath);
+                ImGui::SameLine();
+                if (ImGui::Button("...##open_nanovddb_file"))
+                {
+                    ptr->pending.open_file = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Show##NanoVDB"))
+                {
+                    // TODO: does it need to be on a worker thread?
+                    pnanovdb_editor::Console::getInstance().addLog("Opening file '%s'", ptr->nanovdb_filepath.c_str());
+                    ptr->pending.load_nvdb = true;
+                }
+                ImGui::EndGroup();
+            }
+        }
+        ImGui::Separator();
+        // viewport camera imgui settings save/load
         {
             ImGui::BeginGroup();
             if (ImGui::BeginCombo("Viewport Camera", "Select..."))
@@ -719,56 +857,11 @@ void showViewportSettingsWindow(Instance* ptr)
             }
             ImGui::EndGroup();
         }
-        ImGui::Separator();
-
-        ImGui::Text("Gaussian File");
-        {
-            ImGui::BeginGroup();
-            ImGui::InputText("##viewport_raster_file", &ptr->raster_filepath);
-            ImGui::SameLine();
-            if (ImGui::Button("...##open_raster_file"))
-            {
-                ptr->pending.find_raster_file = true;
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Show##Gaussian"))
-            {
-                // runs rasterization on a worker thread first
-                ptr->pending.update_raster = true;
-            }
-            if (ptr->viewport_option == ViewportOption::NanoVDB)
-            {
-                ImGui::InputFloat("VoxelsPerUnit", &ptr->raster_voxels_per_unit);
-            }
-            ImGui::EndGroup();
-        }
-
-        if (ptr->viewport_option == ViewportOption::NanoVDB)
-        {
-            ImGui::Text("NanoVDB File");
-            {
-                ImGui::BeginGroup();
-                ImGui::InputText("##viewport_nanovdb_file", &ptr->nanovdb_filepath);
-                ImGui::SameLine();
-                if (ImGui::Button("...##open_nanovddb_file"))
-                {
-                    ptr->pending.open_file = true;
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Show##NanoVDB"))
-                {
-                    // TODO: does it need to be on a worker thread?
-                    pnanovdb_editor::Console::getInstance().addLog("Opening file '%s'", ptr->nanovdb_filepath.c_str());
-                    ptr->pending.load_nvdb = true;
-                }
-                ImGui::EndGroup();
-            }
-        }
     }
     ImGui::End();
 }
 
-void showRenderSettingsWindow(Instance* ptr)
+void showRenderSettingsWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_render_settings)
     {
@@ -806,15 +899,38 @@ void showRenderSettingsWindow(Instance* ptr)
         auto settings = ptr->render_settings;
 
         IMGUI_CHECKBOX_SYNC("VSync", settings->vsync);
-        IMGUI_CHECKBOX_SYNC("Projection RH", settings->is_projection_rh);
-        IMGUI_CHECKBOX_SYNC("Orthographic", settings->is_orthographic);
+        IMGUI_CHECKBOX_SYNC("Projection Right-Handed", settings->is_projection_rh);
+        {
+            if (ImGui::RadioButton("Perspective", settings->is_orthographic == PNANOVDB_FALSE))
+            {
+                settings->is_orthographic = PNANOVDB_FALSE;
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Orthographic", settings->is_orthographic == PNANOVDB_TRUE))
+            {
+                settings->is_orthographic = PNANOVDB_TRUE;
+            }
+        }
         IMGUI_CHECKBOX_SYNC("Reverse Z", settings->is_reverse_z);
         {
-            int up_axis = settings->is_y_up ? 0 : 1;
-            const char* up_axis_items[] = { "Y", "Z" };
-            if (ImGui::Combo("Up Axis", &up_axis, up_axis_items, IM_ARRAYSIZE(up_axis_items)))
+            if (settings->is_orthographic)
             {
-                settings->is_y_up = (up_axis == 0);
+                if (ImGui::DragFloat("Orthographic Y", &settings->camera_config.orthographic_y, 0.1f, 0.01f, 100000.f))
+                {
+                    settings->sync_camera = PNANOVDB_TRUE;
+                }
+            }
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("Up Axis");
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Y", settings->is_y_up))
+            {
+                settings->is_y_up = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Z", !settings->is_y_up))
+            {
+                settings->is_y_up = false;
             }
 
             IMGUI_CHECKBOX_SYNC("Upside down", settings->is_upside_down);
@@ -845,7 +961,7 @@ void showRenderSettingsWindow(Instance* ptr)
     ImGui::End();
 }
 
-void showCompilerSettingsWindow(Instance* ptr)
+void showCompilerSettingsWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_compiler_settings)
     {
@@ -962,7 +1078,7 @@ void showCompilerSettingsWindow(Instance* ptr)
     ImGui::End();
 }
 
-void showShaderParamsWindow(Instance* ptr)
+void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_shader_params)
     {
@@ -1091,7 +1207,7 @@ void showShaderParamsWindow(Instance* ptr)
     ImGui::End();
 }
 
-void showBenchmarkWindow(Instance* ptr)
+void showBenchmarkWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_benchmark)
         return;
@@ -1116,7 +1232,7 @@ void showBenchmarkWindow(Instance* ptr)
     ImGui::End();
 }
 
-void showFileHeaderWindow(Instance* ptr)
+void showFileHeaderWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_file_header)
     {
@@ -1125,10 +1241,23 @@ void showFileHeaderWindow(Instance* ptr)
 
     if (ImGui::Begin(FILE_HEADER, &ptr->window.show_file_header))
     {
-        if (ptr->nanovdb_array && ptr->nanovdb_array->data && ptr->nanovdb_array->element_count > 0)
+        pnanovdb_compute_array_t* nanovdb_array = nullptr;
+        if (ptr->nanovdb_arrays && !ptr->nanovdb_arrays->empty())
+        {
+            if (ptr->selected_view_type == ViewsTypes::NanoVDBs && !ptr->selected_scene_item.empty())
+            {
+                auto it = ptr->nanovdb_arrays->find(ptr->selected_scene_item);
+                if (it != ptr->nanovdb_arrays->end())
+                {
+                    nanovdb_array = it->second.nanovdb_array;
+                }
+            }
+        }
+
+        if (nanovdb_array && nanovdb_array->data && nanovdb_array->element_count > 0)
         {
             pnanovdb_buf_t buf =
-                pnanovdb_make_buf((pnanovdb_uint32_t*)ptr->nanovdb_array->data, ptr->nanovdb_array->element_count);
+                pnanovdb_make_buf((pnanovdb_uint32_t*)nanovdb_array->data, nanovdb_array->element_count);
             pnanovdb_grid_handle_t grid = { pnanovdb_address_null() };
 
             ImGui::Text("NanoVDB Grid Information");
@@ -1304,9 +1433,9 @@ void showFileHeaderWindow(Instance* ptr)
             if (ImGui::CollapsingHeader("Memory Usage"))
             {
                 ImGui::Text("Total Buffer Size: %llu bytes",
-                            (unsigned long long)(ptr->nanovdb_array->element_count * ptr->nanovdb_array->element_size));
-                ImGui::Text("Element Size: %llu bytes", (unsigned long long)ptr->nanovdb_array->element_size);
-                ImGui::Text("Element Count: %llu", (unsigned long long)ptr->nanovdb_array->element_count);
+                            (unsigned long long)(nanovdb_array->element_count * nanovdb_array->element_size));
+                ImGui::Text("Element Size: %llu bytes", (unsigned long long)nanovdb_array->element_size);
+                ImGui::Text("Element Count: %llu", (unsigned long long)nanovdb_array->element_count);
             }
         }
         else
@@ -1318,7 +1447,7 @@ void showFileHeaderWindow(Instance* ptr)
     ImGui::End();
 }
 
-void showCodeEditorWindow(Instance* ptr)
+void showCodeEditorWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_code_editor)
         return;
@@ -1335,7 +1464,7 @@ void showCodeEditorWindow(Instance* ptr)
     ImGui::End();
 }
 
-void showProfilerWindow(Instance* ptr, float delta_time)
+void showProfilerWindow(imgui_instance_user::Instance* ptr, float delta_time)
 {
     if (!ptr->window.show_profiler)
     {
@@ -1352,7 +1481,7 @@ void showProfilerWindow(Instance* ptr, float delta_time)
     ImGui::End();
 }
 
-void showConsoleWindow(Instance* ptr)
+void showConsoleWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_console)
     {
@@ -1378,4 +1507,4 @@ void showConsoleWindow(Instance* ptr)
     ImGui::End();
 }
 
-}
+} // namespace pnanovdb_editor

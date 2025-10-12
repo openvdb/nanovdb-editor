@@ -70,7 +70,7 @@ typedef struct pnanovdb_imgui_settings_render_t
     pnanovdb_bool_t is_projection_rh = true;
     pnanovdb_bool_t is_orthographic = false;
     pnanovdb_bool_t is_reverse_z = true;
-    pnanovdb_bool_t is_y_up = true;
+    pnanovdb_bool_t is_y_up = false;    // TODO: set in profile
     pnanovdb_bool_t is_upside_down = false;
     pnanovdb_bool_t vsync = true;
     pnanovdb_bool_t enable_encoder = false;
