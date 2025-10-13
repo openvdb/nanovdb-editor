@@ -247,19 +247,19 @@ void main(uint3 workgroup_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         return;
     }
     uint metadata_count = pnanovdb_grid_get_blind_metadata_count(buf, grid);
-    if (metadata_count < 10u)
+    if (metadata_count < 12u)
     {
         return;
     }
 
-    pnanovdb_gridblindmetadata_handle_t metadata = pnanovdb_grid_get_gridblindmetadata(buf, grid, 1u);
+    pnanovdb_gridblindmetadata_handle_t metadata = pnanovdb_grid_get_gridblindmetadata(buf, grid, 2u);
     uint ids_count = uint(pnanovdb_gridblindmetadata_get_value_count(buf, metadata));
 
-    pnanovdb_address_t addr_headers = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 20u);
-    pnanovdb_address_t addr_ids = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
-    pnanovdb_address_t addr_means = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
-    pnanovdb_address_t addr_gaussian_header_ids = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 7u);
-    pnanovdb_address_t addr_sort_keys = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 8u);
+    pnanovdb_address_t addr_headers = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 0u);
+    pnanovdb_address_t addr_ids = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
+    pnanovdb_address_t addr_gaussian_header_ids = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 3u);
+    pnanovdb_address_t addr_sort_keys = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 4u);
+    pnanovdb_address_t addr_means = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 5u);
 
     float3 ray_dir;
     get_center_ray_dir(ray_dir);

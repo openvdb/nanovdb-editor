@@ -24,175 +24,6 @@
 namespace pnanovdb_raster
 {
 
-static uint32_t float_to_sort_key(float v)
-{
-    uint32_t raw = pnanovdb_float_as_uint32(v);
-    uint32_t mask = -int(raw >> 31) | 0x80000000;
-    return raw ^ mask;
-}
-
-struct vec4
-{
-    float x, y, z, w;
-};
-struct mat4x4
-{
-    vec4 x, y, z, w;
-};
-static vec4 mul(vec4 v, mat4x4 m)
-{
-    vec4 ret = {};
-    ret.x = v.x * m.x.x + v.y * m.y.x + v.z * m.z.x + v.w * m.w.x;
-    ret.y = v.x * m.x.y + v.y * m.y.y + v.z * m.z.y + v.w * m.w.y;
-    ret.z = v.x * m.x.z + v.y * m.y.z + v.z * m.z.z + v.w * m.w.z;
-    ret.w = v.x * m.x.w + v.y * m.y.w + v.z * m.z.w + v.w * m.w.w;
-    return ret;
-}
-static mat4x4 mul(mat4x4 a, mat4x4 b)
-{
-    mat4x4 ret = {
-        mul(a.x, b),
-        mul(a.y, b),
-        mul(a.z, b),
-        mul(a.w, b)
-    };
-    return ret;
-}
-static mat4x4 transpose(mat4x4 m)
-{
-    mat4x4 ret = {
-        m.x.x, m.y.x, m.z.x, m.w.x,
-        m.x.y, m.y.y, m.z.y, m.w.y,
-        m.x.z, m.y.z, m.z.z, m.w.z,
-        m.x.w, m.y.w, m.z.w, m.w.w
-    };
-    return ret;
-}
-
-mat4x4 quat_to_mat(vec4 quatf)
-{
-    vec4 rot0 = vec4{
-        1.f - 2.f * (quatf.y * quatf.y + quatf.z * quatf.z),
-        2.f * (quatf.x * quatf.y - quatf.z * quatf.w),
-        2.f * (quatf.x * quatf.z + quatf.y * quatf.w),
-        0.f };
-    vec4 rot1 = vec4{
-        2.f * (quatf.x * quatf.y + quatf.z * quatf.w),
-        1.f - 2.f * (quatf.x * quatf.x + quatf.z * quatf.z),
-        2.f * (quatf.y * quatf.z - quatf.x * quatf.w),
-        0.f };
-    vec4 rot2 = vec4{
-        2.f * (quatf.x * quatf.z - quatf.y * quatf.w),
-        2.f * (quatf.y * quatf.z + quatf.x * quatf.w),
-        1.f - 2.f * (quatf.x * quatf.x + quatf.y * quatf.y),
-        0.f };
-    mat4x4 ret = {
-        rot0,
-        rot1,
-        rot2,
-        {0.f, 0.f, 0.f, 1.f}
-    };
-    return ret;
-}
-
-mat4x4 quat_and_scale_to_mat(vec4 quatf, vec4 scalef)
-{
-    mat4x4 R = quat_to_mat(quatf);
-    mat4x4 S = {
-        {scalef.x, 0.f, 0.f, 0.f},
-        {0.f, scalef.y, 0.f, 0.f},
-        {0.f, 0.f, scalef.z, 0.f},
-        {0.f, 0.f, 0.f, 1.f}
-    };
-    mat4x4 M = mul(R, S);
-    return mul(M, transpose(M));
-}
-
-mat4x4 covar_world_to_cam(mat4x4 R, mat4x4 covar)
-{
-    return mul(mul(R, covar), transpose(R));
-}
-
-vec4 compute_conic(float posf[3], float quatf[4], float scalef[3], float opacity, int axis)
-{
-    mat4x4 view_x = {
-        {0.f, 0.f, 1.f, 0.f},
-        {0.f, 1.f, 0.f, 0.f},
-        {1.f, 0.f, 0.f, 0.f},
-        {0.f, 0.f, 0.f, 1.f}
-    };
-    mat4x4 view_y = {
-        {1.f, 0.f, 0.f, 0.f},
-        {0.f, 0.f, 1.f, 0.f},
-        {0.f, 1.f, 0.f, 0.f},
-        {0.f, 0.f, 0.f, 1.f}
-    };
-    mat4x4 view_z = {
-        {1.f, 0.f, 0.f, 0.f},
-        {0.f, 1.f, 0.f, 0.f},
-        {0.f, 0.f, 1.f, 0.f},
-        {0.f, 0.f, 0.f, 1.f}
-    };
-
-    mat4x4 view = view_z;
-    if (axis == 0)
-    {
-        view = view_x;
-    }
-    else if (axis == 1)
-    {
-        view = view_y;
-    }
-
-    vec4 mean = {posf[0], posf[1], posf[2], 1.f};
-    vec4 quat = {quatf[0], quatf[1], quatf[2], quatf[3]};
-    vec4 scale = {scalef[0], scalef[1], scalef[2], 0.f};
-
-    vec4 mean_c = mul(mean, view);
-
-    mat4x4 covar = quat_and_scale_to_mat(quat, scale);
-    mat4x4 covar_c = covar_world_to_cam(view, covar);
-
-    float w = 2048.f;
-    float fx = w * 0.5f * 1.f;
-    float fy = w * 0.5f * 1.f;
-    mat4x4 J = {
-        {fx, 0.f, 0.f, 0.f},
-        {0.f, fy, 0.f, 0.f},
-        {0.f, 0.f, 0.f, 0.f},
-        {0.f, 0.f, 0.f, 0.f}
-    };
-
-    mat4x4 cov2d = mul(mul(J, covar_c), transpose(J));
-
-    const float eps2d = 0.3f;
-    cov2d.x.x += eps2d;
-    cov2d.y.y += eps2d;
-
-    vec4 cov2d_inv;
-    float det = cov2d.x.x * cov2d.y.y - cov2d.x.y * cov2d.y.x;
-    float det_inv = 1.f / det;
-    cov2d_inv.x = cov2d.y.y * det_inv;
-    cov2d_inv.y = -cov2d.x.y * det_inv;
-    cov2d_inv.z = -cov2d.y.x * det_inv;
-    cov2d_inv.w = cov2d.x.x * det_inv;
-
-    vec4 conic = {
-        cov2d_inv.x,
-        cov2d_inv.y,
-        cov2d_inv.w,
-        0.f
-    };
-
-    // move conic to camera space
-    float conic_scale = w * 0.5f * 1.f;
-    conic.x *= conic_scale * conic_scale;
-    conic.y *= conic_scale * conic_scale;
-    conic.z *= conic_scale * conic_scale;
-
-    return conic;
-}
-
 static bool voxel_ellipsoid_overlap(
     gaussian_data_t* data, size_t idx,
     float scale, float offset[3],
@@ -648,82 +479,6 @@ void raster_octree_build(pnanovdb_raster_gaussian_data_t* data_in)
     }
     printf("split_list_count(%zu) flat_list_count(%zu) ratio(%f)\n", split_list_count, flat_list_count, (double)flat_list_count / (double)split_list_count);
 
-    std::vector<std::pair<uint64_t, uint64_t>> tmp_keys;
-    std::vector<uint32_t> gaussian_ids_axis[3];
-    std::vector<uint32_t> sort_keys_axis[3];
-    for (int axis = 0; axis < 3; axis++)
-    {
-        gaussian_ids_axis[axis].resize(keys.size());
-        sort_keys_axis[axis].resize(keys.size());
-
-        for (size_t idx = 0u; idx < key_headers.size(); idx++)
-        {
-            uint64_t begin_idx = key_headers[idx].begin_idx;
-            uint64_t count = key_headers[idx].count;
-
-            tmp_keys.clear();
-            tmp_keys.resize(count);
-            for (uint64_t idx = 0u; idx < count; idx++)
-            {
-                auto key = keys[begin_idx + idx];
-
-                uint64_t gid = key.second;
-                float posf[3] = {
-                    ((const float*)data->means_cpu_array->data)[3u * gid + 0u],
-                    ((const float*)data->means_cpu_array->data)[3u * gid + 1u],
-                    ((const float*)data->means_cpu_array->data)[3u * gid + 2u]
-                };
-
-                key.first = (uint64_t)float_to_sort_key(posf[axis]);
-
-                tmp_keys[idx] = key;
-            }
-
-            std::sort(tmp_keys.begin(), tmp_keys.end(), [](const std::pair<uint64_t,uint64_t>& a, const std::pair<uint64_t,uint64_t>& b) {
-                return a.first < b.first;
-            });
-
-            for (uint64_t idx = 0u; idx < count; idx++)
-            {
-                sort_keys_axis[axis][begin_idx + idx] = (uint32_t)tmp_keys[idx].first;
-                gaussian_ids_axis[axis][begin_idx + idx] = (uint32_t)tmp_keys[idx].second;
-            }
-        }
-    }
-
-    std::vector<float> conics_axis[3];
-    for (int axis = 0; axis < 3; axis++)
-    {
-        conics_axis[axis].resize(3u * data->point_count);
-
-        for (size_t idx = 0u; idx < data->point_count; idx++)
-        {
-            float posf[3] = {
-                ((const float*)data->means_cpu_array->data)[3u * idx + 0u],
-                ((const float*)data->means_cpu_array->data)[3u * idx + 1u],
-                ((const float*)data->means_cpu_array->data)[3u * idx + 2u]
-            };
-            float quatf[4] = {
-                ((const float*)data->quaternions_cpu_array->data)[4u * idx + 1u],
-                ((const float*)data->quaternions_cpu_array->data)[4u * idx + 2u],
-                ((const float*)data->quaternions_cpu_array->data)[4u * idx + 3u],
-                ((const float*)data->quaternions_cpu_array->data)[4u * idx + 0u]
-            };
-            float scalef[3] = {
-                ((const float*)data->scales_cpu_array->data)[3u * idx + 0u],
-                ((const float*)data->scales_cpu_array->data)[3u * idx + 1u],
-                ((const float*)data->scales_cpu_array->data)[3u * idx + 2u],
-            };
-            float opacity = ((const float*)data->opacities_cpu_array->data)[idx];
-
-            vec4 conic = compute_conic(posf, quatf, scalef, opacity, axis);
-
-            conics_axis[axis][3u * idx + 0u] = conic.x;
-            conics_axis[axis][3u * idx + 1u] = conic.y;
-            conics_axis[axis][3u * idx + 2u] = conic.z;
-        }
-    }
-
 #if 1
     nanovdb::tools::build::UInt32Grid grid(0u, "gaussians");
 
@@ -810,11 +565,23 @@ void raster_octree_build(pnanovdb_raster_gaussian_data_t* data_in)
 
     nanovdb::tools::CreateNanoGrid<nanovdb::tools::build::UInt32Grid> grid_built(grid);
 
+    grid_built.addBlindData("gaussians_headers",
+        nanovdb::GridBlindDataSemantic::Unknown,
+        nanovdb::GridBlindDataClass::Unknown,
+        nanovdb::GridType::UInt32, 5u * key_headers.size(), 4u);
     grid_built.addBlindData("gaussian_flat_headers",
         nanovdb::GridBlindDataSemantic::Unknown,
         nanovdb::GridBlindDataClass::Unknown,
         nanovdb::GridType::UInt32, (sizeof(header_flat_t) / 4u) * flat_headers.size(), 4u);
     grid_built.addBlindData("gaussian_ids",
+        nanovdb::GridBlindDataSemantic::Unknown,
+        nanovdb::GridBlindDataClass::Unknown,
+        nanovdb::GridType::UInt32, keys.size(), 4u);
+    grid_built.addBlindData("gaussian_header_ids",
+        nanovdb::GridBlindDataSemantic::Unknown,
+        nanovdb::GridBlindDataClass::Unknown,
+        nanovdb::GridType::UInt32, keys.size(), 4u);
+    grid_built.addBlindData("sort_keys",
         nanovdb::GridBlindDataSemantic::Unknown,
         nanovdb::GridBlindDataClass::Unknown,
         nanovdb::GridType::UInt32, keys.size(), 4u);
@@ -838,14 +605,6 @@ void raster_octree_build(pnanovdb_raster_gaussian_data_t* data_in)
         nanovdb::GridBlindDataSemantic::Unknown,
         nanovdb::GridBlindDataClass::Unknown,
         nanovdb::GridType::Float, 1u * data->point_count, 4u);
-    grid_built.addBlindData("gaussian_header_ids",
-        nanovdb::GridBlindDataSemantic::Unknown,
-        nanovdb::GridBlindDataClass::Unknown,
-        nanovdb::GridType::UInt32, keys.size(), 4u);
-    grid_built.addBlindData("sort_keys",
-        nanovdb::GridBlindDataSemantic::Unknown,
-        nanovdb::GridBlindDataClass::Unknown,
-        nanovdb::GridType::UInt32, keys.size(), 4u);
     grid_built.addBlindData("conics",
         nanovdb::GridBlindDataSemantic::Unknown,
         nanovdb::GridBlindDataClass::Unknown,
@@ -854,152 +613,13 @@ void raster_octree_build(pnanovdb_raster_gaussian_data_t* data_in)
         nanovdb::GridBlindDataSemantic::Unknown,
         nanovdb::GridBlindDataClass::Unknown,
         nanovdb::GridType::Float, 3u * data->point_count, 4u);
-    grid_built.addBlindData("gaussian_ids_x",
-        nanovdb::GridBlindDataSemantic::Unknown,
-        nanovdb::GridBlindDataClass::Unknown,
-        nanovdb::GridType::UInt32, keys.size(), 4u);
-    grid_built.addBlindData("gaussian_ids_y",
-        nanovdb::GridBlindDataSemantic::Unknown,
-        nanovdb::GridBlindDataClass::Unknown,
-        nanovdb::GridType::UInt32, keys.size(), 4u);
-    grid_built.addBlindData("gaussian_ids_z",
-        nanovdb::GridBlindDataSemantic::Unknown,
-        nanovdb::GridBlindDataClass::Unknown,
-        nanovdb::GridType::UInt32, keys.size(), 4u);
-    grid_built.addBlindData("sort_keys_x",
-        nanovdb::GridBlindDataSemantic::Unknown,
-        nanovdb::GridBlindDataClass::Unknown,
-        nanovdb::GridType::UInt32, keys.size(), 4u);
-    grid_built.addBlindData("sort_keys_y",
-        nanovdb::GridBlindDataSemantic::Unknown,
-        nanovdb::GridBlindDataClass::Unknown,
-        nanovdb::GridType::UInt32, keys.size(), 4u);
-    grid_built.addBlindData("sort_keys_z",
-        nanovdb::GridBlindDataSemantic::Unknown,
-        nanovdb::GridBlindDataClass::Unknown,
-        nanovdb::GridType::UInt32, keys.size(), 4u);
-    grid_built.addBlindData("conics_x",
-        nanovdb::GridBlindDataSemantic::Unknown,
-        nanovdb::GridBlindDataClass::Unknown,
-        nanovdb::GridType::Float, 3u * data->point_count, 4u);
-    grid_built.addBlindData("conics_y",
-        nanovdb::GridBlindDataSemantic::Unknown,
-        nanovdb::GridBlindDataClass::Unknown,
-        nanovdb::GridType::Float, 3u * data->point_count, 4u);
-    grid_built.addBlindData("conics_z",
-        nanovdb::GridBlindDataSemantic::Unknown,
-        nanovdb::GridBlindDataClass::Unknown,
-        nanovdb::GridType::Float, 3u * data->point_count, 4u);
-    grid_built.addBlindData("gaussians_headers",
-        nanovdb::GridBlindDataSemantic::Unknown,
-        nanovdb::GridBlindDataClass::Unknown,
-        nanovdb::GridType::UInt32, 5u * key_headers.size(), 4u);
 
     nanovdb::GridHandle<nanovdb::HostBuffer> grid_handle = grid_built.getHandle<uint32_t>();
 
     auto grid_ptr = grid_handle.grid<uint32_t>();
 
-    uint32_t* blind_flat_headers = grid_ptr->getBlindData<uint32_t>(0u);
-    for (size_t idx = 0u; idx < key_headers.size(); idx++)
-    {
-        memcpy(blind_flat_headers + (sizeof(header_flat_t) / 4u) * idx, &flat_headers[idx], sizeof(header_flat_t));
-    }
-    uint32_t* blind_ids = grid_ptr->getBlindData<uint32_t>(1u);
-    for (size_t idx = 0u; idx < keys.size(); idx++)
-    {
-        blind_ids[idx] = keys[idx].second;
-    }
-    float* blind_means = grid_ptr->getBlindData<float>(2u);
-    for (size_t idx = 0u; idx < 3u * data->point_count; idx++)
-    {
-        blind_means[idx] = ((const float*)(data->means_cpu_array->data))[idx];
-    }
-    float* blind_quats = grid_ptr->getBlindData<float>(3u);
-    for (size_t idx = 0u; idx < 4u * data->point_count; idx++)
-    {
-        blind_quats[idx] = ((const float*)(data->quaternions_cpu_array->data))[idx];
-    }
-    float* blind_scales = grid_ptr->getBlindData<float>(4u);
-    for (size_t idx = 0u; idx < 3u * data->point_count; idx++)
-    {
-        blind_scales[idx] = ((const float*)(data->scales_cpu_array->data))[idx];
-    }
-    float* blind_shs = grid_ptr->getBlindData<float>(5u);
-    for (size_t idx = 0u; idx < 48u * data->point_count; idx++)
-    {
-        blind_shs[idx] = ((const float*)(data->spherical_harmonics_cpu_array->data))[idx];
-    }
-    float* blind_opacities = grid_ptr->getBlindData<float>(6u);
-    for (size_t idx = 0u; idx < 1u * data->point_count; idx++)
-    {
-        blind_opacities[idx] = ((const float*)(data->opacities_cpu_array->data))[idx];
-    }
-    uint32_t* blind_header_ids = grid_ptr->getBlindData<uint32_t>(7u);
-    for (size_t idx = 0u; idx < keys.size(); idx++)
-    {
-        blind_header_ids[idx] = (uint32_t)(key_header_map[keys[idx].first]);
-    }
-    uint32_t* blind_sort_keys = grid_ptr->getBlindData<uint32_t>(8u);
-    for (size_t idx = 0u; idx < keys.size(); idx++)
-    {
-        blind_sort_keys[idx] = 0u;
-    }
-    float* blind_conics = grid_ptr->getBlindData<float>(9u);
-    for (size_t idx = 0u; idx < 3u * data->point_count; idx++)
-    {
-        blind_conics[idx] = 0.f;
-    }
-    float* blind_colors = grid_ptr->getBlindData<float>(10u);
-    for (size_t idx = 0u; idx < 3u * data->point_count; idx++)
-    {
-        blind_colors[idx] = 0.f;
-    }
-    uint32_t* blind_ids_x = grid_ptr->getBlindData<uint32_t>(11u);
-    for (size_t idx = 0u; idx < keys.size(); idx++)
-    {
-        blind_ids_x[idx] = gaussian_ids_axis[0][idx];
-    }
-    uint32_t* blind_ids_y = grid_ptr->getBlindData<uint32_t>(12u);
-    for (size_t idx = 0u; idx < keys.size(); idx++)
-    {
-        blind_ids_y[idx] = gaussian_ids_axis[1][idx];
-    }
-    uint32_t* blind_ids_z = grid_ptr->getBlindData<uint32_t>(13u);
-    for (size_t idx = 0u; idx < keys.size(); idx++)
-    {
-        blind_ids_z[idx] = gaussian_ids_axis[2][idx];
-    }
-    uint32_t* blind_sort_keys_x = grid_ptr->getBlindData<uint32_t>(14u);
-    for (size_t idx = 0u; idx < keys.size(); idx++)
-    {
-        blind_sort_keys_x[idx] = sort_keys_axis[0][idx];
-    }
-    uint32_t* blind_sort_keys_y = grid_ptr->getBlindData<uint32_t>(15u);
-    for (size_t idx = 0u; idx < keys.size(); idx++)
-    {
-        blind_sort_keys_y[idx] = sort_keys_axis[1][idx];
-    }
-    uint32_t* blind_sort_keys_z = grid_ptr->getBlindData<uint32_t>(16u);
-    for (size_t idx = 0u; idx < keys.size(); idx++)
-    {
-        blind_sort_keys_z[idx] = sort_keys_axis[2][idx];
-    }
-    float* blind_conics_x = grid_ptr->getBlindData<float>(17u);
-    for (size_t idx = 0u; idx < 3u * data->point_count; idx++)
-    {
-        blind_conics_x[idx] = conics_axis[0][idx];
-    }
-    float* blind_conics_y = grid_ptr->getBlindData<float>(18u);
-    for (size_t idx = 0u; idx < 3u * data->point_count; idx++)
-    {
-        blind_conics_y[idx] = conics_axis[1][idx];
-    }
-    float* blind_conics_z = grid_ptr->getBlindData<float>(19u);
-    for (size_t idx = 0u; idx < 3u * data->point_count; idx++)
-    {
-        blind_conics_z[idx] = conics_axis[2][idx];
-    }
-    uint32_t* blind_headers = grid_ptr->getBlindData<uint32_t>(20u);
+    // per adaptively sized voxel
+    uint32_t* blind_headers = grid_ptr->getBlindData<uint32_t>(0u);
     for (size_t idx = 0u; idx < key_headers.size(); idx++)
     {
         blind_headers[5u * idx + 0u] = (uint32_t)key_headers[idx].begin_idx;
@@ -1007,6 +627,67 @@ void raster_octree_build(pnanovdb_raster_gaussian_data_t* data_in)
         blind_headers[5u * idx + 2u] = (uint32_t)(key_headers[idx].key);
         blind_headers[5u * idx + 3u] = (uint32_t)(key_headers[idx].key >> 32u);
         blind_headers[5u * idx + 4u] = (uint32_t)key_headers[idx].parent_idx;
+    }
+    uint32_t* blind_flat_headers = grid_ptr->getBlindData<uint32_t>(1u);
+    for (size_t idx = 0u; idx < key_headers.size(); idx++)
+    {
+        memcpy(blind_flat_headers + (sizeof(header_flat_t) / 4u) * idx, &flat_headers[idx], sizeof(header_flat_t));
+    }
+
+    // per Gaussian overlap with adaptively sized voxel
+    uint32_t* blind_ids = grid_ptr->getBlindData<uint32_t>(2u);
+    for (size_t idx = 0u; idx < keys.size(); idx++)
+    {
+        blind_ids[idx] = keys[idx].second;
+    }
+    uint32_t* blind_header_ids = grid_ptr->getBlindData<uint32_t>(3u);
+    for (size_t idx = 0u; idx < keys.size(); idx++)
+    {
+        blind_header_ids[idx] = (uint32_t)(key_header_map[keys[idx].first]);
+    }
+    uint32_t* blind_sort_keys = grid_ptr->getBlindData<uint32_t>(4u);
+    for (size_t idx = 0u; idx < keys.size(); idx++)
+    {
+        blind_sort_keys[idx] = 0u;
+    }
+
+    // per Gaussian const
+    float* blind_means = grid_ptr->getBlindData<float>(5u);
+    for (size_t idx = 0u; idx < 3u * data->point_count; idx++)
+    {
+        blind_means[idx] = ((const float*)(data->means_cpu_array->data))[idx];
+    }
+    float* blind_quats = grid_ptr->getBlindData<float>(6u);
+    for (size_t idx = 0u; idx < 4u * data->point_count; idx++)
+    {
+        blind_quats[idx] = ((const float*)(data->quaternions_cpu_array->data))[idx];
+    }
+    float* blind_scales = grid_ptr->getBlindData<float>(7u);
+    for (size_t idx = 0u; idx < 3u * data->point_count; idx++)
+    {
+        blind_scales[idx] = ((const float*)(data->scales_cpu_array->data))[idx];
+    }
+    float* blind_shs = grid_ptr->getBlindData<float>(8u);
+    for (size_t idx = 0u; idx < 48u * data->point_count; idx++)
+    {
+        blind_shs[idx] = ((const float*)(data->spherical_harmonics_cpu_array->data))[idx];
+    }
+    float* blind_opacities = grid_ptr->getBlindData<float>(9u);
+    for (size_t idx = 0u; idx < 1u * data->point_count; idx++)
+    {
+        blind_opacities[idx] = ((const float*)(data->opacities_cpu_array->data))[idx];
+    }
+
+    // per Gaussian projected
+    float* blind_conics = grid_ptr->getBlindData<float>(10u);
+    for (size_t idx = 0u; idx < 3u * data->point_count; idx++)
+    {
+        blind_conics[idx] = 0.f;
+    }
+    float* blind_colors = grid_ptr->getBlindData<float>(11u);
+    for (size_t idx = 0u; idx < 3u * data->point_count; idx++)
+    {
+        blind_colors[idx] = 0.f;
     }
 
     static const char* vdb_path = "./data/octree.nvdb";

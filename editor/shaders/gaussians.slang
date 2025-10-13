@@ -277,7 +277,6 @@ uint float_to_sort_key(float v)
 
 void ray_march_nanovdb(
     StructuredBuffer<uint2> buf,
-    bool is_primary,
     float3 worldRayOrigin,
     float rayMinT,
     float3 worldRayDir,
@@ -344,75 +343,23 @@ void ray_march_nanovdb(
 
     if (isHit)
     {
-        pnanovdb_address_t headers = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 0u);
-        pnanovdb_address_t means = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
-        pnanovdb_address_t opacities = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 6u);
-        pnanovdb_address_t colors = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 10u);
+        pnanovdb_address_t flat_headers = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
 
-        pnanovdb_address_t ids = {};
-        pnanovdb_address_t addr_sort_keys = {};
-        pnanovdb_address_t conics = {};
+        pnanovdb_address_t ids = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
+        pnanovdb_address_t addr_sort_keys = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 4u);
 
-        float4x4 view;
-        if (is_primary)
-        {
-            view = float4x4(
-                editor_params.view_x.x, editor_params.view_y.x, editor_params.view_z.x, editor_params.view_w.x,
-                editor_params.view_x.y, editor_params.view_y.y, editor_params.view_z.y, editor_params.view_w.y,
-                editor_params.view_x.z, editor_params.view_y.z, editor_params.view_z.z, editor_params.view_w.z,
-                editor_params.view_x.w, editor_params.view_y.w, editor_params.view_z.w, editor_params.view_w.w
-            );
-            ids = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
-            addr_sort_keys = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 8u);
-            conics = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 9u);
-        }
-        else
-        {
-            bool do_x = abs(rayDir.x) > abs(rayDir.y) && abs(rayDir.x) > abs(rayDir.z);
-            bool do_y = abs(rayDir.y) > abs(rayDir.x) && abs(rayDir.y) > abs(rayDir.z);
-            if (do_x)
-            {
-                static const float4x4 view_x = float4x4(
-                    0.f, 0.f, 1.f, 0.f,
-                    0.f, 1.f, 0.f, 0.f,
-                    1.f, 0.f, 0.f, 0.f,
-                    0.f, 0.f, 0.f, 1.f
-                );
-                view = view_x;
-                rayDir_center = float3(1.f, 0.f, 0.f);
-                ids = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 11u);
-                addr_sort_keys = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 14u);
-                conics = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 17u);
-            }
-            else if (do_y)
-            {
-                static const float4x4 view_y = float4x4(
-                    1.f, 0.f, 0.f, 0.f,
-                    0.f, 0.f, 1.f, 0.f,
-                    0.f, 1.f, 0.f, 0.f,
-                    0.f, 0.f, 0.f, 1.f
-                );
-                view = view_y;
-                rayDir_center = float3(0.f, 1.f, 0.f);
-                ids = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 12u);
-                addr_sort_keys = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 15u);
-                conics = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 18u);
-            }
-            else // (abs(rayDir.z) > abs(rayDir.x) && abs(rayDir.z) > abs(rayDir.y))
-            {
-                static const float4x4 view_z = float4x4(
-                    1.f, 0.f, 0.f, 0.f,
-                    0.f, 1.f, 0.f, 0.f,
-                    0.f, 0.f, 1.f, 0.f,
-                    0.f, 0.f, 0.f, 1.f
-                );
-                view = view_z;
-                rayDir_center = float3(0.f, 0.f, 1.f);
-                ids = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 13u);
-                addr_sort_keys = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 16u);
-                conics = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 19u);
-            }
-        }
+        pnanovdb_address_t means = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 5u);
+        pnanovdb_address_t opacities = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 9u);
+
+        pnanovdb_address_t conics = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 10u);
+        pnanovdb_address_t colors = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 11u);
+
+        float4x4 view = float4x4(
+            editor_params.view_x.x, editor_params.view_y.x, editor_params.view_z.x, editor_params.view_w.x,
+            editor_params.view_x.y, editor_params.view_y.y, editor_params.view_z.y, editor_params.view_w.y,
+            editor_params.view_x.z, editor_params.view_y.z, editor_params.view_z.z, editor_params.view_w.z,
+            editor_params.view_x.w, editor_params.view_y.w, editor_params.view_z.w, editor_params.view_w.w
+        );
 
         bool is_reverse = dot(rayDir, rayDir_center) < 0.f;
 
@@ -456,9 +403,9 @@ void ray_march_nanovdb(
             {
                 for (uint level = 0u; level < max_levels; level += 2u)
                 {
-                    uint current_idx_a = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(headers, 18u * gaussian_header_idx + level + 0u, 4u));
-                    uint current_idx_b = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(headers, 18u * gaussian_header_idx + level + 1u, 4u));
-                    uint count_raw = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(headers, 18u * gaussian_header_idx + (level >> 1u) + 12u, 4u));
+                    uint current_idx_a = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(flat_headers, 18u * gaussian_header_idx + level + 0u, 4u));
+                    uint current_idx_b = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(flat_headers, 18u * gaussian_header_idx + level + 1u, 4u));
+                    uint count_raw = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(flat_headers, 18u * gaussian_header_idx + (level >> 1u) + 12u, 4u));
                     uint current_end_a = current_idx_a + (count_raw & 0xFFFF);
                     uint current_end_b = current_idx_b + (count_raw >> 16u);
                     if (!is_reverse)
@@ -775,19 +722,10 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
 
     float noise_val = ray_march_noise_from_dir(rayDir);
 
-    bool is_primary = true;
-#if RAY_TRACE_TEST
-    if (dot(rayDir, rayDir_center) < 0.75f + 0.1f * (2.f * noise_val - 1.f))
-    {
-        is_primary = false;
-    }
-#endif
-
     float4 sum = float4(0.f, 0.f, 0.f, 1.f);
     float nominalT = 0.f;
     ray_march_nanovdb(
         buf,
-        is_primary,
         rayOrigin,
         0.f,
         rayDir,
@@ -814,7 +752,6 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
         nominalT = 0.f;
         ray_march_nanovdb(
             buf,
-            false,
             rayOrigin,
             0.f,
             rayDir,

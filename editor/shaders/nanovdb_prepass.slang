@@ -339,25 +339,20 @@ void main(uint3 workgroup_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         return;
     }
 
-    pnanovdb_gridblindmetadata_handle_t metadata = pnanovdb_grid_get_gridblindmetadata(buf, grid, 1u);
-    uint ids_count = uint(pnanovdb_gridblindmetadata_get_value_count(buf, metadata));
-
-    pnanovdb_address_t addr_flat_headers = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 0u);
-    pnanovdb_address_t addr_headers = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 20u);
-
     float3 ray_dir;
     get_center_ray_dir(ray_dir);
 
     // projection
-    pnanovdb_address_t addr_means = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
-    pnanovdb_address_t addr_quats = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 3u);
-    pnanovdb_address_t addr_scales = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 4u);
-    pnanovdb_address_t addr_shs = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 5u);
-    pnanovdb_address_t addr_opacities = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 6u);
-    pnanovdb_address_t addr_conics = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 9u);
-    pnanovdb_address_t addr_colors = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 10u);
+    pnanovdb_address_t addr_means = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 5u);
+    pnanovdb_address_t addr_quats = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 6u);
+    pnanovdb_address_t addr_scales = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 7u);
+    pnanovdb_address_t addr_shs = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 8u);
+    pnanovdb_address_t addr_opacities = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 9u);
 
-    pnanovdb_gridblindmetadata_handle_t metadata_means = pnanovdb_grid_get_gridblindmetadata(buf, grid, 2u);
+    pnanovdb_address_t addr_conics = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 10u);
+    pnanovdb_address_t addr_colors = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 11u);
+
+    pnanovdb_gridblindmetadata_handle_t metadata_means = pnanovdb_grid_get_gridblindmetadata(buf, grid, 5u);
     uint point_count = uint(pnanovdb_gridblindmetadata_get_value_count(buf, metadata_means)) / 3u;
 
     uint total_blocks = (point_count + 255u) / 256u;
