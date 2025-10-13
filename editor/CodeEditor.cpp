@@ -115,12 +115,21 @@ bool CodeEditor::render()
 
     if (ImGuiFileDialog::Instance()->IsOpened())
     {
-        ImGui::SetNextWindowSize(dialog_size_, ImGuiCond_Appearing);
+        ImGui::SetNextWindowSize(dialogSize_, ImGuiCond_Appearing);
         if (ImGuiFileDialog::Instance()->Display("OpenCodeDlgKey"))
         {
             if (ImGuiFileDialog::Instance()->IsOk())
             {
                 auto filepath = ImGuiFileDialog::Instance()->GetFilePathName();
+                if (restricDirAccess_ && !rootPath_.empty())
+                {
+                    if (!isPathWithinRoot(filepath, rootPath_))
+                    {
+                        ImGuiFileDialog::Instance()->Close();
+                        return true;
+                    }
+                }
+
                 setSelectedFile(filepath);
             }
             ImGuiFileDialog::Instance()->Close();
@@ -132,6 +141,19 @@ bool CodeEditor::render()
                 assert(tabs_.find(selectedTab_) != tabs_.end());
 
                 std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
+
+                // Validate that the selected file is within the root directory if restriction is enabled
+                if (restricDirAccess_ && !rootPath_.empty())
+                {
+                    if (!isPathWithinRoot(filePath, rootPath_))
+                    {
+                        printf("Error: Cannot save file '%s' outside the allowed directory '%s'\n", filePath.c_str(),
+                               rootPath_.c_str());
+                        ImGuiFileDialog::Instance()->Close();
+                        return true;
+                    }
+                }
+
                 std::string newName = pnanovdb_shader::getShaderName(filePath.c_str());
                 tabs_[selectedTab_].rename(newName.c_str());
 
@@ -162,9 +184,9 @@ bool CodeEditor::render()
     {
         if (ImGui::Button("Run"))
         {
-            if (run_shader_)
+            if (runShader_)
             {
-                run_shader_(shaderName.c_str(), gridDims_[0], gridDims_[1], gridDims_[2]);
+                runShader_(shaderName.c_str(), gridDims_[0], gridDims_[1], gridDims_[2]);
             }
             else
             {
@@ -382,13 +404,15 @@ bool CodeEditor::render()
 
 void CodeEditor::setup(std::string* shaderName,
                        std::atomic<bool>* updateShaderPtr,
-                       ImVec2& dialog_size,
-                       pnanovdb_shader::run_shader_func_t run_shader)
+                       ImVec2& dialogSize,
+                       pnanovdb_shader::run_shader_func_t runShader,
+                       bool restrictFileAccess)
 {
     editorShaderPtr_ = shaderName;
     updateShaderPtr_ = updateShaderPtr;
-    dialog_size_ = dialog_size;
-    run_shader_ = run_shader;
+    dialogSize_ = dialogSize;
+    runShader_ = runShader;
+    restricDirAccess_ = restrictFileAccess;
     if (selectedTab_.empty())
     {
         setSelectedShader(*shaderName);
@@ -559,9 +583,44 @@ void CodeEditor::saveShaderParams()
 void CodeEditor::openFileDialog(const char* dialogKey, const char* title, const char* filters)
 {
     IGFD::FileDialogConfig config;
-    config.path = pnanovdb_shader::getShaderDir();
+    rootPath_ = pnanovdb_shader::getShaderDir();
+    config.path = rootPath_;
+    config.flags = ImGuiFileDialogFlags_DisableCreateDirectoryButton;
 
     ImGuiFileDialog::Instance()->OpenDialog(dialogKey, title, filters, config);
+}
+
+bool CodeEditor::isPathWithinRoot(const std::string& path, const std::string& root) const
+{
+    if (path.empty() || root.empty())
+    {
+        return false;
+    }
+
+    std::filesystem::path canonicalPath;
+    std::filesystem::path canonicalRoot;
+
+    try
+    {
+        canonicalPath = std::filesystem::weakly_canonical(path);
+        canonicalRoot = std::filesystem::weakly_canonical(root);
+    }
+    catch (...)
+    {
+        return false;
+    }
+
+    // Check if path starts with root
+    auto pathStr = canonicalPath.string();
+    auto rootStr = canonicalRoot.string();
+
+    // Ensure both paths end with a separator for proper comparison
+    if (!rootStr.empty() && rootStr.back() != std::filesystem::path::preferred_separator)
+    {
+        rootStr += std::filesystem::path::preferred_separator;
+    }
+
+    return pathStr.find(rootStr) == 0 || pathStr == canonicalRoot.string();
 }
 
 void CodeEditor::registerSettingsHandler(ImGuiContext* context)

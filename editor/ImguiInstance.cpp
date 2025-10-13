@@ -20,6 +20,7 @@
 #include "Console.h"
 #include "RenderSettingsHandler.h"
 #include "InstanceSettingsHandler.h"
+#include "ImguiIni.h"
 
 #include <stdio.h>
 #include <imgui_internal.h> // for the docking branch
@@ -60,6 +61,7 @@ PNANOVDB_INLINE float timestamp_diff(pnanovdb_uint64_t begin, pnanovdb_uint64_t 
     return (float)(((double)(end - begin) / (double)(freq)));
 }
 
+
 namespace imgui_instance_user
 {
 pnanovdb_imgui_instance_t* create(void* userdata,
@@ -82,6 +84,8 @@ pnanovdb_imgui_instance_t* create(void* userdata,
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
+    ptr->update_ini_filename_for_profile(ptr->render_settings->ui_profile_name);
+
     // Register settings handlers
     ImGuiContext* context = ImGui::GetCurrentContext();
     RenderSettingsHandler::Register(context, ptr);
@@ -96,7 +100,7 @@ void destroy(pnanovdb_imgui_instance_t* instance)
     auto ptr = cast(instance);
 
     // Persist settings on shutdown if possible
-    if (ImGui::GetCurrentContext())
+    if (ImGui::GetCurrentContext() && !ptr->is_viewer())
     {
         ImGuiIO& io = ImGui::GetIO();
         if (io.IniFilename && *io.IniFilename)
@@ -110,24 +114,36 @@ void destroy(pnanovdb_imgui_instance_t* instance)
     delete ptr;
 }
 
+// #define INIT_VIEWER_DOCKING // uncomment to generate .ini string for ImguiIni.h
+
 static void initializeDocking(Instance* ptr)
 {
     ImGuiID dockspace_id = 1u;
     ImGui::DockSpaceOverViewport(dockspace_id, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
 
-    bool has_ini_on_disk = false;
+    bool isViewerProfile = ptr->is_viewer();
+
+#ifndef INIT_VIEWER_DOCKING
+    if (isViewerProfile)
+    {
+        // Viewer's settings are loaded from memory, skip custom layout building
+        return;
+    }
+#endif
+
+    bool hasIniOnDisk = false;
     ImGuiIO& io = ImGui::GetIO();
     if (io.IniFilename && *io.IniFilename)
     {
         FILE* f = fopen(io.IniFilename, "rb");
         if (f)
         {
-            has_ini_on_disk = true;
+            hasIniOnDisk = true;
             fclose(f);
         }
     }
 
-    if (!has_ini_on_disk && !ptr->is_docking_setup)
+    if (!hasIniOnDisk && !ptr->is_docking_setup)
     {
         // setup docking once
         ptr->is_docking_setup = true;
@@ -135,8 +151,10 @@ static void initializeDocking(Instance* ptr)
         float window_width = ImGui::GetIO().DisplaySize.x;
         float window_height = ImGui::GetIO().DisplaySize.y;
 
+#ifdef INIT_VIEWER_DOCKING
         float left_dock_width = window_width * 0.25f;
         float right_dock_width = window_width * 0.20f;
+        float far_right_dock_width = window_width * 0.30f;
         float bottom_dock_height = window_height * 0.2f;
 
         // clear existing layout
@@ -146,7 +164,7 @@ static void initializeDocking(Instance* ptr)
         // create dock spaces for various windows, the order matters!
         ImGuiID dock_id_right_far =
             ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.f, nullptr, &dockspace_id);
-        ImGui::DockBuilderSetNodeSize(dock_id_right_far, ImVec2(right_dock_width, window_height));
+        ImGui::DockBuilderSetNodeSize(dock_id_right_far, ImVec2(far_right_dock_width, window_height));
         ImGui::DockBuilderDockWindow(CODE_EDITOR, dock_id_right_far);
         ImGui::DockBuilderDockWindow(PROFILER, dock_id_right_far);
         ImGui::DockBuilderDockWindow(FILE_HEADER, dock_id_right_far);
@@ -155,6 +173,7 @@ static void initializeDocking(Instance* ptr)
         ImGui::DockBuilderSetNodeSize(dock_id_right, ImVec2(right_dock_width, window_height));
 
         ImGuiID dock_id_right_top = dock_id_right;
+
         ImGuiID dock_id_right_bottom =
             ImGui::DockBuilderSplitNode(dock_id_right_top, ImGuiDir_Down, 0.6f, nullptr, &dock_id_right_top);
 
@@ -177,23 +196,72 @@ static void initializeDocking(Instance* ptr)
         ImGui::DockBuilderDockWindow(PROPERTIES, dock_id_left_bottom);
         ImGui::DockBuilderDockWindow(SHADER_PARAMS, dock_id_left_bottom);
         ImGui::DockBuilderDockWindow(BENCHMARK, dock_id_left_bottom);
+#else
+        float left_dock_width = window_width * 0.25f;
+        float right_dock_width = window_width * 0.20f;
+        float far_right_dock_width = window_width * 0.30f;
+        float bottom_dock_height = window_height * 0.2f;
+        float bottom_right_height = window_height * 0.4f;
+
+        // clear existing layout
+        ImGui::DockBuilderRemoveNode(dockspace_id);
+        ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+
+        // create dock spaces for various windows, the order matters!
+        ImGuiID dock_id_right_far =
+            ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.f, nullptr, &dockspace_id);
+        ImGui::DockBuilderSetNodeSize(dock_id_right_far, ImVec2(far_right_dock_width, window_height));
+        ImGui::DockBuilderDockWindow(CODE_EDITOR, dock_id_right_far);
+        ImGui::DockBuilderDockWindow(PROFILER, dock_id_right_far);
+        ImGui::DockBuilderDockWindow(FILE_HEADER, dock_id_right_far);
+
+        ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.f, nullptr, &dockspace_id);
+        ImGui::DockBuilderSetNodeSize(dock_id_right, ImVec2(right_dock_width, window_height));
+
+        ImGuiID dock_id_right_top = dock_id_right;
+        ImGui::DockBuilderDockWindow(SCENE, dock_id_right_top);
+
+        ImGuiID dock_id_right_bottom =
+            ImGui::DockBuilderSplitNode(dock_id_right_top, ImGuiDir_Down, 0.6f, nullptr, &dock_id_right_top);
+        ImGui::DockBuilderSetNodeSize(dock_id_right_bottom, ImVec2(window_width, bottom_right_height));
+        ImGui::DockBuilderDockWindow(PROPERTIES, dock_id_right_bottom);
+
+        ImGuiID dock_id_bottom = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Down, 0.f, nullptr, &dockspace_id);
+        ImGui::DockBuilderSetNodeSize(dock_id_bottom, ImVec2(window_width, bottom_dock_height));
+        ImGui::DockBuilderDockWindow(CONSOLE, dock_id_bottom);
+
+        ImGuiID dock_id_left = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.f, nullptr, &dockspace_id);
+        ImGui::DockBuilderSetNodeSize(dock_id_left, ImVec2(left_dock_width, window_height));
+
+        ImGuiID dock_id_left_top = dock_id_left;
+        ImGui::DockBuilderDockWindow(VIEWPORT_SETTINGS, dock_id_left_top);
+        ImGui::DockBuilderDockWindow(RENDER_SETTINGS, dock_id_left_top);
+        ImGui::DockBuilderDockWindow(COMPILER_SETTINGS, dock_id_left_top);
+
+        ImGuiID dock_id_left_bottom =
+            ImGui::DockBuilderSplitNode(dock_id_left_top, ImGuiDir_Down, 0.f, nullptr, &dock_id_left_top);
+        ImGui::DockBuilderSetNodeSize(dock_id_left_bottom, ImVec2(left_dock_width, window_height));
+        ImGui::DockBuilderDockWindow(SHADER_PARAMS, dock_id_left_bottom);
+        ImGui::DockBuilderDockWindow(BENCHMARK, dock_id_left_bottom);
 
         ImGui::DockBuilderFinish(dockspace_id);
+#endif
     }
-
-    //// Host dockspace every frame
-    // ImGui::DockSpaceOverViewport(dockspace_id, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
 }
 
 static void createMenu(Instance* ptr)
 {
+    bool isViewerProfile = ptr->is_viewer();
+
     if (ImGui::BeginMainMenuBar())
     {
-        if (ImGui::BeginMenu("File"))
+        if (!isViewerProfile && ImGui::BeginMenu("File"))
         {
             ImGui::MenuItem("Open...", "", &ptr->pending.open_file);
             ImGui::MenuItem("Save...", "", &ptr->pending.save_file);
-            if (ImGui::MenuItem("Save Layout"))
+            ImGui::Separator();
+
+            if (ImGui::MenuItem("Save .ini"))
             {
                 ImGuiIO& io = ImGui::GetIO();
                 if (io.IniFilename && *io.IniFilename)
@@ -201,7 +269,7 @@ static void createMenu(Instance* ptr)
                     ImGui::SaveIniSettingsToDisk(io.IniFilename);
                 }
             }
-            if (ImGui::MenuItem("Reload Layout"))
+            if (ImGui::MenuItem("Reload .ini"))
             {
                 ImGuiIO& io = ImGui::GetIO();
                 if (io.IniFilename && *io.IniFilename)
@@ -220,12 +288,18 @@ static void createMenu(Instance* ptr)
             ImGui::MenuItem(SHADER_PARAMS, "", &ptr->window.show_shader_params);
             ImGui::MenuItem(SCENE, "", &ptr->window.show_scene);
             ImGui::MenuItem(PROPERTIES, "", &ptr->window.show_scene_properties);
-            ImGui::MenuItem(BENCHMARK, "", &ptr->window.show_benchmark);
+            if (!isViewerProfile)
+            {
+                ImGui::MenuItem(BENCHMARK, "", &ptr->window.show_benchmark);
+            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Settings"))
         {
-            ImGui::MenuItem(VIEWPORT_SETTINGS, "", &ptr->window.show_viewport_settings);
+            if (!isViewerProfile)
+            {
+                ImGui::MenuItem(VIEWPORT_SETTINGS, "", &ptr->window.show_viewport_settings);
+            }
             ImGui::MenuItem(RENDER_SETTINGS, "", &ptr->window.show_render_settings);
             ImGui::MenuItem(COMPILER_SETTINGS, "", &ptr->window.show_compiler_settings);
             ImGui::EndMenu();
@@ -241,31 +315,31 @@ static void createMenu(Instance* ptr)
 
 static void showWindows(Instance* ptr, float delta_time)
 {
-    // dock left top
-    showSceneWindow(ptr);
+    using namespace pnanovdb_editor;
+
     showViewportSettingsWindow(ptr);
+    showSceneWindow(ptr);
     showRenderSettingsWindow(ptr);
     showCompilerSettingsWindow(ptr);
-
-    // dock left bottom
-    showBenchmarkWindow(ptr);
     showShaderParamsWindow(ptr);
     showPropertiesWindow(ptr);
-
-    // dock right
+    showBenchmarkWindow(ptr);
     showFileHeaderWindow(ptr);
     showCodeEditorWindow(ptr);
     showProfilerWindow(ptr, delta_time);
-
-    // dock bottom
     showConsoleWindow(ptr);
-
-    // modal windows
     showAboutWindow(ptr);
 }
 
-static void markIniDirtyIfNewWindowsAppeared(Instance* /*ptr*/)
+// If new windows appeared (not present in ini yet), mark settings dirty so they get saved
+static void markIniDirtyIfNewWindowsAppeared(Instance* ptr)
 {
+    bool isViewerProfile = ptr->is_viewer();
+    if (isViewerProfile)
+    {
+        return;
+    }
+
     bool need_dirty = false;
     auto ensure_entry = [&](const char* name)
     {
@@ -315,21 +389,38 @@ void update(pnanovdb_imgui_instance_t* instance)
         delta_time = 1.f / 30.f;
     }
 
-    ImGui::NewFrame();
-
-    // Ensure ini is loaded before building default docking (defensive)
+    // Handle profile switching and ini loading
     {
-        static bool s_loaded_ini_once = false;
-        if (!s_loaded_ini_once)
+        ImGuiIO& io = ImGui::GetIO();
+
+        const char* profile_name = ptr->render_settings->ui_profile_name;
+        bool profile_changed = (ptr->current_profile_name != profile_name);
+        if (profile_changed)
         {
-            ImGuiIO& io = ImGui::GetIO();
-            if (io.IniFilename && *io.IniFilename)
+            ptr->update_ini_filename_for_profile(profile_name);
+
+            // Force reload settings and docking for the new profile
+            ptr->loaded_ini_once = false;
+            ptr->is_docking_setup = false;
+        }
+
+        if (!ptr->loaded_ini_once)
+        {
+            // For viewer profile, load from memory; otherwise load from disk
+            bool isViewerProfile = ptr->is_viewer();
+            if (isViewerProfile)
+            {
+                ImGui::LoadIniSettingsFromMemory(viewer_ini.c_str(), viewer_ini.size());
+            }
+            else if (io.IniFilename && *io.IniFilename)
             {
                 ImGui::LoadIniSettingsFromDisk(io.IniFilename);
             }
-            s_loaded_ini_once = true;
+            ptr->loaded_ini_once = true;
         }
     }
+
+    ImGui::NewFrame();
 
     initializeDocking(ptr);
 
@@ -342,12 +433,11 @@ void update(pnanovdb_imgui_instance_t* instance)
 
     showWindows(ptr, delta_time);
 
-    // If new windows appeared (not present in ini yet), mark settings dirty so they get saved
     markIniDirtyIfNewWindowsAppeared(ptr);
 
-    saveLoadSettings(ptr);
+    pnanovdb_editor::saveLoadSettings(ptr);
 
-    showFileDialogs(ptr);
+    pnanovdb_editor::showFileDialogs(ptr);
 
     ImGui::Render();
 }
@@ -384,6 +474,40 @@ void Instance::set_default_shader(const std::string& shaderName)
     shader_name = shaderName;
     pending.viewport_shader_name = shaderName;
     pnanovdb_editor::CodeEditor::getInstance().setSelectedShader(shaderName);
+}
+
+void Instance::update_ini_filename_for_profile(const char* profile_name)
+{
+    ImGuiIO& io = ImGui::GetIO();
+
+    current_profile_name = profile_name ? profile_name : "";
+
+    bool isViewer = (profile_name && strcmp(profile_name, s_viewer_profile_name) == 0);
+    if (isViewer)
+    {
+        // Viewer profile: load from memory, no file persistence
+        io.IniFilename = nullptr;
+        current_ini_filename = "";
+    }
+    else
+    {
+        // Generate profile-specific INI filename
+        std::string ini_filename = "imgui_";
+        if (profile_name && profile_name[0] != '\0')
+        {
+            ini_filename += profile_name;
+        }
+        else
+        {
+            current_ini_filename = "imgui";
+            io.IniFilename = current_ini_filename.c_str();
+            return;
+        }
+        ini_filename += ".ini";
+
+        current_ini_filename = ini_filename;
+        io.IniFilename = current_ini_filename.c_str();
+    }
 }
 }
 

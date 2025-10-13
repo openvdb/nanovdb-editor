@@ -58,8 +58,10 @@ static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* ent
             instance->render_settings_name = buffer;
             instance->viewport_settings[(int)instance->viewport_option].render_settings_name =
                 instance->render_settings_name;
-            // TODO: disable before profiles are set up, Viewer does not have camera override
-            // instance->pending.load_camera = true;
+            if (!instance->is_viewer())
+            {
+                instance->pending.load_camera = true;
+            }
         }
         else
         {

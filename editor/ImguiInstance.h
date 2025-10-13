@@ -35,12 +35,14 @@ namespace imgui_instance_user
 static const char* s_render_settings_default = "default";
 static const char* s_raster2d_shader_group = "raster/raster2d_group";
 
+static const char* s_viewer_profile_name = "viewer";
+
 // TODO: make unique label and save scene items in a map with unique keys rather than strings
 static const char* VIEWPORT_CAMERA = "Viewport Camera";
 
 static const char* VIEWPORT_SETTINGS = "Viewport";
 static const char* RENDER_SETTINGS = "Render Settings";
-static const char* COMPILER_SETTINGS = "Compiler";
+static const char* COMPILER_SETTINGS = "Compiler Settings";
 static const char* PROFILER = "Profiler";
 static const char* CODE_EDITOR = "Shader Editor";
 static const char* CONSOLE = "Log";
@@ -146,7 +148,7 @@ struct WindowState
 {
     bool show_profiler = false;
     bool show_code_editor = false;
-    bool show_console = false;
+    bool show_console = true;
     bool show_viewport_settings = true;
     bool show_render_settings = true;
     bool show_compiler_settings = false;
@@ -202,8 +204,8 @@ struct Instance
     std::shared_ptr<pnanovdb_compute_array_t> nanovdb_array = nullptr;
 
     EditorLoaded loaded;
-    std::string selected_scene_item = "";
-    ViewsTypes selected_view_type = ViewsTypes::None;
+    std::string selected_scene_item = VIEWPORT_CAMERA;
+    ViewsTypes selected_view_type = ViewsTypes::Cameras;
 
     std::map<std::string, pnanovdb_camera_view_t*>* camera_views = nullptr;
     std::map<std::string, int> camera_frustum_index; // map of camera view name to state index for frustum overlay
@@ -217,8 +219,17 @@ struct Instance
     pnanovdb_camera_state_t default_camera_view_state;
 
     bool is_docking_setup = false;
+    bool loaded_ini_once = false;
+    std::string current_profile_name = ""; // Track current profile for switching
+    std::string current_ini_filename = ""; // INI filename for current profile
 
     void set_default_shader(const std::string& shaderName);
+    void update_ini_filename_for_profile(const char* profile_name);
+
+    bool is_viewer() const
+    {
+        return strcmp(render_settings->ui_profile_name, s_viewer_profile_name) == 0;
+    }
 
     pnanovdb_shader::run_shader_func_t run_shader = [this](const char* shaderName,
                                                            pnanovdb_uint32_t grid_dim_x,

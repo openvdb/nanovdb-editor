@@ -110,6 +110,10 @@ static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* ent
     {
         instance->saved_render_settings[name].camera_speed_multiplier = x;
     }
+    // else if (sscanf(line, "ui_profile_name=%255s", instance->saved_render_settings[name].ui_profile_name) == 1)
+    // {
+    //     // String is safely read with length limit, ensuring null termination
+    // }
 }
 
 static void WriteAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler, ImGuiTextBuffer* buf)
@@ -138,6 +142,7 @@ static void WriteAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler, ImGuiText
         buf->appendf("is_y_up=%d\n", render_settings.is_y_up);
         buf->appendf("is_upside_down=%d\n", render_settings.is_upside_down);
         buf->appendf("camera_speed_multiplier=%f\n", render_settings.camera_speed_multiplier);
+        // buf->appendf("ui_profile_name=%s\n", render_settings.ui_profile_name);
         buf->append("\n");
     }
 }

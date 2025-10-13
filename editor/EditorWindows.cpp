@@ -42,11 +42,11 @@
 #    define M_PI_2 1.57079632679489661923
 #endif
 
-namespace imgui_instance_user
+namespace pnanovdb_editor
 {
 const float EPSILON = 1e-6f;
 
-void showSceneWindow(Instance* ptr)
+void showSceneWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_scene)
     {
@@ -81,8 +81,8 @@ void showSceneWindow(Instance* ptr)
             }
         }
 
-        // Show loaded camera views in tree
-        if (!ptr->camera_views->empty())
+        // Show other loaded camera views in tree
+        if (ptr->camera_views->size() > 1)
         {
             if (ImGui::TreeNodeEx("Camera Views", ImGuiTreeNodeFlags_DefaultOpen))
             {
@@ -121,6 +121,7 @@ void showSceneWindow(Instance* ptr)
             }
         }
 
+        // Show other scene items
         auto renderSceneItems = [ptr](const auto& itemMap, const char* treeLabel, auto& pendingField,
                                       ViewsTypes viewType, const std::string& radioPrefix)
         {
@@ -166,7 +167,7 @@ void showSceneWindow(Instance* ptr)
     ImGui::End();
 }
 
-void showCameraViews(Instance* ptr)
+void showCameraViews(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->camera_views)
     {
@@ -389,20 +390,20 @@ void showCameraViews(Instance* ptr)
     }
 }
 
-void showPropertiesWindow(Instance* ptr)
+void showPropertiesWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_scene_properties)
     {
         return;
     }
-
-    if (ptr->selected_scene_item.empty() || ptr->selected_view_type == imgui_instance_user::ViewsTypes::None)
-    {
-        return;
-    }
-
     if (ImGui::Begin(PROPERTIES, &ptr->window.show_scene_properties))
     {
+        if (ptr->selected_scene_item.empty() || ptr->selected_view_type == imgui_instance_user::ViewsTypes::None)
+        {
+            ImGui::TextDisabled("Scene is empty");
+            ImGui::End();
+            return;
+        }
         if (ptr->selected_view_type == imgui_instance_user::ViewsTypes::GaussianScenes)
         {
             ptr->shader_params.renderGroup(imgui_instance_user::s_raster2d_shader_group);
@@ -419,7 +420,7 @@ void showPropertiesWindow(Instance* ptr)
     ImGui::End();
 }
 
-void showViewportSettingsWindow(Instance* ptr)
+void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_viewport_settings)
     {
@@ -436,16 +437,20 @@ void showViewportSettingsWindow(Instance* ptr)
             {
                 ptr->viewport_option = ViewportOption::NanoVDB;
                 ptr->render_settings_name = ptr->viewport_settings[(int)ptr->viewport_option].render_settings_name;
-                // TODO: disable before profiles are set up, Viewer does not have camera override
-                // ptr->pending.load_camera = true;
+                if (!ptr->is_viewer())
+                {
+                    ptr->pending.load_camera = true;
+                }
             }
             ImGui::SameLine();
             if (ImGui::RadioButton("Raster2D", selectedOption == ViewportOption::Raster2D))
             {
                 ptr->viewport_option = ViewportOption::Raster2D;
                 ptr->render_settings_name = ptr->viewport_settings[(int)ptr->viewport_option].render_settings_name;
-                // TODO: disable before profiles are set up, Viewer does not have camera override
-                // ptr->pending.load_camera = true;
+                if (!ptr->is_viewer())
+                {
+                    ptr->pending.load_camera = true;
+                }
             }
             ImGui::EndGroup();
         }
@@ -558,11 +563,35 @@ void showViewportSettingsWindow(Instance* ptr)
                 ImGui::EndGroup();
             }
         }
+        ImGui::Separator();
+
+        // UI profile
+        {
+            const char* profile_options[] = { "default", "viewer" }; // TODO: load from current dir
+            const char* current_profile =
+                ptr->render_settings->ui_profile_name[0] != '\0' ? ptr->render_settings->ui_profile_name : "default";
+            if (ImGui::BeginCombo("UI Profile", current_profile))
+            {
+                for (int i = 0; i < IM_ARRAYSIZE(profile_options); i++)
+                {
+                    bool is_selected = (strcmp(current_profile, profile_options[i]) == 0);
+                    if (ImGui::Selectable(profile_options[i], is_selected))
+                    {
+                        strcpy(ptr->render_settings->ui_profile_name, profile_options[i]);
+                    }
+                    if (is_selected)
+                    {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+        }
     }
     ImGui::End();
 }
 
-void showRenderSettingsWindow(Instance* ptr)
+void showRenderSettingsWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_render_settings)
     {
@@ -635,26 +664,11 @@ void showRenderSettingsWindow(Instance* ptr)
         }
         ImGui::InputText("Server Address", settings->server_address, 256u);
         ImGui::InputInt("Server Port", &settings->server_port);
-        ImGui::Separator();
-        ImGui::InputText("UI Profile", settings->ui_profile_name, 256u);
-        // if (settings->ui_profile_name[0] != '\0' &&
-        // ptr->instance_settings_handler->hasProfile(settings->ui_profile_name))
-        // {
-        //     if (ImGui::Button("Load Profile"))
-        //     {
-        //         ptr->instance_settings_handler->loadProfile(settings->ui_profile_name, ptr);
-        //         pnanovdb_editor::Console::getInstance().addLog("Loaded UI profile '%s'", settings->ui_profile_name);
-        //     }
-        // }
-        // else
-        // {
-        //     ImGui::TextDisabled("Enter a profile name to load");
-        // }
     }
     ImGui::End();
 }
 
-void showCompilerSettingsWindow(Instance* ptr)
+void showCompilerSettingsWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_compiler_settings)
     {
@@ -771,7 +785,7 @@ void showCompilerSettingsWindow(Instance* ptr)
     ImGui::End();
 }
 
-void showShaderParamsWindow(Instance* ptr)
+void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_shader_params)
     {
@@ -900,7 +914,7 @@ void showShaderParamsWindow(Instance* ptr)
     ImGui::End();
 }
 
-void showBenchmarkWindow(Instance* ptr)
+void showBenchmarkWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_benchmark)
         return;
@@ -925,7 +939,7 @@ void showBenchmarkWindow(Instance* ptr)
     ImGui::End();
 }
 
-void showFileHeaderWindow(Instance* ptr)
+void showFileHeaderWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_file_header)
     {
@@ -948,13 +962,13 @@ void showFileHeaderWindow(Instance* ptr)
     ImGui::End();
 }
 
-void showCodeEditorWindow(Instance* ptr)
+void showCodeEditorWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_code_editor)
         return;
 
     pnanovdb_editor::CodeEditor::getInstance().setup(
-        &ptr->shader_name, &ptr->pending.update_shader, ptr->dialog_size, ptr->run_shader);
+        &ptr->shader_name, &ptr->pending.update_shader, ptr->dialog_size, ptr->run_shader, ptr->is_viewer());
     if (ImGui::Begin(CODE_EDITOR, &ptr->window.show_code_editor, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_MenuBar))
     {
         if (!pnanovdb_editor::CodeEditor::getInstance().render())
@@ -971,7 +985,7 @@ void showCodeEditorWindow(Instance* ptr)
     }
 }
 
-void showProfilerWindow(Instance* ptr, float delta_time)
+void showProfilerWindow(imgui_instance_user::Instance* ptr, float delta_time)
 {
     if (!ptr->window.show_profiler)
     {
@@ -988,7 +1002,7 @@ void showProfilerWindow(Instance* ptr, float delta_time)
     ImGui::End();
 }
 
-void showConsoleWindow(Instance* ptr)
+void showConsoleWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_console)
     {
@@ -1014,7 +1028,7 @@ void showConsoleWindow(Instance* ptr)
     ImGui::End();
 }
 
-void showFileDialogs(Instance* ptr)
+void showFileDialogs(imgui_instance_user::Instance* ptr)
 {
     if (ptr->pending.open_file)
     {
@@ -1101,7 +1115,7 @@ void showFileDialogs(Instance* ptr)
     }
 }
 
-void saveLoadSettings(Instance* ptr)
+void saveLoadSettings(imgui_instance_user::Instance* ptr)
 {
     if (ptr->pending.save_render_settings)
     {
@@ -1132,7 +1146,7 @@ void saveLoadSettings(Instance* ptr)
     }
 }
 
-void showAboutWindow(Instance* ptr)
+void showAboutWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_about)
     {
@@ -1169,4 +1183,4 @@ void showAboutWindow(Instance* ptr)
     ImGui::End();
 }
 
-} // imgui_instance_user
+} // pnanovdb_editor
