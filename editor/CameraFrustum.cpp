@@ -367,8 +367,7 @@ void CameraFrustum::render(imgui_instance_user::Instance* ptr)
 
             if (camera->is_visible)
             {
-                bool isViewSelected =
-                    (!ptr->selected_scene_item.empty() && ptr->selected_scene_item == cameraPair.first);
+                bool isViewSelected = (!ptr->selected_scene_item.empty() && ptr->selected_scene_item == cameraPair.first);
                 int selected = isViewSelected ? ptr->camera_frustum_index[ptr->selected_scene_item] : -1;
                 // first draw non-selected cameras with lower alpha
                 for (int i = 0; i < camera->num_cameras; i++)

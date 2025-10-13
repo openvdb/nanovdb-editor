@@ -299,8 +299,8 @@ typedef struct pnanovdb_compute_interop_handle_t
 #define pnanovdb_compute_interop_handle_default_init                                                                   \
     {                                                                                                                  \
         PNANOVDB_COMPUTE_INTEROP_HANDLE_TYPE_UNKNOWN, /*type*/                                                         \
-            0u, /*value*/                                                                                              \
-            0u, /*resource_size_in_bytes*/                                                                             \
+        0u, /*value*/                                                                                                  \
+        0u, /*resource_size_in_bytes*/                                                                                 \
     }
 static const pnanovdb_compute_interop_handle_t pnanovdb_compute_interop_handle_default =
     pnanovdb_compute_interop_handle_default_init;

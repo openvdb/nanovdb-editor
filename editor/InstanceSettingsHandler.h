@@ -64,18 +64,54 @@ static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* ent
         else
         {
             int value = 0;
-            if (sscanf(line, "ShowProfiler=%d", &value) == 1) { instance->window.show_profiler = (value != 0); }
-            else if (sscanf(line, "ShowCodeEditor=%d", &value) == 1) { instance->window.show_code_editor = (value != 0); }
-            else if (sscanf(line, "ShowConsole=%d", &value) == 1) { instance->window.show_console = (value != 0); }
-            else if (sscanf(line, "ShowViewportSettings=%d", &value) == 1) { instance->window.show_viewport_settings = (value != 0); }
-            else if (sscanf(line, "ShowRenderSettings=%d", &value) == 1) { instance->window.show_render_settings = (value != 0); }
-            else if (sscanf(line, "ShowCompilerSettings=%d", &value) == 1) { instance->window.show_compiler_settings = (value != 0); }
-            else if (sscanf(line, "ShowShaderParams=%d", &value) == 1) { instance->window.show_shader_params = (value != 0); }
-            else if (sscanf(line, "ShowBenchmark=%d", &value) == 1) { instance->window.show_benchmark = (value != 0); }
-            else if (sscanf(line, "ShowFileHeader=%d", &value) == 1) { instance->window.show_file_header = (value != 0); }
-            else if (sscanf(line, "ShowScene=%d", &value) == 1) { instance->window.show_scene = (value != 0); }
-            else if (sscanf(line, "ShowSceneProperties=%d", &value) == 1) { instance->window.show_scene_properties = (value != 0); }
-            else if (sscanf(line, "ShowAbout=%d", &value) == 1) { instance->window.show_about = (value != 0); }
+            if (sscanf(line, "ShowProfiler=%d", &value) == 1)
+            {
+                instance->window.show_profiler = (value != 0);
+            }
+            else if (sscanf(line, "ShowCodeEditor=%d", &value) == 1)
+            {
+                instance->window.show_code_editor = (value != 0);
+            }
+            else if (sscanf(line, "ShowConsole=%d", &value) == 1)
+            {
+                instance->window.show_console = (value != 0);
+            }
+            else if (sscanf(line, "ShowViewportSettings=%d", &value) == 1)
+            {
+                instance->window.show_viewport_settings = (value != 0);
+            }
+            else if (sscanf(line, "ShowRenderSettings=%d", &value) == 1)
+            {
+                instance->window.show_render_settings = (value != 0);
+            }
+            else if (sscanf(line, "ShowCompilerSettings=%d", &value) == 1)
+            {
+                instance->window.show_compiler_settings = (value != 0);
+            }
+            else if (sscanf(line, "ShowShaderParams=%d", &value) == 1)
+            {
+                instance->window.show_shader_params = (value != 0);
+            }
+            else if (sscanf(line, "ShowBenchmark=%d", &value) == 1)
+            {
+                instance->window.show_benchmark = (value != 0);
+            }
+            else if (sscanf(line, "ShowFileHeader=%d", &value) == 1)
+            {
+                instance->window.show_file_header = (value != 0);
+            }
+            else if (sscanf(line, "ShowScene=%d", &value) == 1)
+            {
+                instance->window.show_scene = (value != 0);
+            }
+            else if (sscanf(line, "ShowSceneProperties=%d", &value) == 1)
+            {
+                instance->window.show_scene_properties = (value != 0);
+            }
+            else if (sscanf(line, "ShowAbout=%d", &value) == 1)
+            {
+                instance->window.show_about = (value != 0);
+            }
         }
     }
 }

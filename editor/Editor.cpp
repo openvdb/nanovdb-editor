@@ -408,8 +408,7 @@ pnanovdb_int32_t editor_get_external_active_count(void* external_active_count)
 
     auto worker = static_cast<EditorWorker*>(editor->impl->editor_worker);
     pnanovdb_int32_t count = 0;
-    if (worker->set_params.load() > 0 || worker->get_params.load() > 0 ||
-        worker->should_stop.load())
+    if (worker->set_params.load() > 0 || worker->get_params.load() > 0 || worker->should_stop.load())
     {
         count = 1;
     }
@@ -967,7 +966,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
                 if (editor->impl->nanovdb_array)
                 {
-                     imgui_user_instance->selected_view_type = imgui_instance_user::ViewsTypes::NanoVDBs;
+                    imgui_user_instance->selected_view_type = imgui_instance_user::ViewsTypes::NanoVDBs;
                 }
                 else if (editor->impl->gaussian_data)
                 {

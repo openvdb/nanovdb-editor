@@ -127,7 +127,7 @@ static void initializeDocking(Instance* ptr)
         }
     }
 
-    if (!has_ini_on_disk  && !ptr->is_docking_setup)
+    if (!has_ini_on_disk && !ptr->is_docking_setup)
     {
         // setup docking once
         ptr->is_docking_setup = true;
@@ -182,7 +182,7 @@ static void initializeDocking(Instance* ptr)
     }
 
     //// Host dockspace every frame
-    //ImGui::DockSpaceOverViewport(dockspace_id, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+    // ImGui::DockSpaceOverViewport(dockspace_id, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
 }
 
 static void createMenu(Instance* ptr)

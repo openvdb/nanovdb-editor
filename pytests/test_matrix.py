@@ -52,7 +52,6 @@ TEST_CASES = [
 
 
 class TestMatrix(unittest.TestCase):
-
     def setUp(self):
         self.compiler = Compiler()
         self.compute = Compute(self.compiler)

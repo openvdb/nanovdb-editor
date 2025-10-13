@@ -207,8 +207,7 @@ void showCameraViews(Instance* ptr)
         int maxIndex = (camera->num_cameras > 0) ? ((int)camera->num_cameras - 1) : 0;
         if (maxIndex > 0)
         {
-            ImGui::SliderInt("Camera Index", &ptr->camera_frustum_index[ptr->selected_scene_item], 0,
-                                maxIndex, "%d");
+            ImGui::SliderInt("Camera Index", &ptr->camera_frustum_index[ptr->selected_scene_item], 0, maxIndex, "%d");
         }
         else
         {
@@ -252,7 +251,8 @@ void showCameraViews(Instance* ptr)
         pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
 
         // Keep look-at point fixed, recalculate direction and distance from new eye position
-        pnanovdb_vec3_t delta = { state->position.x - eyePos[0], state->position.y - eyePos[1], state->position.z - eyePos[2] };
+        pnanovdb_vec3_t delta = { state->position.x - eyePos[0], state->position.y - eyePos[1],
+                                  state->position.z - eyePos[2] };
         float len2 = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
         if (len2 > 0.f)
         {
@@ -313,7 +313,7 @@ void showCameraViews(Instance* ptr)
         state->eye_up.y = upVec[1];
         state->eye_up.z = upVec[2];
         float len = sqrtf(state->eye_up.x * state->eye_up.x + state->eye_up.y * state->eye_up.y +
-                            state->eye_up.z * state->eye_up.z);
+                          state->eye_up.z * state->eye_up.z);
         if (len > EPSILON)
         {
             state->eye_up.x /= len;
@@ -613,8 +613,8 @@ void showRenderSettingsWindow(Instance* ptr)
 
             IMGUI_CHECKBOX_SYNC("Upside down", settings->is_upside_down);
         }
-        ImGui::DragFloat("Camera Speed Multiplier", &settings->camera_speed_multiplier, 0.f, 1.f, 10000.f,
-                         "%.1f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
+        ImGui::DragFloat("Camera Speed Multiplier", &settings->camera_speed_multiplier, 0.f, 1.f, 10000.f, "%.1f",
+                         ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
         ImGui::Separator();
 
         IMGUI_CHECKBOX_SYNC("Video Encode", settings->enable_encoder);
@@ -940,7 +940,7 @@ void showFileHeaderWindow(Instance* ptr)
             auto it = ptr->nanovdb_arrays->find(ptr->selected_scene_item);
             if (it != ptr->nanovdb_arrays->end())
             {
-                //current_array = it->second.nanovdb_array;
+                // current_array = it->second.nanovdb_array;
             }
         }
         pnanovdb_editor::FileHeaderInfo::getInstance().render(current_array);
@@ -1150,13 +1150,13 @@ void showAboutWindow(Instance* ptr)
 
         // Display version from VERSION.txt
 #ifndef NANOVDB_EDITOR_VERSION
-#define NANOVDB_EDITOR_VERSION "Unknown"
+#    define NANOVDB_EDITOR_VERSION "Unknown"
 #endif
         ImGui::Text("Version: %s", NANOVDB_EDITOR_VERSION);
 
         // Display git hash from CMake
 #ifndef NANOVDB_EDITOR_COMMIT_HASH
-#define NANOVDB_EDITOR_COMMIT_HASH "Unknown"
+#    define NANOVDB_EDITOR_COMMIT_HASH "Unknown"
 #endif
         ImGui::Text("Build: %s", NANOVDB_EDITOR_COMMIT_HASH);
 
