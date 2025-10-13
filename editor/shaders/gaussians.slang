@@ -43,6 +43,106 @@ RWTexture2D<float4> texture_out;
 ConstantBuffer<EditorParams> editor_params;
 ConstantBuffer<ShaderParams> shader_params;
 
+// ray origin is implied zero
+bool intersect_box(float3 rayDir, float3 rayDirInv, float3 boxMin, float3 boxMax, out float tnear, out float tfar)
+{
+    // compute intersection of ray with all six bbox planes
+    float3 tbot = boxMin * rayDirInv;
+    float3 ttop = boxMax * rayDirInv;
+
+    // re-order intersections to find smallest and largest on each axis
+    float3 tmin = min(ttop, tbot);
+    float3 tmax = max(ttop, tbot);
+
+    // find the largest tmin and the smallest tmax
+    tnear = max(max(tmin.x, tmin.y), max(tmin.x, tmin.z));
+    tfar = min(min(tmax.x, tmax.y), min(tmax.x, tmax.z));
+
+    return tfar > tnear;
+}
+
+struct hdda_t
+{
+    int3 ijk;
+    float tmin;
+    float3 ijk_sub;
+    float tmax;
+    int next_axis;
+};
+
+void hdda_init(inout hdda_t hdda, float3 ray_origin, float3 ray_dir, float3 ray_dir_inv, float tmin)
+{
+    float3 ray_pos = ray_dir * tmin + ray_origin;
+
+    hdda.ijk = int3(floor(ray_pos));
+    hdda.ijk_sub = ray_pos - float3(hdda.ijk);
+    hdda.tmin = tmin;
+    hdda.tmax = tmin;
+    hdda.next_axis = 0;
+}
+
+void hdda_update(inout hdda_t hdda, float3 ray_origin, float3 ray_dir, float3 ray_dir_inv, int dim)
+{
+    // based on dim, put everything in a local space
+    int3 offset_to_local = hdda.ijk & ~(dim - 1);
+
+    float3 box_min = float3(offset_to_local) - ray_origin;
+    float3 box_max = float3(offset_to_local + int3(dim, dim, dim)) - ray_origin;
+    intersect_box(ray_dir, ray_dir_inv, box_min, box_max, hdda.tmin, hdda.tmax);
+}
+
+void hdda_step(inout hdda_t hdda, float3 ray_origin, float3 ray_dir, float3 ray_dir_inv, int dim)
+{
+    // based on dim, put everything in a local space
+    int3 offset_to_local = hdda.ijk & ~(dim - 1);
+
+    float3 local_pos = float3(hdda.ijk - offset_to_local) + hdda.ijk_sub;
+    float3 local_max = float3(
+        (ray_dir.x > 0.f ? float(dim) : 0.f),
+        (ray_dir.y > 0.f ? float(dim) : 0.f),
+        (ray_dir.z > 0.f ? float(dim) : 0.f)
+    );
+
+    float3 hit_ts = float3(local_max - local_pos) * ray_dir_inv;
+
+    if (ray_dir.x != 0.f && (hit_ts.x <= hit_ts.y || ray_dir.y == 0.f) && (hit_ts.x <= hit_ts.z || ray_dir.z == 0.f))
+    {
+        hdda.next_axis = 0;
+    }
+    else if (ray_dir.y != 0.f && (hit_ts.y <= hit_ts.x || ray_dir.x == 0.f) && (hit_ts.y <= hit_ts.z || ray_dir.z == 0.f))
+    {
+        hdda.next_axis = 1;
+    }
+    else
+    {
+        hdda.next_axis = 2;
+    }
+
+    float hit_t = hdda.next_axis == 0 ? hit_ts.x : (hdda.next_axis == 1 ? hit_ts.y : hit_ts.z);
+    float3 local_pos_new = local_pos + hit_t * ray_dir;
+
+    hdda.ijk = max(0, min(dim - 1, int3(floor(local_pos_new)))) + offset_to_local;
+    hdda.ijk_sub = local_pos_new - float3(hdda.ijk - offset_to_local);
+
+    if (hdda.next_axis == 0)
+    {
+        hdda.ijk.x = offset_to_local.x + (ray_dir.x > 0.f ? dim : -1);
+        hdda.ijk_sub.x = ray_dir.x > 0.f ? 0.f : 1.f;
+    }
+    if (hdda.next_axis == 1)
+    {
+        hdda.ijk.y = offset_to_local.y + (ray_dir.y > 0.f ? dim : -1);
+        hdda.ijk_sub.y = ray_dir.y > 0.f ? 0.f : 1.f;
+    }
+    if (hdda.next_axis == 2)
+    {
+        hdda.ijk.z = offset_to_local.z + (ray_dir.z > 0.f ? dim : -1);
+        hdda.ijk_sub.z = ray_dir.z > 0.f ? 0.f : 1.f;
+    }
+
+    hdda.tmin = hdda.tmax;
+}
+
 // source: https://www.reedbeta.com/blog/hash-functions-for-gpu-rendering/
 uint ray_march_hash(uint inputValue)
 {
@@ -91,24 +191,6 @@ float3 cross_product(float3 a, float3 b)
     return float3(a.y * b.z - a.z * b.y,
         a.z * b.x - a.x * b.z,
         a.x * b.y - a.y * b.x);
-}
-
-// ray origin is implied zero
-bool intersect_box(float3 rayDir, float3 rayDirInv, float3 boxMin, float3 boxMax, out float tnear, out float tfar)
-{
-    // compute intersection of ray with all six bbox planes
-    float3 tbot = boxMin * rayDirInv;
-    float3 ttop = boxMax * rayDirInv;
-
-    // re-order intersections to find smallest and largest on each axis
-    float3 tmin = min(ttop, tbot);
-    float3 tmax = max(ttop, tbot);
-
-    // find the largest tmin and the smallest tmax
-    tnear = max(max(tmin.x, tmin.y), max(tmin.x, tmin.z));
-    tfar = min(min(tmax.x, tmax.y), min(tmax.x, tmax.z));
-
-    return tfar > tnear;
 }
 
 float2 intersect_sphere(float3 rayOrigin, float3 rayDir)
@@ -335,10 +417,10 @@ void ray_march_nanovdb(
 
         bool is_reverse = dot(rayDir, rayDir_center) < 0.f;
 
-        float3 rayLocation = rayDir * boxMinT + rayOrigin;
-
-        pnanovdb_hdda_t hdda;
-        pnanovdb_hdda_init(hdda, rayOrigin, boxMinT, rayDir, boxMaxT, 1);
+        hdda_t hdda;
+        hdda_init(hdda, rayOrigin, rayDir, rayDirInv, boxMinT);
+        hdda_update(hdda, rayOrigin, rayDir, rayDirInv, 1);
+        hdda_step(hdda, rayOrigin, rayDir, rayDirInv, 1);
 
         static const uint max_levels = 12u;
 
@@ -353,26 +435,12 @@ void ray_march_nanovdb(
         }
         do
         {
-            int dim = pnanovdb_readaccessor_get_dim(grid_type, buf, acc, hdda.voxel);
-            if (hdda.dim != dim)
-            {
-                pnanovdb_hdda_update(hdda, rayOrigin, rayDir, dim);
-            }
-            dim = pnanovdb_readaccessor_get_dim(grid_type, buf, acc, hdda.voxel);
-            if (hdda.dim != dim)
-            {
-                pnanovdb_hdda_update(hdda, rayOrigin, rayDir, dim);
-            }
-            dim = pnanovdb_readaccessor_get_dim(grid_type, buf, acc, hdda.voxel);
-            if (hdda.dim != dim)
-            {
-                pnanovdb_hdda_update(hdda, rayOrigin, rayDir, dim);
-            }
+            int dim = pnanovdb_readaccessor_get_dim(grid_type, buf, acc, hdda.ijk);
 
-            float hdda_tmax = min(hdda.next.x, min(hdda.next.y, hdda.next.z));
+            hdda_update(hdda, rayOrigin, rayDir, rayDirInv, dim);
 
             // compute allowed sort keys for this array interval
-            float3 world_max = worldRayDir * hdda_tmax * rayDirMagnInv + worldRayOrigin;
+            float3 world_max = worldRayDir * hdda.tmax * rayDirMagnInv + worldRayOrigin;
             float3 world_min = worldRayDir * hdda.tmin * rayDirMagnInv + worldRayOrigin;
             uint sort_key_max = float_to_sort_key(dot(world_max, rayDir_center));
             uint sort_key_min = float_to_sort_key(dot(world_min, rayDir_center));
@@ -383,7 +451,7 @@ void ray_march_nanovdb(
                 sort_key_min = tmp;
             }
 
-            pnanovdb_address_t addr = pnanovdb_readaccessor_get_value_address(grid_type, buf, acc, hdda.voxel);
+            pnanovdb_address_t addr = pnanovdb_readaccessor_get_value_address(grid_type, buf, acc, hdda.ijk);
             pnanovdb_uint32_t gaussian_header_idx = pnanovdb_read_uint32(buf, addr);
 
             if (gaussian_header_idx != 0u)
@@ -517,7 +585,7 @@ void ray_march_nanovdb(
                             worldRayOrigin,
                             hdda.tmin * rayDirMagnInv,
                             worldRayDir,
-                            hdda_tmax * rayDirMagnInv,
+                            hdda.tmax * rayDirMagnInv,
                             worldRayDirInv,
                             sum,
                             nominalT
@@ -525,7 +593,10 @@ void ray_march_nanovdb(
                     }
                 } while(closest_idx != ~0u && sum.a > 0.0001f);
             }
-        } while (pnanovdb_hdda_step(hdda) && sum.a > 0.0001f);
+
+            hdda_step(hdda, rayOrigin, rayDir, rayDirInv, dim);
+
+        } while (hdda.tmin < boxMaxT && sum.a > 0.0001f);
     }
 }
 
