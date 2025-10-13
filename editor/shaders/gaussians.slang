@@ -419,7 +419,6 @@ void ray_march_nanovdb(
         hdda_t hdda;
         hdda_init(hdda, rayOrigin, rayDir, rayDirInv, boxMinT);
         hdda_update(hdda, rayOrigin, rayDir, rayDirInv, 1);
-        hdda_step(hdda, rayOrigin, rayDir, rayDirInv, 1);
 
         static const uint max_levels = 12u;
 
