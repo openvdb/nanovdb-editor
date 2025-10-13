@@ -67,7 +67,6 @@ struct hdda_t
     float tmin;
     float3 ijk_sub;
     float tmax;
-    int next_axis;
 };
 
 void hdda_init(inout hdda_t hdda, float3 ray_origin, float3 ray_dir, float3 ray_dir_inv, float tmin)
@@ -78,7 +77,6 @@ void hdda_init(inout hdda_t hdda, float3 ray_origin, float3 ray_dir, float3 ray_
     hdda.ijk_sub = ray_pos - float3(hdda.ijk);
     hdda.tmin = tmin;
     hdda.tmax = tmin;
-    hdda.next_axis = 0;
 }
 
 void hdda_update(inout hdda_t hdda, float3 ray_origin, float3 ray_dir, float3 ray_dir_inv, int dim)
@@ -104,37 +102,38 @@ void hdda_step(inout hdda_t hdda, float3 ray_origin, float3 ray_dir, float3 ray_
     );
 
     float3 hit_ts = float3(local_max - local_pos) * ray_dir_inv;
-
+    float hit_t;
+    int axis;
     if (ray_dir.x != 0.f && (hit_ts.x <= hit_ts.y || ray_dir.y == 0.f) && (hit_ts.x <= hit_ts.z || ray_dir.z == 0.f))
     {
-        hdda.next_axis = 0;
+        hit_t = hit_ts.x;
+        axis = 0;
     }
     else if (ray_dir.y != 0.f && (hit_ts.y <= hit_ts.x || ray_dir.x == 0.f) && (hit_ts.y <= hit_ts.z || ray_dir.z == 0.f))
     {
-        hdda.next_axis = 1;
+        hit_t = hit_ts.y;
+        axis = 1;
     }
     else
     {
-        hdda.next_axis = 2;
+        hit_t = hit_ts.z;
+        axis = 2;
     }
 
-    float hit_t = hdda.next_axis == 0 ? hit_ts.x : (hdda.next_axis == 1 ? hit_ts.y : hit_ts.z);
     float3 local_pos_new = local_pos + hit_t * ray_dir;
-
     hdda.ijk = max(0, min(dim - 1, int3(floor(local_pos_new)))) + offset_to_local;
     hdda.ijk_sub = local_pos_new - float3(hdda.ijk - offset_to_local);
-
-    if (hdda.next_axis == 0)
+    if (axis == 0)
     {
         hdda.ijk.x = offset_to_local.x + (ray_dir.x > 0.f ? dim : -1);
         hdda.ijk_sub.x = ray_dir.x > 0.f ? 0.f : 1.f;
     }
-    if (hdda.next_axis == 1)
+    if (axis == 1)
     {
         hdda.ijk.y = offset_to_local.y + (ray_dir.y > 0.f ? dim : -1);
         hdda.ijk_sub.y = ray_dir.y > 0.f ? 0.f : 1.f;
     }
-    if (hdda.next_axis == 2)
+    if (axis == 2)
     {
         hdda.ijk.z = offset_to_local.z + (ray_dir.z > 0.f ? dim : -1);
         hdda.ijk_sub.z = ray_dir.z > 0.f ? 0.f : 1.f;
