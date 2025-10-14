@@ -199,23 +199,23 @@ static void createMenu(Instance* ptr)
 static void showWindows(Instance* ptr, float delta_time)
 {
     // dock left top
-    pnanovdb_editor::showSceneWindow(ptr);
-    pnanovdb_editor::showViewportSettingsWindow(ptr);
-    pnanovdb_editor::showRenderSettingsWindow(ptr);
-    pnanovdb_editor::showCompilerSettingsWindow(ptr);
+    showSceneWindow(ptr);
+    showViewportSettingsWindow(ptr);
+    showRenderSettingsWindow(ptr);
+    showCompilerSettingsWindow(ptr);
 
     // dock left bottom
-    pnanovdb_editor::showBenchmarkWindow(ptr);
-    pnanovdb_editor::showShaderParamsWindow(ptr);
-    pnanovdb_editor::showPropertiesWindow(ptr);
+    showBenchmarkWindow(ptr);
+    showShaderParamsWindow(ptr);
+    showPropertiesWindow(ptr);
 
     // dock right
-    pnanovdb_editor::showFileHeaderWindow(ptr);
-    pnanovdb_editor::showCodeEditorWindow(ptr);
-    pnanovdb_editor::showProfilerWindow(ptr, delta_time);
+    showFileHeaderWindow(ptr);
+    showCodeEditorWindow(ptr);
+    showProfilerWindow(ptr, delta_time);
 
     // dock bottom
-    pnanovdb_editor::showConsoleWindow(ptr);
+    showConsoleWindow(ptr);
 }
 
 void update(pnanovdb_imgui_instance_t* instance)
@@ -404,7 +404,7 @@ void Instance::set_default_shader(const std::string& shaderName)
     pending.viewport_shader_name = shaderName;
     pnanovdb_editor::CodeEditor::getInstance().setSelectedShader(shaderName);
 }
-} // namespace imgui_instance_user
+}
 
 pnanovdb_imgui_instance_interface_t* get_user_imgui_instance_interface()
 {

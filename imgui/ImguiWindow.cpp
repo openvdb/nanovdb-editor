@@ -137,7 +137,7 @@ pnanovdb_imgui_window_t* create(const pnanovdb_compute_t* compute,
     auto settings = new pnanovdb_imgui_settings_render_t();
     settings->data_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_imgui_settings_render_t);
     pnanovdb_camera_config_default(&settings->camera_config);
-    pnanovdb_camera_state_default(&settings->camera_state, settings->is_y_up);
+    pnanovdb_camera_state_default(&settings->camera_state, PNANOVDB_FALSE);
     *imgui_user_settings = settings;
 
     // set to opposite to force refresh
@@ -618,7 +618,6 @@ void update_camera(pnanovdb_imgui_window_t* window, pnanovdb_imgui_settings_rend
         ptr->camera.state = user_settings->camera_state;
         ptr->camera.config = user_settings->camera_config;
         user_settings->sync_camera = PNANOVDB_FALSE;
-        applyReverseZFarPlane(&ptr->camera.config);
 
         ptr->prev_is_y_up = user_settings->is_y_up;
         ptr->prev_is_upside_down = user_settings->is_upside_down;
@@ -668,7 +667,6 @@ void update_camera(pnanovdb_imgui_window_t* window, pnanovdb_imgui_settings_rend
     {
         user_settings->camera_state = ptr->camera.state;
         user_settings->camera_config = ptr->camera.config;
-        applyReverseZFarPlane(&user_settings->camera_config);
     }
 }
 
