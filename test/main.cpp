@@ -485,11 +485,11 @@ int main(int argc, char* argv[])
 #    endif
 
     pnanovdb_editor_config_t config = {};
-    config.headless = PNANOVDB_TRUE;
-    config.streaming = PNANOVDB_TRUE;
+    config.headless = PNANOVDB_FALSE;
+    config.streaming = PNANOVDB_FALSE;
     config.ip_address = "127.0.0.1";
     config.port = 8080;
-    // config.ui_profile_name = "viewer";
+    config.ui_profile_name = "viewer";
     editor.show(&editor, device, &config);
 
     // if (editor.camera)

@@ -20,8 +20,21 @@ namespace pnanovdb_editor
 class FileHeaderInfo
 {
 public:
-    static FileHeaderInfo& getInstance();
+    static FileHeaderInfo& getInstance()
+    {
+        static FileHeaderInfo instance;
+        return instance;
+    }
 
     bool render(pnanovdb_compute_array_t* array);
+
+private:
+    FileHeaderInfo() = default;
+    ~FileHeaderInfo() = default;
+
+    FileHeaderInfo(const FileHeaderInfo&) = delete;
+    FileHeaderInfo& operator=(const FileHeaderInfo&) = delete;
+    FileHeaderInfo(FileHeaderInfo&&) = delete;
+    FileHeaderInfo& operator=(FileHeaderInfo&&) = delete;
 };
 }

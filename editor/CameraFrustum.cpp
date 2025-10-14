@@ -324,12 +324,6 @@ static void drawCameraFrustum(imgui_instance_user::Instance* ptr,
     }
 }
 
-CameraFrustum& CameraFrustum::getInstance()
-{
-    static CameraFrustum instance;
-    return instance;
-}
-
 void CameraFrustum::render(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->camera_views)

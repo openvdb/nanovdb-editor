@@ -81,14 +81,12 @@ class CodeEditor
     };
 
 public:
-    // singleton
     static CodeEditor& getInstance()
     {
         static CodeEditor instance;
         return instance;
     }
 
-    CodeEditor();
     bool render();
     void setup(std::string* shaderNamePtr,
                std::atomic<bool>* updateShaderPtr,
@@ -103,6 +101,14 @@ public:
     const std::string& getSelectedShader() const;
 
 private:
+    CodeEditor();
+    ~CodeEditor() = default;
+
+    CodeEditor(const CodeEditor&) = delete;
+    CodeEditor& operator=(const CodeEditor&) = delete;
+    CodeEditor(CodeEditor&&) = delete;
+    CodeEditor& operator=(CodeEditor&&) = delete;
+
     static void ClearAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler);
     static void* ReadOpen(ImGuiContext* ctx, ImGuiSettingsHandler* handler, const char* name);
     static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* entry, const char* line);

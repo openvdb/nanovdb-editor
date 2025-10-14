@@ -20,6 +20,23 @@ namespace imgui_instance_user
 {
 namespace InstanceSettingsHandler
 {
+// Field name constants for INI serialization
+static const char* FIELD_GROUP_NAME = "GroupName";
+static const char* FIELD_SHADER_DIRECTORY = "ShaderDirectory";
+static const char* FIELD_SELECTED_RENDER_SETTINGS_NAME = "SelectedRenderSettingsName";
+static const char* FIELD_SHOW_PROFILER = "ShowProfiler";
+static const char* FIELD_SHOW_CODE_EDITOR = "ShowCodeEditor";
+static const char* FIELD_SHOW_CONSOLE = "ShowConsole";
+static const char* FIELD_SHOW_VIEWPORT_SETTINGS = "ShowViewportSettings";
+static const char* FIELD_SHOW_RENDER_SETTINGS = "ShowRenderSettings";
+static const char* FIELD_SHOW_COMPILER_SETTINGS = "ShowCompilerSettings";
+static const char* FIELD_SHOW_SHADER_PARAMS = "ShowShaderParams";
+static const char* FIELD_SHOW_BENCHMARK = "ShowBenchmark";
+static const char* FIELD_SHOW_FILE_HEADER = "ShowFileHeader";
+static const char* FIELD_SHOW_SCENE = "ShowScene";
+static const char* FIELD_SHOW_SCENE_PROPERTIES = "ShowSceneProperties";
+static const char* FIELD_SHOW_ABOUT = "ShowAbout";
+
 static void ClearAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler)
 {
     Instance* instance = (Instance*)handler->UserData;
@@ -45,15 +62,19 @@ static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* ent
     if (name && strcmp(name, "Settings") == 0)
     {
         char buffer[1024] = {};
-        if (sscanf(line, "GroupName=%[^\n]", buffer) == 1)
+        char fmt[128];
+
+        snprintf(fmt, sizeof(fmt), "%s=%%[^\n]", FIELD_GROUP_NAME);
+        if (sscanf(line, fmt, buffer) == 1)
         {
             instance->shader_group = buffer;
         }
-        else if (sscanf(line, "ShaderDirectory=%[^\n]", buffer) == 1)
+        else if (snprintf(fmt, sizeof(fmt), "%s=%%[^\n]", FIELD_SHADER_DIRECTORY), sscanf(line, fmt, buffer) == 1)
         {
             instance->additional_shader_directories.push_back(buffer);
         }
-        else if (sscanf(line, "SelectedRenderSettingsName=%[^\n]", buffer) == 1)
+        else if (snprintf(fmt, sizeof(fmt), "%s=%%[^\n]", FIELD_SELECTED_RENDER_SETTINGS_NAME),
+                 sscanf(line, fmt, buffer) == 1)
         {
             instance->render_settings_name = buffer;
             instance->viewport_settings[(int)instance->viewport_option].render_settings_name =
@@ -66,51 +87,51 @@ static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* ent
         else
         {
             int value = 0;
-            if (sscanf(line, "ShowProfiler=%d", &value) == 1)
+            if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_SHOW_PROFILER), sscanf(line, fmt, &value) == 1)
             {
                 instance->window.show_profiler = (value != 0);
             }
-            else if (sscanf(line, "ShowCodeEditor=%d", &value) == 1)
+            else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_SHOW_CODE_EDITOR), sscanf(line, fmt, &value) == 1)
             {
                 instance->window.show_code_editor = (value != 0);
             }
-            else if (sscanf(line, "ShowConsole=%d", &value) == 1)
+            else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_SHOW_CONSOLE), sscanf(line, fmt, &value) == 1)
             {
                 instance->window.show_console = (value != 0);
             }
-            else if (sscanf(line, "ShowViewportSettings=%d", &value) == 1)
+            else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_SHOW_VIEWPORT_SETTINGS), sscanf(line, fmt, &value) == 1)
             {
                 instance->window.show_viewport_settings = (value != 0);
             }
-            else if (sscanf(line, "ShowRenderSettings=%d", &value) == 1)
+            else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_SHOW_RENDER_SETTINGS), sscanf(line, fmt, &value) == 1)
             {
                 instance->window.show_render_settings = (value != 0);
             }
-            else if (sscanf(line, "ShowCompilerSettings=%d", &value) == 1)
+            else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_SHOW_COMPILER_SETTINGS), sscanf(line, fmt, &value) == 1)
             {
                 instance->window.show_compiler_settings = (value != 0);
             }
-            else if (sscanf(line, "ShowShaderParams=%d", &value) == 1)
+            else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_SHOW_SHADER_PARAMS), sscanf(line, fmt, &value) == 1)
             {
                 instance->window.show_shader_params = (value != 0);
             }
-            else if (sscanf(line, "ShowBenchmark=%d", &value) == 1)
+            else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_SHOW_BENCHMARK), sscanf(line, fmt, &value) == 1)
             {
                 instance->window.show_benchmark = (value != 0);
             }
-            else if (sscanf(line, "ShowFileHeader=%d", &value) == 1)
+            else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_SHOW_FILE_HEADER), sscanf(line, fmt, &value) == 1)
             {
                 instance->window.show_file_header = (value != 0);
             }
-            else if (sscanf(line, "ShowScene=%d", &value) == 1)
+            else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_SHOW_SCENE), sscanf(line, fmt, &value) == 1)
             {
                 instance->window.show_scene = (value != 0);
             }
-            else if (sscanf(line, "ShowSceneProperties=%d", &value) == 1)
+            else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_SHOW_SCENE_PROPERTIES), sscanf(line, fmt, &value) == 1)
             {
                 instance->window.show_scene_properties = (value != 0);
             }
-            else if (sscanf(line, "ShowAbout=%d", &value) == 1)
+            else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_SHOW_ABOUT), sscanf(line, fmt, &value) == 1)
             {
                 instance->window.show_about = (value != 0);
             }
@@ -123,26 +144,26 @@ static void WriteAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler, ImGuiText
     Instance* instance = (Instance*)handler->UserData;
 
     buf->appendf("[%s][Settings]\n", handler->TypeName);
-    buf->appendf("GroupName=%s\n", instance->shader_group.c_str());
-    buf->appendf("SelectedRenderSettingsName=%s\n", instance->render_settings_name.c_str());
+    buf->appendf("%s=%s\n", FIELD_GROUP_NAME, instance->shader_group.c_str());
+    buf->appendf("%s=%s\n", FIELD_SELECTED_RENDER_SETTINGS_NAME, instance->render_settings_name.c_str());
 
     // Persist window visibility flags
-    buf->appendf("ShowProfiler=%d\n", instance->window.show_profiler ? 1 : 0);
-    buf->appendf("ShowCodeEditor=%d\n", instance->window.show_code_editor ? 1 : 0);
-    buf->appendf("ShowConsole=%d\n", instance->window.show_console ? 1 : 0);
-    buf->appendf("ShowViewportSettings=%d\n", instance->window.show_viewport_settings ? 1 : 0);
-    buf->appendf("ShowRenderSettings=%d\n", instance->window.show_render_settings ? 1 : 0);
-    buf->appendf("ShowCompilerSettings=%d\n", instance->window.show_compiler_settings ? 1 : 0);
-    buf->appendf("ShowShaderParams=%d\n", instance->window.show_shader_params ? 1 : 0);
-    buf->appendf("ShowBenchmark=%d\n", instance->window.show_benchmark ? 1 : 0);
-    buf->appendf("ShowFileHeader=%d\n", instance->window.show_file_header ? 1 : 0);
-    buf->appendf("ShowScene=%d\n", instance->window.show_scene ? 1 : 0);
-    buf->appendf("ShowSceneProperties=%d\n", instance->window.show_scene_properties ? 1 : 0);
-    buf->appendf("ShowAbout=%d\n", instance->window.show_about ? 1 : 0);
+    buf->appendf("%s=%d\n", FIELD_SHOW_PROFILER, instance->window.show_profiler ? 1 : 0);
+    buf->appendf("%s=%d\n", FIELD_SHOW_CODE_EDITOR, instance->window.show_code_editor ? 1 : 0);
+    buf->appendf("%s=%d\n", FIELD_SHOW_CONSOLE, instance->window.show_console ? 1 : 0);
+    buf->appendf("%s=%d\n", FIELD_SHOW_VIEWPORT_SETTINGS, instance->window.show_viewport_settings ? 1 : 0);
+    buf->appendf("%s=%d\n", FIELD_SHOW_RENDER_SETTINGS, instance->window.show_render_settings ? 1 : 0);
+    buf->appendf("%s=%d\n", FIELD_SHOW_COMPILER_SETTINGS, instance->window.show_compiler_settings ? 1 : 0);
+    buf->appendf("%s=%d\n", FIELD_SHOW_SHADER_PARAMS, instance->window.show_shader_params ? 1 : 0);
+    buf->appendf("%s=%d\n", FIELD_SHOW_BENCHMARK, instance->window.show_benchmark ? 1 : 0);
+    buf->appendf("%s=%d\n", FIELD_SHOW_FILE_HEADER, instance->window.show_file_header ? 1 : 0);
+    buf->appendf("%s=%d\n", FIELD_SHOW_SCENE, instance->window.show_scene ? 1 : 0);
+    buf->appendf("%s=%d\n", FIELD_SHOW_SCENE_PROPERTIES, instance->window.show_scene_properties ? 1 : 0);
+    buf->appendf("%s=%d\n", FIELD_SHOW_ABOUT, instance->window.show_about ? 1 : 0);
 
     for (const auto& directory : instance->additional_shader_directories)
     {
-        buf->appendf("ShaderDirectory=%s\n", directory.c_str());
+        buf->appendf("%s=%s\n", FIELD_SHADER_DIRECTORY, directory.c_str());
     }
 
     buf->append("\n");

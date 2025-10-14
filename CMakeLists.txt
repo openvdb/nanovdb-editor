@@ -506,7 +506,9 @@ if (NOT SKBUILD)
     )
 
     add_dependencies(pnanovdbeditortestapp pnanovdbeditor_prebuild)
-    add_dependencies(pnanovdbeditortestapp openh264_build)
+    if(NANOVDB_EDITOR_USE_H264 AND TARGET openh264_build)
+        add_dependencies(pnanovdbeditortestapp openh264_build)
+    endif()
 endif()
 
 if (NOT WIN32)

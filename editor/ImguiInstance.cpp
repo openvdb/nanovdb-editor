@@ -317,8 +317,8 @@ static void showWindows(Instance* ptr, float delta_time)
 {
     using namespace pnanovdb_editor;
 
-    showViewportSettingsWindow(ptr);
     showSceneWindow(ptr);
+    showViewportSettingsWindow(ptr);
     showRenderSettingsWindow(ptr);
     showCompilerSettingsWindow(ptr);
     showShaderParamsWindow(ptr);
@@ -417,6 +417,21 @@ void update(pnanovdb_imgui_instance_t* instance)
                 ImGui::LoadIniSettingsFromDisk(io.IniFilename);
             }
             ptr->loaded_ini_once = true;
+
+            // Ensure default render settings entry exists (if not loaded from INI, create it)
+            if (ptr->saved_render_settings.find(s_render_settings_default) == ptr->saved_render_settings.end())
+            {
+                ptr->saved_render_settings[s_render_settings_default] = {};
+                pnanovdb_camera_config_default(&ptr->saved_render_settings[s_render_settings_default].camera_config);
+            }
+
+            // Apply loaded render settings immediately after INI is loaded
+            auto it = ptr->saved_render_settings.find(ptr->render_settings_name);
+            if (it != ptr->saved_render_settings.end())
+            {
+                *ptr->render_settings = it->second;
+                ptr->render_settings->sync_camera = PNANOVDB_TRUE; // Trigger camera sync
+            }
         }
     }
 

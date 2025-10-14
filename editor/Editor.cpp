@@ -955,9 +955,10 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 imgui_user_instance->pending.viewport_gaussian_view.clear();
             }
             // Handle editor-driven selection change (only if no pending UI change)
-            // Do not override when the user has explicitly selected a camera in the Scene window
+            // Do not override when the user has explicitly selected a camera or root node in the Scene window
             else if (views->current_view_scene != imgui_user_instance->selected_scene_item &&
-                     imgui_user_instance->selected_view_type != imgui_instance_user::ViewsTypes::Cameras)
+                     imgui_user_instance->selected_view_type != imgui_instance_user::ViewsTypes::Cameras &&
+                     imgui_user_instance->selected_view_type != imgui_instance_user::ViewsTypes::Root)
             {
                 save_current_view_state(imgui_user_instance->selected_scene_item);
 

@@ -30,6 +30,15 @@
 #include <memory>
 #include <deque>
 
+#define IMGUI_CHECKBOX_SYNC(label, var)                                                                                \
+    {                                                                                                                  \
+        bool temp_bool = ((var) != PNANOVDB_FALSE);                                                                    \
+        if (ImGui::Checkbox((label), &temp_bool))                                                                      \
+        {                                                                                                              \
+            (var) = temp_bool ? PNANOVDB_TRUE : PNANOVDB_FALSE;                                                        \
+        }                                                                                                              \
+    }
+
 namespace imgui_instance_user
 {
 static const char* s_render_settings_default = "default";
@@ -39,6 +48,7 @@ static const char* s_viewer_profile_name = "viewer";
 
 // TODO: make unique label and save scene items in a map with unique keys rather than strings
 static const char* VIEWPORT_CAMERA = "Viewport Camera";
+static const char* SCENE_ROOT_NODE = "Viewer";
 
 static const char* VIEWPORT_SETTINGS = "Viewport";
 static const char* RENDER_SETTINGS = "Render Settings";
@@ -73,6 +83,7 @@ struct ViewportSettings
 
 enum class ViewsTypes
 {
+    Root,
     Cameras,
     GaussianScenes,
     NanoVDBs,
@@ -204,8 +215,8 @@ struct Instance
     std::shared_ptr<pnanovdb_compute_array_t> nanovdb_array = nullptr;
 
     EditorLoaded loaded;
-    std::string selected_scene_item = VIEWPORT_CAMERA;
-    ViewsTypes selected_view_type = ViewsTypes::Cameras;
+    std::string selected_scene_item = SCENE_ROOT_NODE;
+    ViewsTypes selected_view_type = ViewsTypes::Root;
 
     std::map<std::string, pnanovdb_camera_view_t*>* camera_views = nullptr;
     std::map<std::string, int> camera_frustum_index; // map of camera view name to state index for frustum overlay
