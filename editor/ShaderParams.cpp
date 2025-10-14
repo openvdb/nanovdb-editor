@@ -632,6 +632,7 @@ void ShaderParams::createDefaultScalarNParam(const std::string& name,
     param["step"] = 0.01;
     param["useSlider"] = false;
     param["isBool"] = false;
+    param["hidden"] = false;
     json_shader_params[name] = param;
 }
 
@@ -672,22 +673,12 @@ void ShaderParams::addToScalarNParam(const std::string& name, const nlohmann::js
 
     ShaderParam& shader_param = *it;
 
-    if (value.contains("value"))
-    {
-        shader_param.pending_value = value["value"];
-    }
-    else
-    {
-        shader_param.pending_value = nlohmann::json(0);
-    }
+    shader_param.pending_value = value.contains("value") ? value["value"] : nlohmann::json(0);
 
-    assignTypedValue(shader_param.type, shader_param.getMin(), value["min"], nlohmann::json(0));
-    assignTypedValue(shader_param.type, shader_param.getMax(), value["max"], nlohmann::json(1));
+    assignTypedValue(shader_param.type, shader_param.getMin(), value.contains("min") ? value["min"] : nlohmann::json(0));
+    assignTypedValue(shader_param.type, shader_param.getMax(), value.contains("max") ? value["max"] : nlohmann::json(1));
 
-    if (value.contains("step") && value["step"].is_number())
-    {
-        shader_param.step = value["step"];
-    }
+    shader_param.step = value.contains("step") ? value["step"] : 0.01f;
 
     if (shader_param.type != ImGuiDataType_Float)
     {
@@ -703,6 +694,11 @@ void ShaderParams::addToScalarNParam(const std::string& name, const nlohmann::js
         {
             shader_param.is_slider = value["useSlider"].get<bool>();
         }
+    }
+
+    if (value.contains("hidden") && value["hidden"].is_boolean())
+    {
+        shader_param.is_hidden = value["hidden"].get<bool>();
     }
 }
 
@@ -753,6 +749,11 @@ void ShaderParams::addToBoolParam(const std::string& name, const nlohmann::json&
     {
         shader_param.pending_value = value["value"];
     }
+
+    if (value.contains("hidden") && value["hidden"].is_boolean())
+    {
+        shader_param.is_hidden = value["hidden"].get<bool>();
+    }
 }
 
 void ShaderParams::render(const std::string& shader_name)
@@ -791,7 +792,7 @@ void ShaderParams::renderGroup(const std::string& group_file_path)
 
 void ShaderParams::renderParams(const std::string& shader_name, ShaderParam& shader_param)
 {
-    if (shader_param.name.find("_pad") != std::string::npos)
+    if (shader_param.name.find("_pad") != std::string::npos || shader_param.is_hidden)
     {
         return;
     }

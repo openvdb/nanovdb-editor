@@ -24,6 +24,8 @@ namespace InstanceSettingsHandler
 static const char* FIELD_GROUP_NAME = "GroupName";
 static const char* FIELD_SHADER_DIRECTORY = "ShaderDirectory";
 static const char* FIELD_SELECTED_RENDER_SETTINGS_NAME = "SelectedRenderSettingsName";
+static const char* FIELD_WINDOW_WIDTH = "WindowWidth";
+static const char* FIELD_WINDOW_HEIGHT = "WindowHeight";
 static const char* FIELD_SHOW_PROFILER = "ShowProfiler";
 static const char* FIELD_SHOW_CODE_EDITOR = "ShowCodeEditor";
 static const char* FIELD_SHOW_CONSOLE = "ShowConsole";
@@ -87,7 +89,15 @@ static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* ent
         else
         {
             int value = 0;
-            if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_SHOW_PROFILER), sscanf(line, fmt, &value) == 1)
+            if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_WINDOW_WIDTH), sscanf(line, fmt, &value) == 1)
+            {
+                instance->ini_window_width = value;
+            }
+            else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_WINDOW_HEIGHT), sscanf(line, fmt, &value) == 1)
+            {
+                instance->ini_window_height = value;
+            }
+            else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_SHOW_PROFILER), sscanf(line, fmt, &value) == 1)
             {
                 instance->window.show_profiler = (value != 0);
             }
@@ -146,6 +156,13 @@ static void WriteAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler, ImGuiText
     buf->appendf("[%s][Settings]\n", handler->TypeName);
     buf->appendf("%s=%s\n", FIELD_GROUP_NAME, instance->shader_group.c_str());
     buf->appendf("%s=%s\n", FIELD_SELECTED_RENDER_SETTINGS_NAME, instance->render_settings_name.c_str());
+
+    // Persist window resolution
+    if (instance->ini_window_width > 0 && instance->ini_window_height > 0)
+    {
+        buf->appendf("%s=%d\n", FIELD_WINDOW_WIDTH, instance->ini_window_width);
+        buf->appendf("%s=%d\n", FIELD_WINDOW_HEIGHT, instance->ini_window_height);
+    }
 
     // Persist window visibility flags
     buf->appendf("%s=%d\n", FIELD_SHOW_PROFILER, instance->window.show_profiler ? 1 : 0);

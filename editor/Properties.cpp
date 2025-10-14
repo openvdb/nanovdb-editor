@@ -42,21 +42,118 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
     }
 
     int cameraIdx = ptr->camera_frustum_index[ptr->selected_scene_item];
+    pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
 
     bool isViewportCamera = (ptr->selected_scene_item == VIEWPORT_CAMERA);
     if (isViewportCamera)
     {
-        if (ImGui::Button("Reset Viewport Camera"))
+        // Projection mode: Perspective vs Orthographic
         {
-            pnanovdb_camera_state_t default_state = {};
-            pnanovdb_camera_state_default(&default_state, PNANOVDB_FALSE);
+            if (ImGui::RadioButton("Perspective", ptr->render_settings->is_orthographic == PNANOVDB_FALSE))
+            {
+                ptr->render_settings->is_orthographic = PNANOVDB_FALSE;
+                ptr->render_settings->camera_config.is_orthographic = PNANOVDB_FALSE;
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Orthographic", ptr->render_settings->is_orthographic == PNANOVDB_TRUE))
+            {
+                ptr->render_settings->is_orthographic = PNANOVDB_TRUE;
+                ptr->render_settings->camera_config.is_orthographic = PNANOVDB_TRUE;
+            }
+        }
 
-            pnanovdb_camera_config_t default_config = {};
-            pnanovdb_camera_config_default(&default_config);
+        // View preset buttons
+        {
+            auto setLookUp = [&](float up_x, float up_y, float up_z)
+            {
+                ptr->render_settings->camera_state.eye_up.x = up_x;
+                ptr->render_settings->camera_state.eye_up.y = up_y;
+                ptr->render_settings->camera_state.eye_up.z = up_z;
+            };
 
-            ptr->render_settings->camera_state = default_state;
-            ptr->render_settings->camera_config = default_config;
-            ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+            auto setDirection = [&](float dir_x, float dir_y, float dir_z)
+            {
+                ptr->render_settings->camera_state.eye_direction.x = dir_x;
+                ptr->render_settings->camera_state.eye_direction.y = dir_y;
+                ptr->render_settings->camera_state.eye_direction.z = dir_z;
+                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+            };
+
+            bool isYUp = (ptr->render_settings->is_y_up == PNANOVDB_TRUE);
+
+            if (ImGui::Button("Top"))
+            {
+                if (isYUp)
+                {
+                    setDirection(0.0f, -1.0f, 0.0f); // Look down -Y
+                    setLookUp(0.0f, 0.0f, 1.0f); // Screen up is +Z (forward)
+                }
+                else
+                {
+                    setDirection(0.0f, 0.0f, -1.0f); // Look down -Z
+                    setLookUp(0.0f, 1.0f, 0.0f); // Screen up is +Y (forward)
+                }
+                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Front"))
+            {
+                if (isYUp)
+                {
+                    setDirection(0.0f, 0.0f, 1.0f); // Look along +Z (forward)
+                    setLookUp(0.0f, 1.0f, 0.0f);
+                }
+                else
+                {
+                    setDirection(0.0f, 1.0f, 0.0f); // Look along +Y (forward)
+                    setLookUp(0.0f, 0.0f, 1.0f);
+                }
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Right"))
+            {
+                setDirection(1.0f, 0.0f, 0.0f);
+                if (isYUp)
+                {
+                    setLookUp(0.0f, 1.0f, 0.0f);
+                }
+                else
+                {
+                    setLookUp(0.0f, 0.0f, 1.0f);
+                }
+            }
+        }
+
+        if (ImGui::Button("Reset"))
+        {
+            // Load from the "default" saved render settings, fallback to default state and config
+            auto it = ptr->saved_render_settings.find(s_render_settings_default);
+            if (it != ptr->saved_render_settings.end())
+            {
+                ptr->render_settings->camera_state = it->second.camera_state;
+                ptr->render_settings->camera_config = it->second.camera_config;
+                ptr->render_settings->is_projection_rh = it->second.is_projection_rh;
+                ptr->render_settings->is_orthographic = it->second.is_orthographic;
+                ptr->render_settings->is_reverse_z = it->second.is_reverse_z;
+                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+            }
+            else
+            {
+                pnanovdb_camera_state_t default_state = {};
+                pnanovdb_camera_state_default(&default_state, ptr->render_settings->is_y_up);
+
+                pnanovdb_camera_config_t default_config = {};
+                pnanovdb_camera_config_default(&default_config);
+
+                ptr->render_settings->camera_state = default_state;
+                ptr->render_settings->camera_config = default_config;
+                ptr->render_settings->is_projection_rh = default_config.is_projection_rh;
+                ptr->render_settings->is_orthographic = default_config.is_orthographic;
+                ptr->render_settings->is_reverse_z = default_config.is_reverse_z;
+                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+            }
         }
     }
     else
@@ -73,12 +170,12 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
         }
         if (ImGui::Button("Set Viewport Camera"))
         {
-            pnanovdb_vec3_t& up = camera->states[cameraIdx].eye_up;
-            if (camera->states[cameraIdx].eye_up.x != ptr->render_settings->camera_state.eye_up.x ||
-                camera->states[cameraIdx].eye_up.y != ptr->render_settings->camera_state.eye_up.y ||
-                camera->states[cameraIdx].eye_up.z != ptr->render_settings->camera_state.eye_up.z)
+            pnanovdb_vec3_t& up = state->eye_up;
+            if (state->eye_up.x != ptr->render_settings->camera_state.eye_up.x ||
+                state->eye_up.y != ptr->render_settings->camera_state.eye_up.y ||
+                state->eye_up.z != ptr->render_settings->camera_state.eye_up.z)
             {
-                pnanovdb_vec3_t& dir = camera->states[cameraIdx].eye_direction;
+                pnanovdb_vec3_t& dir = state->eye_direction;
                 pnanovdb_vec3_t right = { dir.y * up.z - dir.z * up.y, dir.z * up.x - dir.x * up.z,
                                           dir.x * up.y - dir.y * up.x };
                 up.x = -(right.y * dir.z - right.z * dir.y);
@@ -92,7 +189,7 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
                     up.z /= len;
                 }
             }
-            ptr->render_settings->camera_state = camera->states[cameraIdx];
+            ptr->render_settings->camera_state = *state;
             ptr->render_settings->camera_state.eye_up = up;
             ptr->render_settings->camera_config = camera->configs[cameraIdx];
             ptr->render_settings->is_projection_rh = camera->configs[cameraIdx].is_projection_rh;
@@ -102,12 +199,10 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
         }
     }
 
-    pnanovdb_vec3_t eyePosition = pnanovdb_camera_get_eye_position_from_state(&camera->states[cameraIdx]);
+    pnanovdb_vec3_t eyePosition = pnanovdb_camera_get_eye_position_from_state(state);
     float eyePos[3] = { eyePosition.x, eyePosition.y, eyePosition.z };
     if (ImGui::DragFloat3("Origin", eyePos, 0.1f))
     {
-        pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
-
         // Keep look-at point fixed, recalculate direction and distance from new eye position
         pnanovdb_vec3_t delta = { state->position.x - eyePos[0], state->position.y - eyePos[1],
                                   state->position.z - eyePos[2] };
@@ -131,8 +226,6 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
             ptr->render_settings->sync_camera = PNANOVDB_TRUE;
         }
     }
-
-    pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
     float lookAt[3] = { state->position.x, state->position.y, state->position.z };
     if (ImGui::DragFloat3("Look At", lookAt, 0.1f))
     {
@@ -157,7 +250,6 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
             state->eye_distance_from_position = 0.f;
         }
 
-        // Sync to viewport if editing viewport camera
         if (isViewportCamera)
         {
             ptr->render_settings->camera_state = *state;
@@ -201,33 +293,6 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
             camera->frustum_color.z = frustumColor[2];
         }
         ImGui::Separator();
-        if (ImGui::DragFloat("Near Plane", &camera->configs[cameraIdx].near_plane, 0.1f, 0.01f, 10000.f))
-        {
-            if (isViewportCamera)
-            {
-                ptr->render_settings->camera_config = camera->configs[cameraIdx];
-                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
-            }
-        }
-        if (ImGui::DragFloat("Far Plane", &camera->configs[cameraIdx].far_plane, 10.f, 1.f, 100000.f))
-        {
-            if (isViewportCamera)
-            {
-                ptr->render_settings->camera_config = camera->configs[cameraIdx];
-                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
-            }
-        }
-        if (camera->configs[cameraIdx].is_orthographic)
-        {
-            if (ImGui::DragFloat("Orthographic Y", &camera->configs[cameraIdx].orthographic_y, 0.1f, 0.f, 100000.f))
-            {
-                if (isViewportCamera)
-                {
-                    ptr->render_settings->camera_config = camera->configs[cameraIdx];
-                    ptr->render_settings->sync_camera = PNANOVDB_TRUE;
-                }
-            }
-        }
         if (ImGui::DragFloat("Aspect Ratio", &camera->configs[cameraIdx].aspect_ratio, 0.01f, 0.f, 2.f))
         {
             if (isViewportCamera)
@@ -243,6 +308,33 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
         {
             ptr->render_settings->camera_config = camera->configs[cameraIdx];
             ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+        }
+    }
+    if (ImGui::DragFloat("Near Plane", &camera->configs[cameraIdx].near_plane, 0.1f, 0.01f, 10000.f))
+    {
+        if (isViewportCamera)
+        {
+            ptr->render_settings->camera_config = camera->configs[cameraIdx];
+            ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+        }
+    }
+    if (ImGui::DragFloat("Far Plane", &camera->configs[cameraIdx].far_plane, 10.f, 1.f, 100000.f))
+    {
+        if (isViewportCamera)
+        {
+            ptr->render_settings->camera_config = camera->configs[cameraIdx];
+            ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+        }
+    }
+    if (camera->configs[cameraIdx].is_orthographic)
+    {
+        if (ImGui::DragFloat("Orthographic Y", &camera->configs[cameraIdx].orthographic_y, 0.1f, 0.f, 100000.f))
+        {
+            if (isViewportCamera)
+            {
+                ptr->render_settings->camera_config = camera->configs[cameraIdx];
+                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+            }
         }
     }
 }
@@ -262,6 +354,7 @@ void Properties::render(imgui_instance_user::Instance* ptr)
             auto settings = ptr->render_settings;
 
             IMGUI_CHECKBOX_SYNC("VSync", settings->vsync);
+            IMGUI_CHECKBOX_SYNC("Projection RH", settings->is_projection_rh);
             IMGUI_CHECKBOX_SYNC("Reverse Z", settings->is_reverse_z);
             {
                 int up_axis = settings->is_y_up ? 0 : 1;

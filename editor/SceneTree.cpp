@@ -88,7 +88,7 @@ bool SceneTree::renderTreeNodeHeader(const char* label, bool* visibilityCheckbox
     }
 
     bool treeNodeOpen = ImGui::TreeNodeEx(label, flags);
-    if (visibilityCheckbox && treeNodeOpen)
+    if (visibilityCheckbox)
     {
         ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::GetFrameHeight() + ImGui::GetCursorPosX());
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 1.0f);
@@ -168,19 +168,21 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                 }
                 bool commonVisible = allVisible;
 
-                if (renderTreeNodeHeader("Camera Views", &commonVisible))
-                {
-                    // Update all camera views if visibility checkbox was toggled
-                    if (commonVisible != allVisible)
-                    {
-                        for (auto& cameraPair : *ptr->camera_views)
-                        {
-                            if (cameraPair.first == VIEWPORT_CAMERA || !cameraPair.second)
-                                continue;
-                            cameraPair.second->is_visible = commonVisible;
-                        }
-                    }
+                bool treeNodeOpen = renderTreeNodeHeader("Camera Views", &commonVisible);
 
+                // Update all camera views if visibility checkbox was toggled
+                if (commonVisible != allVisible)
+                {
+                    for (auto& cameraPair : *ptr->camera_views)
+                    {
+                        if (cameraPair.first == VIEWPORT_CAMERA || !cameraPair.second)
+                            continue;
+                        cameraPair.second->is_visible = commonVisible ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+                    }
+                }
+
+                if (treeNodeOpen)
+                {
                     for (auto& cameraPair : *ptr->camera_views)
                     {
                         pnanovdb_camera_view_t* camera = cameraPair.second;

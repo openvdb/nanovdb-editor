@@ -107,10 +107,14 @@ is_y_up=0
 is_upside_down=0
 camera_speed_multiplier=1.000000
 ui_profile_name=viewer
+encode_width=-1
+encode_height=-1
 
 [InstanceSettings][Settings]
 GroupName=
 SelectedRenderSettingsName=default
+WindowWidth=1440
+WindowHeight=720
 ShowProfiler=0
 ShowCodeEditor=0
 ShowConsole=0

@@ -472,7 +472,6 @@ int main(int argc, char* argv[])
 #        endif
 
     raster_params.eps2d = 0.5f;
-    raster_params.near_plane_override = 1.f;
 
 #        ifdef TEST_RASTER_SHADER_PARAMS
     compute.destroy_array(params_array);
@@ -489,7 +488,7 @@ int main(int argc, char* argv[])
     config.streaming = PNANOVDB_FALSE;
     config.ip_address = "127.0.0.1";
     config.port = 8080;
-    config.ui_profile_name = "viewer";
+    // config.ui_profile_name = "viewer";
     editor.show(&editor, device, &config);
 
     // if (editor.camera)

@@ -51,8 +51,8 @@ static const char* VIEWPORT_CAMERA = "Viewport Camera";
 static const char* SCENE_ROOT_NODE = "Viewer";
 
 static const char* VIEWPORT_SETTINGS = "Viewport";
-static const char* RENDER_SETTINGS = "Render Settings";
-static const char* COMPILER_SETTINGS = "Compiler Settings";
+static const char* RENDER_SETTINGS = "Render";
+static const char* COMPILER_SETTINGS = "Compiler";
 static const char* PROFILER = "Profiler";
 static const char* CODE_EDITOR = "Shader Editor";
 static const char* CONSOLE = "Log";
@@ -126,7 +126,7 @@ struct PendingState
     bool open_file = false;
     bool save_file = false;
     bool load_camera = false; // load camera state in editor update loop
-    bool save_camera = true; // save default camera first
+    bool save_camera = false;
     bool save_render_settings = false;
     bool load_render_settings = false;
     std::string viewport_shader_name = "";
@@ -234,6 +234,9 @@ struct Instance
     std::string current_profile_name = ""; // Track current profile for switching
     std::string current_ini_filename = ""; // INI filename for current profile
 
+    int ini_window_width = 0;
+    int ini_window_height = 0;
+
     void set_default_shader(const std::string& shaderName);
     void update_ini_filename_for_profile(const char* profile_name);
 
@@ -272,6 +275,25 @@ struct Instance
 };
 
 PNANOVDB_CAST_PAIR(pnanovdb_imgui_instance_t, Instance)
+
+/*!
+ * \brief Read saved window resolution from INI file
+ *
+ * This function reads the WindowWidth and WindowHeight values from the
+ * [InstanceSettings][Settings] section of the profile-specific INI file.
+ * The window resolution is automatically saved when:
+ * - The editor is closed normally
+ * - The user manually saves settings via Settings > Save Ini menu
+ *
+ * The saved resolution will be automatically applied on the next startup.
+ *
+ * \param profile_name The UI profile name (e.g., "default", "viewer")
+ * \param width Pointer to store the loaded width (if found)
+ * \param height Pointer to store the loaded height (if found)
+ * \return true if resolution was found and loaded, false otherwise
+ */
+bool ini_window_resolution(const char* profile_name, int* width, int* height);
+
 }
 
 pnanovdb_imgui_instance_interface_t* get_user_imgui_instance_interface();

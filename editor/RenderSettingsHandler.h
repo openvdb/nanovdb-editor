@@ -38,6 +38,8 @@ static const char* FIELD_IS_Y_UP = "is_y_up";
 static const char* FIELD_IS_UPSIDE_DOWN = "is_upside_down";
 static const char* FIELD_CAMERA_SPEED_MULTIPLIER = "camera_speed_multiplier";
 static const char* FIELD_UI_PROFILE_NAME = "ui_profile_name";
+static const char* FIELD_ENCODE_WIDTH = "encode_width";
+static const char* FIELD_ENCODE_HEIGHT = "encode_height";
 
 static void ClearAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler)
 {
@@ -47,15 +49,15 @@ static void ClearAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler)
 
 static void* ReadOpen(ImGuiContext* ctx, ImGuiSettingsHandler* handler, const char* name)
 {
-    // name is the camera state name after the [CameraState][name] header
     Instance* instance = (Instance*)handler->UserData;
 
-    // Create a new entry in our camera states map if it doesn't exist
+    // name is the render settings after the [RenderSettings][name] header
     if (instance->saved_render_settings.find(name) == instance->saved_render_settings.end())
     {
-        instance->saved_render_settings[name] = {};
-        // not in settings yet, use defaults
-        pnanovdb_camera_config_default(&instance->saved_render_settings[name].camera_config);
+        // not in settings yet, init with defaults
+        auto& settings = instance->saved_render_settings[name];
+        pnanovdb_camera_config_default(&settings.camera_config);
+        pnanovdb_camera_state_default(&settings.camera_state, settings.is_y_up);
     }
 
     return (void*)name;
@@ -105,14 +107,17 @@ static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* ent
     else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_IS_PROJECTION_RH), sscanf(line, fmt, &boolValue) == 1)
     {
         instance->saved_render_settings[name].is_projection_rh = (pnanovdb_bool_t)boolValue;
+        instance->saved_render_settings[name].camera_config.is_projection_rh = (pnanovdb_bool_t)boolValue;
     }
     else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_IS_ORTHOGRAPHIC), sscanf(line, fmt, &boolValue) == 1)
     {
         instance->saved_render_settings[name].is_orthographic = (pnanovdb_bool_t)boolValue;
+        instance->saved_render_settings[name].camera_config.is_orthographic = (pnanovdb_bool_t)boolValue;
     }
     else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_IS_REVERSE_Z), sscanf(line, fmt, &boolValue) == 1)
     {
         instance->saved_render_settings[name].is_reverse_z = (pnanovdb_bool_t)boolValue;
+        instance->saved_render_settings[name].camera_config.is_reverse_z = (pnanovdb_bool_t)boolValue;
     }
     else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_IS_Y_UP), sscanf(line, fmt, &boolValue) == 1)
     {
@@ -131,18 +136,41 @@ static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* ent
     {
         // String is safely read with length limit, ensuring null termination
     }
+    else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_ENCODE_WIDTH), sscanf(line, fmt, &boolValue) == 1)
+    {
+        instance->saved_render_settings[name].encode_width = boolValue;
+    }
+    else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_ENCODE_HEIGHT), sscanf(line, fmt, &boolValue) == 1)
+    {
+        instance->saved_render_settings[name].encode_height = boolValue;
+    }
+}
+
+static void ApplyAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler)
+{
+    Instance* instance = (Instance*)handler->UserData;
+
+    // After all settings are loaded from INI, apply far plane based on reverse Z and orthographic settings
+    for (auto& pair : instance->saved_render_settings)
+    {
+        auto& settings = pair.second;
+        if (settings.camera_config.is_reverse_z && !settings.camera_config.is_orthographic)
+        {
+            settings.camera_config.far_plane = INFINITY;
+        }
+        else
+        {
+            settings.camera_config.far_plane = 10000.f;
+        }
+    }
 }
 
 static void WriteAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler, ImGuiTextBuffer* buf)
 {
     Instance* instance = (Instance*)handler->UserData;
 
-    // Write all saved camera states
-    for (const auto& pair : instance->saved_render_settings)
+    auto save_render_settings = [&](const std::string& name, const pnanovdb_imgui_settings_render_t& render_settings)
     {
-        const std::string& name = pair.first;
-        const pnanovdb_imgui_settings_render_t& render_settings = pair.second;
-
         buf->appendf("[%s][%s]\n", handler->TypeName, name.c_str());
         buf->appendf("%s=%f,%f,%f\n", FIELD_POSITION, render_settings.camera_state.position.x,
                      render_settings.camera_state.position.y, render_settings.camera_state.position.z);
@@ -160,7 +188,14 @@ static void WriteAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler, ImGuiText
         buf->appendf("%s=%d\n", FIELD_IS_UPSIDE_DOWN, render_settings.is_upside_down);
         buf->appendf("%s=%f\n", FIELD_CAMERA_SPEED_MULTIPLIER, render_settings.camera_speed_multiplier);
         buf->appendf("%s=%s\n", FIELD_UI_PROFILE_NAME, render_settings.ui_profile_name);
+        buf->appendf("%s=%d\n", FIELD_ENCODE_WIDTH, render_settings.encode_width);
+        buf->appendf("%s=%d\n", FIELD_ENCODE_HEIGHT, render_settings.encode_height);
         buf->append("\n");
+    };
+
+    for (const auto& pair : instance->saved_render_settings)
+    {
+        save_render_settings(pair.first, pair.second);
     }
 }
 
@@ -172,6 +207,7 @@ static void Register(ImGuiContext* context, Instance* instance)
     render_settings_handler.ClearAllFn = ClearAll;
     render_settings_handler.ReadOpenFn = ReadOpen;
     render_settings_handler.ReadLineFn = ReadLine;
+    render_settings_handler.ApplyAllFn = ApplyAll;
     render_settings_handler.WriteAllFn = WriteAll;
     render_settings_handler.UserData = instance;
 

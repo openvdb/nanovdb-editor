@@ -99,12 +99,15 @@ void destroy(pnanovdb_imgui_instance_t* instance)
 {
     auto ptr = cast(instance);
 
-    // Persist settings on shutdown if possible
     if (ImGui::GetCurrentContext() && !ptr->is_viewer())
     {
         ImGuiIO& io = ImGui::GetIO();
         if (io.IniFilename && *io.IniFilename)
         {
+            ptr->ini_window_width = (int)io.DisplaySize.x;
+            ptr->ini_window_height = (int)io.DisplaySize.y;
+
+            ptr->saved_render_settings[ptr->render_settings_name] = *ptr->render_settings;
             ImGui::SaveIniSettingsToDisk(io.IniFilename);
         }
     }
@@ -259,24 +262,6 @@ static void createMenu(Instance* ptr)
         {
             ImGui::MenuItem("Open...", "", &ptr->pending.open_file);
             ImGui::MenuItem("Save...", "", &ptr->pending.save_file);
-            ImGui::Separator();
-
-            if (ImGui::MenuItem("Save .ini"))
-            {
-                ImGuiIO& io = ImGui::GetIO();
-                if (io.IniFilename && *io.IniFilename)
-                {
-                    ImGui::SaveIniSettingsToDisk(io.IniFilename);
-                }
-            }
-            if (ImGui::MenuItem("Reload .ini"))
-            {
-                ImGuiIO& io = ImGui::GetIO();
-                if (io.IniFilename && *io.IniFilename)
-                {
-                    ImGui::LoadIniSettingsFromDisk(io.IniFilename);
-                }
-            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Window"))
@@ -302,6 +287,34 @@ static void createMenu(Instance* ptr)
             }
             ImGui::MenuItem(RENDER_SETTINGS, "", &ptr->window.show_render_settings);
             ImGui::MenuItem(COMPILER_SETTINGS, "", &ptr->window.show_compiler_settings);
+
+            if (!isViewerProfile)
+            {
+                ImGui::Separator();
+                if (ImGui::MenuItem("Save INI"))
+                {
+                    ImGuiIO& io = ImGui::GetIO();
+                    if (io.IniFilename && *io.IniFilename)
+                    {
+                        ptr->ini_window_width = (int)io.DisplaySize.x;
+                        ptr->ini_window_height = (int)io.DisplaySize.y;
+
+                        ptr->saved_render_settings[ptr->render_settings_name] = *ptr->render_settings;
+                        ImGui::SaveIniSettingsToDisk(io.IniFilename);
+                    }
+                }
+                if (ImGui::MenuItem("Load INI"))
+                {
+                    ImGuiIO& io = ImGui::GetIO();
+                    if (io.IniFilename && *io.IniFilename)
+                    {
+                        ImGui::LoadIniSettingsFromDisk(io.IniFilename);
+                        *ptr->render_settings = ptr->saved_render_settings[ptr->render_settings_name];
+                        ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                    }
+                }
+            }
+
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Help"))
@@ -421,8 +434,9 @@ void update(pnanovdb_imgui_instance_t* instance)
             // Ensure default render settings entry exists (if not loaded from INI, create it)
             if (ptr->saved_render_settings.find(s_render_settings_default) == ptr->saved_render_settings.end())
             {
-                ptr->saved_render_settings[s_render_settings_default] = {};
-                pnanovdb_camera_config_default(&ptr->saved_render_settings[s_render_settings_default].camera_config);
+                auto& default_settings = ptr->saved_render_settings[s_render_settings_default];
+                pnanovdb_camera_config_default(&default_settings.camera_config);
+                pnanovdb_camera_state_default(&default_settings.camera_state, default_settings.is_y_up);
             }
 
             // Apply loaded render settings immediately after INI is loaded
@@ -430,7 +444,7 @@ void update(pnanovdb_imgui_instance_t* instance)
             if (it != ptr->saved_render_settings.end())
             {
                 *ptr->render_settings = it->second;
-                ptr->render_settings->sync_camera = PNANOVDB_TRUE; // Trigger camera sync
+                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
             }
         }
     }
@@ -524,6 +538,78 @@ void Instance::update_ini_filename_for_profile(const char* profile_name)
         io.IniFilename = current_ini_filename.c_str();
     }
 }
+
+bool ini_window_resolution(const char* profile_name, int* width, int* height)
+{
+    if (!profile_name || !width || !height)
+    {
+        return false;
+    }
+
+    std::string ini_filename = "imgui_";
+    if (profile_name && profile_name[0] != '\0')
+    {
+        ini_filename += profile_name;
+    }
+    else
+    {
+        ini_filename = "imgui";
+    }
+    ini_filename += ".ini";
+
+    FILE* f = fopen(ini_filename.c_str(), "r");
+    if (!f)
+    {
+        return false;
+    }
+
+    bool found_width = false;
+    bool found_height = false;
+    bool in_instance_settings = false;
+    char line[1024];
+
+    while (fgets(line, sizeof(line), f))
+    {
+        if (strstr(line, "[InstanceSettings][Settings]") != nullptr)
+        {
+            in_instance_settings = true;
+            continue;
+        }
+
+        if (line[0] == '[' && in_instance_settings)
+        {
+            if (strstr(line, "[InstanceSettings][Settings]") == nullptr)
+            {
+                in_instance_settings = false;
+            }
+        }
+
+        if (in_instance_settings)
+        {
+            int value = 0;
+            if (sscanf(line, "WindowWidth=%d", &value) == 1)
+            {
+                *width = value;
+                found_width = true;
+            }
+            else if (sscanf(line, "WindowHeight=%d", &value) == 1)
+            {
+                *height = value;
+                found_height = true;
+            }
+        }
+
+        if (found_width && found_height)
+        {
+            break;
+        }
+    }
+
+    fclose(f);
+
+    return found_width && found_height;
+}
+
 }
 
 pnanovdb_imgui_instance_interface_t* get_user_imgui_instance_interface()

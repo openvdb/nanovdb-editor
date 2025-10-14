@@ -24,6 +24,7 @@
 namespace pnanovdb_imgui_window_default
 {
 
+// neeeds to be called after camer.config is set
 static inline void applyReverseZFarPlane(pnanovdb_camera_config_t* config)
 {
     if (config->is_reverse_z && !config->is_orthographic)
@@ -135,15 +136,18 @@ pnanovdb_imgui_window_t* create(const pnanovdb_compute_t* compute,
         }
     }
 
+    pnanovdb_camera_init(&ptr->camera);
+
     auto settings = new pnanovdb_imgui_settings_render_t();
     settings->data_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_imgui_settings_render_t);
     pnanovdb_camera_config_default(&settings->camera_config);
-    pnanovdb_camera_state_default(&settings->camera_state, PNANOVDB_FALSE);
+    pnanovdb_camera_state_default(&settings->camera_state, settings->is_y_up);
     *imgui_user_settings = settings;
 
     // set to opposite to force refresh
     ptr->prev_is_upside_down = settings->is_upside_down ? PNANOVDB_FALSE : PNANOVDB_TRUE;
     ptr->prev_is_y_up = settings->is_y_up ? PNANOVDB_FALSE : PNANOVDB_TRUE;
+
     ptr->window_glfw = window_glfw;
     ptr->log_print = log_print;
 
@@ -209,8 +213,6 @@ pnanovdb_imgui_window_t* create(const pnanovdb_compute_t* compute,
 
         inst.renderer = inst.renderer_interface.create(compute, queue, pixels, tex_width, tex_height);
     }
-
-    pnanovdb_camera_init(&ptr->camera);
 
     // initialize local speed state
     ptr->key_translation_rate_base = ptr->camera.config.key_translation_rate;
@@ -617,8 +619,8 @@ void update_camera(pnanovdb_imgui_window_t* window, pnanovdb_imgui_settings_rend
     {
         // apply imgui settings
         ptr->camera.state = user_settings->camera_state;
+        applyReverseZFarPlane(&user_settings->camera_config);
         ptr->camera.config = user_settings->camera_config;
-        user_settings->sync_camera = PNANOVDB_FALSE;
 
         ptr->prev_is_y_up = user_settings->is_y_up;
         ptr->prev_is_upside_down = user_settings->is_upside_down;
@@ -660,6 +662,7 @@ void update_camera(pnanovdb_imgui_window_t* window, pnanovdb_imgui_settings_rend
 
         ptr->prev_is_upside_down = user_settings->is_upside_down;
     }
+
     if (user_settings->sync_camera)
     {
         user_settings->sync_camera = PNANOVDB_FALSE;
