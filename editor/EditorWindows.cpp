@@ -78,7 +78,13 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
                 ptr->render_settings_name = ptr->viewport_settings[(int)ptr->viewport_option].render_settings_name;
                 if (!ptr->is_viewer())
                 {
-                    ptr->pending.load_camera = true;
+                    // Load camera state
+                    auto it = ptr->saved_camera_states.find(ptr->render_settings_name);
+                    if (it != ptr->saved_camera_states.end())
+                    {
+                        ptr->render_settings->camera_state = it->second;
+                        ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                    }
                 }
             }
             ImGui::SameLine();
@@ -88,7 +94,13 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
                 ptr->render_settings_name = ptr->viewport_settings[(int)ptr->viewport_option].render_settings_name;
                 if (!ptr->is_viewer())
                 {
-                    ptr->pending.load_camera = true;
+                    // Load camera state
+                    auto it = ptr->saved_camera_states.find(ptr->render_settings_name);
+                    if (it != ptr->saved_camera_states.end())
+                    {
+                        ptr->render_settings->camera_state = it->second;
+                        ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                    }
                 }
             }
             ImGui::EndGroup();
@@ -105,7 +117,13 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
                         ptr->render_settings_name = pair.first;
                         ptr->viewport_settings[(int)ptr->viewport_option].render_settings_name =
                             ptr->render_settings_name;
-                        ptr->pending.load_camera = true;
+
+                        auto it = ptr->saved_camera_states.find(ptr->render_settings_name);
+                        if (it != ptr->saved_camera_states.end())
+                        {
+                            ptr->render_settings->camera_state = it->second;
+                            ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                        }
 
                         // TODO: clear selected debug camera when switching to saved camera
 
@@ -126,8 +144,15 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
                 {
                     if (ptr->saved_render_settings.find(ptr->render_settings_name) == ptr->saved_render_settings.end())
                     {
-                        // save camera state in editor update loop
-                        ptr->pending.save_camera = true;
+                        ptr->saved_camera_states[ptr->render_settings_name] = ptr->render_settings->camera_state;
+
+                        imgui_instance_user::copyPersistentFields(
+                            ptr->saved_render_settings[ptr->render_settings_name], *ptr->render_settings);
+
+                        ImGui::MarkIniSettingsDirty();
+
+                        pnanovdb_editor::Console::getInstance().addLog(
+                            "Camera and settings '%s' saved", ptr->render_settings_name.c_str());
                     }
                     else
                     {
@@ -758,36 +783,6 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
     }
 }
 
-void saveLoadSettings(imgui_instance_user::Instance* ptr)
-{
-    if (ptr->pending.save_render_settings)
-    {
-        ptr->pending.save_render_settings = false;
-
-        // Mark settings as dirty to trigger save
-        ImGui::MarkIniSettingsDirty();
-
-        pnanovdb_editor::Console::getInstance().addLog("Render settings '%s' saved", ptr->render_settings_name.c_str());
-    }
-    if (ptr->pending.load_render_settings)
-    {
-        ptr->pending.load_render_settings = false;
-
-        auto it = ptr->saved_render_settings.find(ptr->render_settings_name);
-        if (it != ptr->saved_render_settings.end())
-        {
-            // Copy saved camera state to current camera state
-            ptr->render_settings_name = it->first;
-            // pnanovdb_editor::Console::getInstance().addLog("Render settings '%s' loaded",
-            // ptr->render_settings_name.c_str());
-        }
-        else
-        {
-            pnanovdb_editor::Console::getInstance().addLog(
-                "Render settings '%s' not found", ptr->render_settings_name.c_str());
-        }
-    }
-}
 
 void showAboutWindow(imgui_instance_user::Instance* ptr)
 {

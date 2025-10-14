@@ -289,8 +289,10 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
     auto log_print = ptr->compute_interface.get_log_print(context);
 
     // encoder resize
-    pnanovdb_int32_t target_encode_width = user_settings->encode_resize ? ptr->width_encode_resize : user_settings->encode_width;
-    pnanovdb_int32_t target_encode_height = user_settings->encode_resize ? ptr->height_encode_resize : user_settings->encode_height;
+    pnanovdb_int32_t target_encode_width =
+        user_settings->encode_resize ? ptr->width_encode_resize : user_settings->encode_width;
+    pnanovdb_int32_t target_encode_height =
+        user_settings->encode_resize ? ptr->height_encode_resize : user_settings->encode_height;
     if (ptr->encoder && target_encode_width > 0 && target_encode_height > 0 &&
         (target_encode_width != ptr->width || target_encode_height != ptr->height))
     {

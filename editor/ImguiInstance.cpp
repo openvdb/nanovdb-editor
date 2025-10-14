@@ -19,6 +19,8 @@
 #include "CodeEditor.h"
 #include "Console.h"
 #include "RenderSettingsHandler.h"
+#include "RenderSettingsConfig.h"
+#include "CameraStateHandler.h"
 #include "InstanceSettingsHandler.h"
 #include "ImguiIni.h"
 
@@ -77,7 +79,7 @@ static void save_ini_settings(Instance* ptr)
         ptr->ini_window_width = (int)io.DisplaySize.x;
         ptr->ini_window_height = (int)io.DisplaySize.y;
 
-        ptr->saved_render_settings[ptr->render_settings_name] = *ptr->render_settings;
+        copyPersistentFields(ptr->saved_render_settings[ptr->render_settings_name], *ptr->render_settings);
         ImGui::SaveIniSettingsToDisk(io.IniFilename);
     }
 }
@@ -107,6 +109,7 @@ pnanovdb_imgui_instance_t* create(void* userdata,
     // Register settings handlers
     ImGuiContext* context = ImGui::GetCurrentContext();
     RenderSettingsHandler::Register(context, ptr);
+    CameraStateHandler::Register(context, ptr);
     InstanceSettingsHandler::Register(context, ptr);
     pnanovdb_editor::CodeEditor::getInstance().registerSettingsHandler(context);
 
@@ -311,7 +314,8 @@ static void createMenu(Instance* ptr)
                     if (io.IniFilename && *io.IniFilename)
                     {
                         ImGui::LoadIniSettingsFromDisk(io.IniFilename);
-                        *ptr->render_settings = ptr->saved_render_settings[ptr->render_settings_name];
+                        copyPersistentFields(
+                            *ptr->render_settings, ptr->saved_render_settings[ptr->render_settings_name]);
                         ptr->render_settings->sync_camera = PNANOVDB_TRUE;
                     }
                 }
@@ -421,7 +425,6 @@ void update(pnanovdb_imgui_instance_t* instance)
 
         if (!ptr->loaded_ini_once)
         {
-            // For viewer profile, load from memory; otherwise load from disk
             bool isViewerProfile = ptr->is_viewer();
             if (isViewerProfile)
             {
@@ -445,7 +448,14 @@ void update(pnanovdb_imgui_instance_t* instance)
             auto it = ptr->saved_render_settings.find(ptr->render_settings_name);
             if (it != ptr->saved_render_settings.end())
             {
-                *ptr->render_settings = it->second;
+                copyPersistentFields(*ptr->render_settings, it->second);
+            }
+
+            // Apply loaded camera state from INI
+            auto camera_it = ptr->saved_camera_states.find(ptr->render_settings_name);
+            if (camera_it != ptr->saved_camera_states.end())
+            {
+                ptr->render_settings->camera_state = camera_it->second;
                 ptr->render_settings->sync_camera = PNANOVDB_TRUE;
             }
         }
@@ -465,8 +475,6 @@ void update(pnanovdb_imgui_instance_t* instance)
     showWindows(ptr, delta_time);
 
     markIniDirtyIfNewWindowsAppeared(ptr);
-
-    pnanovdb_editor::saveLoadSettings(ptr);
 
     pnanovdb_editor::showFileDialogs(ptr);
 

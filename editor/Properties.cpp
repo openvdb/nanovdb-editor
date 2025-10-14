@@ -128,32 +128,38 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
 
         if (ImGui::Button("Reset"))
         {
-            // Load from the "default" saved render settings, fallback to default state and config
-            auto it = ptr->saved_render_settings.find(s_render_settings_default);
-            if (it != ptr->saved_render_settings.end())
+            auto camera_it = ptr->saved_camera_states.find(s_render_settings_default);
+            if (camera_it != ptr->saved_camera_states.end())
             {
-                ptr->render_settings->camera_state = it->second.camera_state;
-                ptr->render_settings->camera_config = it->second.camera_config;
-                ptr->render_settings->is_projection_rh = it->second.is_projection_rh;
-                ptr->render_settings->is_orthographic = it->second.is_orthographic;
-                ptr->render_settings->is_reverse_z = it->second.is_reverse_z;
-                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                ptr->render_settings->camera_state = camera_it->second;
             }
             else
             {
+                // Fallback to default camera state if not found
                 pnanovdb_camera_state_t default_state = {};
                 pnanovdb_camera_state_default(&default_state, ptr->render_settings->is_y_up);
-
-                pnanovdb_camera_config_t default_config = {};
-                pnanovdb_camera_config_default(&default_config);
-
                 ptr->render_settings->camera_state = default_state;
+            }
+
+            pnanovdb_camera_config_t default_config = {};
+            pnanovdb_camera_config_default(&default_config);
                 ptr->render_settings->camera_config = default_config;
+
+            auto settings_it = ptr->saved_render_settings.find(s_render_settings_default);
+            if (settings_it != ptr->saved_render_settings.end())
+            {
+                ptr->render_settings->is_projection_rh = settings_it->second.is_projection_rh;
+                ptr->render_settings->is_orthographic = settings_it->second.is_orthographic;
+                ptr->render_settings->is_reverse_z = settings_it->second.is_reverse_z;
+            }
+            else
+            {
                 ptr->render_settings->is_projection_rh = default_config.is_projection_rh;
                 ptr->render_settings->is_orthographic = default_config.is_orthographic;
                 ptr->render_settings->is_reverse_z = default_config.is_reverse_z;
-                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
             }
+
+            ptr->render_settings->sync_camera = PNANOVDB_TRUE;
         }
     }
     else

@@ -94,21 +94,21 @@ DockSpace           ID=0x00000001 Window=0x1BBC0F80 Pos=0,21 Size=1440,699 Split
   DockNode          ID=0x00000003 Parent=0x00000001 SizeRef=432,720
 
 [RenderSettings][default]
-position=0.000000,0.000000,0.000000
-eye_direction=0.000000,1.000000,0.000000
-eye_up=0.000000,0.000000,1.000000
-eye_distance_from_position=3.000000
-orthographic_scale=1.000000
 vsync=1
 is_projection_rh=1
 is_orthographic=0
 is_reverse_z=1
 is_y_up=0
-is_upside_down=0
+is_upside_down=1
 camera_speed_multiplier=1.000000
 ui_profile_name=viewer
-encode_width=-1
-encode_height=-1
+
+[CameraState][default]
+position=0.000000,0.000000,0.000000
+eye_direction=0.000000,0.000000,1.000000
+eye_up=0.000000,1.000000,0.000000
+eye_distance_from_position=10.000000
+orthographic_scale=1.000000
 
 [InstanceSettings][Settings]
 GroupName=

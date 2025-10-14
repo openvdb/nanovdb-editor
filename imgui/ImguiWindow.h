@@ -86,6 +86,8 @@ typedef struct pnanovdb_imgui_settings_render_t
     pnanovdb_camera_config_t camera_config = {};
     float camera_speed_multiplier = 1.f;
     char ui_profile_name[256u] = { 'd', 'e', 'f', 'a', 'u', 'l', 't', '\0' };
+    // NOTE: When adding new fields here, ensure you categorize them as persistent, config-only,
+    //       or runtime-only, and update RenderSettingsConfig.h to reflect the appropriate category
 
 } pnanovdb_imgui_settings_render_t;
 

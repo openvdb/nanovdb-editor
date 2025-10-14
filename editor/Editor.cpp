@@ -35,6 +35,7 @@
 
 #ifdef USE_IMGUI_INSTANCE
 #    include "ImguiInstance.h"
+#    include "RenderSettingsConfig.h"
 #endif
 
 static const pnanovdb_uint32_t s_default_width = 1440u;
@@ -470,26 +471,14 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         imgui_user_settings->sync_camera = PNANOVDB_TRUE;
     }
 
+    imgui_instance_user::RenderSettingsConfig render_config;
+    render_config.load(*config);
+    render_config.applyToSettings(*imgui_user_settings);
+
     // Automatically enable encoder when streaming is requested
     if (config->streaming || config->stream_to_file)
     {
         imgui_user_settings->enable_encoder = PNANOVDB_TRUE;
-        if (config->ip_address != nullptr)
-        {
-            snprintf(imgui_user_settings->server_address, sizeof(imgui_user_settings->server_address), "%s",
-                     config->ip_address);
-        }
-        imgui_user_settings->server_port = config->port;
-        if (config->stream_to_file)
-        {
-            imgui_user_settings->encode_to_file = PNANOVDB_TRUE;
-        }
-    }
-
-    if (config->ui_profile_name != nullptr)
-    {
-        snprintf(imgui_user_settings->ui_profile_name, sizeof(imgui_user_settings->ui_profile_name), "%s",
-                 config->ui_profile_name);
     }
 
 #ifdef USE_IMGUI_INSTANCE
@@ -1224,35 +1213,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             }
         }
 
-        // update camera settings
-        if (imgui_user_instance->pending.save_camera)
-        {
-            imgui_user_instance->pending.save_camera = false;
-
-            // Ensure top-level fields are synced to camera_config before saving
-            imgui_user_settings->camera_config.is_projection_rh = imgui_user_settings->is_projection_rh;
-            imgui_user_settings->camera_config.is_reverse_z = imgui_user_settings->is_reverse_z;
-            imgui_user_settings->camera_config.is_orthographic = imgui_user_settings->is_orthographic;
-
-            imgui_user_instance->saved_render_settings[imgui_user_instance->render_settings_name] = *imgui_user_settings;
-
-            pnanovdb_camera_state_t camera_state = {};
-            imgui_window_iface->get_camera(imgui_window, &camera_state, nullptr);
-            imgui_user_instance->saved_render_settings[imgui_user_instance->render_settings_name].camera_state =
-                camera_state;
-
-            imgui_user_instance->pending.save_render_settings = true;
-        }
-        if (imgui_user_instance->pending.load_camera)
-        {
-            imgui_user_instance->pending.load_camera = false;
-
-            auto& saved = imgui_user_instance->saved_render_settings[imgui_user_instance->render_settings_name];
-            imgui_user_settings->camera_state = saved.camera_state;
-            imgui_user_settings->sync_camera = PNANOVDB_TRUE;
-
-            imgui_user_instance->pending.load_render_settings = true;
-        }
         if (editor->impl->camera && imgui_user_settings->sync_camera == PNANOVDB_FALSE)
         {
             imgui_window_iface->get_camera(imgui_window, &editor->impl->camera->state, &editor->impl->camera->config);

@@ -125,10 +125,6 @@ struct PendingState
     bool find_callable_file = false;
     bool open_file = false;
     bool save_file = false;
-    bool load_camera = false; // load camera state in editor update loop
-    bool save_camera = false;
-    bool save_render_settings = false;
-    bool load_render_settings = false;
     std::string viewport_shader_name = "";
     std::string viewport_gaussian_view = "";
     std::string viweport_nanovdb_array = "";
@@ -204,6 +200,7 @@ struct Instance
 
     std::string render_settings_name = s_render_settings_default;
     std::map<std::string, pnanovdb_imgui_settings_render_t> saved_render_settings;
+    std::map<std::string, pnanovdb_camera_state_t> saved_camera_states;
 
     std::vector<std::string> viewport_shaders;
 

@@ -35,6 +35,5 @@ void showConsoleWindow(Instance* ptr);
 void showAboutWindow(Instance* ptr);
 
 void showFileDialogs(Instance* ptr);
-void saveLoadSettings(Instance* ptr);
 
 } // namespace pnanovdb_editor
