@@ -69,6 +69,7 @@ struct Window
     FILE* encode_file = nullptr;
     pnanovdb_socket_t* socket = nullptr;
     pnanovdb_server_instance_t* server = nullptr;
+    pnanovdb_bool_t encoder_was_enabled = PNANOVDB_FALSE;
 
     std::vector<ImguiInstance> imgui_instances;
     bool enable_default_imgui = false;
@@ -332,8 +333,10 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         inst.instance_interface.update(inst.instance);
     }
 
-    if (!ptr->encoder && user_settings->enable_encoder)
+    if (!ptr->encoder && (user_settings->enable_encoder || ptr->encoder_was_enabled))
     {
+        ptr->encoder_was_enabled = PNANOVDB_TRUE;
+
         pnanovdb_compute_encoder_desc_t encoder_desc = {};
         encoder_desc.width = ptr->width;
         encoder_desc.height = ptr->height;
