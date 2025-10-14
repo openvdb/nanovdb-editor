@@ -69,6 +69,8 @@ struct Window
     FILE* encode_file = nullptr;
     pnanovdb_socket_t* socket = nullptr;
     pnanovdb_server_instance_t* server = nullptr;
+    pnanovdb_bool_t encoder_was_enabled = PNANOVDB_FALSE;
+    pnanovdb_bool_t encode_to_file_active = PNANOVDB_FALSE;
 
     std::vector<ImguiInstance> imgui_instances;
     bool enable_default_imgui = false;
@@ -287,26 +289,34 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
     // encoder resize
     pnanovdb_int32_t target_encode_width = user_settings->encode_resize ? ptr->width_encode_resize : user_settings->encode_width;
     pnanovdb_int32_t target_encode_height = user_settings->encode_resize ? ptr->height_encode_resize : user_settings->encode_height;
-    if (ptr->encoder && target_encode_width > 0 && target_encode_height > 0 &&
-        (target_encode_width != ptr->width || target_encode_height != ptr->height))
+    bool encode_size_changed = target_encode_width > 0 && target_encode_height > 0 &&
+        (target_encode_width != ptr->width || target_encode_height != ptr->height);
+    bool encode_to_file_changed = user_settings->encode_to_file != ptr->encode_to_file_active;
+    if (ptr->encoder && (encode_size_changed || encode_to_file_changed))
     {
         compute->device_interface.wait_idle(compute_queue);
 
+        // destroy encoder, close recording file as needed
         compute->device_interface.destroy_encoder(ptr->encoder);
         ptr->encoder = nullptr;
         if (ptr->encode_file)
         {
             fclose(ptr->encode_file);
             ptr->encode_file = nullptr;
+            ptr->encode_to_file_active = PNANOVDB_FALSE;
         }
 
-        if (ptr->window_glfw)
+        // apply resize event if applicable
+        if (encode_size_changed)
         {
-            windowGlfwResize(ptr->window_glfw, target_encode_width, target_encode_height);
-        }
-        else
-        {
-            resizeWindow(ptr, target_encode_width, target_encode_height);
+            if (ptr->window_glfw)
+            {
+                windowGlfwResize(ptr->window_glfw, target_encode_width, target_encode_height);
+            }
+            else
+            {
+                resizeWindow(ptr, target_encode_width, target_encode_height);
+            }
         }
     }
 
@@ -332,8 +342,10 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         inst.instance_interface.update(inst.instance);
     }
 
-    if (!ptr->encoder && user_settings->enable_encoder)
+    if (!ptr->encoder && (user_settings->enable_encoder || ptr->encoder_was_enabled))
     {
+        ptr->encoder_was_enabled = PNANOVDB_TRUE;
+
         pnanovdb_compute_encoder_desc_t encoder_desc = {};
         encoder_desc.width = ptr->width;
         encoder_desc.height = ptr->height;
@@ -343,6 +355,7 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         if (user_settings->encode_to_file)
         {
             ptr->encode_file = fopen("capture_stream.h264", "wb");
+            ptr->encode_to_file_active = PNANOVDB_TRUE;
         }
 #if 0
             if (!ptr->socket)

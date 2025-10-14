@@ -840,6 +840,7 @@ void showRenderSettingsWindow(Instance* ptr)
             ImGui::EndCombo();
         }
         IMGUI_CHECKBOX_SYNC("Fit Resolution", settings->encode_resize);
+        IMGUI_CHECKBOX_SYNC("Video Record", settings->encode_to_file);
         ImGui::InputText("Server Address", settings->server_address, 256u);
         ImGui::InputInt("Server Port", &settings->server_port);
     }
