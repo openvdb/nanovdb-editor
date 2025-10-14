@@ -678,7 +678,7 @@ void ShaderParams::addToScalarNParam(const std::string& name, const nlohmann::js
     assignTypedValue(shader_param.type, shader_param.getMin(), value.contains("min") ? value["min"] : nlohmann::json(0));
     assignTypedValue(shader_param.type, shader_param.getMax(), value.contains("max") ? value["max"] : nlohmann::json(1));
 
-    shader_param.step = value.contains("step") ? value["step"] : 0.01f;
+    shader_param.step = value.contains("step") ? value["step"].get<float>() : 0.01f;
 
     if (shader_param.type != ImGuiDataType_Float)
     {
