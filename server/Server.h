@@ -56,7 +56,10 @@ typedef struct pnanovdb_server_t
                                                                int max_attempts,
                                                                pnanovdb_compute_log_print_t log_print);
 
-    void(PNANOVDB_ABI* push_h264)(pnanovdb_server_instance_t* instance, const void* data, pnanovdb_uint64_t data_size);
+    void(PNANOVDB_ABI* push_h264)(pnanovdb_server_instance_t* instance,
+                                  const void* data, pnanovdb_uint64_t data_size,
+                                  pnanovdb_uint32_t width,
+                                  pnanovdb_uint32_t height);
 
     pnanovdb_bool_t(PNANOVDB_ABI* pop_event)(pnanovdb_server_instance_t* instance, pnanovdb_server_event_t* out_event);
 

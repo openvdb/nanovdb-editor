@@ -462,7 +462,7 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         }
         if (ptr->server)
         {
-            pnanovdb_get_server()->push_h264(ptr->server, encoder_data, encoder_data_size);
+            pnanovdb_get_server()->push_h264(ptr->server, encoder_data, encoder_data_size, ptr->width, ptr->height);
         }
         if (ptr->encode_file)
         {

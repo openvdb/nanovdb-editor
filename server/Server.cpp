@@ -56,6 +56,13 @@ int code_to_imgui(const std::string& code);
 
 static const uint32_t ring_buffer_size = 60u;
 
+struct server_frame_metadata_t
+{
+    uint64_t frame_id;
+    uint width;
+    uint height;
+};
+
 struct server_instance_t
 {
     std::shared_ptr<restinio::asio_ns::io_context> ioctx;
@@ -66,7 +73,7 @@ struct server_instance_t
     pnanovdb_compute_log_print_t log_print;
 
     std::vector<std::vector<char>> buffers;
-    std::vector<uint64_t> frame_ids;
+    std::vector<server_frame_metadata_t> frame_metadatas;
     std::map<uint64_t, uint64_t> client_ring_buffer_idx;
     uint32_t ring_buffer_idx = 0u;
     uint64_t frame_id_counter = 0llu;
@@ -104,7 +111,7 @@ void send_video(const asio::error_code& ec)
                 while (ring_buf_it->second != ~0u && ring_buf_it->second != g_server_instance->ring_buffer_idx)
                 {
                     auto& front = g_server_instance->buffers[ring_buf_it->second];
-                    uint64_t frame_id = g_server_instance->frame_ids[ring_buf_it->second];
+                    server_frame_metadata_t metadata = g_server_instance->frame_metadatas[ring_buf_it->second];
                     ring_buf_it->second = (ring_buf_it->second + 1) % ring_buffer_size;
 
                     // printf("Sending %zu bytes of video\n", front.size());
@@ -114,7 +121,9 @@ void send_video(const asio::error_code& ec)
                     nlohmann::json msg = {
                         {"type", "event"},
                         {"eventType", "frameid"},
-                        {"frameid", frame_id}
+                        {"frameid", metadata.frame_id},
+                        {"width", metadata.width},
+                        {"height", metadata.height}
                     };
 
                     wsh->send_message(rws::final_frame_flag_t::final_frame, rws::opcode_t::text_frame,
@@ -239,10 +248,11 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
                                              else if (eventType == "frameid")
                                              {
                                                 uint64_t frame_id = msg["frameid"].get<uint64_t>();
-                                                if (g_server_instance && g_server_instance->log_print)
-                                                {
-                                                    g_server_instance->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "frame_id(%zu)", frame_id);
-                                                }
+                                                // TODO: compute latency
+                                                //if (g_server_instance && g_server_instance->log_print)
+                                                //{
+                                                //    g_server_instance->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "frame_id(%zu)", frame_id);
+                                                //}
                                              }
 
                                              if (g_server_instance)
@@ -303,7 +313,7 @@ pnanovdb_server_instance_t* create_instance(const char* serveraddress, int port,
     auto ptr = new server_instance_t();
 
     ptr->buffers.resize(ring_buffer_size);
-    ptr->frame_ids.resize(ring_buffer_size);
+    ptr->frame_metadatas.resize(ring_buffer_size);
 
     ptr->serveraddress = serveraddress;
     ptr->port = port;
@@ -376,7 +386,11 @@ pnanovdb_server_instance_t* create_instance(const char* serveraddress, int port,
     return cast(ptr);
 }
 
-void push_h264(pnanovdb_server_instance_t* instance, const void* data, pnanovdb_uint64_t data_size)
+void push_h264(pnanovdb_server_instance_t* instance,
+               const void* data,
+               pnanovdb_uint64_t data_size,
+               pnanovdb_uint32_t width,
+               pnanovdb_uint32_t height)
 {
     auto ptr = cast(instance);
 
@@ -384,8 +398,13 @@ void push_h264(pnanovdb_server_instance_t* instance, const void* data, pnanovdb_
 
     const char* data_char = (const char*)data;
 
+    server_frame_metadata_t metadata = {};
+    metadata.frame_id = ptr->frame_id_counter;
+    metadata.width = width;
+    metadata.height = height;
+
     ptr->buffers[ptr->ring_buffer_idx].assign(data_char, data_char + data_size);
-    ptr->frame_ids[ptr->ring_buffer_idx] = ptr->frame_id_counter;
+    ptr->frame_metadatas[ptr->ring_buffer_idx] = metadata;
 
     ptr->ring_buffer_idx = (ptr->ring_buffer_idx + 1) % ring_buffer_size;
     ptr->frame_id_counter++;

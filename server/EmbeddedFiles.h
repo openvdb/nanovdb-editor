@@ -103,6 +103,8 @@ top: 0; left: 0; bottom: 0; right: 0;
             debug: false
          });
 
+        var old_width = 0;
+
         const hostname = window.location.hostname;
         const port = window.location.port;
         var ws = new WebSocket("ws://" + hostname + ":" + port + "/ws");
@@ -119,6 +121,20 @@ top: 0; left: 0; bottom: 0; right: 0;
             else if(typeof event.data === 'string')
             {
                 ws.send(event.data);
+                try {
+                    const jsObject = JSON.parse(event.data);
+                    if (old_width == 0)
+                    {
+                        old_width = jsObject.width;
+                    }
+                    if (old_width != jsObject.width)
+                    {
+                        console.log("Resolution changed. Refreshing.");
+                        window.location.reload();
+                    }
+                } catch (error) {
+                    console.error("Error parsing JSON:", error.message);
+                }
                 //console.log('String message: ', event.data);
             }
         });
