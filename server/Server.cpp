@@ -254,6 +254,12 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
                                                 //    g_server_instance->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "frame_id(%zu)", frame_id);
                                                 //}
                                              }
+                                             else if (eventType == "resize")
+                                             {
+                                                event.type = PNANOVDB_SERVER_EVENT_RESIZE;
+                                                event.width = msg["width"];
+                                                event.height = msg["height"];
+                                             }
 
                                              if (g_server_instance)
                                              {

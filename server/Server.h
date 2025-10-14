@@ -29,6 +29,7 @@ typedef struct pnanovdb_server_instance_t pnanovdb_server_instance_t;
 #define PNANOVDB_SERVER_EVENT_KEYDOWN 5
 #define PNANOVDB_SERVER_EVENT_KEYUP 6
 #define PNANOVDB_SERVER_EVENT_INACTIVE 7
+#define PNANOVDB_SERVER_EVENT_RESIZE 8
 
 typedef struct pnanovdb_server_event_t
 {
@@ -45,6 +46,8 @@ typedef struct pnanovdb_server_event_t
     pnanovdb_bool_t ctrl_key;
     pnanovdb_bool_t shift_key;
     pnanovdb_bool_t meta_key;
+    pnanovdb_int32_t width;
+    pnanovdb_int32_t height;
 } pnanovdb_server_event_t;
 
 typedef struct pnanovdb_server_t

@@ -239,12 +239,33 @@ top: 0; left: 0; bottom: 0; right: 0;
                                 video.play();
                             })
                         }
+
+                        // send first resize event
+                        {
+                            const msg = {
+                                type: "event",
+                                eventType: "resize",
+                                width: window.innerWidth,
+                                height: window.innerHeight
+                            };
+                            ws.send(JSON.stringify(msg));    
+                        }
                     }
                 } catch (error) {
                     console.error("Error parsing JSON:", error.message);
                 }
                 //console.log('String message: ', event.data);
             }
+        });
+
+        window.addEventListener('resize', () => {
+            const msg = {
+                type: "event",
+                eventType: "resize",
+                width: window.innerWidth,
+                height: window.innerHeight
+            };
+            ws.send(JSON.stringify(msg));            
         });
 
         document.addEventListener('keydown', (event) => {
