@@ -103,7 +103,9 @@ top: 0; left: 0; bottom: 0; right: 0;
             debug: false
          });
 
+        const video = document.getElementById("stream");
         var old_width = 0;
+        var old_height = 0;
 
         const hostname = window.location.hostname;
         const port = window.location.port;
@@ -123,13 +125,14 @@ top: 0; left: 0; bottom: 0; right: 0;
                 ws.send(event.data);
                 try {
                     const jsObject = JSON.parse(event.data);
-                    if (old_width == 0)
+                    if (old_width == 0 && old_height == 0)
                     {
                         old_width = jsObject.width;
+                        old_height = jsObject.height;
                     }
-                    if (old_width != jsObject.width)
+                    if (old_width != jsObject.width || old_height != jsObject.height)
                     {
-                        console.log("Resolution changed. Refreshing.");
+                        console.log("Resolution changed. Reloading page.");
                         window.location.reload();
                     }
                 } catch (error) {
@@ -138,8 +141,6 @@ top: 0; left: 0; bottom: 0; right: 0;
                 //console.log('String message: ', event.data);
             }
         });
-
-        const video = document.getElementById("stream");
 
         video.addEventListener('contextmenu', (event) => {
             event.preventDefault();
