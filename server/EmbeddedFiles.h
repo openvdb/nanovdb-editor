@@ -248,7 +248,7 @@ top: 0; left: 0; bottom: 0; right: 0;
                                 width: window.innerWidth,
                                 height: window.innerHeight
                             };
-                            ws.send(JSON.stringify(msg));    
+                            ws.send(JSON.stringify(msg));
                         }
                     }
                 } catch (error) {
@@ -265,7 +265,7 @@ top: 0; left: 0; bottom: 0; right: 0;
                 width: window.innerWidth,
                 height: window.innerHeight
             };
-            ws.send(JSON.stringify(msg));            
+            ws.send(JSON.stringify(msg));
         });
 
         document.addEventListener('keydown', (event) => {
