@@ -95,103 +95,175 @@ top: 0; left: 0; bottom: 0; right: 0;
     </div>
     <script>
     window.onload = function(){
-        var jmuxer = new JMuxer({
-            node: 'stream',
-            mode: 'video',
-            flushingTime: 0,
-            fps: 90,
-            debug: false
-         });
+        const streamStage = document.getElementById("streamStage");
+        var video = document.getElementById("stream");
+        var videoWidth = 0;
+        var videoHeight = 0;
 
         const hostname = window.location.hostname;
         const port = window.location.port;
         var ws = new WebSocket("ws://" + hostname + ":" + port + "/ws");
         ws.binaryType = 'arraybuffer';
         ws.addEventListener('message',function(event){
-            if (!document.hidden){
-                jmuxer.feed({
-                    video: new Uint8Array(event.data)
-                });
+            if (event.data instanceof ArrayBuffer)
+            {
+                if (!document.hidden){
+                    if (jmuxer)
+                    {
+                        jmuxer.feed({
+                            video: new Uint8Array(event.data)
+                        });
+                    }
+                }
+            }
+            else if(typeof event.data === 'string')
+            {
+                ws.send(event.data);
+                try {
+                    const jsObject = JSON.parse(event.data);
+                    if (videoWidth != jsObject.width || videoHeight != jsObject.height)
+                    {
+                        videoWidth = jsObject.width;
+                        videoHeight = jsObject.height;
+                        console.log("Resolution changed. Recreating video and jmuxer.");
+                        video.remove();
+                        video = document.createElement('video');
+                        video.autoplay = true;
+                        video.muted = true;
+                        video.id = "stream";
+                        streamStage.appendChild(video);
+                        jmuxer = new JMuxer({
+                            node: 'stream',
+                            mode: 'video',
+                            flushingTime: 0,
+                            fps: 90,
+                            debug: false
+                        });
+
+                        video.addEventListener('contextmenu', (event) => {
+                            event.preventDefault();
+                        });
+
+                        video.addEventListener('mousemove', (event) => {
+                            let rect = video.getBoundingClientRect();
+                            let x = (event.clientX - rect.left) / (rect.right - rect.left);
+                            let y = (event.clientY - rect.top) / (rect.bottom - rect.top);
+                            const msg = {
+                                type: "event",
+                                eventType: "mousemove",
+                                x: x,
+                                y: y
+                            };
+                            ws.send(JSON.stringify(msg));
+                        });
+                        video.addEventListener('mousedown', (event) => {
+                            const msg = {
+                                type: "event",
+                                eventType: "mousedown",
+                                button: event.button
+                            };
+                            ws.send(JSON.stringify(msg));
+                        });
+                        video.addEventListener('mouseup', (event) => {
+                            const msg = {
+                                type: "event",
+                                eventType: "mouseup",
+                                button: event.button
+                            };
+                            ws.send(JSON.stringify(msg));
+                        });
+                        video.addEventListener('wheel', (event) => {
+                            const msg = {
+                                type: "event",
+                                eventType: "mousewheel",
+                                deltaX: event.deltaX,
+                                deltaY: event.deltaY
+                            };
+                            ws.send(JSON.stringify(msg));
+                        });
+
+                        video.addEventListener('touchmove', (event) => {
+                            let rect = video.getBoundingClientRect();
+                            let x = (event.targetTouches[0].clientX - rect.left) / (rect.right - rect.left);
+                            let y = (event.targetTouches[0].clientY - rect.top) / (rect.bottom - rect.top);
+                            const msg = {
+                                type: "event",
+                                eventType: "mousemove",
+                                x: x,
+                                y: y
+                            };
+                            ws.send(JSON.stringify(msg));
+                        });
+                        video.addEventListener('touchstart', (event) => {
+                            const msg = {
+                                type: "event",
+                                eventType: "mousedown",
+                                button: 0
+                            };
+                            ws.send(JSON.stringify(msg));
+                        });
+                        video.addEventListener('touchend', (event) => {
+                            const msg = {
+                                type: "event",
+                                eventType: "mouseup",
+                                button: 0
+                            };
+                            ws.send(JSON.stringify(msg));
+                        });
+                        video.addEventListener('touchcancel', (event) => {
+                            const msg = {
+                                type: "event",
+                                eventType: "mouseup",
+                                button: 0
+                            };
+                            ws.send(JSON.stringify(msg));
+                        });
+
+                        const userAgent = navigator.userAgent;
+                        if (userAgent.includes('Safari') && !userAgent.includes('Chrome'))
+                        {
+                            video.addEventListener('waiting', (event) => {
+                                //console.log('Waiting!');
+                                video.pause();
+                            });
+                            video.addEventListener('canplay', (event) => {
+                                //console.log('Canplay!');
+                                video.play();
+                            });
+                            video.addEventListener('canplaythrough', (event) => {
+                                //console.log('Canplaythrough!');
+                                video.play();
+                            });
+                            video.addEventListener('durationchange', (event) => {
+                                //console.log('Durationchange!');
+                                video.play();
+                            })
+                        }
+
+                        // send first resize event
+                        {
+                            const msg = {
+                                type: "event",
+                                eventType: "resize",
+                                width: window.innerWidth,
+                                height: window.innerHeight
+                            };
+                            ws.send(JSON.stringify(msg));
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error parsing JSON:", error.message);
+                }
+                //console.log('String message: ', event.data);
             }
         });
 
-        const video = document.getElementById("stream");
-
-        video.addEventListener('contextmenu', (event) => {
-            event.preventDefault();
-        });
-
-        video.addEventListener('mousemove', (event) => {
-            let rect = video.getBoundingClientRect();
-            let x = (event.clientX - rect.left) / (rect.right - rect.left);
-            let y = (event.clientY - rect.top) / (rect.bottom - rect.top);
+        window.addEventListener('resize', () => {
             const msg = {
                 type: "event",
-                eventType: "mousemove",
-                x: x,
-                y: y
-            };
-            ws.send(JSON.stringify(msg));
-        });
-        video.addEventListener('mousedown', (event) => {
-            const msg = {
-                type: "event",
-                eventType: "mousedown",
-                button: event.button
-            };
-            ws.send(JSON.stringify(msg));
-        });
-        video.addEventListener('mouseup', (event) => {
-            const msg = {
-                type: "event",
-                eventType: "mouseup",
-                button: event.button
-            };
-            ws.send(JSON.stringify(msg));
-        });
-        video.addEventListener('wheel', (event) => {
-            const msg = {
-                type: "event",
-                eventType: "mousewheel",
-                deltaX: event.deltaX,
-                deltaY: event.deltaY
-            };
-            ws.send(JSON.stringify(msg));
-        });
-
-        video.addEventListener('touchmove', (event) => {
-            let rect = video.getBoundingClientRect();
-            let x = (event.targetTouches[0].clientX - rect.left) / (rect.right - rect.left);
-            let y = (event.targetTouches[0].clientY - rect.top) / (rect.bottom - rect.top);
-            const msg = {
-                type: "event",
-                eventType: "mousemove",
-                x: x,
-                y: y
-            };
-            ws.send(JSON.stringify(msg));
-        });
-        video.addEventListener('touchstart', (event) => {
-            const msg = {
-                type: "event",
-                eventType: "mousedown",
-                button: 0
-            };
-            ws.send(JSON.stringify(msg));
-        });
-        video.addEventListener('touchend', (event) => {
-            const msg = {
-                type: "event",
-                eventType: "mouseup",
-                button: 0
-            };
-            ws.send(JSON.stringify(msg));
-        });
-        video.addEventListener('touchcancel', (event) => {
-            const msg = {
-                type: "event",
-                eventType: "mouseup",
-                button: 0
+                eventType: "resize",
+                width: window.innerWidth,
+                height: window.innerHeight
             };
             ws.send(JSON.stringify(msg));
         });
@@ -232,27 +304,6 @@ top: 0; left: 0; bottom: 0; right: 0;
                 event.preventDefault();
             }
         });
-
-        const userAgent = navigator.userAgent;
-        if (userAgent.includes('Safari') && !userAgent.includes('Chrome'))
-        {
-            video.addEventListener('waiting', (event) => {
-                //console.log('Waiting!');
-                video.pause();
-            });
-            video.addEventListener('canplay', (event) => {
-                //console.log('Canplay!');
-                video.play();
-            });
-            video.addEventListener('canplaythrough', (event) => {
-                //console.log('Canplaythrough!');
-                video.play();
-            });
-            video.addEventListener('durationchange', (event) => {
-                //console.log('Durationchange!');
-                video.play();
-            })
-        }
     }
     </script>
 </body>

@@ -80,6 +80,8 @@ struct Window
 
     pnanovdb_uint32_t width = 0;
     pnanovdb_uint32_t height = 0;
+    pnanovdb_uint32_t width_encode_resize = 0;
+    pnanovdb_uint32_t height_encode_resize = 0;
 
     pnanovdb_camera_t camera = {};
 
@@ -283,8 +285,10 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
     auto log_print = ptr->compute_interface.get_log_print(context);
 
     // encoder resize
-    if (ptr->encoder && user_settings->encode_width > 0 && user_settings->encode_height > 0 &&
-        (user_settings->encode_width != ptr->width || user_settings->encode_height != ptr->height))
+    pnanovdb_int32_t target_encode_width = user_settings->encode_resize ? ptr->width_encode_resize : user_settings->encode_width;
+    pnanovdb_int32_t target_encode_height = user_settings->encode_resize ? ptr->height_encode_resize : user_settings->encode_height;
+    if (ptr->encoder && target_encode_width > 0 && target_encode_height > 0 &&
+        (target_encode_width != ptr->width || target_encode_height != ptr->height))
     {
         compute->device_interface.wait_idle(compute_queue);
 
@@ -298,11 +302,11 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
 
         if (ptr->window_glfw)
         {
-            windowGlfwResize(ptr->window_glfw, user_settings->encode_width, user_settings->encode_height);
+            windowGlfwResize(ptr->window_glfw, target_encode_width, target_encode_height);
         }
         else
         {
-            resizeWindow(ptr, user_settings->encode_width, user_settings->encode_height);
+            resizeWindow(ptr, target_encode_width, target_encode_height);
         }
     }
 
@@ -462,7 +466,7 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         }
         if (ptr->server)
         {
-            pnanovdb_get_server()->push_h264(ptr->server, encoder_data, encoder_data_size);
+            pnanovdb_get_server()->push_h264(ptr->server, encoder_data, encoder_data_size, ptr->width, ptr->height);
         }
         if (ptr->encode_file)
         {
@@ -538,6 +542,11 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
                             ptr->server, get_external_active_count, external_active_count);
                     }
                     break;
+                }
+                else if (event.type == PNANOVDB_SERVER_EVENT_RESIZE)
+                {
+                    ptr->width_encode_resize = event.width;
+                    ptr->height_encode_resize = event.height;
                 }
             }
         }
