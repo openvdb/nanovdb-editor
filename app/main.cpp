@@ -32,6 +32,7 @@ struct NanoVDBEditorArgs : public argparse::Args
     std::string& convert_node2_output_file = kwarg("o,output", "Convert to Node2 output file path").set_default("");
     bool& headless = flag("headless", "Run in headless mode").set_default(false);
     bool& streaming = flag("s,stream", "Run in streaming mode").set_default(false);
+    bool& stream_to_file = flag("stream-to-file", "Stream to file").set_default(false);
     std::string& ip_address = kwarg("ip,address", "IP address for streaming").set_default("127.0.0.1");
     int& port = kwarg("p,port", "Port for streaming").set_default(8080);
 };
@@ -67,6 +68,7 @@ int main(int argc, char* argv[])
 
     printf("Headless mode: %s\n", args.headless ? "true" : "false");
     printf("Streaming mode: %s\n", args.streaming ? "true" : "false");
+    printf("Stream to file: %s\n", args.stream_to_file ? "true" : "false");
     printf("IP address: %s\n", args.ip_address.c_str());
     printf("Port: %d\n", args.port);
 
@@ -87,8 +89,6 @@ int main(int argc, char* argv[])
     pnanovdb_editor_t editor = {};
     pnanovdb_editor_load(&editor, &compute, &compiler);
 
-    editor.compute = &compute;
-
     pnanovdb_compute_array_t* data_in = compute.load_nanovdb(file);
     editor.add_nanovdb(&editor, data_in);
 
@@ -97,6 +97,7 @@ int main(int argc, char* argv[])
     config.port = args.port;
     config.headless = args.headless ? PNANOVDB_TRUE : PNANOVDB_FALSE;
     config.streaming = args.streaming ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+    config.stream_to_file = args.stream_to_file ? PNANOVDB_TRUE : PNANOVDB_FALSE;
     editor.show(&editor, device, &config);
 
     pnanovdb_editor_free(&editor);

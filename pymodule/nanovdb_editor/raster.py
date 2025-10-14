@@ -14,7 +14,8 @@ class pnanovdb_Raster(Structure):
     """Definition equivalent to pnanovdb_raster_t."""
 
     _fields_ = [
-        ("raster_interface", c_void_p),  # PNANOVDB_REFLECT_INTERFACE()
+        ("interface_pnanovdb_reflect_data_type", c_void_p),  # PNANOVDB_REFLECT_INTERFACE()
+        ("compute", POINTER(pnanovdb_Compute)),
         ("create_context", CFUNCTYPE(c_void_p, POINTER(pnanovdb_Compute), POINTER(pnanovdb_ComputeQueue))),
         ("destroy_context", CFUNCTYPE(None, POINTER(pnanovdb_Compute), POINTER(pnanovdb_ComputeQueue), c_void_p)),
         (
@@ -30,7 +31,8 @@ class pnanovdb_Raster(Structure):
                 POINTER(pnanovdb_ComputeArray),  # colors
                 POINTER(pnanovdb_ComputeArray),  # spherical_harmonics
                 POINTER(pnanovdb_ComputeArray),  # opacities
-                POINTER(POINTER(pnanovdb_ComputeArray)),
+                POINTER(pnanovdb_ComputeArray),  # shader_params_arrays
+                c_uint32,  # shader_param_count
             ),
         ),  # shader_params_arrays
         (
@@ -89,7 +91,6 @@ class pnanovdb_Raster(Structure):
                 c_void_p,
             ),
         ),  # userdata
-        ("compute", POINTER(pnanovdb_Compute)),
     ]
 
 

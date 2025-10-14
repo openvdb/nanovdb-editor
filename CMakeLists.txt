@@ -473,9 +473,11 @@ if (NOT SKBUILD)
             pnanovdbcompute
             pnanovdbfileformat
             pnanovdbeditor
+            $<$<BOOL:${NANOVDB_EDITOR_USE_H264}>:openh264>
     )
 
     add_dependencies(pnanovdbeditortestapp pnanovdbeditor_prebuild)
+    add_dependencies(pnanovdbeditortestapp openh264_build)
 endif()
 
 if (NOT WIN32)

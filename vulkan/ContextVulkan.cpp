@@ -599,15 +599,19 @@ void context_flushNodes(Context* context)
         auto ptr = cast(context->deferredReleaseBuffers[idx]);
         if (ptr)
         {
+            // Only process UPLOAD buffers if lastActive <= lastFenceCompleted
             if (ptr->memory_type != PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE &&
                 ptr->lastActive > context->deviceQueue->lastFenceCompleted)
             {
-                continue;
+                continue; // Don't process yet, but also don't erase - keep in deferred list
             }
             ptr->refCount--;
-            ptr->lastActive = context->deviceQueue->nextFenceValue;
+            ptr->lastActive = ptr->memory_type != PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE ?
+                                  context->deviceQueue->lastFenceCompleted :
+                                  context->deviceQueue->nextFenceValue;
+            // Only erase if we actually processed it
+            context->deferredReleaseBuffers.erase(context->deferredReleaseBuffers.begin() + idx);
         }
-        context->deferredReleaseBuffers.erase(context->deferredReleaseBuffers.begin() + idx);
     }
     // apply deferred destroyTexture
     for (pnanovdb_uint32_t idx = context->deferredReleaseTextures.size() - 1u;
@@ -643,7 +647,7 @@ void context_flushNodes(Context* context)
             ptr = context->pool_buffers[idx].release();
             buffer_destroy(context, ptr);
 
-            context->logPrint(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Vulkan destroy pool buffer %d", idx);
+            context->logPrint(PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Vulkan destroy pool buffer %d", idx);
 
             context->pool_buffers.erase(context->pool_buffers.begin() + idx);
         }
@@ -656,7 +660,7 @@ void context_flushNodes(Context* context)
             ptr = context->pool_textures[idx].release();
             texture_destroy(context, ptr);
 
-            context->logPrint(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Vulkan destroy pool texture %d", idx);
+            context->logPrint(PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Vulkan destroy pool texture %d", idx);
 
             context->pool_textures.erase(context->pool_textures.begin() + idx);
         }

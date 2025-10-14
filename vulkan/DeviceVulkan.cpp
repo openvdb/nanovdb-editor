@@ -384,7 +384,7 @@ pnanovdb_compute_device_t* createDevice(pnanovdb_compute_device_manager_t* devic
 
         if (ptr->logPrint)
         {
-            ptr->logPrint(PNANOVDB_COMPUTE_LOG_LEVEL_INFO,
+            ptr->logPrint(PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG,
                           "Vulkan graphics_queue_family_idx(%d) compute_queue_family_idx(%d) encode_queue_family_idx(%d)",
                           ptr->graphicsQueueFamilyIdx, ptr->computeQueueFamilyIdx, ptr->encodeQueueFamilyIdx);
         }

@@ -103,7 +103,9 @@ top: 0; left: 0; bottom: 0; right: 0;
             debug: false
          });
 
-        var ws = new WebSocket("ws://$serveraddress:$port/ws");
+        const hostname = window.location.hostname;
+        const port = window.location.port;
+        var ws = new WebSocket("ws://" + hostname + ":" + port + "/ws");
         ws.binaryType = 'arraybuffer';
         ws.addEventListener('message',function(event){
             if (event.data instanceof ArrayBuffer)

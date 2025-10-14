@@ -19,6 +19,8 @@
 #include "Socket.h"
 #include <server/Server.h>
 
+#include <stdlib.h>
+
 namespace pnanovdb_imgui_window_default
 {
 
@@ -64,6 +66,7 @@ struct Window
     pnanovdb_compute_log_print_t log_print = nullptr;
 
     pnanovdb_compute_encoder_t* encoder = nullptr;
+    FILE* encode_file = nullptr;
     pnanovdb_socket_t* socket = nullptr;
     pnanovdb_server_instance_t* server = nullptr;
 
@@ -82,6 +85,9 @@ struct Window
 
     pnanovdb_bool_t prev_is_y_up = PNANOVDB_FALSE;
     pnanovdb_bool_t prev_is_upside_down = PNANOVDB_FALSE;
+
+    float key_translation_rate_base = 1.f;
+    float shift_speed_multiplier;
 };
 
 PNANOVDB_CAST_PAIR(pnanovdb_imgui_window_t, Window)
@@ -134,8 +140,9 @@ pnanovdb_imgui_window_t* create(const pnanovdb_compute_t* compute,
     pnanovdb_camera_state_default(&settings->camera_state, PNANOVDB_FALSE);
     *imgui_user_settings = settings;
 
-    ptr->prev_is_upside_down = settings->is_upside_down;
-    ptr->prev_is_y_up = settings->is_y_up;
+    // set to opposite to force refresh
+    ptr->prev_is_upside_down = settings->is_upside_down ? PNANOVDB_FALSE : PNANOVDB_TRUE;
+    ptr->prev_is_y_up = settings->is_y_up ? PNANOVDB_FALSE : PNANOVDB_TRUE;
     ptr->window_glfw = window_glfw;
     ptr->log_print = log_print;
 
@@ -204,6 +211,10 @@ pnanovdb_imgui_window_t* create(const pnanovdb_compute_t* compute,
 
     pnanovdb_camera_init(&ptr->camera);
 
+    // initialize local speed state
+    ptr->key_translation_rate_base = ptr->camera.config.key_translation_rate;
+    ptr->shift_speed_multiplier = settings->key_translation_shift_multiplier;
+
     return cast(ptr);
 }
 
@@ -238,6 +249,11 @@ void destroy(const pnanovdb_compute_t* compute,
         {
             pnanovdb_get_server()->destroy_instance(ptr->server);
             ptr->server = nullptr;
+        }
+        if (ptr->encode_file)
+        {
+            fclose(ptr->encode_file);
+            ptr->encode_file = nullptr;
         }
     }
 
@@ -274,6 +290,11 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
 
         compute->device_interface.destroy_encoder(ptr->encoder);
         ptr->encoder = nullptr;
+        if (ptr->encode_file)
+        {
+            fclose(ptr->encode_file);
+            ptr->encode_file = nullptr;
+        }
 
         if (ptr->window_glfw)
         {
@@ -315,6 +336,10 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         encoder_desc.fps = 30;
 
         ptr->encoder = ptr->device_interface.create_encoder(compute_queue, &encoder_desc);
+        if (user_settings->encode_to_file)
+        {
+            ptr->encode_file = fopen("capture_stream.h264", "wb");
+        }
 #if 0
             if (!ptr->socket)
             {
@@ -324,7 +349,8 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         if (!ptr->server)
         {
             ptr->server = pnanovdb_get_server()->create_instance(
-                user_settings->server_address, user_settings->server_port, log_print);
+                user_settings->server_address, user_settings->server_port,
+                user_settings->server_create_max_attempts, log_print);
             if (!ptr->server)
             {
                 if (log_print)
@@ -334,6 +360,11 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
                 ptr->device_interface.destroy_encoder(ptr->encoder);
                 ptr->encoder = nullptr;
                 return PNANOVDB_FALSE;
+            }
+            if (log_print)
+            {
+                log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Running on server %s:%d", user_settings->server_address,
+                          user_settings->server_port);
             }
         }
 #endif
@@ -432,6 +463,10 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         if (ptr->server)
         {
             pnanovdb_get_server()->push_h264(ptr->server, encoder_data, encoder_data_size);
+        }
+        if (ptr->encode_file)
+        {
+            fwrite(encoder_data, 1u, encoder_data_size, ptr->encode_file);
         }
         ptr->device_interface.unmap_encoder_data(ptr->encoder);
     }
@@ -575,6 +610,8 @@ void update_camera(pnanovdb_imgui_window_t* window, pnanovdb_imgui_settings_rend
 {
     auto ptr = cast(window);
 
+    ptr->shift_speed_multiplier = user_settings->key_translation_shift_multiplier;
+
     if (user_settings->sync_camera)
     {
         // apply imgui settings
@@ -616,6 +653,7 @@ void update_camera(pnanovdb_imgui_window_t* window, pnanovdb_imgui_settings_rend
     }
     if (user_settings->is_upside_down != ptr->prev_is_upside_down)
     {
+        ptr->camera.state.eye_up.x = -ptr->camera.state.eye_up.x;
         ptr->camera.state.eye_up.y = -ptr->camera.state.eye_up.y;
         ptr->camera.state.eye_up.z = -ptr->camera.state.eye_up.z;
 
@@ -765,6 +803,15 @@ void keyboardWindow(Window* ptr, ImGuiKey key, int scanCode, bool is_pressed, bo
             io.AddKeyEvent(key, is_pressed);
         }
     }
+    if (shift)
+    {
+        ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base * ptr->shift_speed_multiplier;
+    }
+    else
+    {
+        // restore previous (base) rate
+        ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base;
+    }
     // always report key release, conditional on key down
     if ((zeroWantCaptureKeyboard && zeroWantCaptureMouse) || !is_pressed)
     {
@@ -832,6 +879,17 @@ void mouseMoveWindow(Window* ptr, double mouseX, double mouseY)
         {
             zeroWantCaptureMouse = false;
         }
+
+        // apply transient rate scaling here too for mouse-driven motion
+        if (io.KeyShift)
+        {
+            ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base * ptr->shift_speed_multiplier;
+        }
+        else
+        {
+            // restore previous (base) rate
+            ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base;
+        }
     }
     if (zeroWantCaptureMouse)
     {
@@ -865,6 +923,17 @@ void mouseButtonWindow(Window* ptr, int button, bool is_pressed, int modifiers)
             {
                 ptr->mouse_pressed[button] = PNANOVDB_FALSE;
             }
+        }
+
+        // apply transient rate scaling for wheel zoom behavior
+        if (io.KeyShift)
+        {
+            ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base * ptr->shift_speed_multiplier;
+        }
+        else
+        {
+            // restore previous (base) rate
+            ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base;
         }
     }
     if (zeroWantCaptureMouse)

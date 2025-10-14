@@ -76,23 +76,37 @@ CPMAddPackage(
     VERSION ${VULKAN_VERSION}
 )
 
-if(NOT NANOVDB_EDITOR_USE_GLFW)
+if(VulkanHeaders_ADDED)
+    set(VULKAN_LOADER_OPTIONS
+        "BUILD_LOADER ON"
+        "BUILD_TESTS OFF"
+        "BUILD_SHARED_LOADER ON"
+        "BUILD_STATIC_LOADER OFF"
+        "VULKAN_HEADERS_INSTALL_DIR=${VulkanHeaders_SOURCE_DIR}"
+        "BUILD_WSI_DIRECTFB_SUPPORT OFF"
+    )
+
+    if(NANOVDB_EDITOR_USE_GLFW)
+        list(APPEND VULKAN_LOADER_OPTIONS
+            "BUILD_WSI_XLIB_SUPPORT ON"
+            "BUILD_WSI_XCB_SUPPORT ON"
+            "BUILD_WSI_WAYLAND_SUPPORT ON"
+        )
+    else()
+        list(APPEND VULKAN_LOADER_OPTIONS
+            "BUILD_WSI_XLIB_SUPPORT OFF"
+            "BUILD_WSI_XCB_SUPPORT OFF"
+            "BUILD_WSI_WAYLAND_SUPPORT OFF"
+        )
+    endif()
+
     CPMAddPackage(
         NAME VulkanLoader
         GITHUB_REPOSITORY KhronosGroup/Vulkan-Loader
         GIT_TAG v${VULKAN_VERSION}
         GIT_SHALLOW TRUE
         VERSION ${VULKAN_VERSION}
-        OPTIONS
-            "BUILD_LOADER ON"
-            "BUILD_TESTS OFF"
-            "BUILD_SHARED_LOADER ON"
-            "BUILD_STATIC_LOADER OFF"
-            "BUILD_WSI_XLIB_SUPPORT OFF"
-            "BUILD_WSI_XCB_SUPPORT OFF"
-            "BUILD_WSI_WAYLAND_SUPPORT OFF"
-            "BUILD_WSI_DIRECTFB_SUPPORT OFF"
-            "VULKAN_HEADERS_INSTALL_DIR=${VulkanHeaders_SOURCE_DIR}"
+        OPTIONS ${VULKAN_LOADER_OPTIONS}
     )
 endif()
 
@@ -167,7 +181,7 @@ CPMAddPackage(
 CPMAddPackage(
     NAME ImGuiColorTextEdit
     GITHUB_REPOSITORY goossens/ImGuiColorTextEdit
-    GIT_TAG eb891897d0c2a086bfb6e974b1564d4cd7543e73    # master
+    GIT_TAG 1b3d30c04498deacd210b143a1d7aa21f006a514    # master
     GIT_SHALLOW TRUE
     VERSION 1.0.0
     DOWNLOAD_ONLY YES
@@ -356,6 +370,17 @@ if(NANOVDB_EDITOR_E57_FORMAT)
         OPTIONS
             "E57FORMAT_BUILD_EXAMPLES OFF"
             "E57FORMAT_BUILD_TESTS OFF"
+    )
+endif()
+
+if(NANOVDB_EDITOR_USE_H264)
+    CPMAddPackage(
+        NAME openh264
+        GITHUB_REPOSITORY cisco/openh264
+        GIT_TAG 2.5.1
+        GIT_SHALLOW TRUE
+        VERSION 2.5.1
+        DOWNLOAD_ONLY YES
     )
 endif()
 
@@ -571,4 +596,57 @@ endif()
 
 if(NANOVDB_EDITOR_E57_FORMAT AND libE57Format_ADDED AND TARGET E57Format)
     set_target_properties(E57Format PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
+
+if(openh264_ADDED)
+    file(MAKE_DIRECTORY ${CPM_PACKAGE_openh264_BINARY_DIR})     # DOWNLOAD_ONLY does not create build dir
+
+    set(OPENH264_OUTPUT_LIB ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libopenh264${CMAKE_STATIC_LIBRARY_SUFFIX})
+    set(OPENH264_BUILD_LIB ${CPM_PACKAGE_openh264_BINARY_DIR}/libopenh264${CMAKE_STATIC_LIBRARY_SUFFIX})
+
+    add_custom_command(
+        OUTPUT ${OPENH264_OUTPUT_LIB}
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CPM_PACKAGE_openh264_SOURCE_DIR}
+            ${CPM_PACKAGE_openh264_BINARY_DIR}
+        # Build encoder and common libraries from root directory
+        COMMAND ${CMAKE_COMMAND} -E env CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER}
+                make -j${CMAKE_BUILD_PARALLEL_LEVEL}
+                USE_ASM=No BUILDTYPE=static DECODER=No
+                "CFLAGS=-fPIC -DWELS_X86_ASM=0"
+                "CXXFLAGS=-fPIC -std=c++11 -DWELS_X86_ASM=0"
+                libencoder.a libcommon.a libprocessing.a
+        # Create our own static library from encoder objects
+        COMMAND ${CMAKE_COMMAND} -E rm -rf temp_openh264_objects
+        COMMAND ${CMAKE_COMMAND} -E make_directory temp_openh264_objects
+        COMMAND ${CMAKE_COMMAND} -E chdir temp_openh264_objects ar x ../libencoder.a
+        COMMAND ${CMAKE_COMMAND} -E chdir temp_openh264_objects ar x ../libcommon.a
+        COMMAND ${CMAKE_COMMAND} -E chdir temp_openh264_objects ar x ../libprocessing.a
+        COMMAND find temp_openh264_objects -name "*.o" -print0 | xargs -0 ar rcs ${OPENH264_BUILD_LIB}
+        COMMAND ${CMAKE_COMMAND} -E rm -rf temp_openh264_objects
+        # Ensure proper symbol index
+        COMMAND ranlib ${OPENH264_BUILD_LIB}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${OPENH264_BUILD_LIB}
+            ${OPENH264_OUTPUT_LIB}
+        # Ensure the final copied library also has proper symbol index
+        COMMAND ranlib ${OPENH264_OUTPUT_LIB}
+        WORKING_DIRECTORY ${CPM_PACKAGE_openh264_BINARY_DIR}
+        DEPENDS ${CPM_PACKAGE_openh264_SOURCE_DIR}/Makefile
+        COMMENT "Building openh264 encoder-only static library"
+        VERBATIM
+    )
+
+    add_custom_target(openh264_build ALL
+        DEPENDS ${OPENH264_OUTPUT_LIB}
+    )
+
+    # Create an imported library target pointing to the built library in output dir
+    add_library(openh264 STATIC IMPORTED)
+    set_target_properties(openh264 PROPERTIES
+        IMPORTED_LOCATION ${OPENH264_OUTPUT_LIB}
+        INTERFACE_INCLUDE_DIRECTORIES ${CPM_PACKAGE_openh264_SOURCE_DIR}/codec/api
+    )
+    add_dependencies(openh264 openh264_build)
 endif()

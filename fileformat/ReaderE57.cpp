@@ -577,7 +577,7 @@ bool read_e57(const char* filename, size_t* array_size, float** positions_array,
     std::ifstream file(filename, std::ios::binary);
     if (!file.is_open())
     {
-        printf("Error: Could not open file: %s\n", filename);
+        printf("Could not open file: %s\n", filename);
         return false;
     }
     file.close();

@@ -6,7 +6,7 @@ requires = [
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "nanovdb_editor"
+name = "nanovdb-editor"
 dynamic = ["version"]
 description = "NanoVDB Editor Python Module"
 authors = [
@@ -15,13 +15,12 @@ authors = [
 license = {text = "Apache-2.0"}
 readme = "README.md"
 requires-python = ">=3.8"
-dependencies = [
-]
+keywords = ["nanovdb", "volume", "rendering", "gaussian", "splatting", "3d"]
 
 [project.urls]
-Homepage = "https://github.com/nanovdb-editor"
-Repository = "https://github.com/nanovdb-editor"
-Documentation = "https://github.com/nanovdb-editor/tree/main/pymodule"
+Homepage = "https://github.com/openvdb/nanovdb-editor"
+Repository = "https://github.com/openvdb/nanovdb-editor"
+Documentation = "https://github.com/openvdb/nanovdb-editor/tree/main/pymodule"
 
 [tool.scikit-build]
 build-dir = "build/{wheel_tag}-{build_type}"
@@ -35,6 +34,9 @@ source-dir = ".."
 args = [
     "-DSKBUILD=ON",
 ]
+
+[tool.scikit-build.wheel]
+py-api = "py3"
 
 [tool.scikit-build.metadata.version]
 provider = "scikit_build_core.metadata.regex"

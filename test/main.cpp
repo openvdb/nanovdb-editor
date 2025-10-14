@@ -12,7 +12,6 @@
 #include <nanovdb_editor/putil/Raster.h>
 #include <nanovdb_editor/putil/Editor.h>
 #include <nanovdb_editor/putil/FileFormat.h>
-#include <nanovdb_editor/putil/Raster.hpp>
 #include <nanovdb_editor/putil/Reflect.h>
 
 #include <nanovdb/io/IO.h>
@@ -33,10 +32,12 @@
 #define TEST_EDITOR
 // #define TEST_EDITOR_START_STOP
 // #define TEST_RASTER
-// #define TEST_RASTER_2D
+#define TEST_RASTER_2D
 // #define TEST_SVRASTER
 // #define TEST_E57
 #define TEST_CAMERA
+// #define TEST_H264
+
 struct constants_t
 {
     int magic_number;
@@ -44,6 +45,140 @@ struct constants_t
     int pad2;
     int pad3;
 };
+
+#ifdef TEST_H264
+#    include <wels/codec_api.h>
+#    include <wels/codec_app_def.h>
+#    include <wels/codec_def.h>
+
+void test_openh264()
+{
+    printf("Testing OpenH264 encoder...\n");
+
+    // Create encoder
+    ISVCEncoder* encoder = nullptr;
+    int rv = WelsCreateSVCEncoder(&encoder);
+    if (rv != 0 || !encoder)
+    {
+        printf("Error: Failed to create OpenH264 encoder\n");
+        return;
+    }
+
+    // Set encoding parameters
+    SEncParamExt param;
+    memset(&param, 0, sizeof(SEncParamExt));
+    encoder->GetDefaultParams(&param);
+
+    param.iUsageType = CAMERA_VIDEO_REAL_TIME;
+    param.fMaxFrameRate = 30.0f;
+    param.iPicWidth = 320;
+    param.iPicHeight = 240;
+    param.iTargetBitrate = 5000000;
+    param.iRCMode = RC_QUALITY_MODE;
+    param.iTemporalLayerNum = 1;
+    param.iSpatialLayerNum = 1;
+    param.bEnableDenoise = false;
+    param.bEnableBackgroundDetection = true;
+    param.bEnableAdaptiveQuant = true;
+    param.bEnableFrameSkip = true;
+    param.bEnableLongTermReference = false;
+    param.iLtrMarkPeriod = 30;
+    param.uiIntraPeriod = 320;
+    param.eSpsPpsIdStrategy = INCREASING_ID;
+    param.bPrefixNalAddingCtrl = false;
+    param.iComplexityMode = LOW_COMPLEXITY;
+    param.bSimulcastAVC = false;
+
+    param.sSpatialLayers[0].iVideoWidth = param.iPicWidth;
+    param.sSpatialLayers[0].iVideoHeight = param.iPicHeight;
+    param.sSpatialLayers[0].fFrameRate = param.fMaxFrameRate;
+    param.sSpatialLayers[0].iSpatialBitrate = param.iTargetBitrate;
+    param.sSpatialLayers[0].iMaxSpatialBitrate = param.iTargetBitrate;
+    param.sSpatialLayers[0].uiProfileIdc = PRO_BASELINE;
+    param.sSpatialLayers[0].uiLevelIdc = LEVEL_5_1;
+    param.sSpatialLayers[0].iDLayerQp = 24;
+    param.sSpatialLayers[0].sSliceArgument.uiSliceMode = SM_SINGLE_SLICE;
+
+    // Initialize encoder
+    rv = encoder->InitializeExt(&param);
+    if (rv != cmResultSuccess)
+    {
+        printf("Error: Failed to initialize OpenH264 encoder (code: %d)\n", rv);
+        WelsDestroySVCEncoder(encoder);
+        return;
+    }
+
+    // Create a simple test frame (solid color)
+    int frameSize = param.iPicWidth * param.iPicHeight * 3 / 2; // YUV420
+    unsigned char* yuvData = new unsigned char[frameSize];
+
+    // Fill with simple pattern
+    int ySize = param.iPicWidth * param.iPicHeight;
+    int uvSize = ySize / 4;
+
+    // Y plane (luminance) - gradient
+    for (int i = 0; i < ySize; i++)
+    {
+        yuvData[i] = (unsigned char)((i * 255) / ySize);
+    }
+
+    // U plane (blue chroma) - constant
+    for (int i = 0; i < uvSize; i++)
+    {
+        yuvData[ySize + i] = 128;
+    }
+
+    // V plane (red chroma) - constant
+    for (int i = 0; i < uvSize; i++)
+    {
+        yuvData[ySize + uvSize + i] = 128;
+    }
+
+    // Prepare source picture
+    SSourcePicture sourcePicture;
+    memset(&sourcePicture, 0, sizeof(SSourcePicture));
+    sourcePicture.iPicWidth = param.iPicWidth;
+    sourcePicture.iPicHeight = param.iPicHeight;
+    sourcePicture.iColorFormat = videoFormatI420;
+    sourcePicture.iStride[0] = param.iPicWidth;
+    sourcePicture.iStride[1] = param.iPicWidth / 2;
+    sourcePicture.iStride[2] = param.iPicWidth / 2;
+    sourcePicture.pData[0] = yuvData;
+    sourcePicture.pData[1] = yuvData + ySize;
+    sourcePicture.pData[2] = yuvData + ySize + uvSize;
+
+    // Encode frame
+    SFrameBSInfo frameInfo;
+    memset(&frameInfo, 0, sizeof(SFrameBSInfo));
+
+    rv = encoder->EncodeFrame(&sourcePicture, &frameInfo);
+    if (rv != cmResultSuccess)
+    {
+        printf("Error: Failed to encode frame (code: %d)\n", rv);
+    }
+    else
+    {
+        printf("Success: Encoded frame with %d layers\n", frameInfo.iLayerNum);
+
+        // Calculate total encoded size
+        int totalSize = 0;
+        for (int i = 0; i < frameInfo.iLayerNum; i++)
+        {
+            for (int j = 0; j < frameInfo.sLayerInfo[i].iNalCount; j++)
+            {
+                totalSize += frameInfo.sLayerInfo[i].pNalLengthInByte[j];
+            }
+        }
+        printf("Encoded size: %d bytes\n", totalSize);
+    }
+
+    // Cleanup
+    delete[] yuvData;
+    encoder->Uninitialize();
+    WelsDestroySVCEncoder(encoder);
+
+    printf("OpenH264 test completed\n");
+}
 
 void pnanovdb_compute_log_print(pnanovdb_compute_log_level_t level, const char* format, ...)
 {
@@ -69,6 +204,7 @@ void pnanovdb_compute_log_print(pnanovdb_compute_log_level_t level, const char* 
 
     va_end(args);
 }
+#endif
 
 struct NanoVDBEditorArgs : public argparse::Args
 {
@@ -76,6 +212,11 @@ struct NanoVDBEditorArgs : public argparse::Args
 
 int main(int argc, char* argv[])
 {
+#ifdef TEST_H264
+    test_openh264();
+    return 0;
+#endif
+
     auto args = argparse::parse<NanoVDBEditorArgs>(argc, argv);
 
 #if TEST_NODE2
@@ -118,7 +259,7 @@ int main(int argc, char* argv[])
 
     pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
 
-    pnanovdb_raster::raster_file(
+    raster.raster_file
         &raster, &compute, queue, npy_file, voxel_size, &data_nanovdb, nullptr, nullptr, nullptr, nullptr, nullptr);
 
     compute.save_nanovdb(data_nanovdb, "./data/splats.nvdb");
@@ -133,7 +274,7 @@ int main(int argc, char* argv[])
 
     pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
 
-    pnanovdb_raster::raster_file(
+    raster.raster_file
         &raster, &compute, queue, npy_file, voxel_size, &data_nanovdb, nullptr, nullptr, nullptr, nullptr, nullptr);
 
     compute.save_nanovdb(data_nanovdb, "./data/splats.nvdb");
@@ -196,9 +337,17 @@ int main(int argc, char* argv[])
     pnanovdb_editor_load(&editor, &compute, &compiler);
 
 #    ifdef TEST_CAMERA
+    pnanovdb_camera_config_t default_config = {};
+    pnanovdb_camera_config_default(&default_config);
+    default_config.near_plane = 0.1f;
+    default_config.far_plane = 100.0f;
+
+    pnanovdb_camera_state_t default_state = {};
+    pnanovdb_camera_state_default(&default_state, PNANOVDB_FALSE);
+
     pnanovdb_camera_state_t debug_state = {};
     pnanovdb_camera_state_default(&debug_state, PNANOVDB_FALSE);
-    debug_state.position = { 0.632428, 0.930241, -0.005193 };
+    debug_state.position = { 0.632428, -0.930241, -0.005193 };
     debug_state.eye_direction = { -0.012344, 0.959868, -0.280182 };
     debug_state.eye_up = { 0.000000, 1.000000, 0.000000 };
     debug_state.eye_distance_from_position = 41.431084;
@@ -207,14 +356,31 @@ int main(int argc, char* argv[])
     pnanovdb_camera_config_default(&debug_config);
     debug_config.near_plane = 0.1f;
     debug_config.far_plane = 100.0f;
-    debug_config.aspect_ratio = 1.0f;
+    debug_config.aspect_ratio = 2.0f;
+
+    pnanovdb_camera_state_t test_state = default_state;
+    test_state.eye_distance_from_position = 3.f;
+    test_state.eye_up = { 0.000000, 0.000000, -1.000000 };
+    pnanovdb_camera_config_t test_config = default_config;
+
+    pnanovdb_camera_view_t test_camera;
+    pnanovdb_camera_view_default(&test_camera);
+    test_camera.name = "test";
+    test_camera.num_cameras = 1;
+    test_camera.states = new pnanovdb_camera_state_t[test_camera.num_cameras];
+    test_camera.states[0] = test_state;
+    test_camera.configs = new pnanovdb_camera_config_t[test_camera.num_cameras];
+    test_camera.configs[0] = test_config;
+    test_camera.is_visible = PNANOVDB_FALSE;
+    editor.add_camera_view(&editor, &test_camera);
 
     pnanovdb_camera_view_t debug_camera;
-    pnanovdb_debug_camera_default(&debug_camera);
+    pnanovdb_camera_view_default(&debug_camera);
     debug_camera.name = "test_10";
     debug_camera.num_cameras = 10;
     debug_camera.states = new pnanovdb_camera_state_t[debug_camera.num_cameras];
     debug_camera.configs = new pnanovdb_camera_config_t[debug_camera.num_cameras];
+    debug_camera.is_visible = PNANOVDB_FALSE;
 
     for (int i = 0; i < debug_camera.num_cameras; ++i)
     {
@@ -226,23 +392,16 @@ int main(int argc, char* argv[])
     }
     editor.add_camera_view(&editor, &debug_camera);
 
-    pnanovdb_camera_config_t default_config = {};
-    pnanovdb_camera_config_default(&default_config);
-    default_config.near_plane = 0.1f;
-    default_config.far_plane = 100.0f;
-
-    pnanovdb_camera_state_t default_state = {};
-    pnanovdb_camera_state_default(&default_state, PNANOVDB_FALSE);
-
     pnanovdb_camera_view_t default_camera;
-    pnanovdb_debug_camera_default(&default_camera);
-    default_camera.name = "default";
+    pnanovdb_camera_view_default(&default_camera);
+    default_camera.name = "test_default";
     default_camera.num_cameras = 1;
     default_camera.states = new pnanovdb_camera_state_t[default_camera.num_cameras];
     default_camera.states[0] = default_state;
     default_camera.configs = new pnanovdb_camera_config_t[default_camera.num_cameras];
     default_camera.configs[0] = default_config;
-    // editor.add_camera_view(&editor, &default_camera);
+    default_camera.is_visible = PNANOVDB_FALSE;
+    editor.add_camera_view(&editor, &default_camera);
 #    endif
 
 #    ifdef TEST_RASTER
@@ -253,7 +412,7 @@ int main(int argc, char* argv[])
     camera.state.eye_direction = { -0.022936, 0.760122, -0.649375 };
     camera.state.eye_up = { 0.000000, 1.000000, 0.000000 };
     camera.state.eye_distance_from_position = -0.072589;
-    editor.add_camera(&editor, &camera);
+    editor.update_camera(&editor, &camera);
 #    endif
 
 #    ifdef TEST_RASTER_2D
@@ -264,9 +423,10 @@ int main(int argc, char* argv[])
     camera.state.eye_direction = { -0.012344, 0.959868, -0.280182 };
     camera.state.eye_up = { 0.000000, 1.000000, 0.000000 };
     camera.state.eye_distance_from_position = -2.111028;
-    editor.add_camera(&editor, &camera);
+    editor.update_camera(&editor, &camera);
 
-    const char* raster_file = "";
+    const char* raster_file = "./data/ficus.ply";
+    const char* raster_file_garden = "./data/garden.ply";
     pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
 
     pnanovdb_raster_t raster = {};
@@ -275,6 +435,15 @@ int main(int argc, char* argv[])
     const pnanovdb_reflect_data_type_t* data_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t);
     const pnanovdb_raster_shader_params_t* defaults = (const pnanovdb_raster_shader_params_t*)data_type->default_value;
     pnanovdb_raster_shader_params_t raster_params = *defaults;
+    raster_params.data_type = data_type;
+    raster_params.name = "ficus";
+    pnanovdb_raster_shader_params_t raster_params_garden = *defaults;
+    raster_params_garden.data_type = data_type;
+    raster_params_garden.name = "garden";
+
+    pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr;
+    pnanovdb_raster_gaussian_data_t* gaussian_data_garden = nullptr;
+    pnanovdb_raster_context_t* raster_ctx = nullptr;
 
 #        ifdef TEST_RASTER_SHADER_PARAMS
     pnanovdb_compute_array_t* params_array =
@@ -287,14 +456,20 @@ int main(int argc, char* argv[])
 
     shader_params_arrays[pnanovdb_raster::shader_param_count] = params_array;
 
-    pnanovdb_raster::raster_file(&raster, &compute, queue, raster_file, 0.f, nullptr, &editor.gaussian_data,
-                                 &editor.raster_ctx, shader_params_arrays, nullptr, nullptr);
-#        else
-    pnanovdb_raster::raster_file(&raster, &compute, queue, raster_file, 0.f, nullptr, &editor.gaussian_data,
-                                 &editor.raster_ctx, nullptr, nullptr, nullptr);
-#        endif
+    raster.raster_file(&raster, &compute, queue, raster_file, 0.f, nullptr, &editor.gaussian_data, &editor.raster_ctx,
+                       shader_params_arrays, nullptr, nullptr, nullptr);
 
-    editor.add_shader_params(&editor, &raster_params, data_type);
+#        else
+    raster_params.name = "ficus";
+    raster.raster_file(&raster, &compute, queue, raster_file, 0.f, nullptr, &gaussian_data, &raster_ctx, nullptr,
+                       &raster_params, nullptr, nullptr);
+    editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data);
+
+    raster_params_garden.name = "garden";
+    raster.raster_file(&raster, &compute, queue, raster_file_garden, 0.f, nullptr, &gaussian_data_garden, &raster_ctx,
+                       nullptr, &raster_params_garden, nullptr, nullptr);
+    editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data_garden);
+#        endif
 
     raster_params.eps2d = 0.5f;
     raster_params.near_plane_override = 1.f;
@@ -323,6 +498,13 @@ int main(int argc, char* argv[])
     // }
 
 #    ifdef TEST_RASTER_2D
+    raster.destroy_gaussian_data(raster.compute, queue, gaussian_data);
+    gaussian_data = nullptr;
+    raster.destroy_gaussian_data(raster.compute, queue, gaussian_data_garden);
+    gaussian_data_garden = nullptr;
+    raster.destroy_context(raster.compute, queue, raster_ctx);
+    raster_ctx = nullptr;
+
     pnanovdb_raster_free(&raster);
 #    endif
 
@@ -356,7 +538,7 @@ int main(int argc, char* argv[])
 
     pnanovdb_camera_t camera;
     pnanovdb_camera_init(&camera);
-    editor.add_camera(&editor, &camera);
+    editor.update_camera(&editor, &camera);
 
     runEditorLoop(10);
 

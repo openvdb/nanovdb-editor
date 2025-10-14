@@ -10,6 +10,7 @@ SLANG_DEBUG_OUTPUT=OFF
 CLEAN_SHADERS=OFF
 ENABLE_SANITIZERS=OFF
 GLFW_OFF=OFF
+H264_OFF=OFF    # Set to ON to disable H264 build
 
 # Parse command line arguments
 clean_build=false
@@ -90,6 +91,7 @@ function run_build() {
     -DNANOVDB_EDITOR_SLANG_DEBUG_OUTPUT=$SLANG_DEBUG_OUTPUT \
     -DNANOVDB_EDITOR_ENABLE_SANITIZERS=$ENABLE_SANITIZERS \
     -DNANOVDB_EDITOR_BUILD_TESTS=ON \
+    -DNANOVDB_EDITOR_USE_H264=$([ "$H264_OFF" = "ON" ] && echo OFF || echo ON) \
     -DNANOVDB_EDITOR_USE_GLFW=$([ "$GLFW_OFF" = "ON" ] && echo OFF || echo ON)
 
     # Build

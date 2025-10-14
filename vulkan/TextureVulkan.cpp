@@ -213,7 +213,7 @@ void texture_createImage(Context* context, Texture* ptr, VkImageUsageFlags usage
     if (result == VK_SUCCESS)
     {
         context->deviceQueue->device->logPrint(
-            PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Texture vidmem allocate %lld bytes", texMemReq.size);
+            PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Texture vidmem allocate %lld bytes", texMemReq.size);
     }
     else
     {
@@ -222,12 +222,12 @@ void texture_createImage(Context* context, Texture* ptr, VkImageUsageFlags usage
         if (result == VK_SUCCESS)
         {
             context->deviceQueue->device->logPrint(
-                PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Texture sysmem allocate %lld bytes", texMemReq.size);
+                PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Texture sysmem allocate %lld bytes", texMemReq.size);
         }
         else
         {
             context->deviceQueue->device->logPrint(
-                PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Texture allocate failed %lld bytes", texMemReq.size);
+                PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Texture allocate failed %lld bytes", texMemReq.size);
         }
     }
 

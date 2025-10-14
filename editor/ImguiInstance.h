@@ -28,10 +28,27 @@
 #include <map>
 #include <mutex>
 #include <memory>
+#include <deque>
 
 namespace imgui_instance_user
 {
 static const char* s_render_settings_default = "default";
+static const char* s_raster2d_shader_group = "raster/raster2d_group";
+
+// TODO: make unique label and save scene items in a map with unique keys rather than strings
+static const char* VIEWPORT_CAMERA = "Viewport Camera";
+
+static const char* VIEWPORT_SETTINGS = "Viewport";
+static const char* RENDER_SETTINGS = "Render Settings";
+static const char* COMPILER_SETTINGS = "Compiler";
+static const char* PROFILER = "Profiler";
+static const char* CODE_EDITOR = "Shader Editor";
+static const char* CONSOLE = "Log";
+static const char* SHADER_PARAMS = "Params";
+static const char* BENCHMARK = "Benchmark";
+static const char* FILE_HEADER = "File Header";
+static const char* SCENE = "Scene";
+static const char* PROPERTIES = "Properties";
 
 enum class ViewportOption : int
 {
@@ -52,6 +69,37 @@ struct ViewportSettings
     std::string render_settings_name = s_render_settings_default;
 };
 
+enum class ViewsTypes
+{
+    Cameras,
+    GaussianScenes,
+    NanoVDBs,
+    None
+};
+
+struct GaussianDataContext
+{
+    pnanovdb_raster_context_t* raster_ctx;
+    pnanovdb_raster_gaussian_data_t* gaussian_data;
+    pnanovdb_raster_shader_params_t* shader_params;
+
+    pnanovdb_imgui_settings_render_t* render_settings;
+};
+
+struct GaussianDataLoadedContext
+{
+    pnanovdb_raster_context_t* raster_ctx;
+    std::shared_ptr<pnanovdb_raster_gaussian_data_t> gaussian_data;
+    pnanovdb_raster_shader_params_t* shader_params;
+    pnanovdb_imgui_settings_render_t* render_settings;
+};
+struct EditorLoaded
+{
+    std::deque<std::string> filenames;
+    std::vector<pnanovdb_compute_array_t*> nanovdb_arrays;
+    std::vector<GaussianDataLoadedContext> gaussian_views;
+};
+
 struct PendingState
 {
     std::atomic<bool> update_shader = true; // needs to be initialized with true to map the shader after init
@@ -68,7 +116,9 @@ struct PendingState
     bool save_camera = true; // save default camera first
     bool save_render_settings = false;
     bool load_render_settings = false;
-    std::string shader_name = "";
+    std::string viewport_shader_name = "";
+    std::string viewport_gaussian_view = "";
+    std::string viweport_nanovdb_array = "";
     bool update_memory_stats = false;
     bool update_raster = false;
     bool find_shader_directory = false;
@@ -96,14 +146,15 @@ struct WindowState
 {
     bool show_profiler = false;
     bool show_code_editor = false;
-    bool show_console = true;
+    bool show_console = false;
     bool show_viewport_settings = true;
     bool show_render_settings = true;
     bool show_compiler_settings = false;
     bool show_shader_params = true;
     bool show_benchmark = false;
     bool show_file_header = false;
-    bool show_views = true;
+    bool show_scene = true;
+    bool show_scene_properties = true;
 };
 
 struct UniformState
@@ -133,7 +184,7 @@ struct Instance
     float raster_voxels_per_unit = 128.f;
 
     ShaderParams shader_params;
-    std::string shader_group = "";
+    std::string shader_group = ""; // selected group in shader params window
 
     ImVec2 dialog_size{ 768.f, 512.f };
 
@@ -149,10 +200,20 @@ struct Instance
 
     std::shared_ptr<pnanovdb_compute_array_t> nanovdb_array = nullptr;
 
+    EditorLoaded loaded;
+    std::string selected_scene_item = "";
+    ViewsTypes selected_view_type = ViewsTypes::None;
+
     std::map<std::string, pnanovdb_camera_view_t*>* camera_views = nullptr;
-    std::string selected_camera_view = "";
-    std::string selected_camera_frustum = "";
     std::map<std::string, int> camera_frustum_index; // map of camera view name to state index for frustum overlay
+    std::map<std::string, pnanovdb_compute_array_t>* nanovdb_arrays = nullptr;
+    std::map<std::string, GaussianDataContext>* gaussian_views = nullptr;
+    std::string raster_shader_group = s_raster2d_shader_group;
+    std::map<std::string, pnanovdb_imgui_settings_render_t> views_render_settings;
+
+    pnanovdb_camera_view_t default_camera_view; // default camera view that syncs with viewport
+    pnanovdb_camera_config_t default_camera_view_config;
+    pnanovdb_camera_state_t default_camera_view_state;
 
     void set_default_shader(const std::string& shaderName);
 
