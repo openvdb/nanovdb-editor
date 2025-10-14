@@ -64,6 +64,24 @@ PNANOVDB_INLINE float timestamp_diff(pnanovdb_uint64_t begin, pnanovdb_uint64_t 
 
 namespace imgui_instance_user
 {
+static void save_ini_settings(Instance* ptr)
+{
+    if (!ptr || ptr->is_viewer())
+    {
+        return;
+    }
+
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.IniFilename && *io.IniFilename)
+    {
+        ptr->ini_window_width = (int)io.DisplaySize.x;
+        ptr->ini_window_height = (int)io.DisplaySize.y;
+
+        ptr->saved_render_settings[ptr->render_settings_name] = *ptr->render_settings;
+        ImGui::SaveIniSettingsToDisk(io.IniFilename);
+    }
+}
+
 pnanovdb_imgui_instance_t* create(void* userdata,
                                   void* user_settings,
                                   const pnanovdb_reflect_data_type_t* user_settings_data_type)
@@ -99,17 +117,9 @@ void destroy(pnanovdb_imgui_instance_t* instance)
 {
     auto ptr = cast(instance);
 
-    if (ImGui::GetCurrentContext() && !ptr->is_viewer())
+    if (ImGui::GetCurrentContext())
     {
-        ImGuiIO& io = ImGui::GetIO();
-        if (io.IniFilename && *io.IniFilename)
-        {
-            ptr->ini_window_width = (int)io.DisplaySize.x;
-            ptr->ini_window_height = (int)io.DisplaySize.y;
-
-            ptr->saved_render_settings[ptr->render_settings_name] = *ptr->render_settings;
-            ImGui::SaveIniSettingsToDisk(io.IniFilename);
-        }
+        save_ini_settings(ptr);
     }
 
     ImGui::DestroyContext();
@@ -293,15 +303,7 @@ static void createMenu(Instance* ptr)
                 ImGui::Separator();
                 if (ImGui::MenuItem("Save INI"))
                 {
-                    ImGuiIO& io = ImGui::GetIO();
-                    if (io.IniFilename && *io.IniFilename)
-                    {
-                        ptr->ini_window_width = (int)io.DisplaySize.x;
-                        ptr->ini_window_height = (int)io.DisplaySize.y;
-
-                        ptr->saved_render_settings[ptr->render_settings_name] = *ptr->render_settings;
-                        ImGui::SaveIniSettingsToDisk(io.IniFilename);
-                    }
+                    save_ini_settings(ptr);
                 }
                 if (ImGui::MenuItem("Load INI"))
                 {
