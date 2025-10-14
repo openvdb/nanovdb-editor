@@ -300,6 +300,7 @@ void showRenderSettingsWindow(imgui_instance_user::Instance* ptr)
             }
             ImGui::EndCombo();
         }
+        IMGUI_CHECKBOX_SYNC("Fit Resolution", settings->encode_resize);
         ImGui::InputText("Server Address", settings->server_address, 256u);
         ImGui::InputInt("Server Port", &settings->server_port);
     }
