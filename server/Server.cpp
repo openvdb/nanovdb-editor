@@ -59,8 +59,8 @@ static const uint32_t ring_buffer_size = 60u;
 struct server_frame_metadata_t
 {
     uint64_t frame_id;
-    uint width;
-    uint height;
+    uint32_t width;
+    uint32_t height;
 };
 
 struct server_instance_t
@@ -118,16 +118,14 @@ void send_video(const asio::error_code& ec)
 
                     auto& wsh = wsh_itr->second;
 
-                    nlohmann::json msg = {
-                        {"type", "event"},
-                        {"eventType", "frameid"},
-                        {"frameid", metadata.frame_id},
-                        {"width", metadata.width},
-                        {"height", metadata.height}
-                    };
+                    nlohmann::json msg = { { "type", "event" },
+                                           { "eventType", "frameid" },
+                                           { "frameid", metadata.frame_id },
+                                           { "width", metadata.width },
+                                           { "height", metadata.height } };
 
                     wsh->send_message(rws::final_frame_flag_t::final_frame, rws::opcode_t::text_frame,
-                                    restinio::writable_item_t(msg.dump()));
+                                      restinio::writable_item_t(msg.dump()));
                     wsh->send_message(rws::final_frame_flag_t::final_frame, rws::opcode_t::binary_frame,
                                       restinio::writable_item_t(front));
                 }
@@ -247,18 +245,19 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
                                              }
                                              else if (eventType == "frameid")
                                              {
-                                                uint64_t frame_id = msg["frameid"].get<uint64_t>();
-                                                // TODO: compute latency
-                                                //if (g_server_instance && g_server_instance->log_print)
-                                                //{
-                                                //    g_server_instance->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "frame_id(%zu)", frame_id);
-                                                //}
+                                                 uint64_t frame_id = msg["frameid"].get<uint64_t>();
+                                                 // TODO: compute latency
+                                                 // if (g_server_instance && g_server_instance->log_print)
+                                                 //{
+                                                 //    g_server_instance->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO,
+                                                 //    "frame_id(%zu)", frame_id);
+                                                 //}
                                              }
                                              else if (eventType == "resize")
                                              {
-                                                event.type = PNANOVDB_SERVER_EVENT_RESIZE;
-                                                event.width = msg["width"];
-                                                event.height = msg["height"];
+                                                 event.type = PNANOVDB_SERVER_EVENT_RESIZE;
+                                                 event.width = msg["width"];
+                                                 event.height = msg["height"];
                                              }
 
                                              if (g_server_instance)

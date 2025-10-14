@@ -179,6 +179,7 @@ void test_openh264()
 
     printf("OpenH264 test completed\n");
 }
+#endif
 
 void pnanovdb_compute_log_print(pnanovdb_compute_log_level_t level, const char* format, ...)
 {
@@ -198,13 +199,18 @@ void pnanovdb_compute_log_print(pnanovdb_compute_log_level_t level, const char* 
     {
         prefix = "Info";
     }
+    else if (level == PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG)
+    {
+        // prefix = "Debug";
+        va_end(args);
+        return;
+    }
     printf("%s: ", prefix);
     vprintf(format, args);
     printf("\n");
 
     va_end(args);
 }
-#endif
 
 struct NanoVDBEditorArgs : public argparse::Args
 {
@@ -234,7 +240,7 @@ int main(int argc, char* argv[])
     pnanovdb_compute_load(&compute, &compiler);
 
     pnanovdb_compute_device_desc_t device_desc = {};
-    // device_desc.log_print = pnanovdb_compute_log_print;
+    device_desc.log_print = pnanovdb_compute_log_print;
 
     pnanovdb_compute_device_manager_t* device_manager = compute.device_interface.create_device_manager(PNANOVDB_FALSE);
     pnanovdb_compute_device_t* device = compute.device_interface.create_device(device_manager, &device_desc);
@@ -484,8 +490,8 @@ int main(int argc, char* argv[])
 #    endif
 
     pnanovdb_editor_config_t config = {};
-    config.headless = PNANOVDB_FALSE;
-    config.streaming = PNANOVDB_FALSE;
+    config.headless = PNANOVDB_TRUE;
+    config.streaming = PNANOVDB_TRUE;
     config.ip_address = "127.0.0.1";
     config.port = 8080;
     // config.ui_profile_name = "viewer";
@@ -516,8 +522,8 @@ int main(int argc, char* argv[])
     pnanovdb_editor_load(&editor, &compute, &compiler);
 
     pnanovdb_editor_config_t config = {};
-    config.headless = PNANOVDB_TRUE;
-    config.streaming = PNANOVDB_TRUE;
+    config.headless = PNANOVDB_FALSE;
+    config.streaming = PNANOVDB_FALSE;
     config.ip_address = "127.0.0.1";
     config.port = 8080;
 
