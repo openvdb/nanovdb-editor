@@ -308,8 +308,15 @@ void showRenderSettingsWindow(imgui_instance_user::Instance* ptr)
         ImGui::DragFloat("Camera Speed Multiplier", &settings->camera_speed_multiplier, 0.f, 1.f, 10000.f, "%.1f",
                          ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
         ImGui::Separator();
-
-        IMGUI_CHECKBOX_SYNC("Video Encode", settings->enable_encoder);
+        if (settings->enable_encoder)
+        {
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("Video encoding is running...");
+        }
+        else
+        {
+            IMGUI_CHECKBOX_SYNC("Video Encode", settings->enable_encoder);
+        }
         if (ImGui::BeginCombo("Resolution", "Select..."))
         {
             const char* labels[4] = { "1440x720", "1920x1080", "2560x1440", "3840x2160" };
