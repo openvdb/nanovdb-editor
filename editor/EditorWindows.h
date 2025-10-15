@@ -14,10 +14,14 @@
 namespace imgui_instance_user
 {
 struct Instance;
+} // namespace imgui_instance_user
+namespace pnanovdb_editor
+{
+using namespace imgui_instance_user;
 
 // Window rendering functions
 void showSceneWindow(Instance* ptr);
-void showCameraViewWindow(Instance* ptr);
+void showCameraViews(Instance* ptr);
 void showPropertiesWindow(Instance* ptr);
 void showViewportSettingsWindow(Instance* ptr);
 void showRenderSettingsWindow(Instance* ptr);
@@ -28,8 +32,8 @@ void showFileHeaderWindow(Instance* ptr);
 void showCodeEditorWindow(Instance* ptr);
 void showProfilerWindow(Instance* ptr, float delta_time);
 void showConsoleWindow(Instance* ptr);
+void showAboutWindow(Instance* ptr);
 
 void showFileDialogs(Instance* ptr);
-void saveLoadSettings(Instance* ptr);
 
-} // namespace imgui_instance_user
+} // namespace pnanovdb_editor

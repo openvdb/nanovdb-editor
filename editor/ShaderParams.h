@@ -39,6 +39,7 @@ struct ShaderParam
     float step;
     bool is_slider = false; // use slider in UI, for integers only
     bool is_bool = false; // use checkbox in UI, for integers only
+    bool is_hidden = false; // do not show in UI
     nlohmann::json pending_value; // store value to apply when pool array is allocated
 
     ShaderParam() : pool_index(SIZE_MAX), size(0), num_elements(0), step(0.0f)

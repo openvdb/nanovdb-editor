@@ -16,17 +16,22 @@ namespace pnanovdb_editor
 class Viewport
 {
 public:
-    // singleton
     static Viewport& getInstance()
     {
         static Viewport instance;
         return instance;
     }
 
-    Viewport();
     void setup();
     void render(const char* title);
 
 private:
+    Viewport();
+    ~Viewport() = default;
+
+    Viewport(const Viewport&) = delete;
+    Viewport& operator=(const Viewport&) = delete;
+    Viewport(Viewport&&) = delete;
+    Viewport& operator=(Viewport&&) = delete;
 };
 }

@@ -27,18 +27,23 @@ namespace pnanovdb_editor
 class Console
 {
 public:
-    // singleton
     static Console& getInstance()
     {
         static Console instance;
         return instance;
     }
 
-    Console();
     bool render();
     void addLog(const char* fmt, ...);
 
 private:
+    Console();
+    ~Console() = default;
+
+    Console(const Console&) = delete;
+    Console& operator=(const Console&) = delete;
+    Console(Console&&) = delete;
+    Console& operator=(Console&&) = delete;
     ImGuiTextBuffer buffer_;
     bool scrollToBottom_ = false;
     std::mutex logMutex_;

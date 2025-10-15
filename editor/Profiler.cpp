@@ -17,12 +17,6 @@ namespace pnanovdb_editor
 {
 int Profiler::s_id = 0;
 
-Profiler& Profiler::getInstance()
-{
-    static Profiler instance;
-    return instance;
-}
-
 bool Profiler::render(bool* update_memory_stats, float delta_time)
 {
     ImGuiIO& io = ImGui::GetIO();

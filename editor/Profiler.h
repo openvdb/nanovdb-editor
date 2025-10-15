@@ -45,7 +45,11 @@ struct ProfilerEntry
 class Profiler
 {
 public:
-    static Profiler& getInstance();
+    static Profiler& getInstance()
+    {
+        static Profiler instance;
+        return instance;
+    }
 
     pnanovdb_compute_device_memory_stats_t* getMemoryStats()
     {
@@ -66,6 +70,8 @@ private:
 
     Profiler(const Profiler&) = delete;
     Profiler& operator=(const Profiler&) = delete;
+    Profiler(Profiler&&) = delete;
+    Profiler& operator=(Profiler&&) = delete;
 
     void render_profiler_table(pnanovdb_uint64_t capture_id,
                                const std::map<std::string, ProfilerEntry>& entries,

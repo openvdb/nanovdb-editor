@@ -75,6 +75,7 @@ typedef struct pnanovdb_imgui_settings_render_t
     pnanovdb_bool_t vsync = true;
     pnanovdb_bool_t enable_encoder = false;
     pnanovdb_bool_t encode_to_file = false;
+    pnanovdb_bool_t encode_resize = false;
     pnanovdb_int32_t encode_width = -1;
     pnanovdb_int32_t encode_height = -1;
     char server_address[256u] = { 'l', 'o', 'c', 'a', 'l', 'h', 'o', 's', 't', '\0' };
@@ -83,8 +84,10 @@ typedef struct pnanovdb_imgui_settings_render_t
     pnanovdb_bool_t sync_camera = false;
     pnanovdb_camera_state_t camera_state = {};
     pnanovdb_camera_config_t camera_config = {};
-    float key_translation_shift_multiplier = 100.f;
+    float camera_speed_multiplier = 1.f;
     char ui_profile_name[256u] = { 'd', 'e', 'f', 'a', 'u', 'l', 't', '\0' };
+    // NOTE: When adding new fields here, ensure you categorize them as persistent, config-only,
+    //       or runtime-only, and update RenderSettingsConfig.h to reflect the appropriate category
 
 } pnanovdb_imgui_settings_render_t;
 
@@ -98,6 +101,7 @@ PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, is_upside_down, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, vsync, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, enable_encoder, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, encode_to_file, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, encode_resize, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_int32_t, encode_width, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_int32_t, encode_height, 0, 0)
 PNANOVDB_REFLECT_VALUE(char, server_address[0], 0, 0)
@@ -106,7 +110,7 @@ PNANOVDB_REFLECT_VALUE(pnanovdb_int32_t, server_create_max_attempts, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, sync_camera, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_camera_state_t, camera_state, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_camera_config_t, camera_config, 0, 0)
-PNANOVDB_REFLECT_VALUE(float, key_translation_shift_multiplier, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, camera_speed_multiplier, 0, 0)
 PNANOVDB_REFLECT_END(0)
 #undef PNANOVDB_REFLECT_TYPE
 

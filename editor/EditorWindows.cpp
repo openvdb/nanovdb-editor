@@ -21,6 +21,8 @@
 #include "ShaderMonitor.h"
 #include "ShaderCompileUtils.h"
 #include "Node2Verify.h"
+#include "SceneTree.h"
+#include "Properties.h"
 
 #include "misc/cpp/imgui_stdlib.h" // for std::string text input
 
@@ -29,282 +31,35 @@
 #include <cmath>
 #include <filesystem>
 
-#define IMGUI_CHECKBOX_SYNC(label, var)                                                                                \
-    {                                                                                                                  \
-        bool temp_bool = ((var) != PNANOVDB_FALSE);                                                                    \
-        if (ImGui::Checkbox((label), &temp_bool))                                                                      \
-        {                                                                                                              \
-            (var) = temp_bool ? PNANOVDB_TRUE : PNANOVDB_FALSE;                                                        \
-        }                                                                                                              \
-    }
-
 #ifndef M_PI_2
 #    define M_PI_2 1.57079632679489661923
 #endif
 
-namespace imgui_instance_user
+namespace pnanovdb_editor
 {
 const float EPSILON = 1e-6f;
 
-void showSceneWindow(Instance* ptr)
+void showSceneWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_scene)
     {
         return;
     }
 
-    if (ImGui::Begin(SCENE, &ptr->window.show_scene))
-    {
-        if (!ptr->camera_views->empty() && ImGui::TreeNodeEx("Cameras", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            for (auto& cameraPair : *ptr->camera_views)
-            {
-                pnanovdb_camera_view_t* camera = cameraPair.second;
-                if (!camera)
-                {
-                    continue;
-                }
-                const std::string& cameraName = cameraPair.first;
-                IMGUI_CHECKBOX_SYNC(("##Visible" + cameraName).c_str(), camera->is_visible);
-                ImGui::SameLine();
-                ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-                bool isSelected = (ptr->selected_camera_frustum == cameraName);
-                if (isSelected)
-                {
-                    flags |= ImGuiTreeNodeFlags_Selected;
-                }
-                ImGui::TreeNodeEx(cameraName.c_str(), flags);
-                if (ImGui::IsItemClicked())
-                {
-                    ptr->selected_camera_frustum = cameraName;
-                    ptr->window.show_camera_view = true;
-                    ImGui::SetWindowFocus(CAMERA_VIEW);
-                }
-            }
-            ImGui::TreePop();
-        }
-
-        auto renderSceneItems =
-            [ptr](const auto& itemMap, const char* treeLabel, auto& pendingField, const std::string& radioPrefix)
-        {
-            if (ImGui::TreeNodeEx(treeLabel, ImGuiTreeNodeFlags_DefaultOpen))
-            {
-                for (auto& pair : itemMap)
-                {
-                    const std::string& name = pair.first;
-                    bool isSelected = (ptr->selected_scene_view == name);
-
-                    if (ImGui::RadioButton((radioPrefix + name).c_str(), isSelected))
-                    {
-                        pendingField = name;
-                        ptr->window.show_scene_properties = true;
-                        ImGui::SetWindowFocus(PROPERTIES);
-                    }
-                    ImGui::SameLine();
-
-                    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-                    if (isSelected)
-                    {
-                        flags |= ImGuiTreeNodeFlags_Selected;
-                    }
-                    ImGui::TreeNodeEx(name.c_str(), flags);
-                    if (ImGui::IsItemClicked())
-                    {
-                        pendingField = name;
-                        ptr->window.show_scene_properties = true;
-                        ImGui::SetWindowFocus(PROPERTIES);
-                    }
-                }
-                ImGui::TreePop();
-            }
-        };
-
-        if (ptr->nanovdb_arrays && !ptr->nanovdb_arrays->empty())
-        {
-            renderSceneItems(
-                *ptr->nanovdb_arrays, "NanoVDB Scenes", ptr->pending.viweport_nanovdb_array, "##RadioNanoVDB");
-        }
-
-        if (ptr->gaussian_views && !ptr->gaussian_views->empty())
-        {
-            renderSceneItems(
-                *ptr->gaussian_views, "Gaussian Views", ptr->pending.viewport_gaussian_view, "##RadioGaussian");
-        }
-    }
-    ImGui::End();
+    SceneTree::getInstance().render(ptr);
 }
 
-void showCameraViewWindow(Instance* ptr)
-{
-    if (!ptr->window.show_camera_view)
-    {
-        return;
-    }
-
-    if (ImGui::Begin(CAMERA_VIEW, &ptr->window.show_camera_view))
-    {
-        if (!ptr->selected_camera_frustum.empty())
-        {
-            auto it = ptr->camera_views ? ptr->camera_views->find(ptr->selected_camera_frustum) :
-                                          std::map<std::string, pnanovdb_camera_view_t*>().end();
-            if (it !=
-                (ptr->camera_views ? ptr->camera_views->end() : std::map<std::string, pnanovdb_camera_view_t*>().end()))
-            {
-                pnanovdb_camera_view_t* camera = it->second;
-                if (camera)
-                {
-                    ImGui::Text("Total Cameras: %d", camera->num_cameras);
-                    int maxIndex = (camera->num_cameras > 0) ? ((int)camera->num_cameras - 1) : 0;
-                    if (maxIndex > 0)
-                    {
-                        ImGui::SliderInt("Camera Index", &ptr->camera_frustum_index[ptr->selected_camera_frustum], 0,
-                                         maxIndex, "%d");
-                    }
-                    else
-                    {
-                        ImGui::Text("Camera Index: 0");
-                        ImGui::Dummy(ImVec2(0.f, 1.f));
-                    }
-                    int cameraIdx = ptr->camera_frustum_index[ptr->selected_camera_frustum];
-                    if (ImGui::Button("Set Viewport Camera"))
-                    {
-                        pnanovdb_vec3_t& up = camera->states[cameraIdx].eye_up;
-                        if (camera->states[cameraIdx].eye_up.x != ptr->render_settings->camera_state.eye_up.x ||
-                            camera->states[cameraIdx].eye_up.y != ptr->render_settings->camera_state.eye_up.y ||
-                            camera->states[cameraIdx].eye_up.z != ptr->render_settings->camera_state.eye_up.z)
-                        {
-                            pnanovdb_vec3_t& dir = camera->states[cameraIdx].eye_direction;
-                            pnanovdb_vec3_t right = { dir.y * up.z - dir.z * up.y, dir.z * up.x - dir.x * up.z,
-                                                      dir.x * up.y - dir.y * up.x };
-                            up.x = -(right.y * dir.z - right.z * dir.y);
-                            up.y = -(right.z * dir.x - right.x * dir.z);
-                            up.z = -(right.x * dir.y - right.y * dir.x);
-                            float len = sqrtf(up.x * up.x + up.y * up.y + up.z * up.z);
-                            if (len > EPSILON)
-                            {
-                                up.x /= len;
-                                up.y /= len;
-                                up.z /= len;
-                            }
-                        }
-                        ptr->render_settings->camera_state = camera->states[cameraIdx];
-                        ptr->render_settings->camera_state.eye_up = up;
-                        ptr->render_settings->camera_config = camera->configs[cameraIdx];
-                        ptr->render_settings->is_projection_rh = camera->configs[cameraIdx].is_projection_rh;
-                        ptr->render_settings->is_orthographic = camera->configs[cameraIdx].is_orthographic;
-                        ptr->render_settings->is_reverse_z = camera->configs[cameraIdx].is_reverse_z;
-                        ptr->render_settings->sync_camera = PNANOVDB_TRUE;
-                    }
-
-                    pnanovdb_vec3_t eyePosition = pnanovdb_camera_get_eye_position_from_state(&camera->states[cameraIdx]);
-                    float eyePos[3] = { eyePosition.x, eyePosition.y, eyePosition.z };
-                    if (ImGui::DragFloat3("Origin", eyePos, 0.1f))
-                    {
-                        pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
-                        state->position.x = eyePos[0] + state->eye_direction.x * state->eye_distance_from_position;
-                        state->position.y = eyePos[1] + state->eye_direction.y * state->eye_distance_from_position;
-                        state->position.z = eyePos[2] + state->eye_direction.z * state->eye_distance_from_position;
-                    }
-
-                    pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
-                    float lookAt[3] = { state->position.x, state->position.y, state->position.z };
-                    if (ImGui::DragFloat3("Look At", lookAt, 0.1f))
-                    {
-                        pnanovdb_vec3_t eye = pnanovdb_camera_get_eye_position_from_state(state);
-                        pnanovdb_vec3_t delta = { lookAt[0] - eye.x, lookAt[1] - eye.y, lookAt[2] - eye.z };
-                        float len2 = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
-                        if (len2 > 0.f)
-                        {
-                            float len = pnanovdb_camera_sqrt(len2);
-                            pnanovdb_vec3_t dir = { delta.x / len, delta.y / len, delta.z / len };
-                            state->position.x = lookAt[0];
-                            state->position.y = lookAt[1];
-                            state->position.z = lookAt[2];
-                            state->eye_direction = dir;
-                            state->eye_distance_from_position = len;
-                        }
-                        else
-                        {
-                            state->position.x = lookAt[0];
-                            state->position.y = lookAt[1];
-                            state->position.z = lookAt[2];
-                            state->eye_distance_from_position = 0.f;
-                        }
-                    }
-                    float upVec[3] = { state->eye_up.x, state->eye_up.y, state->eye_up.z };
-                    if (ImGui::DragFloat3("Up", upVec, 0.1f))
-                    {
-                        state->eye_up.x = upVec[0];
-                        state->eye_up.y = upVec[1];
-                        state->eye_up.z = upVec[2];
-                        float len = sqrtf(state->eye_up.x * state->eye_up.x + state->eye_up.y * state->eye_up.y +
-                                          state->eye_up.z * state->eye_up.z);
-                        if (len > EPSILON)
-                        {
-                            state->eye_up.x /= len;
-                            state->eye_up.y /= len;
-                            state->eye_up.z /= len;
-                        }
-                    }
-                    ImGui::Separator();
-                    ImGui::DragFloat("Axis Length", &camera->axis_length, 1.f, 0.f, 100.f);
-                    ImGui::DragFloat("Axis Thickness", &camera->axis_thickness, 0.1f, 0.f, 10.f);
-                    ImGui::DragFloat("Frustum Line Width", &camera->frustum_line_width, 0.1f, 0.f, 10.f);
-                    ImGui::DragFloat("Frustum Scale", &camera->frustum_scale, 0.1f, 0.f, 10.f);
-                    float frustumColor[4] = { (float)camera->frustum_color.x, (float)camera->frustum_color.y,
-                                              (float)camera->frustum_color.z, 1.0f };
-                    if (ImGui::ColorEdit4("Frustum Color", frustumColor))
-                    {
-                        camera->frustum_color.x = frustumColor[0];
-                        camera->frustum_color.y = frustumColor[1];
-                        camera->frustum_color.z = frustumColor[2];
-                    }
-                    ImGui::Separator();
-                    ImGui::DragFloat("Near Plane", &camera->configs[cameraIdx].near_plane, 0.1f, 0.01f, 10000.f);
-                    ImGui::DragFloat("Far Plane", &camera->configs[cameraIdx].far_plane, 10.f, 1.f, 100000.f);
-                    if (camera->configs[cameraIdx].is_orthographic)
-                    {
-                        ImGui::DragFloat(
-                            "Orthographic Y", &camera->configs[cameraIdx].orthographic_y, 0.1f, 0.f, 100000.f);
-                    }
-                    else
-                    {
-                        ImGui::DragFloat("FOV", &camera->configs[cameraIdx].fov_angle_y, 0.01f, 0.f, M_PI_2);
-                        ImGui::DragFloat("Aspect Ratio", &camera->configs[cameraIdx].aspect_ratio, 0.01f, 0.f, 2.f);
-                    }
-                }
-            }
-        }
-        else
-        {
-            ImGui::TextDisabled("Select a camera from the Scene window");
-        }
-    }
-    ImGui::End();
-}
-
-void showPropertiesWindow(Instance* ptr)
+void showPropertiesWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_scene_properties)
     {
         return;
     }
 
-    if (ImGui::Begin(PROPERTIES, &ptr->window.show_scene_properties))
-    {
-        if (!ptr->selected_scene_view.empty())
-        {
-            ptr->shader_params.renderGroup(imgui_instance_user::s_raster2d_shader_group);
-        }
-        else
-        {
-            ImGui::TextDisabled("Select a scene from the Scene window");
-        }
-    }
-    ImGui::End();
+    Properties::getInstance().render(ptr);
 }
 
-void showViewportSettingsWindow(Instance* ptr)
+void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_viewport_settings)
     {
@@ -321,16 +76,32 @@ void showViewportSettingsWindow(Instance* ptr)
             {
                 ptr->viewport_option = ViewportOption::NanoVDB;
                 ptr->render_settings_name = ptr->viewport_settings[(int)ptr->viewport_option].render_settings_name;
-                // TODO: disable before profiles are set up, Viewer does not have camera override
-                // ptr->pending.load_camera = true;
+                if (!ptr->is_viewer())
+                {
+                    // Load camera state
+                    auto it = ptr->saved_camera_states.find(ptr->render_settings_name);
+                    if (it != ptr->saved_camera_states.end())
+                    {
+                        ptr->render_settings->camera_state = it->second;
+                        ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                    }
+                }
             }
             ImGui::SameLine();
             if (ImGui::RadioButton("Raster2D", selectedOption == ViewportOption::Raster2D))
             {
                 ptr->viewport_option = ViewportOption::Raster2D;
                 ptr->render_settings_name = ptr->viewport_settings[(int)ptr->viewport_option].render_settings_name;
-                // TODO: disable before profiles are set up, Viewer does not have camera override
-                // ptr->pending.load_camera = true;
+                if (!ptr->is_viewer())
+                {
+                    // Load camera state
+                    auto it = ptr->saved_camera_states.find(ptr->render_settings_name);
+                    if (it != ptr->saved_camera_states.end())
+                    {
+                        ptr->render_settings->camera_state = it->second;
+                        ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                    }
+                }
             }
             ImGui::EndGroup();
         }
@@ -346,10 +117,15 @@ void showViewportSettingsWindow(Instance* ptr)
                         ptr->render_settings_name = pair.first;
                         ptr->viewport_settings[(int)ptr->viewport_option].render_settings_name =
                             ptr->render_settings_name;
-                        ptr->pending.load_camera = true;
 
-                        // clear selected debug camera when switching to saved camera
-                        ptr->selected_camera_view.clear();
+                        auto it = ptr->saved_camera_states.find(ptr->render_settings_name);
+                        if (it != ptr->saved_camera_states.end())
+                        {
+                            ptr->render_settings->camera_state = it->second;
+                            ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                        }
+
+                        // TODO: clear selected debug camera when switching to saved camera
 
                         ImGui::MarkIniSettingsDirty();
                     }
@@ -368,8 +144,15 @@ void showViewportSettingsWindow(Instance* ptr)
                 {
                     if (ptr->saved_render_settings.find(ptr->render_settings_name) == ptr->saved_render_settings.end())
                     {
-                        // save camera state in editor update loop
-                        ptr->pending.save_camera = true;
+                        ptr->saved_camera_states[ptr->render_settings_name] = ptr->render_settings->camera_state;
+
+                        imgui_instance_user::copyPersistentFields(
+                            ptr->saved_render_settings[ptr->render_settings_name], *ptr->render_settings);
+
+                        ImGui::MarkIniSettingsDirty();
+
+                        pnanovdb_editor::Console::getInstance().addLog(
+                            "Camera and settings '%s' saved", ptr->render_settings_name.c_str());
                     }
                     else
                     {
@@ -444,11 +227,35 @@ void showViewportSettingsWindow(Instance* ptr)
                 ImGui::EndGroup();
             }
         }
+        ImGui::Separator();
+
+        // UI profile
+        {
+            const char* profile_options[] = { "default", "viewer" }; // TODO: load from current dir
+            const char* current_profile =
+                ptr->render_settings->ui_profile_name[0] != '\0' ? ptr->render_settings->ui_profile_name : "default";
+            if (ImGui::BeginCombo("UI Profile", current_profile))
+            {
+                for (int i = 0; i < IM_ARRAYSIZE(profile_options); i++)
+                {
+                    bool is_selected = (strcmp(current_profile, profile_options[i]) == 0);
+                    if (ImGui::Selectable(profile_options[i], is_selected))
+                    {
+                        strcpy(ptr->render_settings->ui_profile_name, profile_options[i]);
+                    }
+                    if (is_selected)
+                    {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+        }
     }
     ImGui::End();
 }
 
-void showRenderSettingsWindow(Instance* ptr)
+void showRenderSettingsWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_render_settings)
     {
@@ -496,14 +303,20 @@ void showRenderSettingsWindow(Instance* ptr)
             {
                 settings->is_y_up = (up_axis == 0);
             }
-
-            IMGUI_CHECKBOX_SYNC("Upside down", settings->is_upside_down);
         }
-        ImGui::DragFloat("Shift Speed Multiplier", &settings->key_translation_shift_multiplier, 0.f, 1.f, 10000.f,
-                         "%.1f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
+        IMGUI_CHECKBOX_SYNC("Upside Down", settings->is_upside_down);
+        ImGui::DragFloat("Camera Speed Multiplier", &settings->camera_speed_multiplier, 0.f, 1.f, 10000.f, "%.1f",
+                         ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
         ImGui::Separator();
-
-        IMGUI_CHECKBOX_SYNC("Video Encode", settings->enable_encoder);
+        if (settings->enable_encoder)
+        {
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("Video encoding is running...");
+        }
+        else
+        {
+            IMGUI_CHECKBOX_SYNC("Video Encode", settings->enable_encoder);
+        }
         if (ImGui::BeginCombo("Resolution", "Select..."))
         {
             const char* labels[4] = { "1440x720", "1920x1080", "2560x1440", "3840x2160" };
@@ -519,28 +332,15 @@ void showRenderSettingsWindow(Instance* ptr)
             }
             ImGui::EndCombo();
         }
+        IMGUI_CHECKBOX_SYNC("Fit Resolution", settings->encode_resize);
+        IMGUI_CHECKBOX_SYNC("Video Record", settings->encode_to_file);
         ImGui::InputText("Server Address", settings->server_address, 256u);
         ImGui::InputInt("Server Port", &settings->server_port);
-        ImGui::Separator();
-        ImGui::InputText("UI Profile", settings->ui_profile_name, 256u);
-        // if (settings->ui_profile_name[0] != '\0' &&
-        // ptr->instance_settings_handler->hasProfile(settings->ui_profile_name))
-        // {
-        //     if (ImGui::Button("Load Profile"))
-        //     {
-        //         ptr->instance_settings_handler->loadProfile(settings->ui_profile_name, ptr);
-        //         pnanovdb_editor::Console::getInstance().addLog("Loaded UI profile '%s'", settings->ui_profile_name);
-        //     }
-        // }
-        // else
-        // {
-        //     ImGui::TextDisabled("Enter a profile name to load");
-        // }
     }
     ImGui::End();
 }
 
-void showCompilerSettingsWindow(Instance* ptr)
+void showCompilerSettingsWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_compiler_settings)
     {
@@ -657,7 +457,7 @@ void showCompilerSettingsWindow(Instance* ptr)
     ImGui::End();
 }
 
-void showShaderParamsWindow(Instance* ptr)
+void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_shader_params)
     {
@@ -786,7 +586,7 @@ void showShaderParamsWindow(Instance* ptr)
     ImGui::End();
 }
 
-void showBenchmarkWindow(Instance* ptr)
+void showBenchmarkWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_benchmark)
         return;
@@ -811,7 +611,7 @@ void showBenchmarkWindow(Instance* ptr)
     ImGui::End();
 }
 
-void showFileHeaderWindow(Instance* ptr)
+void showFileHeaderWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_file_header)
     {
@@ -820,18 +620,31 @@ void showFileHeaderWindow(Instance* ptr)
 
     if (ImGui::Begin(FILE_HEADER, &ptr->window.show_file_header))
     {
-        (void)pnanovdb_editor::FileHeaderInfo::getInstance().render(ptr->nanovdb_array.get());
+        pnanovdb_compute_array_t* current_array = nullptr;
+        if (ptr->selected_view_type == ViewsTypes::NanoVDBs && ptr->nanovdb_arrays)
+        {
+            auto it = ptr->nanovdb_arrays->find(ptr->selected_scene_item);
+            if (it != ptr->nanovdb_arrays->end())
+            {
+                // TODO: fixed on a branch
+                // current_array = it->second.nanovdb_array;
+            }
+        }
+        pnanovdb_editor::FileHeaderInfo::getInstance().render(current_array);
     }
     ImGui::End();
 }
 
-void showCodeEditorWindow(Instance* ptr)
+void showCodeEditorWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_code_editor)
+    {
         return;
+    }
 
     pnanovdb_editor::CodeEditor::getInstance().setup(
-        &ptr->shader_name, &ptr->pending.update_shader, ptr->dialog_size, ptr->run_shader);
+        &ptr->shader_name, &ptr->pending.update_shader, ptr->dialog_size, ptr->run_shader, ptr->is_viewer());
+
     if (ImGui::Begin(CODE_EDITOR, &ptr->window.show_code_editor, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_MenuBar))
     {
         if (!pnanovdb_editor::CodeEditor::getInstance().render())
@@ -848,7 +661,7 @@ void showCodeEditorWindow(Instance* ptr)
     }
 }
 
-void showProfilerWindow(Instance* ptr, float delta_time)
+void showProfilerWindow(imgui_instance_user::Instance* ptr, float delta_time)
 {
     if (!ptr->window.show_profiler)
     {
@@ -865,7 +678,7 @@ void showProfilerWindow(Instance* ptr, float delta_time)
     ImGui::End();
 }
 
-void showConsoleWindow(Instance* ptr)
+void showConsoleWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_console)
     {
@@ -891,7 +704,7 @@ void showConsoleWindow(Instance* ptr)
     ImGui::End();
 }
 
-void showFileDialogs(Instance* ptr)
+void showFileDialogs(imgui_instance_user::Instance* ptr)
 {
     if (ptr->pending.open_file)
     {
@@ -978,35 +791,42 @@ void showFileDialogs(Instance* ptr)
     }
 }
 
-void saveLoadSettings(Instance* ptr)
+
+void showAboutWindow(imgui_instance_user::Instance* ptr)
 {
-    if (ptr->pending.save_render_settings)
+    if (!ptr->window.show_about)
     {
-        ptr->pending.save_render_settings = false;
-
-        // Mark settings as dirty to trigger save
-        ImGui::MarkIniSettingsDirty();
-
-        pnanovdb_editor::Console::getInstance().addLog("Render settings '%s' saved", ptr->render_settings_name.c_str());
+        return;
     }
-    if (ptr->pending.load_render_settings)
+
+    // Center the window on first use
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(400, 160), ImGuiCond_Appearing);
+
+    if (ImGui::Begin("About", &ptr->window.show_about, ImGuiWindowFlags_NoResize))
     {
-        ptr->pending.load_render_settings = false;
+        ImGui::Text("NanoVDB Editor");
+        ImGui::Separator();
 
-        auto it = ptr->saved_render_settings.find(ptr->render_settings_name);
-        if (it != ptr->saved_render_settings.end())
-        {
-            // Copy saved camera state to current camera state
-            ptr->render_settings_name = it->first;
-            // pnanovdb_editor::Console::getInstance().addLog("Render settings '%s' loaded",
-            // ptr->render_settings_name.c_str());
-        }
-        else
-        {
-            pnanovdb_editor::Console::getInstance().addLog(
-                "Render settings '%s' not found", ptr->render_settings_name.c_str());
-        }
+        // Display version from VERSION.txt
+#ifndef NANOVDB_EDITOR_VERSION
+#    define NANOVDB_EDITOR_VERSION "Unknown"
+#endif
+        ImGui::Text("Version: %s", NANOVDB_EDITOR_VERSION);
+
+        // Display git hash from CMake
+#ifndef NANOVDB_EDITOR_COMMIT_HASH
+#    define NANOVDB_EDITOR_COMMIT_HASH "Unknown"
+#endif
+        ImGui::Text("Build: %s", NANOVDB_EDITOR_COMMIT_HASH);
+
+        ImGui::Separator();
+        ImGui::Text("Copyright Contributors to the OpenVDB Project");
+        ImGui::Text("SPDX-License-Identifier: Apache-2.0");
+
+        ImGui::Spacing();
     }
+    ImGui::End();
 }
 
-} // imgui_instance_user
+} // pnanovdb_editor

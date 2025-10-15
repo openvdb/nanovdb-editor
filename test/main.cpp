@@ -179,6 +179,7 @@ void test_openh264()
 
     printf("OpenH264 test completed\n");
 }
+#endif
 
 void pnanovdb_compute_log_print(pnanovdb_compute_log_level_t level, const char* format, ...)
 {
@@ -198,13 +199,18 @@ void pnanovdb_compute_log_print(pnanovdb_compute_log_level_t level, const char* 
     {
         prefix = "Info";
     }
+    else if (level == PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG)
+    {
+        // prefix = "Debug";
+        va_end(args);
+        return;
+    }
     printf("%s: ", prefix);
     vprintf(format, args);
     printf("\n");
 
     va_end(args);
 }
-#endif
 
 struct NanoVDBEditorArgs : public argparse::Args
 {
@@ -234,7 +240,7 @@ int main(int argc, char* argv[])
     pnanovdb_compute_load(&compute, &compiler);
 
     pnanovdb_compute_device_desc_t device_desc = {};
-    // device_desc.log_print = pnanovdb_compute_log_print;
+    device_desc.log_print = pnanovdb_compute_log_print;
 
     pnanovdb_compute_device_manager_t* device_manager = compute.device_interface.create_device_manager(PNANOVDB_FALSE);
     pnanovdb_compute_device_t* device = compute.device_interface.create_device(device_manager, &device_desc);
@@ -337,9 +343,17 @@ int main(int argc, char* argv[])
     pnanovdb_editor_load(&editor, &compute, &compiler);
 
 #    ifdef TEST_CAMERA
+    pnanovdb_camera_config_t default_config = {};
+    pnanovdb_camera_config_default(&default_config);
+    default_config.near_plane = 0.1f;
+    default_config.far_plane = 100.0f;
+
+    pnanovdb_camera_state_t default_state = {};
+    pnanovdb_camera_state_default(&default_state, PNANOVDB_FALSE);
+
     pnanovdb_camera_state_t debug_state = {};
     pnanovdb_camera_state_default(&debug_state, PNANOVDB_FALSE);
-    debug_state.position = { 0.632428, 0.930241, -0.005193 };
+    debug_state.position = { 0.632428, -0.930241, -0.005193 };
     debug_state.eye_direction = { -0.012344, 0.959868, -0.280182 };
     debug_state.eye_up = { 0.000000, 1.000000, 0.000000 };
     debug_state.eye_distance_from_position = 41.431084;
@@ -350,8 +364,24 @@ int main(int argc, char* argv[])
     debug_config.far_plane = 100.0f;
     debug_config.aspect_ratio = 2.0f;
 
+    pnanovdb_camera_state_t test_state = default_state;
+    test_state.eye_distance_from_position = 3.f;
+    test_state.eye_up = { 0.000000, 0.000000, -1.000000 };
+    pnanovdb_camera_config_t test_config = default_config;
+
+    pnanovdb_camera_view_t test_camera;
+    pnanovdb_camera_view_default(&test_camera);
+    test_camera.name = "test";
+    test_camera.num_cameras = 1;
+    test_camera.states = new pnanovdb_camera_state_t[test_camera.num_cameras];
+    test_camera.states[0] = test_state;
+    test_camera.configs = new pnanovdb_camera_config_t[test_camera.num_cameras];
+    test_camera.configs[0] = test_config;
+    test_camera.is_visible = PNANOVDB_FALSE;
+    editor.add_camera_view(&editor, &test_camera);
+
     pnanovdb_camera_view_t debug_camera;
-    pnanovdb_debug_camera_default(&debug_camera);
+    pnanovdb_camera_view_default(&debug_camera);
     debug_camera.name = "test_10";
     debug_camera.num_cameras = 10;
     debug_camera.states = new pnanovdb_camera_state_t[debug_camera.num_cameras];
@@ -368,17 +398,9 @@ int main(int argc, char* argv[])
     }
     editor.add_camera_view(&editor, &debug_camera);
 
-    pnanovdb_camera_config_t default_config = {};
-    pnanovdb_camera_config_default(&default_config);
-    default_config.near_plane = 0.1f;
-    default_config.far_plane = 100.0f;
-
-    pnanovdb_camera_state_t default_state = {};
-    pnanovdb_camera_state_default(&default_state, PNANOVDB_FALSE);
-
     pnanovdb_camera_view_t default_camera;
-    pnanovdb_debug_camera_default(&default_camera);
-    default_camera.name = "default";
+    pnanovdb_camera_view_default(&default_camera);
+    default_camera.name = "test_default";
     default_camera.num_cameras = 1;
     default_camera.states = new pnanovdb_camera_state_t[default_camera.num_cameras];
     default_camera.states[0] = default_state;
@@ -403,11 +425,11 @@ int main(int argc, char* argv[])
     pnanovdb_camera_t camera;
     pnanovdb_camera_init(&camera);
 
-    camera.state.position = { 0.358805, 0.725740, -0.693701 };
-    camera.state.eye_direction = { -0.012344, 0.959868, -0.280182 };
-    camera.state.eye_up = { 0.000000, 1.000000, 0.000000 };
-    camera.state.eye_distance_from_position = -2.111028;
-    editor.update_camera(&editor, &camera);
+    // camera.state.position = { 0.358805, 0.725740, -0.693701 };
+    // camera.state.eye_direction = { -0.012344, 0.959868, -0.280182 };
+    // camera.state.eye_up = { 0.000000, 1.000000, 0.000000 };
+    // camera.state.eye_distance_from_position = -2.111028;
+    // editor.update_camera(&editor, &camera);
 
     const char* raster_file = "./data/ficus.ply";
     const char* raster_file_garden = "./data/garden.ply";
@@ -456,7 +478,6 @@ int main(int argc, char* argv[])
 #        endif
 
     raster_params.eps2d = 0.5f;
-    raster_params.near_plane_override = 1.f;
 
 #        ifdef TEST_RASTER_SHADER_PARAMS
     compute.destroy_array(params_array);
@@ -469,10 +490,11 @@ int main(int argc, char* argv[])
 #    endif
 
     pnanovdb_editor_config_t config = {};
-    config.headless = PNANOVDB_FALSE;
-    config.streaming = PNANOVDB_FALSE;
+    config.headless = PNANOVDB_TRUE;
+    config.streaming = PNANOVDB_TRUE;
     config.ip_address = "127.0.0.1";
     config.port = 8080;
+    // config.ui_profile_name = "viewer";
     editor.show(&editor, device, &config);
 
     // if (editor.camera)
@@ -500,8 +522,8 @@ int main(int argc, char* argv[])
     pnanovdb_editor_load(&editor, &compute, &compiler);
 
     pnanovdb_editor_config_t config = {};
-    config.headless = PNANOVDB_TRUE;
-    config.streaming = PNANOVDB_TRUE;
+    config.headless = PNANOVDB_FALSE;
+    config.streaming = PNANOVDB_FALSE;
     config.ip_address = "127.0.0.1";
     config.port = 8080;
 

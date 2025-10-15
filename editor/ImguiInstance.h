@@ -28,15 +28,30 @@
 #include <map>
 #include <mutex>
 #include <memory>
-#include <set>
+#include <deque>
+
+#define IMGUI_CHECKBOX_SYNC(label, var)                                                                                \
+    {                                                                                                                  \
+        bool temp_bool = ((var) != PNANOVDB_FALSE);                                                                    \
+        if (ImGui::Checkbox((label), &temp_bool))                                                                      \
+        {                                                                                                              \
+            (var) = temp_bool ? PNANOVDB_TRUE : PNANOVDB_FALSE;                                                        \
+        }                                                                                                              \
+    }
 
 namespace imgui_instance_user
 {
 static const char* s_render_settings_default = "default";
 static const char* s_raster2d_shader_group = "raster/raster2d_group";
 
+static const char* s_viewer_profile_name = "viewer";
+
+// TODO: make unique label and save scene items in a map with unique keys rather than strings
+static const char* VIEWPORT_CAMERA = "Viewport Camera";
+static const char* SCENE_ROOT_NODE = "Viewer";
+
 static const char* VIEWPORT_SETTINGS = "Viewport";
-static const char* RENDER_SETTINGS = "Render Settings";
+static const char* RENDER_SETTINGS = "Render";
 static const char* COMPILER_SETTINGS = "Compiler";
 static const char* PROFILER = "Profiler";
 static const char* CODE_EDITOR = "Shader Editor";
@@ -45,7 +60,6 @@ static const char* SHADER_PARAMS = "Params";
 static const char* BENCHMARK = "Benchmark";
 static const char* FILE_HEADER = "File Header";
 static const char* SCENE = "Scene";
-static const char* CAMERA_VIEW = "Camera View";
 static const char* PROPERTIES = "Properties";
 
 enum class ViewportOption : int
@@ -69,8 +83,10 @@ struct ViewportSettings
 
 enum class ViewsTypes
 {
+    Root,
     Cameras,
     GaussianScenes,
+    NanoVDBs,
     None
 };
 
@@ -92,7 +108,7 @@ struct GaussianDataLoadedContext
 };
 struct EditorLoaded
 {
-    std::set<std::string> filenames; // TODO add some cleanup
+    std::deque<std::string> filenames;
     std::vector<pnanovdb_compute_array_t*> nanovdb_arrays;
     std::vector<GaussianDataLoadedContext> gaussian_views;
 };
@@ -109,10 +125,6 @@ struct PendingState
     bool find_callable_file = false;
     bool open_file = false;
     bool save_file = false;
-    bool load_camera = false; // load camera state in editor update loop
-    bool save_camera = true; // save default camera first
-    bool save_render_settings = false;
-    bool load_render_settings = false;
     std::string viewport_shader_name = "";
     std::string viewport_gaussian_view = "";
     std::string viweport_nanovdb_array = "";
@@ -151,8 +163,8 @@ struct WindowState
     bool show_benchmark = false;
     bool show_file_header = false;
     bool show_scene = true;
-    bool show_camera_view = true;
     bool show_scene_properties = true;
+    bool show_about = false;
 };
 
 struct UniformState
@@ -188,6 +200,7 @@ struct Instance
 
     std::string render_settings_name = s_render_settings_default;
     std::map<std::string, pnanovdb_imgui_settings_render_t> saved_render_settings;
+    std::map<std::string, pnanovdb_camera_state_t> saved_camera_states;
 
     std::vector<std::string> viewport_shaders;
 
@@ -199,20 +212,35 @@ struct Instance
     std::shared_ptr<pnanovdb_compute_array_t> nanovdb_array = nullptr;
 
     EditorLoaded loaded;
-    ViewsTypes selected_view_type = ViewsTypes::None;
+    std::string selected_scene_item = SCENE_ROOT_NODE;
+    ViewsTypes selected_view_type = ViewsTypes::Root;
 
     std::map<std::string, pnanovdb_camera_view_t*>* camera_views = nullptr;
-    std::string selected_camera_view = "";
-    std::string selected_camera_frustum = "";
     std::map<std::string, int> camera_frustum_index; // map of camera view name to state index for frustum overlay
-
-    std::string selected_scene_view = "";
     std::map<std::string, pnanovdb_compute_array_t>* nanovdb_arrays = nullptr;
     std::map<std::string, GaussianDataContext>* gaussian_views = nullptr;
     std::string raster_shader_group = s_raster2d_shader_group;
     std::map<std::string, pnanovdb_imgui_settings_render_t> views_render_settings;
 
+    pnanovdb_camera_view_t default_camera_view; // default camera view that syncs with viewport
+    pnanovdb_camera_config_t default_camera_view_config;
+    pnanovdb_camera_state_t default_camera_view_state;
+
+    bool is_docking_setup = false;
+    bool loaded_ini_once = false;
+    std::string current_profile_name = ""; // Track current profile for switching
+    std::string current_ini_filename = ""; // INI filename for current profile
+
+    int ini_window_width = 0;
+    int ini_window_height = 0;
+
     void set_default_shader(const std::string& shaderName);
+    void update_ini_filename_for_profile(const char* profile_name);
+
+    bool is_viewer() const
+    {
+        return strcmp(render_settings->ui_profile_name, s_viewer_profile_name) == 0;
+    }
 
     pnanovdb_shader::run_shader_func_t run_shader = [this](const char* shaderName,
                                                            pnanovdb_uint32_t grid_dim_x,
@@ -244,6 +272,25 @@ struct Instance
 };
 
 PNANOVDB_CAST_PAIR(pnanovdb_imgui_instance_t, Instance)
+
+/*!
+ * \brief Read saved window resolution from INI file
+ *
+ * This function reads the WindowWidth and WindowHeight values from the
+ * [InstanceSettings][Settings] section of the profile-specific INI file.
+ * The window resolution is automatically saved when:
+ * - The editor is closed normally
+ * - The user manually saves settings via Settings > Save Ini menu
+ *
+ * The saved resolution will be automatically applied on the next startup.
+ *
+ * \param profile_name The UI profile name (e.g., "default", "viewer")
+ * \param width Pointer to store the loaded width (if found)
+ * \param height Pointer to store the loaded height (if found)
+ * \return true if resolution was found and loaded, false otherwise
+ */
+bool ini_window_resolution(const char* profile_name, int* width, int* height);
+
 }
 
 pnanovdb_imgui_instance_interface_t* get_user_imgui_instance_interface();

@@ -257,7 +257,7 @@ pnanovdb_bool_t enumerateDevices(pnanovdb_compute_device_manager_t* manager,
 
 /// ************************** Device **************************************
 
-void logDefault(pnanovdb_compute_log_level_t level, const char* format, ...)
+void PNANOVDB_ABI logDefault(pnanovdb_compute_log_level_t level, const char* format, ...)
 {
     // NOP
 }

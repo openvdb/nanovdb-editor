@@ -29,6 +29,7 @@ typedef struct pnanovdb_server_instance_t pnanovdb_server_instance_t;
 #define PNANOVDB_SERVER_EVENT_KEYDOWN 5
 #define PNANOVDB_SERVER_EVENT_KEYUP 6
 #define PNANOVDB_SERVER_EVENT_INACTIVE 7
+#define PNANOVDB_SERVER_EVENT_RESIZE 8
 
 typedef struct pnanovdb_server_event_t
 {
@@ -45,6 +46,8 @@ typedef struct pnanovdb_server_event_t
     pnanovdb_bool_t ctrl_key;
     pnanovdb_bool_t shift_key;
     pnanovdb_bool_t meta_key;
+    pnanovdb_int32_t width;
+    pnanovdb_int32_t height;
 } pnanovdb_server_event_t;
 
 typedef struct pnanovdb_server_t
@@ -56,7 +59,11 @@ typedef struct pnanovdb_server_t
                                                                int max_attempts,
                                                                pnanovdb_compute_log_print_t log_print);
 
-    void(PNANOVDB_ABI* push_h264)(pnanovdb_server_instance_t* instance, const void* data, pnanovdb_uint64_t data_size);
+    void(PNANOVDB_ABI* push_h264)(pnanovdb_server_instance_t* instance,
+                                  const void* data,
+                                  pnanovdb_uint64_t data_size,
+                                  pnanovdb_uint32_t width,
+                                  pnanovdb_uint32_t height);
 
     pnanovdb_bool_t(PNANOVDB_ABI* pop_event)(pnanovdb_server_instance_t* instance, pnanovdb_server_event_t* out_event);
 

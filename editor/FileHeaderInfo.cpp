@@ -200,12 +200,6 @@ static std::string getVersionString(uint32_t version)
     return std::string(versionStr);
 }
 
-FileHeaderInfo& FileHeaderInfo::getInstance()
-{
-    static FileHeaderInfo instance;
-    return instance;
-}
-
 bool FileHeaderInfo::render(pnanovdb_compute_array_t* array)
 {
     if (!(array && array->data && array->element_count > 0))

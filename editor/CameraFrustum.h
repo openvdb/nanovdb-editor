@@ -21,11 +21,21 @@ namespace pnanovdb_editor
 class CameraFrustum
 {
 public:
-    static CameraFrustum& getInstance();
+    static CameraFrustum& getInstance()
+    {
+        static CameraFrustum instance;
+        return instance;
+    }
 
     void render(imgui_instance_user::Instance* ptr);
 
 private:
     CameraFrustum() = default;
+    ~CameraFrustum() = default;
+
+    CameraFrustum(const CameraFrustum&) = delete;
+    CameraFrustum& operator=(const CameraFrustum&) = delete;
+    CameraFrustum(CameraFrustum&&) = delete;
+    CameraFrustum& operator=(CameraFrustum&&) = delete;
 };
 }

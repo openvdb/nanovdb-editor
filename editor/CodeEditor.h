@@ -81,19 +81,18 @@ class CodeEditor
     };
 
 public:
-    // singleton
     static CodeEditor& getInstance()
     {
         static CodeEditor instance;
         return instance;
     }
 
-    CodeEditor();
     bool render();
     void setup(std::string* shaderNamePtr,
                std::atomic<bool>* updateShaderPtr,
-               ImVec2& dialog_size,
-               pnanovdb_shader::run_shader_func_t run_shader);
+               ImVec2& dialogSize,
+               pnanovdb_shader::run_shader_func_t runShader,
+               bool restrictFileAccess);
     void setSelectedShader(const std::string& shaderName);
     void updateViewer();
     void saveShaderParams();
@@ -102,6 +101,14 @@ public:
     const std::string& getSelectedShader() const;
 
 private:
+    CodeEditor();
+    ~CodeEditor() = default;
+
+    CodeEditor(const CodeEditor&) = delete;
+    CodeEditor& operator=(const CodeEditor&) = delete;
+    CodeEditor(CodeEditor&&) = delete;
+    CodeEditor& operator=(CodeEditor&&) = delete;
+
     static void ClearAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler);
     static void* ReadOpen(ImGuiContext* ctx, ImGuiSettingsHandler* handler, const char* name);
     static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* entry, const char* line);
@@ -112,6 +119,7 @@ private:
     void addNewFile();
     void saveSelectedTabText();
     void openFileDialog(const char* dialogKey, const char* title, const char* filters);
+    bool isPathWithinRoot(const std::string& path, const std::string& root) const;
 
     std::map<std::string, EditorTab> tabs_; // key is shader name
     std::string selectedTab_;
@@ -119,10 +127,12 @@ private:
     ShowOption selectedOption_;
     std::string* editorShaderPtr_;
     std::atomic<bool>* updateShaderPtr_;
-    pnanovdb_shader::run_shader_func_t run_shader_;
+    pnanovdb_shader::run_shader_func_t runShader_;
+    bool restricDirAccess_ = false;
     ImVec2 editorSize_;
-    ImVec2 dialog_size_;
+    ImVec2 dialogSize_;
     bool isEditorLastClicked_ = false;
     int gridDims_[3] = { 1, 1, 1 };
+    std::string rootPath_; // Root path for file browser restriction
 };
 }

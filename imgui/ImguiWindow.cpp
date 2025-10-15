@@ -24,6 +24,7 @@
 namespace pnanovdb_imgui_window_default
 {
 
+// neeeds to be called after camer.config is set
 static inline void applyReverseZFarPlane(pnanovdb_camera_config_t* config)
 {
     if (config->is_reverse_z && !config->is_orthographic)
@@ -69,6 +70,8 @@ struct Window
     FILE* encode_file = nullptr;
     pnanovdb_socket_t* socket = nullptr;
     pnanovdb_server_instance_t* server = nullptr;
+    pnanovdb_bool_t encoder_was_enabled = PNANOVDB_FALSE;
+    pnanovdb_bool_t encode_to_file_active = PNANOVDB_FALSE;
 
     std::vector<ImguiInstance> imgui_instances;
     bool enable_default_imgui = false;
@@ -80,6 +83,8 @@ struct Window
 
     pnanovdb_uint32_t width = 0;
     pnanovdb_uint32_t height = 0;
+    pnanovdb_uint32_t width_encode_resize = 0;
+    pnanovdb_uint32_t height_encode_resize = 0;
 
     pnanovdb_camera_t camera = {};
 
@@ -87,7 +92,8 @@ struct Window
     pnanovdb_bool_t prev_is_upside_down = PNANOVDB_FALSE;
 
     float key_translation_rate_base = 1.f;
-    float shift_speed_multiplier;
+    float camera_speed_multiplier = 1.f;
+    float shift_speed_multiplier = 10.f;
 };
 
 PNANOVDB_CAST_PAIR(pnanovdb_imgui_window_t, Window)
@@ -134,15 +140,18 @@ pnanovdb_imgui_window_t* create(const pnanovdb_compute_t* compute,
         }
     }
 
+    pnanovdb_camera_init(&ptr->camera);
+
     auto settings = new pnanovdb_imgui_settings_render_t();
     settings->data_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_imgui_settings_render_t);
     pnanovdb_camera_config_default(&settings->camera_config);
-    pnanovdb_camera_state_default(&settings->camera_state, PNANOVDB_FALSE);
+    pnanovdb_camera_state_default(&settings->camera_state, settings->is_y_up);
     *imgui_user_settings = settings;
 
     // set to opposite to force refresh
     ptr->prev_is_upside_down = settings->is_upside_down ? PNANOVDB_FALSE : PNANOVDB_TRUE;
     ptr->prev_is_y_up = settings->is_y_up ? PNANOVDB_FALSE : PNANOVDB_TRUE;
+
     ptr->window_glfw = window_glfw;
     ptr->log_print = log_print;
 
@@ -209,11 +218,9 @@ pnanovdb_imgui_window_t* create(const pnanovdb_compute_t* compute,
         inst.renderer = inst.renderer_interface.create(compute, queue, pixels, tex_width, tex_height);
     }
 
-    pnanovdb_camera_init(&ptr->camera);
-
     // initialize local speed state
     ptr->key_translation_rate_base = ptr->camera.config.key_translation_rate;
-    ptr->shift_speed_multiplier = settings->key_translation_shift_multiplier;
+    ptr->camera_speed_multiplier = settings->camera_speed_multiplier;
 
     return cast(ptr);
 }
@@ -283,26 +290,38 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
     auto log_print = ptr->compute_interface.get_log_print(context);
 
     // encoder resize
-    if (ptr->encoder && user_settings->encode_width > 0 && user_settings->encode_height > 0 &&
-        (user_settings->encode_width != ptr->width || user_settings->encode_height != ptr->height))
+    pnanovdb_int32_t target_encode_width =
+        user_settings->encode_resize ? ptr->width_encode_resize : user_settings->encode_width;
+    pnanovdb_int32_t target_encode_height =
+        user_settings->encode_resize ? ptr->height_encode_resize : user_settings->encode_height;
+    bool encode_size_changed = target_encode_width > 0 && target_encode_height > 0 &&
+                               (target_encode_width != ptr->width || target_encode_height != ptr->height);
+    bool encode_to_file_changed = user_settings->encode_to_file != ptr->encode_to_file_active;
+    if (ptr->encoder && (encode_size_changed || encode_to_file_changed))
     {
         compute->device_interface.wait_idle(compute_queue);
 
+        // destroy encoder, close recording file as needed
         compute->device_interface.destroy_encoder(ptr->encoder);
         ptr->encoder = nullptr;
         if (ptr->encode_file)
         {
             fclose(ptr->encode_file);
             ptr->encode_file = nullptr;
+            ptr->encode_to_file_active = PNANOVDB_FALSE;
         }
 
-        if (ptr->window_glfw)
+        // apply resize event if applicable
+        if (encode_size_changed)
         {
-            windowGlfwResize(ptr->window_glfw, user_settings->encode_width, user_settings->encode_height);
-        }
-        else
-        {
-            resizeWindow(ptr, user_settings->encode_width, user_settings->encode_height);
+            if (ptr->window_glfw)
+            {
+                windowGlfwResize(ptr->window_glfw, target_encode_width, target_encode_height);
+            }
+            else
+            {
+                resizeWindow(ptr, target_encode_width, target_encode_height);
+            }
         }
     }
 
@@ -328,8 +347,10 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         inst.instance_interface.update(inst.instance);
     }
 
-    if (!ptr->encoder && user_settings->enable_encoder)
+    if (!ptr->encoder && (user_settings->enable_encoder || ptr->encoder_was_enabled))
     {
+        ptr->encoder_was_enabled = PNANOVDB_TRUE;
+
         pnanovdb_compute_encoder_desc_t encoder_desc = {};
         encoder_desc.width = ptr->width;
         encoder_desc.height = ptr->height;
@@ -339,6 +360,7 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         if (user_settings->encode_to_file)
         {
             ptr->encode_file = fopen("capture_stream.h264", "wb");
+            ptr->encode_to_file_active = PNANOVDB_TRUE;
         }
 #if 0
             if (!ptr->socket)
@@ -462,7 +484,7 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         }
         if (ptr->server)
         {
-            pnanovdb_get_server()->push_h264(ptr->server, encoder_data, encoder_data_size);
+            pnanovdb_get_server()->push_h264(ptr->server, encoder_data, encoder_data_size, ptr->width, ptr->height);
         }
         if (ptr->encode_file)
         {
@@ -539,6 +561,11 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
                     }
                     break;
                 }
+                else if (event.type == PNANOVDB_SERVER_EVENT_RESIZE)
+                {
+                    ptr->width_encode_resize = event.width;
+                    ptr->height_encode_resize = event.height;
+                }
             }
         }
     }
@@ -610,14 +637,14 @@ void update_camera(pnanovdb_imgui_window_t* window, pnanovdb_imgui_settings_rend
 {
     auto ptr = cast(window);
 
-    ptr->shift_speed_multiplier = user_settings->key_translation_shift_multiplier;
+    ptr->camera_speed_multiplier = user_settings->camera_speed_multiplier;
 
     if (user_settings->sync_camera)
     {
         // apply imgui settings
         ptr->camera.state = user_settings->camera_state;
+        applyReverseZFarPlane(&user_settings->camera_config);
         ptr->camera.config = user_settings->camera_config;
-        user_settings->sync_camera = PNANOVDB_FALSE;
 
         ptr->prev_is_y_up = user_settings->is_y_up;
         ptr->prev_is_upside_down = user_settings->is_upside_down;
@@ -659,6 +686,7 @@ void update_camera(pnanovdb_imgui_window_t* window, pnanovdb_imgui_settings_rend
 
         ptr->prev_is_upside_down = user_settings->is_upside_down;
     }
+
     if (user_settings->sync_camera)
     {
         user_settings->sync_camera = PNANOVDB_FALSE;
@@ -805,12 +833,12 @@ void keyboardWindow(Window* ptr, ImGuiKey key, int scanCode, bool is_pressed, bo
     }
     if (shift)
     {
-        ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base * ptr->shift_speed_multiplier;
+        ptr->camera.config.key_translation_rate =
+            ptr->key_translation_rate_base * ptr->camera_speed_multiplier * ptr->shift_speed_multiplier;
     }
     else
     {
-        // restore previous (base) rate
-        ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base;
+        ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base * ptr->camera_speed_multiplier;
     }
     // always report key release, conditional on key down
     if ((zeroWantCaptureKeyboard && zeroWantCaptureMouse) || !is_pressed)
@@ -880,15 +908,14 @@ void mouseMoveWindow(Window* ptr, double mouseX, double mouseY)
             zeroWantCaptureMouse = false;
         }
 
-        // apply transient rate scaling here too for mouse-driven motion
         if (io.KeyShift)
         {
-            ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base * ptr->shift_speed_multiplier;
+            ptr->camera.config.key_translation_rate =
+                ptr->key_translation_rate_base * ptr->camera_speed_multiplier * ptr->shift_speed_multiplier;
         }
         else
         {
-            // restore previous (base) rate
-            ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base;
+            ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base * ptr->camera_speed_multiplier;
         }
     }
     if (zeroWantCaptureMouse)
@@ -923,17 +950,6 @@ void mouseButtonWindow(Window* ptr, int button, bool is_pressed, int modifiers)
             {
                 ptr->mouse_pressed[button] = PNANOVDB_FALSE;
             }
-        }
-
-        // apply transient rate scaling for wheel zoom behavior
-        if (io.KeyShift)
-        {
-            ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base * ptr->shift_speed_multiplier;
-        }
-        else
-        {
-            // restore previous (base) rate
-            ptr->camera.config.key_translation_rate = ptr->key_translation_rate_base;
         }
     }
     if (zeroWantCaptureMouse)
@@ -977,6 +993,17 @@ void mouseWheelWindow(Window* ptr, double scrollX, double scrollY)
         if (io.WantCaptureMouse)
         {
             zeroWantCaptureMouse = false;
+        }
+
+        if (io.KeyShift)
+        {
+            scrollX *= ptr->camera_speed_multiplier * ptr->shift_speed_multiplier;
+            scrollY *= ptr->camera_speed_multiplier * ptr->shift_speed_multiplier;
+        }
+        else
+        {
+            scrollX *= ptr->camera_speed_multiplier;
+            scrollY *= ptr->camera_speed_multiplier;
         }
 
         io.MouseWheelH += (float)scrollX;
