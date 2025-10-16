@@ -24,6 +24,8 @@
 #include "InstanceSettingsHandler.h"
 #include "ImguiIni.h"
 
+#include "imgui/LogoTexture.h"
+
 #include <stdio.h>
 #include <imgui_internal.h> // for the docking branch
 #include "misc/cpp/imgui_stdlib.h" // for std::string text input
@@ -332,6 +334,43 @@ static void createMenu(Instance* ptr)
     }
 }
 
+static void renderLogoOverlay(Instance* ptr)
+{
+    if (ptr->is_viewer())
+    {
+        // Viewer profile overlay (bottom-left) using standalone texture
+        ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+        ImVec2 viewportPos = mainViewport->Pos;
+        ImVec2 viewportSize = mainViewport->Size;
+
+        ImGui::SetNextWindowPos(viewportPos);
+        ImGui::SetNextWindowSize(viewportSize);
+        ImGui::SetNextWindowBgAlpha(0.f);
+
+        ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                                        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+                                        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoInputs |
+                                        ImGuiWindowFlags_NoFocusOnAppearing |
+                                        ImGuiWindowFlags_NoBringToFrontOnFocus;
+
+        if (ImGui::Begin("ViewerLogoOverlay", nullptr, windowFlags))
+        {
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            const float margin = 10.f;
+            int lw = 0, lh = 0;
+            imgui_get_logo_size(&lw, &lh);
+            ImTextureID texId = imgui_get_logo_texture();
+            if (texId && lw > 0 && lh > 0)
+            {
+                ImVec2 size((float)lw, (float)lh);
+                ImVec2 pos(viewportPos.x + margin, viewportPos.y + viewportSize.y - size.y - margin);
+                drawList->AddImage(texId, pos, ImVec2(pos.x + size.x, pos.y + size.y));
+            }
+        }
+        ImGui::End();
+    }
+}
+
 static void showWindows(Instance* ptr, float delta_time)
 {
     using namespace pnanovdb_editor;
@@ -468,6 +507,8 @@ void update(pnanovdb_imgui_instance_t* instance)
     pnanovdb_editor::CameraFrustum::getInstance().render(ptr);
 
     createMenu(ptr);
+
+    renderLogoOverlay(ptr);
 
     // bool show_demo_window = true;
     // ImGui::ShowDemoWindow(&show_demo_window);

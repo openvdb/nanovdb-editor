@@ -11,6 +11,10 @@
 
 
 #include "ImguiWindowGlfw.h"
+#include "LogoTexture.h"
+
+#define NANOVDB_EDITOR_DEFINE_LOGO_DATA
+#include "editor/ViewerLogoData.h" // embedded RGBA data (single-owner here)
 
 #include <vector>
 #include <thread>
@@ -20,6 +24,9 @@
 #include <server/Server.h>
 
 #include <stdlib.h>
+
+// Forward declare namespaced accessors so we can provide global wrappers for other modules
+namespace pnanovdb_imgui_window_default { ImTextureID imgui_get_logo_texture(); void imgui_get_logo_size(int* w, int* h); }
 
 namespace pnanovdb_imgui_window_default
 {
@@ -56,7 +63,32 @@ struct ImguiInstance
     pnanovdb_imgui_renderer_interface_t renderer_interface;
     pnanovdb_imgui_renderer_t* renderer;
     void* userdata;
+    pnanovdb_imgui_texture_t* logo_texture = nullptr;
+    int logo_w = 0;
+    int logo_h = 0;
 };
+
+// Provide accessors to the standalone logo texture for other modules (e.g., UI overlay)
+static ImguiInstance* g_first_instance_for_logo = nullptr;
+
+ImTextureID imgui_get_logo_texture()
+{
+    if (g_first_instance_for_logo && g_first_instance_for_logo->logo_texture)
+    {
+        return (ImTextureID)g_first_instance_for_logo->logo_texture;
+    }
+    return (ImTextureID)0;
+}
+
+void imgui_get_logo_size(int* w, int* h)
+{
+    if (w) *w = 0; if (h) *h = 0;
+    if (g_first_instance_for_logo)
+    {
+        if (w) *w = g_first_instance_for_logo->logo_w;
+        if (h) *h = g_first_instance_for_logo->logo_h;
+    }
+}
 
 struct Window
 {
@@ -199,6 +231,7 @@ pnanovdb_imgui_window_t* create(const pnanovdb_compute_t* compute,
         setStyle_NvidiaDark(*inst.instance_interface.get_style(inst.instance));
 
         ImGuiIO& io = *inst.instance_interface.get_io(inst.instance);
+        io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
 
 #if defined(__linux__)
         ImFont* font = io.Fonts->AddFontDefault();
@@ -211,11 +244,26 @@ pnanovdb_imgui_window_t* create(const pnanovdb_compute_t* compute,
         unsigned char* pixels = nullptr;
         int tex_width = 0;
         int tex_height = 0;
+
         inst.instance_interface.get_tex_data_as_rgba32(inst.instance, &pixels, &tex_width, &tex_height);
+        if (!pixels || tex_width <= 0 || tex_height <= 0)
+        {
+            io.Fonts->GetTexDataAsRGBA32(&pixels, &tex_width, &tex_height);
+        }
 
         pnanovdb_imgui_renderer_interface_t_duplicate(&inst.renderer_interface, pnanovdb_imgui_get_renderer_interface());
 
         inst.renderer = inst.renderer_interface.create(compute, queue, pixels, tex_width, tex_height);
+
+        // Create standalone texture for viewer logo
+        if (!inst.logo_texture && g_viewer_logo_width > 0u && g_viewer_logo_height > 0u)
+        {
+            pnanovdb_compute_context_t* ctx = compute->device_interface.get_compute_context(queue);
+            inst.logo_w = (int)g_viewer_logo_width;
+            inst.logo_h = (int)g_viewer_logo_height;
+            inst.logo_texture = inst.renderer_interface.create_texture(
+                ctx, inst.renderer, (unsigned char*)g_viewer_logo_rgba, inst.logo_w, inst.logo_h);
+        }
     }
 
     // initialize local speed state
@@ -396,7 +444,16 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
     pnanovdb_compute_swapchain_t* swapchain = nullptr;
     if (ptr->window_glfw)
     {
-        swapchain = windowGlfwGetSwapchain(ptr->window_glfw);
+        swapchain = windowGlfwGetSwapchain(ptr->window_glfw);// Copyright Contributors to the OpenVDB Project
+// SPDX-License-Identifier: Apache-2.0
+
+/*!
+            \file   nanovdb_editor/editor/ViewerLogoData.h
+
+            \author Petra Hapalova
+
+            \brief
+        */
     }
     if (swapchain)
     {
@@ -1097,8 +1154,8 @@ void setStyle_NvidiaDark(ImGuiStyle& s)
     s.Colors[::ImGuiCol_TabActive] = ImVec4(0.35f, 0.35f, 0.35f, 1.00f);
     s.Colors[::ImGuiCol_TabUnfocused] = ImVec4(0.16f, 0.16f, 0.16f, 1.00f);
     s.Colors[::ImGuiCol_TabUnfocusedActive] = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
-    // s.Colors[::ImGuiCol_DockingPreview] = ImVec4(0.26f, 0.59f, 0.98f, 0.70f);
-    // s.Colors[::ImGuiCol_DockingEmptyBg] = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
+    s.Colors[::ImGuiCol_DockingPreview] = ImVec4(0.26f, 0.59f, 0.98f, 0.70f);
+    s.Colors[::ImGuiCol_DockingEmptyBg] = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
     s.Colors[::ImGuiCol_PlotLines] = ImVec4(0.61f, 0.61f, 0.61f, 1.00f);
     s.Colors[::ImGuiCol_PlotLinesHovered] = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
     s.Colors[::ImGuiCol_PlotHistogram] = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
@@ -1123,4 +1180,15 @@ pnanovdb_imgui_window_interface_t* pnanovdb_imgui_get_window_interface()
     iface.get_camera = get_camera;
     iface.update_camera = update_camera;
     return &iface;
+}
+
+// Global wrappers for logo texture access (used by UI code in other modules)
+ImTextureID imgui_get_logo_texture()
+{
+    return pnanovdb_imgui_window_default::imgui_get_logo_texture();
+}
+
+void imgui_get_logo_size(int* w, int* h)
+{
+    pnanovdb_imgui_window_default::imgui_get_logo_size(w, h);
 }
