@@ -142,16 +142,6 @@ struct EditorParams
     uint32_t pad2;
 };
 
-// user defines a group of shader parameters which can be controlled in the editor
-struct ShaderParams
-{
-#if NANOVDB_EDITOR_SHADER_PARAMS_SIZE
-    uint64_t pad[NANOVDB_EDITOR_SHADER_PARAMS_SIZE];
-#else
-    uint64_t pad[16u];
-#endif
-};
-
 static void save_image(const char* filename, float* mapped_data, uint32_t image_width, uint32_t image_height)
 {
     FILE* file = fopen(filename, "wb");
@@ -808,7 +798,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             auto get_ui_params = [&]()
             {
                 editor->impl->compute->destroy_array(raster2d_shader_params_array);
-                return imgui_user_instance->shader_params.get_compute_array_for_shader<pnanovdb_raster_shader_params_t>(
+                return imgui_user_instance->shader_params.get_compute_array_for_shader(
                     raster2d_shader_name, editor->impl->compute);
             };
 
@@ -971,7 +961,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 editor->impl->compute->destroy_array(
                     pending_shader_params_arrays[pnanovdb_raster::gaussian_frag_color_slang]);
                 pending_shader_params_arrays[pnanovdb_raster::gaussian_frag_color_slang] =
-                    imgui_user_instance->shader_params.get_compute_array_for_shader<ShaderParams>(
+                    imgui_user_instance->shader_params.get_compute_array_for_shader(
                         "raster/gaussian_frag_color.slang", editor->impl->compute);
 
                 // create new default params
@@ -1120,20 +1110,16 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 editor_params.height = image_height;
 
                 EditorParams* mapped =
-                    (EditorParams*)pnanovdb_compute_upload_buffer_map(compute_context, &compute_upload_buffer, 16u);
+                    (EditorParams*)pnanovdb_compute_upload_buffer_map(compute_context, &compute_upload_buffer, sizeof(EditorParams));
                 *mapped = editor_params;
                 auto* upload_transient = pnanovdb_compute_upload_buffer_unmap(compute_context, &compute_upload_buffer);
 
-#    if NANOVDB_EDITOR_SHADER_PARAMS_SIZE
-                ShaderParams* shader_params_mapped = (ShaderParams*)pnanovdb_compute_upload_buffer_map(
-                    compute_context, &shader_params_upload_buffer, NANOVDB_EDITOR_SHADER_PARAMS_SIZE);
-#    else
-                ShaderParams* shader_params_mapped = (ShaderParams*)pnanovdb_compute_upload_buffer_map(
-                    compute_context, &shader_params_upload_buffer, 16u);
-#    endif
+                void* shader_params_mapped = pnanovdb_compute_upload_buffer_map(
+                    compute_context, &shader_params_upload_buffer, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
+
                 editor->impl->compute->destroy_array(viewport_shader_params_array);
                 viewport_shader_params_array =
-                    imgui_user_instance->shader_params.get_compute_array_for_shader<ShaderParams>(
+                    imgui_user_instance->shader_params.get_compute_array_for_shader(
                         imgui_user_instance->shader_name.c_str(), editor->impl->compute);
                 if (viewport_shader_params_array)
                 {
@@ -1205,7 +1191,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             shader_context = editor->impl->compute->create_shader_context(s_default_shader);
             editor->impl->compute->init_shader(editor->impl->compute, device_queue, shader_context, &compile_settings);
 
-            ShaderParams shader_params = {};
             EditorParams editor_params = {};
             editor_params.view_inv = pnanovdb_camera_mat_transpose(view_inv);
             editor_params.projection_inv = pnanovdb_camera_mat_transpose(projection_inv);

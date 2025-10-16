@@ -159,21 +159,21 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
     buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT;
     buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
     buf_desc.structure_stride = 0u;
-    buf_desc.size_in_bytes = sizeof(shader_params_t);
+    buf_desc.size_in_bytes = PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE;
 
     // copy shader params
     auto create_and_init_buffer = [&](const void* src, size_t size) -> pnanovdb_compute_buffer_t*
     {
         pnanovdb_compute_buffer_t* buffer =
             compute_interface->create_buffer(compute_context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &buf_desc);
-        shader_params_t* mapped = (shader_params_t*)compute_interface->map_buffer(compute_context, buffer);
+        void* mapped = compute_interface->map_buffer(compute_context, buffer);
         if (src && size > 0)
         {
             std::memcpy(mapped, src, size);
         }
         else
         {
-            std::memset(mapped, 0, sizeof(shader_params_t));
+            std::memset(mapped, 0, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
         }
         compute_interface->unmap_buffer(compute_context, buffer);
         return buffer;

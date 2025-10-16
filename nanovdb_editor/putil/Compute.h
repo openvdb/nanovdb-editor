@@ -122,6 +122,8 @@ typedef pnanovdb_uint32_t pnanovdb_compute_buffer_usage_t;
 #define PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_SRC 64
 #define PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_DST 128
 
+#define PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE 65536u
+
 typedef struct pnanovdb_compute_buffer_desc_t
 {
     pnanovdb_compute_buffer_usage_t usage;

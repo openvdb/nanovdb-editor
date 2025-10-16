@@ -174,7 +174,6 @@ private:
     void processPendingArrays(const std::string& shader_name);
 
 public:
-    template <typename ShaderParamsT>
     pnanovdb_compute_array_t* get_compute_array_for_shader(const std::string& shader_name,
                                                            const pnanovdb_compute_t* compute)
     {
@@ -190,9 +189,11 @@ public:
         }
         std::vector<ShaderParam>& shader_params = *get(shader_name);
 
-        ShaderParamsT params = {};
-        char* shader_param_ptr = reinterpret_cast<char*>(&params);
-        size_t total_size = 0;
+        // make constant array at 64KB limit of constant buffer
+        pnanovdb_compute_array_t* constant_array = compute->create_array(sizeof(char), PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE, nullptr);
+
+        char* shader_param_write_ptr = reinterpret_cast<char*>(constant_array->data);
+        size_t shader_param_write_offset = 0;
 
         // build the combined data structure using pool arrays
         for (auto& shader_param : shader_params)
@@ -204,13 +205,15 @@ public:
             if (!pool_array.empty())
             {
                 size_t shader_param_size = shader_param.num_elements * shader_param.size;
-                std::memcpy(shader_param_ptr, pool_array.data(), shader_param_size);
-                shader_param_ptr += shader_param_size;
-                total_size += shader_param_size;
+                if (shader_param_write_offset + shader_param_size <= PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE)
+                {
+                    std::memcpy(shader_param_write_ptr + shader_param_write_offset, pool_array.data(), shader_param_size);
+                }
+                shader_param_write_offset += shader_param_size;
             }
         }
 
-        return compute->create_array(sizeof(char), total_size, reinterpret_cast<void*>(&params));
+        return constant_array;
     }
 };
 }

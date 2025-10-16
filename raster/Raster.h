@@ -17,14 +17,6 @@
 
 namespace pnanovdb_raster
 {
-struct shader_params_t
-{
-#if NANOVDB_EDITOR_SHADER_PARAMS_SIZE
-    uint64_t pad[NANOVDB_EDITOR_SHADER_PARAMS_SIZE];
-#else
-    uint64_t pad[16u];
-#endif
-};
 
 static const char* s_shader_names[shader_count] = { "raster/gaussian_frag_alloc.slang",
                                                     "raster/gaussian_frag_color.slang",
