@@ -85,11 +85,23 @@ static pnanovdb_bool_t load_npz_file(const char* filename,
         return PNANOVDB_FALSE;
     }
 
+    static const uint32_t name_alias_count = 2u;
+    const char* name_aliases[name_alias_count][2] = {
+        {"sh_0", "sh"},
+        {"sh_n", "sh"},
+    };
+
     // early exit if not all arrays are found
     for (pnanovdb_uint32_t i = 0; i < array_count; i++)
     {
         const char* array_name = array_names[i];
-        if (npz_dict.count(array_name) == 0)
+        bool found_match = npz_dict.count(array_name) > 0;
+        for (uint32_t alias_idx = 0u; !found_match && alias_idx < name_alias_count; alias_idx++)
+        {
+            found_match = strcmp(array_name, name_aliases[alias_idx][0]) == 0 &&
+                npz_dict.count(name_aliases[alias_idx][1]) > 0;
+        }
+        if (!found_match)
         {
             printf("Warning: Array '%s' not found in npz file\n", array_name);
             return PNANOVDB_FALSE;
@@ -99,22 +111,72 @@ static pnanovdb_bool_t load_npz_file(const char* filename,
     for (pnanovdb_uint32_t i = 0; i < array_count; i++)
     {
         const char* array_name = array_names[i];
-        if (npz_dict.count(array_name) > 0)
+        const char* array_name_aliased = array_name;
+        bool found_match = npz_dict.count(array_name) > 0;
+        for (uint32_t alias_idx = 0u; !found_match && alias_idx < name_alias_count; alias_idx++)
         {
-            cnpy::NpyArray npz_array = npz_dict[array_name];
+            array_name_aliased = name_aliases[alias_idx][1];
+            found_match = strcmp(array_name, name_aliases[alias_idx][0]) == 0 &&
+                npz_dict.count(name_aliases[alias_idx][1]) > 0;
+        }
+
+        if (found_match)
+        {
+            cnpy::NpyArray npz_array = npz_dict[array_name_aliased];
 
             out_arrays[i] = new pnanovdb_compute_array_t();
 
             size_t total_size = 1;
-            for (auto& shape : npz_array.shape)
+            size_t vector_stride = 1u;
+            size_t vector_width = 1u;
+            for (size_t shape_idx = 0u; shape_idx < npz_array.shape.size(); shape_idx++)
             {
-                total_size *= shape;
+                total_size *= npz_array.shape[shape_idx];
+                if (shape_idx == 1u)
+                {
+                    vector_stride = npz_array.shape[shape_idx];
+                }
+                if (shape_idx == 2u)
+                {
+                    vector_width = npz_array.shape[shape_idx];
+                }
             }
 
-            out_arrays[i]->element_count = total_size;
-            out_arrays[i]->element_size = npz_array.word_size;
-            out_arrays[i]->data = new char[total_size * npz_array.word_size];
-            memcpy(out_arrays[i]->data, npz_array.data<char>(), total_size * npz_array.word_size);
+            if (array_name == array_name_aliased)
+            {
+                out_arrays[i]->element_count = total_size;
+                out_arrays[i]->element_size = npz_array.word_size;
+                out_arrays[i]->data = new char[total_size * npz_array.word_size];
+                memcpy(out_arrays[i]->data, npz_array.data<char>(), total_size * npz_array.word_size);
+            }
+            else if (strcmp(array_name, "sh_0") == 0)
+            {
+                size_t dst_size = total_size / vector_stride;
+                out_arrays[i]->element_count = dst_size;
+                out_arrays[i]->element_size = npz_array.word_size;
+                out_arrays[i]->data = new char[dst_size * npz_array.word_size];
+                size_t sh_count = total_size / (vector_stride * vector_width);
+                for (size_t sh_idx = 0u; sh_idx < sh_count; sh_idx++)
+                {
+                    memcpy(out_arrays[i]->data + sh_idx * vector_width * npz_array.word_size,
+                        npz_array.data<char>() + sh_idx * vector_stride * vector_width * npz_array.word_size,
+                        vector_width * npz_array.word_size);
+                }
+            }
+            else if (strcmp(array_name, "sh_n") == 0)
+            {
+                size_t dst_size = (total_size * (vector_stride - 1u)) / vector_stride;
+                out_arrays[i]->element_count = dst_size;
+                out_arrays[i]->element_size = npz_array.word_size;
+                out_arrays[i]->data = new char[dst_size * npz_array.word_size];
+                size_t sh_count = total_size / (vector_stride * vector_width);
+                for (size_t sh_idx = 0u; sh_idx < sh_count; sh_idx++)
+                {
+                    memcpy(out_arrays[i]->data + sh_idx * (vector_stride - 1u) * vector_width * npz_array.word_size,
+                        npz_array.data<char>() + sh_idx * vector_stride * vector_width * npz_array.word_size + vector_width * npz_array.word_size,
+                        (vector_stride - 1u) * vector_width * npz_array.word_size);
+                }
+            }
         }
         else
         {
