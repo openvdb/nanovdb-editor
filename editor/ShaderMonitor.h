@@ -38,6 +38,8 @@ private:
 
     ShaderMonitor(const ShaderMonitor&) = delete;
     ShaderMonitor& operator=(const ShaderMonitor&) = delete;
+    ShaderMonitor(ShaderMonitor&&) = delete;
+    ShaderMonitor& operator=(ShaderMonitor&&) = delete;
 
     std::unordered_map<std::string, std::unique_ptr<filewatch::FileWatch<std::string>>> watchers;
     std::unordered_map<std::string, std::chrono::steady_clock::time_point> lastEventTime;

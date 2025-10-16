@@ -28,7 +28,7 @@ EDITOR_LIB = "pnanovdbeditor"
 pnanovdb_bool_t = c_int32
 
 
-class pnanovdb_EditorConfig(Structure):
+class EditorConfig(Structure):
     """Definition equivalent to pnanovdb_editor_config_t."""
 
     _fields_ = [
@@ -138,7 +138,7 @@ class pnanovdb_Editor(Structure):
                 None,
                 c_void_p,
                 POINTER(pnanovdb_Device),
-                POINTER(pnanovdb_EditorConfig),
+                POINTER(EditorConfig),
             ),
         ),
         (
@@ -147,7 +147,7 @@ class pnanovdb_Editor(Structure):
                 None,
                 c_void_p,
                 POINTER(pnanovdb_Device),
-                POINTER(pnanovdb_EditorConfig),
+                POINTER(EditorConfig),
             ),
         ),
         ("stop", CFUNCTYPE(None, c_void_p)),
@@ -274,7 +274,7 @@ class Editor:
         try:
             if config is None:
                 # Create default config
-                config = pnanovdb_EditorConfig()
+                config = EditorConfig()
                 config.ip_address = b"127.0.0.1"
                 config.port = 8080
                 config.headless = 0  # pnanovdb_bool_t
@@ -295,7 +295,7 @@ class Editor:
         try:
             if config is None:
                 # Create default config
-                config = pnanovdb_EditorConfig()
+                config = EditorConfig()
                 config.ip_address = b"127.0.0.1"
                 config.port = 8080
                 config.headless = 0  # pnanovdb_bool_t

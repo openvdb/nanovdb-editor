@@ -11,6 +11,7 @@
 */
 
 #include "CommonVulkan.h"
+#include "nanovdb_editor/putil/Compute.h"
 
 #if defined(_WIN32)
 
@@ -32,7 +33,7 @@ pnanovdb_compute_encoder_t* create_encoder(pnanovdb_compute_queue_t* queue, cons
 
     if (!device->enabledExtensions.VK_KHR_VIDEO_QUEUE || !device->enabledExtensions.VK_KHR_VIDEO_ENCODE_QUEUE)
     {
-        device->logPrint(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Vulkan Video Encode is not supported.");
+        device->logPrint(PNANOVDB_COMPUTE_LOG_LEVEL_WARNING, "Vulkan Video Encode is not supported.");
         return nullptr;
     }
 

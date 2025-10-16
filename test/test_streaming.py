@@ -2,11 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import argparse
-from nanovdb_editor import Compiler, Compute, Editor, pnanovdb_EditorConfig
+from nanovdb_editor import Compiler, Compute, Editor, EditorConfig
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='NanoVDB Editor Server')
-    parser.add_argument('--ip', default='127.0.0.1',
+    parser.add_argument('--ip', default='192.168.0.6',
                        help='IP address to bind to (default: 127.0.0.1)')
     parser.add_argument('--port', type=int, default=8080,
                        help='Port to bind to (default: 8080)')
@@ -23,7 +23,7 @@ if __name__ == "__main__":
 
     editor = Editor(compute, compiler)
 
-    config = pnanovdb_EditorConfig()
+    config = EditorConfig()
     config.ip_address = args.ip.encode('utf-8')
     config.port = args.port
     config.headless = 1

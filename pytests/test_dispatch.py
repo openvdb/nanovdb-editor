@@ -1,7 +1,7 @@
 # Copyright Contributors to the OpenVDB Project
 # SPDX-License-Identifier: Apache-2.0
 #
-from nanovdb_editor import Compiler, Compute, pnanovdb_CompileTarget, MemoryBuffer
+from nanovdb_editor import Compiler, Compute, CompileTarget, MemoryBuffer
 from ctypes import *
 
 import os
@@ -34,7 +34,6 @@ class TestDispatch(unittest.TestCase):
             self.assertEqual(result[i], val + self.constants_data[0])
 
     def test_vulkan_dispatch(self):
-
         self.compiler.compile_shader(TEST_SHADER, entry_point_name="computeMain")
 
         input_array = self.compute.create_array(self.input_data)
@@ -57,10 +56,7 @@ class TestDispatch(unittest.TestCase):
         self.compute.destroy_array(output_array)
 
     def test_cpu_dispatch(self):
-
-        self.compiler.compile_shader(
-            TEST_SHADER, entry_point_name="computeMain", compile_target=pnanovdb_CompileTarget.CPU
-        )
+        self.compiler.compile_shader(TEST_SHADER, entry_point_name="computeMain", compile_target=CompileTarget.CPU)
 
         class Constants(Structure):
             """Definition equivalent to constants_t in the shader."""

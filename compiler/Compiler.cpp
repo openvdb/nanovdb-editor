@@ -110,7 +110,7 @@ pnanovdb_bool_t compile_file(pnanovdb_compiler_instance_t* instance,
         bool result = pnanovdb_shader::save_shader(source.source_filename, *shader);
         if (result)
         {
-            printf("Compiled shader '%s' was updated\n", source.source_filename);
+            // printf("Info: Compiled shader '%s' was updated\n", source.source_filename);
 
             if (shader_updated)
             {

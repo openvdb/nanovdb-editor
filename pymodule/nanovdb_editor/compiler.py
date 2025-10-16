@@ -13,7 +13,7 @@ COMPILER_LIB = "pnanovdbcompiler"
 pnanovdb_bool_t = c_int32
 
 
-class pnanovdb_CompileTarget(Enum):
+class CompileTarget(Enum):
     UNDEFINED = 0
     VULKAN = 1
     CPU = 2
@@ -123,7 +123,7 @@ class Compiler:
             raise RuntimeError("Failed to create compiler instance")
 
     def compile_shader(
-        self, filename: str, entry_point_name="main", is_row_major=False, compile_target=pnanovdb_CompileTarget.VULKAN
+        self, filename: str, entry_point_name="main", is_row_major=False, compile_target=CompileTarget.VULKAN
     ) -> bool:
         if not self._instance:
             raise RuntimeError("No compiler instance exists")

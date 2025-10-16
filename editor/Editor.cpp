@@ -35,6 +35,7 @@
 
 #ifdef USE_IMGUI_INSTANCE
 #    include "ImguiInstance.h"
+#    include "RenderSettingsConfig.h"
 #endif
 
 static const pnanovdb_uint32_t s_default_width = 1440u;
@@ -156,7 +157,7 @@ static void save_image(const char* filename, float* mapped_data, uint32_t image_
     FILE* file = fopen(filename, "wb");
     if (!file)
     {
-        printf("Could not create file to save the capture '%s'", filename);
+        printf("Error: Could not create file to save the capture '%s'", filename);
         return;
     }
 
@@ -297,7 +298,7 @@ void add_gaussian_data(pnanovdb_editor_t* editor,
         EditorWorker* worker = static_cast<EditorWorker*>(editor->impl->editor_worker);
         worker->pending_gaussian_data.set_pending(gaussian_data);
         worker->pending_raster_ctx.set_pending(raster_ctx);
-        worker->pending_shader_params.set_pending(ptr->shader_params);
+        worker->pending_shader_params.set_pending(raster_params);
         worker->pending_shader_params_data_type.set_pending(ptr->shader_params_data_type);
     }
     else
@@ -317,7 +318,7 @@ void add_gaussian_data(pnanovdb_editor_t* editor,
             // replace existing view if name matches
             views->gaussians.erase(it);
         }
-        views->gaussians[raster_params->name] = { raster_ctx, gaussian_data, raster_params, nullptr };
+        views->gaussians[raster_params->name] = { raster_ctx, gaussian_data, raster_params };
     }
 }
 
@@ -408,8 +409,7 @@ pnanovdb_int32_t editor_get_external_active_count(void* external_active_count)
 
     auto worker = static_cast<EditorWorker*>(editor->impl->editor_worker);
     pnanovdb_int32_t count = 0;
-    if (worker->set_params.load() > 0 || worker->get_params.load() > 0 ||
-        worker->should_stop.load())
+    if (worker->set_params.load() > 0 || worker->get_params.load() > 0 || worker->should_stop.load())
     {
         count = 1;
     }
@@ -425,6 +425,18 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
     pnanovdb_int32_t image_width = s_default_width;
     pnanovdb_int32_t image_height = s_default_height;
+
+    const char* profile_name =
+        config->ui_profile_name ? config->ui_profile_name : imgui_instance_user::s_render_settings_default;
+    int saved_width = 0, saved_height = 0;
+    if (imgui_instance_user::ini_window_resolution(profile_name, &saved_width, &saved_height))
+    {
+        if (saved_width > 0 && saved_height > 0)
+        {
+            image_width = saved_width;
+            image_height = saved_height;
+        }
+    }
 
     pnanovdb_imgui_window_interface_t* imgui_window_iface = pnanovdb_imgui_get_window_interface();
     if (!imgui_window_iface)
@@ -459,20 +471,14 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         imgui_user_settings->sync_camera = PNANOVDB_TRUE;
     }
 
+    imgui_instance_user::RenderSettingsConfig render_config;
+    render_config.load(*config);
+    render_config.applyToSettings(*imgui_user_settings);
+
     // Automatically enable encoder when streaming is requested
     if (config->streaming || config->stream_to_file)
     {
         imgui_user_settings->enable_encoder = PNANOVDB_TRUE;
-        if (config->ip_address != nullptr)
-        {
-            snprintf(imgui_user_settings->server_address, sizeof(imgui_user_settings->server_address), "%s",
-                     config->ip_address);
-        }
-        imgui_user_settings->server_port = config->port;
-        if (config->stream_to_file)
-        {
-            imgui_user_settings->encode_to_file = PNANOVDB_TRUE;
-        }
     }
 
 #ifdef USE_IMGUI_INSTANCE
@@ -539,8 +545,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     const pnanovdb_raster_shader_params_t* default_raster_shader_params =
         (const pnanovdb_raster_shader_params_t*)raster_shader_params_data_type->default_value;
     pnanovdb_raster_shader_params_t init_raster_shader_params = *default_raster_shader_params;
-    init_raster_shader_params.near_plane_override = imgui_user_settings->camera_config.near_plane;
-    init_raster_shader_params.far_plane_override = imgui_user_settings->camera_config.far_plane;
 
     // init raster params with default values and load UI group
     pnanovdb_compute_array_t* raster2d_shader_params_array = editor->impl->compute->create_array(
@@ -557,23 +561,26 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     imgui_user_instance->gaussian_views = &(static_cast<EditorView*>(editor->impl->views)->gaussians);
 
     // Initialize default camera view that syncs with viewport
-    pnanovdb_camera_view_default(&imgui_user_instance->default_camera_view);
-    imgui_user_instance->default_camera_view.name = imgui_instance_user::VIEWPORT_CAMERA;
-    imgui_user_instance->default_camera_view.configs = &imgui_user_instance->default_camera_view_config;
-    imgui_user_instance->default_camera_view.states = &imgui_user_instance->default_camera_view_state;
-    imgui_user_instance->default_camera_view.num_cameras = 1;
-    imgui_user_instance->default_camera_view.is_visible = PNANOVDB_FALSE;
+    pnanovdb_camera_config_t default_camera_view_config;
+    pnanovdb_camera_state_t default_camera_view_state;
 
     if (editor->impl->camera)
     {
-        imgui_user_instance->default_camera_view_config = editor->impl->camera->config;
-        imgui_user_instance->default_camera_view_state = editor->impl->camera->state;
+        default_camera_view_config = editor->impl->camera->config;
+        default_camera_view_state = editor->impl->camera->state;
     }
     else
     {
-        pnanovdb_camera_config_default(&imgui_user_instance->default_camera_view_config);
-        pnanovdb_camera_state_default(&imgui_user_instance->default_camera_view_state, PNANOVDB_FALSE);
+        pnanovdb_camera_config_default(&default_camera_view_config);
+        pnanovdb_camera_state_default(&default_camera_view_state, imgui_user_instance->render_settings->is_y_up);
     }
+
+    pnanovdb_camera_view_default(&imgui_user_instance->default_camera_view);
+    imgui_user_instance->default_camera_view.name = imgui_instance_user::VIEWPORT_CAMERA;
+    imgui_user_instance->default_camera_view.configs = &default_camera_view_config;
+    imgui_user_instance->default_camera_view.states = &default_camera_view_state;
+    imgui_user_instance->default_camera_view.num_cameras = 1;
+    imgui_user_instance->default_camera_view.is_visible = PNANOVDB_FALSE;
 
     imgui_user_instance->camera_views->insert(
         { imgui_instance_user::VIEWPORT_CAMERA, &imgui_user_instance->default_camera_view });
@@ -688,28 +695,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             void* old_shader_params = nullptr;
             worker->pending_shader_params.process_pending(editor->impl->shader_params, old_shader_params);
             const pnanovdb_reflect_data_type_t* old_shader_params_data_type = nullptr;
-            updated = worker->pending_shader_params_data_type.process_pending(
+            worker->pending_shader_params_data_type.process_pending(
                 editor->impl->shader_params_data_type, old_shader_params_data_type);
-            if (updated)
-            {
-                if (editor->impl->shader_params &&
-                    pnanovdb_reflect_layout_compare(editor->impl->shader_params_data_type,
-                                                    PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t)) ==
-                        PNANOVDB_TRUE)
-                {
-                    // init raster shader param's camera from imgui camera
-                    pnanovdb_raster_shader_params_t* raster_params =
-                        (pnanovdb_raster_shader_params_t*)editor->impl->shader_params;
-                    if (raster_params->near_plane_override == 0.f)
-                    {
-                        raster_params->near_plane_override = imgui_user_settings->camera_config.near_plane;
-                    }
-                    if (raster_params->far_plane_override == 0.f)
-                    {
-                        raster_params->far_plane_override = imgui_user_settings->camera_config.far_plane;
-                    }
-                }
-            }
         }
 
         if (editor->impl->editor_worker && static_cast<EditorWorker*>(editor->impl->editor_worker)->should_stop.load())
@@ -810,32 +797,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
         if (imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::Raster2D)
         {
-            auto sync_camera_from_params_to_ui = [&](pnanovdb_raster_shader_params_t* raster_params)
-            {
-                if (raster_params->near_plane_override != imgui_user_settings->camera_config.near_plane)
-                {
-                    imgui_user_settings->camera_config.near_plane = raster_params->near_plane_override;
-                    imgui_user_settings->sync_camera = PNANOVDB_TRUE;
-                }
-                if (raster_params->far_plane_override != imgui_user_settings->camera_config.far_plane)
-                {
-                    imgui_user_settings->camera_config.far_plane = raster_params->far_plane_override;
-                    imgui_user_settings->sync_camera = PNANOVDB_TRUE;
-                }
-            };
-
-            auto init_camera_overrides = [&](pnanovdb_raster_shader_params_t* raster_params)
-            {
-                if (raster_params->near_plane_override == 0.f)
-                {
-                    raster_params->near_plane_override = imgui_user_settings->camera_config.near_plane;
-                }
-                if (raster_params->far_plane_override == 0.f)
-                {
-                    raster_params->far_plane_override = imgui_user_settings->camera_config.far_plane;
-                }
-            };
-
             auto copy_editor_params_to_ui = [&]()
             {
                 raster2d_shader_params_array = editor->impl->compute->create_array(
@@ -862,19 +823,11 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                     return;
                 }
 
-                // Save render settings from UI
-                imgui_user_instance->views_render_settings[view_name] = *imgui_user_settings;
-
-                pnanovdb_camera_state_t camera_state = {};
-                imgui_window_iface->get_camera(imgui_window, &camera_state, nullptr);
-                imgui_user_instance->views_render_settings[view_name].camera_state = camera_state;
-
                 // Save current shader params from UI back to the view's stored params
                 if (imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::Raster2D &&
                     current_it->second.shader_params)
                 {
                     auto current_shader_params = get_ui_params();
-
                     if (current_shader_params && current_shader_params->data)
                     {
                         size_t data_size = current_shader_params->element_count * current_shader_params->element_size;
@@ -901,37 +854,16 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 {
                     pnanovdb_raster_shader_params_t* raster_params =
                         (pnanovdb_raster_shader_params_t*)editor->impl->shader_params;
-                    init_camera_overrides(raster_params);
                     copy_editor_params_to_ui();
-                    sync_camera_from_params_to_ui(raster_params);
-                }
-
-                // Load render settings into UI
-                if (new_it->second.render_settings == nullptr)
-                {
-                    // Create new settings from current if none exists for this view yet
-                    imgui_user_instance->views_render_settings[view_name] = *imgui_user_settings;
-                    new_it->second.render_settings = &imgui_user_instance->views_render_settings[view_name];
-                }
-                else
-                {
-                    *imgui_user_settings = *new_it->second.render_settings;
-                    imgui_user_settings->sync_camera = PNANOVDB_TRUE;
                 }
             };
 
             // Handle pending UI selection change (Gaussian views only)
             if (!imgui_user_instance->pending.viewport_gaussian_view.empty() &&
-                imgui_user_instance->pending.viewport_gaussian_view != imgui_user_instance->selected_scene_item)
+                imgui_user_instance->pending.viewport_gaussian_view != imgui_user_instance->selected_scene_item &&
+                imgui_user_instance->selected_view_type != imgui_instance_user::ViewsTypes::Cameras &&
+                imgui_user_instance->selected_view_type != imgui_instance_user::ViewsTypes::Root)
             {
-                pnanovdb_camera_state_t captured_camera_state = {};
-                pnanovdb_camera_config_t captured_camera_config = {};
-                imgui_window_iface->get_camera(imgui_window, &captured_camera_state, &captured_camera_config);
-
-                // Update default camera view to preserve viewport camera changes
-                imgui_user_instance->default_camera_view_state = captured_camera_state;
-                imgui_user_instance->default_camera_view_config = captured_camera_config;
-
                 save_current_view_state(imgui_user_instance->selected_scene_item);
 
                 // Update both editor and UI to the new selection
@@ -942,17 +874,13 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
                 load_view_into_editor_and_ui(new_view_name);
 
-                // This preserves viewport camera changes when switching views
-                imgui_user_settings->camera_state = captured_camera_state;
-                imgui_user_settings->camera_config = captured_camera_config;
-                imgui_user_settings->sync_camera = PNANOVDB_TRUE;
-
                 imgui_user_instance->pending.viewport_gaussian_view.clear();
             }
+
             // Handle editor-driven selection change (only if no pending UI change)
-            // Do not override when the user has explicitly selected a camera in the Scene window
             else if (views->current_view_scene != imgui_user_instance->selected_scene_item &&
-                     imgui_user_instance->selected_view_type != imgui_instance_user::ViewsTypes::Cameras)
+                     imgui_user_instance->selected_view_type != imgui_instance_user::ViewsTypes::Cameras &&
+                     imgui_user_instance->selected_view_type != imgui_instance_user::ViewsTypes::Root)
             {
                 save_current_view_state(imgui_user_instance->selected_scene_item);
 
@@ -961,7 +889,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
                 if (editor->impl->nanovdb_array)
                 {
-                     imgui_user_instance->selected_view_type = imgui_instance_user::ViewsTypes::NanoVDBs;
+                    imgui_user_instance->selected_view_type = imgui_instance_user::ViewsTypes::NanoVDBs;
                 }
                 else if (editor->impl->gaussian_data)
                 {
@@ -986,20 +914,13 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                         if (worker->set_params.load() > 0)
                         {
                             // Push editor params to UI
-                            pnanovdb_raster_shader_params_t* raster_params =
-                                (pnanovdb_raster_shader_params_t*)editor->impl->shader_params;
-                            init_camera_overrides(raster_params);
                             copy_editor_params_to_ui();
-                            sync_camera_from_params_to_ui(raster_params);
                             worker->set_params.fetch_sub(1);
                         }
                         else
                         {
                             // Pull UI params for camera sync
                             raster2d_shader_params_array = get_ui_params();
-                            pnanovdb_raster_shader_params_t* raster_params =
-                                (pnanovdb_raster_shader_params_t*)raster2d_shader_params_array->data;
-                            sync_camera_from_params_to_ui(raster_params);
                         }
 
                         if (worker->get_params.load() > 0)
@@ -1016,9 +937,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                     }
                     else
                     {
-                        pnanovdb_raster_shader_params_t* raster_params =
-                            (pnanovdb_raster_shader_params_t*)editor->impl->shader_params;
-                        init_camera_overrides(raster_params);
                         copy_editor_params_to_ui();
 
                         // Clear editor params so UI becomes source of truth
@@ -1029,11 +947,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 else // Use UI params as source of truth
                 {
                     raster2d_shader_params_array = get_ui_params();
-
-                    // Sync camera from UI params
-                    pnanovdb_raster_shader_params_t* raster_params =
-                        (pnanovdb_raster_shader_params_t*)raster2d_shader_params_array->data;
-                    sync_camera_from_params_to_ui(raster_params);
                 }
             }
         }
@@ -1151,11 +1064,10 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                              queue = device_queue](pnanovdb_raster_gaussian_data_t* ptr)
                             {
                                 destroy_fn(compute, queue, ptr);
-                                // printf("Destroyed gaussian data - %p\n", ptr);
+                                // printf("Info: Destroyed gaussian data - %p\n", ptr);
                             });
                         it.shader_params = pending_raster_params;
-                        it.render_settings = nullptr;
-                        // printf("Created gaussian data - %p\n", pending_gaussian_data);
+                        // printf("Info: Created gaussian data - %p\n", pending_gaussian_data);
 
                         editor->add_gaussian_data(editor, pending_raster_ctx, device_queue, pending_gaussian_data);
                     }
@@ -1282,29 +1194,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             }
         }
 
-        // update camera settings
-        if (imgui_user_instance->pending.save_camera)
-        {
-            imgui_user_instance->pending.save_camera = false;
-
-            imgui_user_instance->saved_render_settings[imgui_user_instance->render_settings_name] = *imgui_user_settings;
-
-            pnanovdb_camera_state_t camera_state = {};
-            imgui_window_iface->get_camera(imgui_window, &camera_state, nullptr);
-            imgui_user_instance->saved_render_settings[imgui_user_instance->render_settings_name].camera_state =
-                camera_state;
-
-            imgui_user_instance->pending.save_render_settings = true;
-        }
-        if (imgui_user_instance->pending.load_camera)
-        {
-            imgui_user_instance->pending.load_camera = false;
-
-            *imgui_user_settings = imgui_user_instance->saved_render_settings[imgui_user_instance->render_settings_name];
-            imgui_user_settings->sync_camera = PNANOVDB_TRUE;
-
-            imgui_user_instance->pending.load_render_settings = true;
-        }
         if (editor->impl->camera && imgui_user_settings->sync_camera == PNANOVDB_FALSE)
         {
             imgui_window_iface->get_camera(imgui_window, &editor->impl->camera->state, &editor->impl->camera->config);
@@ -1334,8 +1223,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         imgui_window_iface->update_camera(imgui_window, imgui_user_settings);
 
         // update default camera view to sync with viewport camera to preserve changes when switching views
-        imgui_user_instance->default_camera_view_state = imgui_user_settings->camera_state;
-        imgui_user_instance->default_camera_view_config = imgui_user_settings->camera_config;
+        imgui_user_instance->default_camera_view.states = &imgui_user_settings->camera_state;
+        imgui_user_instance->default_camera_view.configs = &imgui_user_settings->camera_config;
 
         // update viewport image
         should_run = imgui_window_iface->update(

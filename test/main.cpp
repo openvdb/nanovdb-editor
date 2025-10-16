@@ -179,6 +179,7 @@ void test_openh264()
 
     printf("OpenH264 test completed\n");
 }
+#endif
 
 void pnanovdb_compute_log_print(pnanovdb_compute_log_level_t level, const char* format, ...)
 {
@@ -198,13 +199,18 @@ void pnanovdb_compute_log_print(pnanovdb_compute_log_level_t level, const char* 
     {
         prefix = "Info";
     }
+    else if (level == PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG)
+    {
+        // prefix = "Debug";
+        va_end(args);
+        return;
+    }
     printf("%s: ", prefix);
     vprintf(format, args);
     printf("\n");
 
     va_end(args);
 }
-#endif
 
 struct NanoVDBEditorArgs : public argparse::Args
 {
@@ -234,7 +240,7 @@ int main(int argc, char* argv[])
     pnanovdb_compute_load(&compute, &compiler);
 
     pnanovdb_compute_device_desc_t device_desc = {};
-    // device_desc.log_print = pnanovdb_compute_log_print;
+    device_desc.log_print = pnanovdb_compute_log_print;
 
     pnanovdb_compute_device_manager_t* device_manager = compute.device_interface.create_device_manager(PNANOVDB_FALSE);
     pnanovdb_compute_device_t* device = compute.device_interface.create_device(device_manager, &device_desc);
@@ -419,11 +425,11 @@ int main(int argc, char* argv[])
     pnanovdb_camera_t camera;
     pnanovdb_camera_init(&camera);
 
-    camera.state.position = { 0.358805, 0.725740, -0.693701 };
-    camera.state.eye_direction = { -0.012344, 0.959868, -0.280182 };
-    camera.state.eye_up = { 0.000000, 1.000000, 0.000000 };
-    camera.state.eye_distance_from_position = -2.111028;
-    editor.update_camera(&editor, &camera);
+    // camera.state.position = { 0.358805, 0.725740, -0.693701 };
+    // camera.state.eye_direction = { -0.012344, 0.959868, -0.280182 };
+    // camera.state.eye_up = { 0.000000, 1.000000, 0.000000 };
+    // camera.state.eye_distance_from_position = -2.111028;
+    // editor.update_camera(&editor, &camera);
 
     const char* raster_file = "./data/ficus.ply";
     const char* raster_file_garden = "./data/garden.ply";
@@ -472,7 +478,6 @@ int main(int argc, char* argv[])
 #        endif
 
     raster_params.eps2d = 0.5f;
-    raster_params.near_plane_override = 1.f;
 
 #        ifdef TEST_RASTER_SHADER_PARAMS
     compute.destroy_array(params_array);
@@ -485,10 +490,11 @@ int main(int argc, char* argv[])
 #    endif
 
     pnanovdb_editor_config_t config = {};
-    config.headless = PNANOVDB_FALSE;
-    config.streaming = PNANOVDB_FALSE;
+    config.headless = PNANOVDB_TRUE;
+    config.streaming = PNANOVDB_TRUE;
     config.ip_address = "127.0.0.1";
     config.port = 8080;
+    // config.ui_profile_name = "viewer";
     editor.show(&editor, device, &config);
 
     // if (editor.camera)
@@ -516,8 +522,8 @@ int main(int argc, char* argv[])
     pnanovdb_editor_load(&editor, &compute, &compiler);
 
     pnanovdb_editor_config_t config = {};
-    config.headless = PNANOVDB_TRUE;
-    config.streaming = PNANOVDB_TRUE;
+    config.headless = PNANOVDB_FALSE;
+    config.streaming = PNANOVDB_FALSE;
     config.ip_address = "127.0.0.1";
     config.port = 8080;
 

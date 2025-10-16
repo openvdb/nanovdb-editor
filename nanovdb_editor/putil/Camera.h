@@ -686,14 +686,29 @@ PNANOVDB_FORCE_INLINE void pnanovdb_camera_mouse_update(PNANOVDB_INOUT(pnanovdb_
     // apply zoom
     if (zoom_dy != 0.f)
     {
+        float k = PNANOVDB_DEREF(ptr).config.zoom_rate;
+        float f = 1.f + k * fabsf(zoom_dy);
         if (PNANOVDB_DEREF(ptr).config.is_orthographic)
         {
-            PNANOVDB_DEREF(ptr).state.orthographic_scale *= (1.f - PNANOVDB_DEREF(ptr).config.zoom_rate * zoom_dy);
+            if (zoom_dy >= 0.f)
+            {
+                PNANOVDB_DEREF(ptr).state.orthographic_scale /= f;
+            }
+            else
+            {
+                PNANOVDB_DEREF(ptr).state.orthographic_scale *= f;
+            }
         }
         else
         {
-            PNANOVDB_DEREF(ptr).state.eye_distance_from_position *=
-                (1.f + PNANOVDB_DEREF(ptr).config.zoom_rate * zoom_dy);
+            if (zoom_dy >= 0.f)
+            {
+                PNANOVDB_DEREF(ptr).state.eye_distance_from_position *= f;
+            }
+            else
+            {
+                PNANOVDB_DEREF(ptr).state.eye_distance_from_position /= f;
+            }
         }
     }
 }
@@ -705,14 +720,29 @@ PNANOVDB_FORCE_INLINE void pnanovdb_camera_mouse_wheel_update(PNANOVDB_INOUT(pna
     if (scroll_y != 0.f)
     {
         float zoom_dy = (-PNANOVDB_DEREF(ptr).config.scroll_zoom_rate) * scroll_y;
+        float k = PNANOVDB_DEREF(ptr).config.zoom_rate;
+        float f = 1.f + k * fabsf(zoom_dy);
         if (PNANOVDB_DEREF(ptr).config.is_orthographic)
         {
-            PNANOVDB_DEREF(ptr).state.orthographic_scale *= (1.f - PNANOVDB_DEREF(ptr).config.zoom_rate * zoom_dy);
+            if (zoom_dy >= 0.f)
+            {
+                PNANOVDB_DEREF(ptr).state.orthographic_scale /= f;
+            }
+            else
+            {
+                PNANOVDB_DEREF(ptr).state.orthographic_scale *= f;
+            }
         }
         else
         {
-            PNANOVDB_DEREF(ptr).state.eye_distance_from_position *=
-                (1.f + PNANOVDB_DEREF(ptr).config.zoom_rate * zoom_dy);
+            if (zoom_dy >= 0.f)
+            {
+                PNANOVDB_DEREF(ptr).state.eye_distance_from_position *= f;
+            }
+            else
+            {
+                PNANOVDB_DEREF(ptr).state.eye_distance_from_position /= f;
+            }
         }
     }
 }
