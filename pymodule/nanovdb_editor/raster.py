@@ -29,7 +29,8 @@ class pnanovdb_Raster(Structure):
                 POINTER(pnanovdb_ComputeArray),  # quaternions
                 POINTER(pnanovdb_ComputeArray),  # scales
                 POINTER(pnanovdb_ComputeArray),  # colors
-                POINTER(pnanovdb_ComputeArray),  # spherical_harmonics
+                POINTER(pnanovdb_ComputeArray),  # sh_0
+                POINTER(pnanovdb_ComputeArray),  # sh_n
                 POINTER(pnanovdb_ComputeArray),  # opacities
                 POINTER(pnanovdb_ComputeArray),  # shader_params_arrays
                 c_uint32,  # shader_param_count
@@ -84,7 +85,8 @@ class pnanovdb_Raster(Structure):
                 POINTER(pnanovdb_ComputeArray),  # quaternions
                 POINTER(pnanovdb_ComputeArray),  # scales
                 POINTER(pnanovdb_ComputeArray),  # colors
-                POINTER(pnanovdb_ComputeArray),  # spherical_harmonics
+                POINTER(pnanovdb_ComputeArray),  # sh_0
+                POINTER(pnanovdb_ComputeArray),  # sh_n
                 POINTER(pnanovdb_ComputeArray),  # opacities
                 POINTER(POINTER(pnanovdb_ComputeArray)),  # shader_params_arrays
                 c_void_p,  # profiler_report
@@ -120,7 +122,8 @@ class Raster:
         quaternions: pnanovdb_ComputeArray,
         scales: pnanovdb_ComputeArray,
         colors: pnanovdb_ComputeArray,
-        spherical_harmonics: pnanovdb_ComputeArray,
+        sh_0: pnanovdb_ComputeArray,
+        sh_n: pnanovdb_ComputeArray,
         opacities: pnanovdb_ComputeArray,
         shader_params_arrays=None,
         profiler_report=None,
@@ -137,7 +140,8 @@ class Raster:
                 pointer(quaternions),
                 pointer(scales),
                 pointer(colors),
-                pointer(spherical_harmonics),
+                pointer(sh_0),
+                pointer(sh_1),
                 pointer(opacities),
                 shader_params_arrays,
                 profiler_report or c_void_p(),
