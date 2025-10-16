@@ -218,8 +218,10 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
         compute_interface->register_buffer_as_transient(context, data->scales_gpu_array->device_buffer);
     pnanovdb_compute_buffer_transient_t* colors_transient =
         compute_interface->register_buffer_as_transient(context, data->colors_gpu_array->device_buffer);
-    pnanovdb_compute_buffer_transient_t* spherical_harmonics_transient =
-        compute_interface->register_buffer_as_transient(context, data->spherical_harmonics_gpu_array->device_buffer);
+    pnanovdb_compute_buffer_transient_t* sh_0_transient =
+        compute_interface->register_buffer_as_transient(context, data->sh_0_gpu_array->device_buffer);
+    pnanovdb_compute_buffer_transient_t* sh_n_transient =
+        compute_interface->register_buffer_as_transient(context, data->sh_n_gpu_array->device_buffer);
     pnanovdb_compute_buffer_transient_t* opacities_transient =
         compute_interface->register_buffer_as_transient(context, data->opacities_gpu_array->device_buffer);
 
@@ -297,8 +299,9 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
         pnanovdb_compute_resource_t resources[4u] = {};
         resources[0u].buffer_transient = constant_transient;
         resources[1u].buffer_transient = shader_params_transient;
-        resources[2u].buffer_transient = spherical_harmonics_transient;
-        resources[3u].buffer_transient = resolved_color_transient;
+        resources[2u].buffer_transient = sh_0_transient;
+        resources[3u].buffer_transient = sh_n_transient;
+        resources[4u].buffer_transient = resolved_color_transient;
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_spherical_harmonics_slang],
                                  resources, (constants.prim_count + 255u) / 256u, 1u, 1u, "gaussian_spherical_harmonics");
@@ -380,8 +383,10 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
         compute_interface->register_buffer_as_transient(context, data->quaternions_gpu_array->device_buffer);
     scales_transient = compute_interface->register_buffer_as_transient(context, data->scales_gpu_array->device_buffer);
     colors_transient = compute_interface->register_buffer_as_transient(context, data->colors_gpu_array->device_buffer);
-    spherical_harmonics_transient =
-        compute_interface->register_buffer_as_transient(context, data->spherical_harmonics_gpu_array->device_buffer);
+    sh_0_transient =
+        compute_interface->register_buffer_as_transient(context, data->sh_0_gpu_array->device_buffer);
+    sh_n_transient =
+        compute_interface->register_buffer_as_transient(context, data->sh_n_gpu_array->device_buffer);
     opacities_transient =
         compute_interface->register_buffer_as_transient(context, data->opacities_gpu_array->device_buffer);
 

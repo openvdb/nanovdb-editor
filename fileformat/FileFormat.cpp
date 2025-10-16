@@ -183,7 +183,8 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
     std::vector<float> arr_opacities;
     std::vector<float> arr_quaternions;
     std::vector<float> arr_scales;
-    std::vector<float> arr_sh;
+    std::vector<float> arr_sh_0;
+    std::vector<float> arr_sh_n;
 
     auto resolve_prop = [&](const char* str)
     {
@@ -232,28 +233,29 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
         arr_scales.push_back(element[prop_scale_1]);
         arr_scales.push_back(element[prop_scale_2]);
         // put in rrrgggbbb convention
-        arr_sh.push_back(element[prop_f_dc_0]);
+        arr_sh_0.push_back(element[prop_f_dc_0]);
+        arr_sh_0.push_back(element[prop_f_dc_1]);
+        arr_sh_0.push_back(element[prop_f_dc_2]);
+
         if (prop_f_rest_0 != ~0u)
         {
             for (unsigned int idx = 0u; idx < 15u; idx++)
             {
-                arr_sh.push_back(element[prop_f_rest_0 + idx]);
+                arr_sh_n.push_back(element[prop_f_rest_0 + idx]);
             }
         }
-        arr_sh.push_back(element[prop_f_dc_1]);
         if (prop_f_rest_0 != ~0u)
         {
             for (unsigned int idx = 0u; idx < 15u; idx++)
             {
-                arr_sh.push_back(element[prop_f_rest_0 + 15u + idx]);
+                arr_sh_n.push_back(element[prop_f_rest_0 + 15u + idx]);
             }
         }
-        arr_sh.push_back(element[prop_f_dc_2]);
         if (prop_f_rest_0 != ~0u)
         {
             for (unsigned int idx = 0u; idx < 15u; idx++)
             {
-                arr_sh.push_back(element[prop_f_rest_0 + 30u + idx]);
+                arr_sh_n.push_back(element[prop_f_rest_0 + 30u + idx]);
             }
         }
     }
@@ -282,9 +284,13 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
         {
             source_array = &arr_scales;
         }
-        else if (strcmp(array_name, "sh") == 0)
+        else if (strcmp(array_name, "sh_0") == 0)
         {
-            source_array = &arr_sh;
+            source_array = &arr_sh_0;
+        }
+        else if (strcmp(array_name, "sh_n") == 0)
+        {
+            source_array = &arr_sh_n;
         }
 
         if (source_array && !source_array->empty())

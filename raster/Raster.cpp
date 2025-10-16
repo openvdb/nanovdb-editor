@@ -564,7 +564,8 @@ pnanovdb_compute_array_t* raster_to_nanovdb(const pnanovdb_compute_t* compute,
                                             pnanovdb_compute_array_t* quaternions,
                                             pnanovdb_compute_array_t* scales,
                                             pnanovdb_compute_array_t* colors,
-                                            pnanovdb_compute_array_t* spherical_harmonics,
+                                            pnanovdb_compute_array_t* sh_0,
+                                            pnanovdb_compute_array_t* sh_n,
                                             pnanovdb_compute_array_t* opacities,
                                             pnanovdb_compute_array_t** shader_params_arrays,
                                             pnanovdb_profiler_report_t profiler_report,
@@ -583,7 +584,7 @@ pnanovdb_compute_array_t* raster_to_nanovdb(const pnanovdb_compute_t* compute,
 
     // note: colors duplicate for now, since no SH in interface
     pnanovdb_raster_gaussian_data_t* data =
-        create_gaussian_data(compute, queue, cast(ctx), means, quaternions, scales, colors, spherical_harmonics,
+        create_gaussian_data(compute, queue, cast(ctx), means, quaternions, scales, colors, sh_0, sh_n,
                              opacities, shader_params_arrays, nullptr);
 
     upload_gaussian_data(compute, queue, cast(ctx), data);

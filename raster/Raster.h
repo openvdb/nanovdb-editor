@@ -55,7 +55,8 @@ struct gaussian_data_t
     pnanovdb_compute_array_t* quaternions_cpu_array;
     pnanovdb_compute_array_t* scales_cpu_array;
     pnanovdb_compute_array_t* colors_cpu_array;
-    pnanovdb_compute_array_t* spherical_harmonics_cpu_array;
+    pnanovdb_compute_array_t* sh_0_cpu_array;
+    pnanovdb_compute_array_t* sh_n_cpu_array;
     pnanovdb_compute_array_t* opacities_cpu_array;
     pnanovdb_compute_array_t** shader_params_cpu_arrays;
 
@@ -63,7 +64,8 @@ struct gaussian_data_t
     compute_gpu_array_t* quaternions_gpu_array;
     compute_gpu_array_t* scales_gpu_array;
     compute_gpu_array_t* colors_gpu_array;
-    compute_gpu_array_t* spherical_harmonics_gpu_array;
+    compute_gpu_array_t* sh_0_gpu_array;
+    compute_gpu_array_t* sh_n_gpu_array;
     compute_gpu_array_t* opacities_gpu_array;
     compute_gpu_array_t** shader_params_gpu_arrays;
 
@@ -87,7 +89,8 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
                                                       pnanovdb_compute_array_t* quaternions,
                                                       pnanovdb_compute_array_t* scales,
                                                       pnanovdb_compute_array_t* colors,
-                                                      pnanovdb_compute_array_t* spherical_harmonics,
+                                                      pnanovdb_compute_array_t* sh_0,
+                                                      pnanovdb_compute_array_t* sh_n,
                                                       pnanovdb_compute_array_t* opacities,
                                                       pnanovdb_compute_array_t** shader_params_arrays,
                                                       pnanovdb_raster_shader_params_t* raster_params);

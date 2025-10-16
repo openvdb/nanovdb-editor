@@ -43,10 +43,11 @@ static pnanovdb_compute_array_t* process_gaussian_arrays_common(const pnanovdb_c
     pnanovdb_compute_array_t* opacity_arr = arrays_gaussian[1];
     pnanovdb_compute_array_t* quat_arr = arrays_gaussian[2];
     pnanovdb_compute_array_t* scale_arr = arrays_gaussian[3];
-    pnanovdb_compute_array_t* spherical_harmonics_arr = arrays_gaussian[4];
+    pnanovdb_compute_array_t* sh_0_arr = arrays_gaussian[4];
+    pnanovdb_compute_array_t* sh_n_arr = arrays_gaussian[5];
     pnanovdb_compute_array_t* color_arr = compute->create_array(4u, point_count * 3u, nullptr);
 
-    pnanovdb_uint32_t sh_stride = (pnanovdb_uint32_t)(spherical_harmonics_arr->element_count / means_arr->element_count);
+    pnanovdb_uint32_t sh_stride = (pnanovdb_uint32_t)(sh_n_arr->element_count / means_arr->element_count);
 
     if (worker)
     {
@@ -89,19 +90,19 @@ static pnanovdb_compute_array_t* process_gaussian_arrays_common(const pnanovdb_c
         worker->updateTaskProgress(0.7f);
     }
 
-    float* mapped_spherical_harmonics = (float*)compute->map_array(spherical_harmonics_arr);
+    float* mapped_sh_0 = (float*)compute->map_array(sh_0_arr);
     float* mapped_color = (float*)compute->map_array(color_arr);
     for (pnanovdb_uint64_t point_idx = 0u; point_idx < point_count; point_idx++)
     {
         const float c0 = 0.28209479177387814f;
         mapped_color[3u * point_idx + 0u] =
-            c0 * mapped_spherical_harmonics[3u * sh_stride * point_idx + 0u * sh_stride] + 0.5f;
+            c0 * mapped_sh_0[3u * point_idx] + 0.5f;
         mapped_color[3u * point_idx + 1u] =
-            c0 * mapped_spherical_harmonics[3u * sh_stride * point_idx + 1u * sh_stride] + 0.5f;
+            c0 * mapped_sh_0[3u * point_idx] + 0.5f;
         mapped_color[3u * point_idx + 2u] =
-            c0 * mapped_spherical_harmonics[3u * sh_stride * point_idx + 2u * sh_stride] + 0.5f;
+            c0 * mapped_sh_0[3u * point_idx] + 0.5f;
     }
-    compute->unmap_array(spherical_harmonics_arr);
+    compute->unmap_array(sh_0_arr);
     compute->unmap_array(color_arr);
 
     if (worker)
@@ -166,11 +167,12 @@ static pnanovdb_bool_t process_arrays_to_raster_to_nanovdb(pnanovdb_raster_t* ra
     pnanovdb_compute_array_t* opacity_arr = arrays_gaussian[1];
     pnanovdb_compute_array_t* quat_arr = arrays_gaussian[2];
     pnanovdb_compute_array_t* scale_arr = arrays_gaussian[3];
-    pnanovdb_compute_array_t* spherical_harmonics_arr = arrays_gaussian[4];
+    pnanovdb_compute_array_t* sh_0_arr = arrays_gaussian[4];
+    pnanovdb_compute_array_t* sh_n_arr = arrays_gaussian[5];
     pnanovdb_compute_array_t* color_arr = process_gaussian_arrays_common(compute, queue, arrays_gaussian, worker);
 
     *nanovdb_arr = raster->raster_to_nanovdb(raster->compute, queue, voxel_size, means_arr, quat_arr, scale_arr,
-                                             color_arr, spherical_harmonics_arr, opacity_arr, shader_params_arrays,
+                                             color_arr, sh_0_arr, sh_n_arr, opacity_arr, shader_params_arrays,
                                              profiler_report, userdata);
 
     compute->destroy_array(color_arr);
@@ -233,7 +235,8 @@ static pnanovdb_bool_t process_arrays_to_create_gaussian_data(pnanovdb_raster_t*
     pnanovdb_compute_array_t* opacity_arr = arrays_gaussian[1];
     pnanovdb_compute_array_t* quat_arr = arrays_gaussian[2];
     pnanovdb_compute_array_t* scale_arr = arrays_gaussian[3];
-    pnanovdb_compute_array_t* spherical_harmonics_arr = arrays_gaussian[4];
+    pnanovdb_compute_array_t* sh_0_arr = arrays_gaussian[4];
+    pnanovdb_compute_array_t* sh_n_arr = arrays_gaussian[5];
 
     if (worker)
     {
@@ -271,7 +274,7 @@ static pnanovdb_bool_t process_arrays_to_create_gaussian_data(pnanovdb_raster_t*
     }
     pnanovdb_raster_gaussian_data_t* raster_data =
         raster->create_gaussian_data(raster->compute, queue, raster_ctx, means_arr, quat_arr, scale_arr, color_arr,
-                                     spherical_harmonics_arr, opacity_arr, shader_params_arrays, raster_params);
+                                     sh_0_arr, sh_n_arr, opacity_arr, shader_params_arrays, raster_params);
 
     compute->destroy_array(color_arr);
     *gaussian_data = raster_data;
@@ -317,10 +320,10 @@ pnanovdb_bool_t raster_file(pnanovdb_raster_t* raster,
     pnanovdb_fileformat_t fileformat = {};
     pnanovdb_fileformat_load(&fileformat, compute);
 
-    const char* array_names_gaussian[] = { "means", "opacities", "quaternions", "scales", "sh" };
-    pnanovdb_compute_array_t* arrays_gaussian[5] = {};
+    const char* array_names_gaussian[] = { "means", "opacities", "quaternions", "scales", "sh_0", "sh_n" };
+    pnanovdb_compute_array_t* arrays_gaussian[6] = {};
 
-    pnanovdb_bool_t loaded_gaussian = fileformat.load_file(filename, 5, array_names_gaussian, arrays_gaussian);
+    pnanovdb_bool_t loaded_gaussian = fileformat.load_file(filename, 6, array_names_gaussian, arrays_gaussian);
     if (loaded_gaussian == PNANOVDB_TRUE)
     {
         pnanovdb_bool_t result = PNANOVDB_FALSE;
@@ -352,7 +355,7 @@ pnanovdb_bool_t raster_file(pnanovdb_raster_t* raster,
                 log_print(PNANOVDB_COMPUTE_LOG_LEVEL_ERROR, "Failed to rasterize Gaussian data from file '%s'", filename);
             }
         }
-        for (pnanovdb_uint32_t idx = 0u; idx < 5u; idx++)
+        for (pnanovdb_uint32_t idx = 0u; idx < 6u; idx++)
         {
             compute->destroy_array(arrays_gaussian[idx]);
         }

@@ -97,7 +97,8 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
                                                       pnanovdb_compute_array_t* quaternions,
                                                       pnanovdb_compute_array_t* scales,
                                                       pnanovdb_compute_array_t* colors,
-                                                      pnanovdb_compute_array_t* spherical_harmonics,
+                                                      pnanovdb_compute_array_t* sh_0,
+                                                      pnanovdb_compute_array_t* sh_n,
                                                       pnanovdb_compute_array_t* opacities,
                                                       pnanovdb_compute_array_t** shader_params_arrays,
                                                       pnanovdb_raster_shader_params_t* raster_params)
@@ -105,7 +106,7 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
     auto ptr = new gaussian_data_t();
 
     ptr->point_count = means->element_count / 3u;
-    ptr->sh_stride = (pnanovdb_uint32_t)(spherical_harmonics->element_count / means->element_count);
+    ptr->sh_stride = (pnanovdb_uint32_t)(sh_n->element_count / means->element_count);
 
     ptr->has_uploaded = PNANOVDB_FALSE;
 
@@ -123,8 +124,8 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
         compute->create_array(quaternions->element_size, quaternions->element_count, quaternions->data);
     ptr->scales_cpu_array = compute->create_array(scales->element_size, scales->element_count, scales->data);
     ptr->colors_cpu_array = compute->create_array(colors->element_size, colors->element_count, colors->data);
-    ptr->spherical_harmonics_cpu_array = compute->create_array(
-        spherical_harmonics->element_size, spherical_harmonics->element_count, spherical_harmonics->data);
+    ptr->sh_0_cpu_array = compute->create_array(sh_0->element_size, sh_0->element_count, sh_0->data);
+    ptr->sh_n_cpu_array = compute->create_array(sh_n->element_size, sh_n->element_count, sh_n->data);
     ptr->opacities_cpu_array = compute->create_array(opacities->element_size, opacities->element_count, opacities->data);
     ptr->shader_params_cpu_arrays = new pnanovdb_compute_array_t*[shader_param_count];
 
@@ -149,7 +150,8 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
     ptr->quaternions_gpu_array = gpu_array_create();
     ptr->scales_gpu_array = gpu_array_create();
     ptr->colors_gpu_array = gpu_array_create();
-    ptr->spherical_harmonics_gpu_array = gpu_array_create();
+    ptr->sh_0_gpu_array = gpu_array_create();
+    ptr->sh_n_gpu_array = gpu_array_create();
     ptr->opacities_gpu_array = gpu_array_create();
     ptr->shader_params_gpu_arrays = new compute_gpu_array_t*[shader_param_count];
 
@@ -214,7 +216,8 @@ void upload_gaussian_data(const pnanovdb_compute_t* compute,
         gpu_array_upload(compute, queue, ptr->quaternions_gpu_array, ptr->quaternions_cpu_array);
         gpu_array_upload(compute, queue, ptr->scales_gpu_array, ptr->scales_cpu_array);
         gpu_array_upload(compute, queue, ptr->colors_gpu_array, ptr->colors_cpu_array);
-        gpu_array_upload(compute, queue, ptr->spherical_harmonics_gpu_array, ptr->spherical_harmonics_cpu_array);
+        gpu_array_upload(compute, queue, ptr->sh_0_gpu_array, ptr->sh_0_cpu_array);
+        gpu_array_upload(compute, queue, ptr->sh_n_gpu_array, ptr->sh_n_cpu_array);
         gpu_array_upload(compute, queue, ptr->opacities_gpu_array, ptr->opacities_cpu_array);
 
         for (pnanovdb_uint32_t idx = 0u; idx < shader_param_count; idx++)
@@ -246,14 +249,16 @@ void destroy_gaussian_data(const pnanovdb_compute_t* compute,
     gpu_array_destroy(compute, queue, ptr->quaternions_gpu_array);
     gpu_array_destroy(compute, queue, ptr->scales_gpu_array);
     gpu_array_destroy(compute, queue, ptr->colors_gpu_array);
-    gpu_array_destroy(compute, queue, ptr->spherical_harmonics_gpu_array);
+    gpu_array_destroy(compute, queue, ptr->sh_0_gpu_array);
+    gpu_array_destroy(compute, queue, ptr->sh_n_gpu_array);
     gpu_array_destroy(compute, queue, ptr->opacities_gpu_array);
 
     compute->destroy_array(ptr->means_cpu_array);
     compute->destroy_array(ptr->quaternions_cpu_array);
     compute->destroy_array(ptr->scales_cpu_array);
     compute->destroy_array(ptr->colors_cpu_array);
-    compute->destroy_array(ptr->spherical_harmonics_cpu_array);
+    compute->destroy_array(ptr->sh_0_cpu_array);
+    compute->destroy_array(ptr->sh_n_cpu_array);
     compute->destroy_array(ptr->opacities_cpu_array);
 
     for (pnanovdb_uint32_t idx = 0u; idx < shader_param_count; idx++)
