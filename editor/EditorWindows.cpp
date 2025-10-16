@@ -801,7 +801,7 @@ void showAboutWindow(imgui_instance_user::Instance* ptr)
 
     // Center the window on first use
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(400, 160), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize(ImVec2(400, 200), ImGuiCond_Appearing);
 
     if (ImGui::Begin("About", &ptr->window.show_about, ImGuiWindowFlags_NoResize))
     {

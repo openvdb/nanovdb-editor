@@ -200,10 +200,6 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
             }
             ptr->render_settings->camera_state = *state;
             ptr->render_settings->camera_state.eye_up = up;
-            ptr->render_settings->camera_config = camera->configs[cameraIdx];
-            ptr->render_settings->is_projection_rh = camera->configs[cameraIdx].is_projection_rh;
-            ptr->render_settings->is_orthographic = camera->configs[cameraIdx].is_orthographic;
-            ptr->render_settings->is_reverse_z = camera->configs[cameraIdx].is_reverse_z;
             ptr->render_settings->sync_camera = PNANOVDB_TRUE;
         }
     }
@@ -364,7 +360,7 @@ void Properties::render(imgui_instance_user::Instance* ptr)
 
             IMGUI_CHECKBOX_SYNC("VSync", settings->vsync);
             IMGUI_CHECKBOX_SYNC("Projection RH", settings->is_projection_rh);
-            IMGUI_CHECKBOX_SYNC("Reverse Z", settings->is_reverse_z);
+            IMGUI_CHECKBOX_SYNC("Upside Down", settings->is_upside_down);
             {
                 int up_axis = settings->is_y_up ? 0 : 1;
                 const char* up_axis_items[] = { "Y", "Z" };

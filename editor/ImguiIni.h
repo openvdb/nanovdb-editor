@@ -105,8 +105,8 @@ ui_profile_name=viewer
 
 [CameraState][default]
 position=0.000000,0.000000,0.000000
-eye_direction=0.000000,0.000000,1.000000
-eye_up=0.000000,1.000000,0.000000
+eye_direction=0.000000,0.700000,0.700000
+eye_up=0.000000,0.000000,1.000000
 eye_distance_from_position=10.000000
 orthographic_scale=1.000000
 

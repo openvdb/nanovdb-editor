@@ -185,6 +185,14 @@ To display a group of shader parameters from different shaders, define a JSON fi
 }
 ```
 
+## Video Encoding To File
+
+To convert output file to mp4:
+
+```
+ffmpeg -i input.h264 -c:v copy -f mp4 output.mp4
+```
+
 ## Acknowledgements
 
 This project makes use of the following libraries:
