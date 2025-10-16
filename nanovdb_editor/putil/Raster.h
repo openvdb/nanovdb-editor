@@ -25,8 +25,6 @@ typedef struct pnanovdb_raster_gaussian_data_t pnanovdb_raster_gaussian_data_t;
 
 typedef struct pnanovdb_raster_shader_params_t
 {
-    float near_plane_override;
-    float far_plane_override;
     float eps2d;
     float min_radius_2d;
     pnanovdb_uint32_t tile_size;
@@ -38,8 +36,6 @@ typedef struct pnanovdb_raster_shader_params_t
 } pnanovdb_raster_shader_params_t;
 
 static const pnanovdb_raster_shader_params_t default_shader_params = {
-    0.f, // near_plane override, should be initialized from current camera
-    0.f, // far_plane override, should be initialized from current camera
     0.3f, // eps2d
     0.f, // min_radius_2d
     16u, // tile_size
@@ -51,8 +47,6 @@ static const pnanovdb_raster_shader_params_t default_shader_params = {
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_raster_shader_params_t
 PNANOVDB_REFLECT_BEGIN()
-PNANOVDB_REFLECT_VALUE(float, near_plane_override, 0, 0)
-PNANOVDB_REFLECT_VALUE(float, far_plane_override, 0, 0)
 PNANOVDB_REFLECT_VALUE(float, eps2d, 0, 0)
 PNANOVDB_REFLECT_VALUE(float, min_radius_2d, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_uint32_t, tile_size, 0, 0)

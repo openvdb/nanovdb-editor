@@ -15,7 +15,7 @@
 // #define TEST_FILE_FORMAT
 // #define FORMAT_INGP
 #define FORMAT_PLY
-#define TEST_TRAINIG
+// #define TEST_TRAINIG
 
 void pnanovdb_compute_log_print(pnanovdb_compute_log_level_t level, const char* format, ...)
 {
@@ -276,8 +276,6 @@ int main(int argc, char* argv[])
 
     printf("Updated shader params:\n");
     printf("eps2d: %f\n", raster_params.eps2d);
-    printf("near_plane: %f\n", raster_params.near_plane_override);
-    printf("far_plane: %f\n", raster_params.far_plane_override);
 
     editor.sync_shader_params(&editor, &raster_params_garden, PNANOVDB_FALSE);
 

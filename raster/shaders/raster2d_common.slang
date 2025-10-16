@@ -43,8 +43,6 @@ struct constants_t
 
 struct shader_params_t
 {
-    float near_plane;
-    float far_plane;
     float eps2d;
     float radius_clip;
 

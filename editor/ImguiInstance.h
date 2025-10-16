@@ -95,8 +95,6 @@ struct GaussianDataContext
     pnanovdb_raster_context_t* raster_ctx;
     pnanovdb_raster_gaussian_data_t* gaussian_data;
     pnanovdb_raster_shader_params_t* shader_params;
-
-    pnanovdb_imgui_settings_render_t* render_settings;
 };
 
 struct GaussianDataLoadedContext
@@ -104,7 +102,6 @@ struct GaussianDataLoadedContext
     pnanovdb_raster_context_t* raster_ctx;
     std::shared_ptr<pnanovdb_raster_gaussian_data_t> gaussian_data;
     pnanovdb_raster_shader_params_t* shader_params;
-    pnanovdb_imgui_settings_render_t* render_settings;
 };
 struct EditorLoaded
 {
@@ -220,11 +217,9 @@ struct Instance
     std::map<std::string, pnanovdb_compute_array_t>* nanovdb_arrays = nullptr;
     std::map<std::string, GaussianDataContext>* gaussian_views = nullptr;
     std::string raster_shader_group = s_raster2d_shader_group;
-    std::map<std::string, pnanovdb_imgui_settings_render_t> views_render_settings;
+    std::map<std::string, pnanovdb_camera_state_t> views_camera_state;
 
     pnanovdb_camera_view_t default_camera_view; // default camera view that syncs with viewport
-    pnanovdb_camera_config_t default_camera_view_config;
-    pnanovdb_camera_state_t default_camera_view_state;
 
     bool is_docking_setup = false;
     bool loaded_ini_once = false;
