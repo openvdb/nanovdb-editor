@@ -111,8 +111,11 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
 
     if (raster_params)
     {
-        ptr->shader_params =
-            compute->create_array(sizeof(char), raster_params->data_type->element_size, (void*)raster_params);
+        // don't copy the data, just the pointer
+        ptr->shader_params = new pnanovdb_compute_array_t();
+        ptr->shader_params->element_count = 1u;
+        ptr->shader_params->element_size = raster_params->data_type->element_size;
+        ptr->shader_params->data = (void*)raster_params;
     }
 
     ptr->means_cpu_array = compute->create_array(means->element_size, means->element_count, means->data);

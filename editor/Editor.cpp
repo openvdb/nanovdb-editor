@@ -298,7 +298,7 @@ void add_gaussian_data(pnanovdb_editor_t* editor,
         EditorWorker* worker = static_cast<EditorWorker*>(editor->impl->editor_worker);
         worker->pending_gaussian_data.set_pending(gaussian_data);
         worker->pending_raster_ctx.set_pending(raster_ctx);
-        worker->pending_shader_params.set_pending(ptr->shader_params);
+        worker->pending_shader_params.set_pending(raster_params);
         worker->pending_shader_params_data_type.set_pending(ptr->shader_params_data_type);
     }
     else
@@ -695,19 +695,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             void* old_shader_params = nullptr;
             worker->pending_shader_params.process_pending(editor->impl->shader_params, old_shader_params);
             const pnanovdb_reflect_data_type_t* old_shader_params_data_type = nullptr;
-            updated = worker->pending_shader_params_data_type.process_pending(
+            worker->pending_shader_params_data_type.process_pending(
                 editor->impl->shader_params_data_type, old_shader_params_data_type);
-            if (updated)
-            {
-                if (editor->impl->shader_params &&
-                    pnanovdb_reflect_layout_compare(editor->impl->shader_params_data_type,
-                                                    PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t)) ==
-                        PNANOVDB_TRUE)
-                {
-                    pnanovdb_raster_shader_params_t* raster_params =
-                        (pnanovdb_raster_shader_params_t*)editor->impl->shader_params;
-                }
-            }
         }
 
         if (editor->impl->editor_worker && static_cast<EditorWorker*>(editor->impl->editor_worker)->should_stop.load())
@@ -839,7 +828,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                     current_it->second.shader_params)
                 {
                     auto current_shader_params = get_ui_params();
-
                     if (current_shader_params && current_shader_params->data)
                     {
                         size_t data_size = current_shader_params->element_count * current_shader_params->element_size;
@@ -928,6 +916,11 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                             // Push editor params to UI
                             copy_editor_params_to_ui();
                             worker->set_params.fetch_sub(1);
+                        }
+                        else
+                        {
+                            // Pull UI params for camera sync
+                            raster2d_shader_params_array = get_ui_params();
                         }
 
                         if (worker->get_params.load() > 0)

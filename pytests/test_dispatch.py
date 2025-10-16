@@ -56,9 +56,7 @@ class TestDispatch(unittest.TestCase):
         self.compute.destroy_array(output_array)
 
     def test_cpu_dispatch(self):
-        self.compiler.compile_shader(
-            TEST_SHADER, entry_point_name="computeMain", compile_target=CompileTarget.CPU
-        )
+        self.compiler.compile_shader(TEST_SHADER, entry_point_name="computeMain", compile_target=CompileTarget.CPU)
 
         class Constants(Structure):
             """Definition equivalent to constants_t in the shader."""
