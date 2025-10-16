@@ -61,7 +61,7 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
                 ptr->render_settings->camera_config.is_orthographic = PNANOVDB_TRUE;
             }
         }
-
+#if 0
         // View preset buttons
         {
             auto setLookUp = [&](float up_x, float up_y, float up_z)
@@ -80,18 +80,21 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
             };
 
             bool isYUp = (ptr->render_settings->is_y_up == PNANOVDB_TRUE);
+            float upAxisVal = isYUp ? ptr->render_settings->camera_state.eye_up.y
+                                    : ptr->render_settings->camera_state.eye_up.z;
+            const float upSign = (upAxisVal < -EPSILON) ? -1.0f : 1.0f;
 
             if (ImGui::Button("Top"))
             {
                 if (isYUp)
                 {
                     setDirection(0.0f, -1.0f, 0.0f); // Look down -Y
-                    setLookUp(0.0f, 0.0f, 1.0f); // Screen up is +Z (forward)
+                    setLookUp(0.0f, 0.0f, upSign * 1.0f); // Screen up is +/-Z (forward)
                 }
                 else
                 {
                     setDirection(0.0f, 0.0f, -1.0f); // Look down -Z
-                    setLookUp(0.0f, 1.0f, 0.0f); // Screen up is +Y (forward)
+                    setLookUp(0.0f, upSign * 1.0f, 0.0f); // Screen up is +/-Y (forward)
                 }
                 ptr->render_settings->sync_camera = PNANOVDB_TRUE;
             }
@@ -102,12 +105,12 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
                 if (isYUp)
                 {
                     setDirection(0.0f, 0.0f, 1.0f); // Look along +Z (forward)
-                    setLookUp(0.0f, 1.0f, 0.0f);
+                    setLookUp(0.0f, upSign * 1.0f, 0.0f);
                 }
                 else
                 {
                     setDirection(0.0f, 1.0f, 0.0f); // Look along +Y (forward)
-                    setLookUp(0.0f, 0.0f, 1.0f);
+                    setLookUp(0.0f, 0.0f, upSign * 1.0f);
                 }
             }
 
@@ -117,15 +120,15 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
                 setDirection(1.0f, 0.0f, 0.0f);
                 if (isYUp)
                 {
-                    setLookUp(0.0f, 1.0f, 0.0f);
+                    setLookUp(0.0f, upSign * 1.0f, 0.0f);
                 }
                 else
                 {
-                    setLookUp(0.0f, 0.0f, 1.0f);
+                    setLookUp(0.0f, 0.0f, upSign * 1.0f);
                 }
             }
         }
-
+#endif
         if (ImGui::Button("Reset"))
         {
             auto camera_it = ptr->saved_camera_states.find(s_render_settings_default);
@@ -143,7 +146,7 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
 
             pnanovdb_camera_config_t default_config = {};
             pnanovdb_camera_config_default(&default_config);
-                ptr->render_settings->camera_config = default_config;
+            ptr->render_settings->camera_config = default_config;
 
             auto settings_it = ptr->saved_render_settings.find(s_render_settings_default);
             if (settings_it != ptr->saved_render_settings.end())
