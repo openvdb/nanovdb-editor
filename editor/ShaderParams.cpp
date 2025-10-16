@@ -67,7 +67,7 @@ static std::optional<nlohmann::ordered_json> loadAndParseJsonFile(const std::str
 
     if (!json.contains(pnanovdb_shader::SHADER_PARAM_JSON))
     {
-        printf("File '%s' should contain '%s'\n", json_filePath.c_str(), pnanovdb_shader::SHADER_PARAM_JSON);
+        printf("Error: File '%s' should contain '%s'\n", json_filePath.c_str(), pnanovdb_shader::SHADER_PARAM_JSON);
         return std::nullopt;
     }
 
@@ -799,7 +799,7 @@ void ShaderParams::renderParams(const std::string& shader_name, ShaderParam& sha
 
     if (!getAllocatedPoolArray(shader_param))
     {
-        printf("Failed to allocate UI array for parameter '%s'\n", shader_param.name.c_str());
+        printf("Error: Failed to allocate UI array for parameter '%s'\n", shader_param.name.c_str());
         return;
     }
 

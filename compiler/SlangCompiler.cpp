@@ -185,7 +185,7 @@ bool SlangCompiler::compileFile(const char* sourceFile,
     std::filesystem::path fsPath(sourceFile);
     if (!compile(settings, fsPath.filename().string().c_str(), code.c_str(), numIncludePaths, includePaths) && !shader_)
     {
-        printf("Slang shader compilation of '%s' failed\n", variableName);
+        printf("Error: Slang shader compilation of '%s' failed\n", variableName);
         return false;
     }
 
@@ -223,7 +223,7 @@ bool SlangCompiler::compileFile(const char* sourceFile,
     }
     else
     {
-        printf("Saving bytecode for '%s' failed\n", variableName);
+        printf("Error: Saving bytecode for '%s' failed\n", variableName);
         return false;
     }
 
@@ -644,7 +644,7 @@ ShaderDataPtr compileShader(SlangCompiler& compiler,
         return nullptr;
     }
 
-    printf("Slang shader '%s' was compiled\n", source->source_filename);
+    // printf("Info: Slang shader '%s' was compiled\n", source->source_filename);
 
     return shaderData;
 }

@@ -157,7 +157,7 @@ static void save_image(const char* filename, float* mapped_data, uint32_t image_
     FILE* file = fopen(filename, "wb");
     if (!file)
     {
-        printf("Could not create file to save the capture '%s'", filename);
+        printf("Error: Could not create file to save the capture '%s'", filename);
         return;
     }
 
@@ -1082,11 +1082,11 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                              queue = device_queue](pnanovdb_raster_gaussian_data_t* ptr)
                             {
                                 destroy_fn(compute, queue, ptr);
-                                // printf("Destroyed gaussian data - %p\n", ptr);
+                                // printf("Info: Destroyed gaussian data - %p\n", ptr);
                             });
                         it.shader_params = pending_raster_params;
                         it.render_settings = nullptr;
-                        // printf("Created gaussian data - %p\n", pending_gaussian_data);
+                        // printf("Info: Created gaussian data - %p\n", pending_gaussian_data);
 
                         editor->add_gaussian_data(editor, pending_raster_ctx, device_queue, pending_gaussian_data);
                     }

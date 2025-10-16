@@ -194,7 +194,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
                 return idx;
             }
         }
-        printf("Failed to resolve: %s", str);
+        printf("Error: Failed to resolve: %s", str);
         return uint32_t(~0u);
     };
 
@@ -414,7 +414,7 @@ static pnanovdb_bool_t load_ingp_file(const char* filename,
     std::ifstream file(filename, std::ios::binary);
     if (!file.is_open())
     {
-        printf("Could not open file: %s\n", filename);
+        printf("Error: Could not open file: %s\n", filename);
         return PNANOVDB_FALSE;
     }
 

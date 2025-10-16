@@ -74,7 +74,7 @@ pnanovdb_compute_array_t* load_nanovdb(const char* filepath)
     }
     catch (const std::ios_base::failure& e)
     {
-        printf("Could not open nanovdb '%s'\n", filepath);
+        printf("Error: Could not open nanovdb '%s'\n", filepath);
         return nullptr;
     }
 
@@ -91,7 +91,7 @@ pnanovdb_bool_t save_nanovdb(pnanovdb_compute_array_t* array, const char* filepa
 {
     if (!array || !array->data || array->element_size == 0u || array->element_count == 0u)
     {
-        printf("Could not save nanovdb '%s' (invalid array)\n", filepath);
+        printf("Error: Could not save nanovdb '%s' (invalid array)\n", filepath);
         return PNANOVDB_FALSE;
     }
     nanovdb::HostBuffer buffer(array->element_count * array->element_size);
@@ -104,7 +104,7 @@ pnanovdb_bool_t save_nanovdb(pnanovdb_compute_array_t* array, const char* filepa
     }
     catch (const std::ios_base::failure& e)
     {
-        printf("Could not save nanovdb '%s' (%s)\n", filepath, e.what());
+        printf("Error: Could not save nanovdb '%s' (%s)\n", filepath, e.what());
         return PNANOVDB_FALSE;
     }
     return PNANOVDB_TRUE;
@@ -131,7 +131,7 @@ pnanovdb_bool_t init_shader(const pnanovdb_compute_t* compute,
             nullptr, shader_ctx->source.source_filename, compileSettings, &shader_updated);
         if (shader_updated && log_print)
         {
-            log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "shader '%s' updated", shader_ctx->source.source_filename);
+            log_print(PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "shader '%s' updated", shader_ctx->source.source_filename);
         }
     }
     if (shader_updated == PNANOVDB_TRUE)

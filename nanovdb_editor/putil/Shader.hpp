@@ -217,7 +217,7 @@ static nlohmann::json loadShaderJson(const char* relFilePath)
     nlohmann::json shaderJson;
     if (relFilePath == nullptr)
     {
-        printf("Could not load shader from a file, path is empty\n");
+        printf("Error: Could not load shader from a file, path is empty\n");
         return shaderJson;
     }
     const std::string jsonFilePath = getShaderCacheFilePath(relFilePath) + JSON_EXT;
@@ -232,7 +232,7 @@ static nlohmann::json loadShaderJson(const char* relFilePath)
         }
         catch (const nlohmann::json::exception& e)
         {
-            printf("Failed to parse shader file: %s", e.what());
+            printf("Error: Failed to parse shader file: %s", e.what());
         }
         inFile.close();
     }

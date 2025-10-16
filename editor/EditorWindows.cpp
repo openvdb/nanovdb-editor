@@ -152,7 +152,7 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
                         ImGui::MarkIniSettingsDirty();
 
                         pnanovdb_editor::Console::getInstance().addLog(
-                            "Camera and settings '%s' saved", ptr->render_settings_name.c_str());
+                            "Render settings '%s' saved", ptr->render_settings_name.c_str());
                     }
                     else
                     {
@@ -809,16 +809,14 @@ void showAboutWindow(imgui_instance_user::Instance* ptr)
         ImGui::Separator();
 
         // Display version from VERSION.txt
-#ifndef NANOVDB_EDITOR_VERSION
-#    define NANOVDB_EDITOR_VERSION "Unknown"
-#endif
         ImGui::Text("Version: %s", NANOVDB_EDITOR_VERSION);
 
         // Display git hash from CMake
-#ifndef NANOVDB_EDITOR_COMMIT_HASH
-#    define NANOVDB_EDITOR_COMMIT_HASH "Unknown"
-#endif
         ImGui::Text("Build: %s", NANOVDB_EDITOR_COMMIT_HASH);
+        if (strlen(NANOVDB_EDITOR_FVDB_COMMIT_HASH) > 0)
+        {
+            ImGui::Text("fVDB Build: %s", NANOVDB_EDITOR_FVDB_COMMIT_HASH);
+        }
 
         ImGui::Separator();
         ImGui::Text("Copyright Contributors to the OpenVDB Project");
