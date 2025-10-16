@@ -358,8 +358,8 @@ void Properties::render(imgui_instance_user::Instance* ptr)
         {
             auto settings = ptr->render_settings;
 
-            IMGUI_CHECKBOX_SYNC("VSync", settings->vsync);
-            IMGUI_CHECKBOX_SYNC("Projection RH", settings->is_projection_rh);
+            ImGui::DragFloat("Camera Speed Multiplier", &settings->camera_speed_multiplier, 0.f, 1.f, 10000.f, "%.1f",
+                             ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
             IMGUI_CHECKBOX_SYNC("Upside Down", settings->is_upside_down);
             {
                 int up_axis = settings->is_y_up ? 0 : 1;
@@ -369,6 +369,9 @@ void Properties::render(imgui_instance_user::Instance* ptr)
                     settings->is_y_up = (up_axis == 0);
                 }
             }
+
+            IMGUI_CHECKBOX_SYNC("VSync", settings->vsync);
+            IMGUI_CHECKBOX_SYNC("Projection RH", settings->is_projection_rh);
             if (ImGui::BeginCombo("Resolution", "Select..."))
             {
                 const char* labels[4] = { "1440x720", "1920x1080", "2560x1440", "3840x2160" };
