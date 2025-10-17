@@ -824,8 +824,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                     auto current_shader_params = get_ui_params();
                     if (current_shader_params && current_shader_params->data)
                     {
-                        size_t data_size = current_shader_params->element_count * current_shader_params->element_size;
-                        std::memcpy(current_it->second.shader_params, current_shader_params->data, data_size);
+                        std::memcpy(current_it->second.shader_params, current_shader_params->data,
+                                    raster_shader_params_data_type->element_size);
                         editor->impl->compute->destroy_array(current_shader_params);
                     }
                 }
@@ -922,9 +922,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                             // Copy UI params back to editor
                             if (raster2d_shader_params_array && raster2d_shader_params_array->data)
                             {
-                                size_t data_size = raster2d_shader_params_array->element_count *
-                                                   raster2d_shader_params_array->element_size;
-                                std::memcpy(editor->impl->shader_params, raster2d_shader_params_array->data, data_size);
+                                std::memcpy(editor->impl->shader_params, raster2d_shader_params_array->data,
+                                            raster_shader_params_data_type->element_size);
                             }
                             worker->get_params.fetch_sub(1);
                         }

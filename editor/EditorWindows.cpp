@@ -127,7 +127,7 @@ void createMenu(imgui_instance_user::Instance* ptr)
             centerText += "NanoVDB Editor";
             if (isViewerProfile)
             {
-                centerText += "- fVDB (" + std::to_string(ptr->render_settings->server_port) + ")";
+                centerText += " - fVDB (" + std::to_string(ptr->render_settings->server_port) + ")";
             }
             else
             {
