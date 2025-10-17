@@ -27,7 +27,7 @@
 
 struct NanoVDBEditorArgs : public argparse::Args
 {
-    std::string& input_file = kwarg("i,input", "Input NanoVDB file path").set_default("./data/dragon.nvdb");
+    std::string& input_file = kwarg("i,input", "Input NanoVDB file path").set_default("./data/octree.nvdb");
     bool& convert_node2 = flag("c,convert", "Convert to Node2 format").set_default(false);
     std::string& convert_node2_output_file = kwarg("o,output", "Convert to Node2 output file path").set_default("");
     bool& headless = flag("headless", "Run in headless mode").set_default(false);

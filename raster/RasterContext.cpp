@@ -129,6 +129,9 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
     ptr->opacities_cpu_array = compute->create_array(opacities->element_size, opacities->element_count, opacities->data);
     ptr->shader_params_cpu_arrays = new pnanovdb_compute_array_t*[shader_param_count];
 
+    // TESTING OCTREE BUILD
+    raster_octree_build(cast(ptr));
+
     for (pnanovdb_uint32_t idx = 0u; idx < shader_param_count; idx++)
     {
         ptr->shader_params_cpu_arrays[idx] = nullptr;

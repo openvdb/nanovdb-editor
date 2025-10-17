@@ -1,0 +1,10 @@
+{
+    "ShaderParams": {
+        "highlight_bbox": {
+            "value": false
+        },
+        "auto_center": {
+            "value": false
+        }
+    }
+}

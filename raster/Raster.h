@@ -154,4 +154,6 @@ pnanovdb_bool_t create_gaussian_data_from_arrays(pnanovdb_raster_t* raster,
                                                  pnanovdb_raster_gaussian_data_t** gaussian_data,
                                                  pnanovdb_raster_shader_params_t* raster_params,
                                                  pnanovdb_raster_context_t** raster_context);
+
+void raster_octree_build(pnanovdb_raster_gaussian_data_t* data);
 }
