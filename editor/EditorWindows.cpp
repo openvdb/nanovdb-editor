@@ -292,10 +292,8 @@ void showRenderSettingsWindow(imgui_instance_user::Instance* ptr)
 
         auto settings = ptr->render_settings;
 
-        IMGUI_CHECKBOX_SYNC("VSync", settings->vsync);
-        IMGUI_CHECKBOX_SYNC("Projection RH", settings->is_projection_rh);
-        IMGUI_CHECKBOX_SYNC("Orthographic", settings->is_orthographic);
-        IMGUI_CHECKBOX_SYNC("Reverse Z", settings->is_reverse_z);
+        ImGui::SeparatorText("Camera");
+        IMGUI_CHECKBOX_SYNC("Upside Down", settings->is_upside_down);
         {
             int up_axis = settings->is_y_up ? 0 : 1;
             const char* up_axis_items[] = { "Y", "Z" };
@@ -304,18 +302,41 @@ void showRenderSettingsWindow(imgui_instance_user::Instance* ptr)
                 settings->is_y_up = (up_axis == 0);
             }
         }
-        IMGUI_CHECKBOX_SYNC("Upside Down", settings->is_upside_down);
+        {
+            if (ImGui::RadioButton("Perspective", ptr->render_settings->is_orthographic == PNANOVDB_FALSE))
+            {
+                ptr->render_settings->is_orthographic = PNANOVDB_FALSE;
+                ptr->render_settings->camera_config.is_orthographic = PNANOVDB_FALSE;
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Orthographic", ptr->render_settings->is_orthographic == PNANOVDB_TRUE))
+            {
+                ptr->render_settings->is_orthographic = PNANOVDB_TRUE;
+                ptr->render_settings->camera_config.is_orthographic = PNANOVDB_TRUE;
+            }
+        }
         ImGui::DragFloat("Camera Speed Multiplier", &settings->camera_speed_multiplier, 0.f, 1.f, 10000.f, "%.1f",
                          ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
-        ImGui::Separator();
+
+        ImGui::SeparatorText("Advanced Settings");
+        IMGUI_CHECKBOX_SYNC("VSync", settings->vsync);
+        IMGUI_CHECKBOX_SYNC("Projection RH", settings->is_projection_rh);
+        IMGUI_CHECKBOX_SYNC("Reverse Z Buffer", settings->is_reverse_z);
+
+        ImGui::SeparatorText("Video Streaming");
+        ImGui::InputText("Server Address", settings->server_address, 256u);
+        ImGui::InputInt("Server Port", &settings->server_port);
         if (settings->enable_encoder)
         {
             ImGui::AlignTextToFramePadding();
-            ImGui::Text("Video encoding is running...");
+            ImGui::Text("Streaming is running...");
         }
         else
         {
-            IMGUI_CHECKBOX_SYNC("Video Encode", settings->enable_encoder);
+            if (ImGui::Button("Start Streaming"))
+            {
+                settings->enable_encoder = PNANOVDB_TRUE;
+            }
         }
         if (ImGui::BeginCombo("Resolution", "Select..."))
         {
@@ -334,8 +355,6 @@ void showRenderSettingsWindow(imgui_instance_user::Instance* ptr)
         }
         IMGUI_CHECKBOX_SYNC("Fit Resolution", settings->encode_resize);
         IMGUI_CHECKBOX_SYNC("Video Record", settings->encode_to_file);
-        ImGui::InputText("Server Address", settings->server_address, 256u);
-        ImGui::InputInt("Server Port", &settings->server_port);
     }
     ImGui::End();
 }

@@ -328,6 +328,28 @@ static void createMenu(Instance* ptr)
             ImGui::MenuItem("About", "", &ptr->window.show_about);
             ImGui::EndMenu();
         }
+
+        std::string centerText;
+        if (isViewerProfile)
+        {
+            centerText = "NanoVDB Editor (" + std::string(ptr->render_settings->server_address) + ":" +
+                         std::to_string(ptr->render_settings->server_port) + ")";
+        }
+        else
+        {
+            centerText = "NanoVDB Editor - fVDB (" + std::to_string(ptr->render_settings->server_port) + ")";
+        }
+
+        float windowWidth = ImGui::GetWindowWidth();
+        float textWidth = ImGui::CalcTextSize(centerText.c_str()).x;
+
+        ImGui::SetCursorPosX((windowWidth - textWidth) * 0.5f);
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        ImGui::Text("%s", centerText.c_str());
+        ImGui::PopStyleColor();
+
+
         ImGui::EndMainMenuBar();
     }
 }

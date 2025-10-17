@@ -87,8 +87,8 @@ static pnanovdb_bool_t load_npz_file(const char* filename,
 
     static const uint32_t name_alias_count = 2u;
     const char* name_aliases[name_alias_count][2] = {
-        {"sh_0", "sh"},
-        {"sh_n", "sh"},
+        { "sh_0", "sh" },
+        { "sh_n", "sh" },
     };
 
     // early exit if not all arrays are found
@@ -98,8 +98,8 @@ static pnanovdb_bool_t load_npz_file(const char* filename,
         bool found_match = npz_dict.count(array_name) > 0;
         for (uint32_t alias_idx = 0u; !found_match && alias_idx < name_alias_count; alias_idx++)
         {
-            found_match = strcmp(array_name, name_aliases[alias_idx][0]) == 0 &&
-                npz_dict.count(name_aliases[alias_idx][1]) > 0;
+            found_match =
+                strcmp(array_name, name_aliases[alias_idx][0]) == 0 && npz_dict.count(name_aliases[alias_idx][1]) > 0;
         }
         if (!found_match)
         {
@@ -116,8 +116,8 @@ static pnanovdb_bool_t load_npz_file(const char* filename,
         for (uint32_t alias_idx = 0u; !found_match && alias_idx < name_alias_count; alias_idx++)
         {
             array_name_aliased = name_aliases[alias_idx][1];
-            found_match = strcmp(array_name, name_aliases[alias_idx][0]) == 0 &&
-                npz_dict.count(name_aliases[alias_idx][1]) > 0;
+            found_match =
+                strcmp(array_name, name_aliases[alias_idx][0]) == 0 && npz_dict.count(name_aliases[alias_idx][1]) > 0;
         }
 
         if (found_match)
@@ -158,9 +158,9 @@ static pnanovdb_bool_t load_npz_file(const char* filename,
                 size_t sh_count = total_size / (vector_stride * vector_width);
                 for (size_t sh_idx = 0u; sh_idx < sh_count; sh_idx++)
                 {
-                    memcpy(out_arrays[i]->data + sh_idx * vector_width * npz_array.word_size,
-                        npz_array.data<char>() + sh_idx * vector_stride * vector_width * npz_array.word_size,
-                        vector_width * npz_array.word_size);
+                    memcpy(static_cast<char*>(out_arrays[i]->data) + sh_idx * vector_width * npz_array.word_size,
+                           npz_array.data<char>() + sh_idx * vector_stride * vector_width * npz_array.word_size,
+                           vector_width * npz_array.word_size);
                 }
             }
             else if (strcmp(array_name, "sh_n") == 0)
@@ -172,9 +172,11 @@ static pnanovdb_bool_t load_npz_file(const char* filename,
                 size_t sh_count = total_size / (vector_stride * vector_width);
                 for (size_t sh_idx = 0u; sh_idx < sh_count; sh_idx++)
                 {
-                    memcpy(out_arrays[i]->data + sh_idx * (vector_stride - 1u) * vector_width * npz_array.word_size,
-                        npz_array.data<char>() + sh_idx * vector_stride * vector_width * npz_array.word_size + vector_width * npz_array.word_size,
-                        (vector_stride - 1u) * vector_width * npz_array.word_size);
+                    memcpy(static_cast<char*>(out_arrays[i]->data) +
+                               sh_idx * (vector_stride - 1u) * vector_width * npz_array.word_size,
+                           npz_array.data<char>() + sh_idx * vector_stride * vector_width * npz_array.word_size +
+                               vector_width * npz_array.word_size,
+                           (vector_stride - 1u) * vector_width * npz_array.word_size);
                 }
             }
         }

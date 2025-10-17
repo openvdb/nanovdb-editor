@@ -223,6 +223,10 @@ void init(pnanovdb_editor_t* editor)
 
 void shutdown(pnanovdb_editor_t* editor)
 {
+    if (editor->impl->editor_worker)
+    {
+        editor->stop(editor);
+    }
     if (editor->impl->views)
     {
         delete static_cast<EditorView*>(editor->impl->views);

@@ -99,7 +99,7 @@ is_projection_rh=1
 is_orthographic=0
 is_reverse_z=1
 is_y_up=0
-is_upside_down=1
+is_upside_down=0
 camera_speed_multiplier=1.000000
 ui_profile_name=viewer
 

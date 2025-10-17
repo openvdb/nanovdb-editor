@@ -51,7 +51,7 @@ static const char* VIEWPORT_CAMERA = "Viewport Camera";
 static const char* SCENE_ROOT_NODE = "Viewer";
 
 static const char* VIEWPORT_SETTINGS = "Viewport";
-static const char* RENDER_SETTINGS = "Render";
+static const char* RENDER_SETTINGS = "Settings";
 static const char* COMPILER_SETTINGS = "Compiler";
 static const char* PROFILER = "Profiler";
 static const char* CODE_EDITOR = "Shader Editor";
