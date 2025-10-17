@@ -39,6 +39,186 @@ namespace pnanovdb_editor
 {
 const float EPSILON = 1e-6f;
 
+void saveIniSettings(imgui_instance_user::Instance* ptr)
+{
+    if (!ptr || ptr->is_viewer())
+    {
+        return;
+    }
+
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.IniFilename && *io.IniFilename)
+    {
+        ptr->ini_window_width = (int)io.DisplaySize.x;
+        ptr->ini_window_height = (int)io.DisplaySize.y;
+
+        copyPersistentFields(ptr->saved_render_settings[ptr->render_settings_name], *ptr->render_settings);
+        ImGui::SaveIniSettingsToDisk(io.IniFilename);
+    }
+}
+
+void createMenu(imgui_instance_user::Instance* ptr)
+{
+    bool isViewerProfile = ptr->is_viewer();
+
+    if (ImGui::BeginMainMenuBar())
+    {
+        if (!isViewerProfile && ImGui::BeginMenu("File"))
+        {
+            ImGui::MenuItem("Open...", "", &ptr->pending.open_file);
+            ImGui::MenuItem("Save...", "", &ptr->pending.save_file);
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Windows"))
+        {
+            ImGui::MenuItem(RENDER_SETTINGS, "", &ptr->window.show_render_settings);
+            if (!isViewerProfile)
+            {
+                ImGui::MenuItem(VIEWPORT_SETTINGS, "", &ptr->window.show_viewport_settings);
+                ImGui::MenuItem(COMPILER_SETTINGS, "", &ptr->window.show_compiler_settings);
+            }
+            ImGui::MenuItem(SCENE, "", &ptr->window.show_scene);
+            ImGui::MenuItem(PROPERTIES, "", &ptr->window.show_scene_properties);
+            ImGui::MenuItem(PROFILER, "", &ptr->window.show_profiler);
+            ImGui::MenuItem(CODE_EDITOR, "", &ptr->window.show_code_editor);
+            ImGui::MenuItem(SHADER_PARAMS, "", &ptr->window.show_shader_params);
+            if (!isViewerProfile)
+            {
+                ImGui::MenuItem(FILE_HEADER, "", &ptr->window.show_file_header);
+            }
+            ImGui::MenuItem(CONSOLE, "", &ptr->window.show_console);
+            if (!isViewerProfile)
+            {
+                ImGui::MenuItem(BENCHMARK, "", &ptr->window.show_benchmark);
+
+                ImGui::Separator();
+                if (ImGui::MenuItem("Save INI"))
+                {
+                    saveIniSettings(ptr);
+                }
+                if (ImGui::MenuItem("Load INI"))
+                {
+                    ImGuiIO& io = ImGui::GetIO();
+                    if (io.IniFilename && *io.IniFilename)
+                    {
+                        ImGui::LoadIniSettingsFromDisk(io.IniFilename);
+                        copyPersistentFields(
+                            *ptr->render_settings, ptr->saved_render_settings[ptr->render_settings_name]);
+                        ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                    }
+                }
+            }
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Help"))
+        {
+            ImGui::MenuItem("About", "", &ptr->window.show_about);
+            ImGui::EndMenu();
+        }
+
+        // Center-aligned application label
+        {
+            std::string centerText;
+            if (isViewerProfile)
+            {
+                centerText = "NanoVDB Editor";
+                if (ptr->render_settings->enable_encoder)
+                {
+                    centerText += std::string(ptr->render_settings->server_address) + ":" + std::to_string(ptr->render_settings->server_port);
+                }
+            }
+            else
+            {
+                centerText = "NanoVDB Editor - fVDB (" + std::to_string(ptr->render_settings->server_port) + ")";
+            }
+            float windowWidth = ImGui::GetWindowWidth();
+            float textWidth = ImGui::CalcTextSize(centerText.c_str()).x;
+            ImGui::SetCursorPosX((windowWidth - textWidth) * 0.5f);
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+            ImGui::Text("%s", centerText.c_str());
+            ImGui::PopStyleColor();
+        }
+
+        // Right-aligned Recording toggle
+        if (ptr->render_settings->enable_encoder)
+        {
+            const bool isRecording = (ptr->render_settings->encode_to_file != 0);
+
+            // Use red color for both record (circle) and stop (square)
+            const ImVec4 baseColor = ImVec4(0.85f, 0.20f, 0.20f, 1.0f);
+
+            const float h = ImGui::GetFrameHeight();
+            const ImVec2 size(h, h);
+
+            const float windowWidthR = ImGui::GetWindowWidth();
+            const ImGuiStyle& style = ImGui::GetStyle();
+            const float rightPadding = style.FramePadding.x;
+
+            ImGui::SameLine(windowWidthR - size.x - rightPadding);
+
+            ImVec2 pMin = ImGui::GetCursorScreenPos();
+            ImVec2 pMax = ImVec2(pMin.x + size.x, pMin.y + size.y);
+
+            // Click/hover handling via an invisible button covering the icon area
+            ImGui::InvisibleButton("##recording", size);
+            const bool hovered = ImGui::IsItemHovered();
+            const bool held = ImGui::IsItemActive();
+            if (ImGui::IsItemClicked())
+            {
+                ptr->render_settings->encode_to_file = ~ptr->render_settings->encode_to_file;
+            }
+
+            if (hovered)
+            {
+                ImGui::SetTooltip("Stream to file");
+            }
+
+            // Adjust color for hover/active feedback
+            ImVec4 drawColor = baseColor;
+            if (held)
+            {
+                drawColor.x *= 0.85f; drawColor.y *= 0.85f; drawColor.z *= 0.85f;
+            }
+            else if (hovered)
+            {
+                drawColor.x *= 1.20f; drawColor.y *= 1.20f; drawColor.z *= 1.20f;
+            }
+
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+
+            // Optional subtle background hover hint
+            if (hovered || held)
+            {
+                const ImU32 bgCol = ImGui::GetColorU32(ImVec4(1.f, 1.f, 1.f, held ? 0.06f : 0.08f));
+                dl->AddRectFilled(pMin, pMax, bgCol, 4.0f);
+            }
+
+            // Draw icon using primitives
+            const float inner = size.y * 0.22f;
+            const float yOffset = 1.0f;
+            const ImVec2 innerMin(pMin.x + inner, pMin.y + inner + yOffset);
+            const ImVec2 innerMax(pMax.x - inner, pMax.y - inner + yOffset);
+            const ImU32 iconCol = ImGui::GetColorU32(drawColor);
+            if (isRecording)
+            {
+                // White square (stop)
+                const ImU32 whiteCol = IM_COL32(255, 255, 255, 255);
+                dl->AddRectFilled(innerMin, innerMax, whiteCol, 2.0f);
+            }
+            else
+            {
+                // Red circle (record)
+                const ImVec2 center((innerMin.x + innerMax.x) * 0.5f, (innerMin.y + innerMax.y) * 0.5f);
+                const float radius = 0.5f * std::min(innerMax.x - innerMin.x, innerMax.y - innerMin.y);
+                dl->AddCircleFilled(center, radius, iconCol, 24);
+            }
+        }
+
+        ImGui::EndMainMenuBar();
+    }
+}
+
 void showSceneWindow(imgui_instance_user::Instance* ptr)
 {
     if (!ptr->window.show_scene)
@@ -68,6 +248,32 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
 
     if (ImGui::Begin(VIEWPORT_SETTINGS, &ptr->window.show_viewport_settings))
     {
+        ImGui::Text("Viewport Shader");
+        {
+            ImGui::BeginGroup();
+            if (ImGui::BeginCombo("##viewport_shader", "Select..."))
+            {
+                for (const auto& shader : ptr->viewport_shaders)
+                {
+                    if (ImGui::Selectable(shader.c_str()))
+                    {
+                        ptr->pending.viewport_shader_name = shader;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::InputText("##viewport_shader_name", &ptr->pending.viewport_shader_name);
+            ImGui::SameLine();
+            if (ImGui::Button("Update"))
+            {
+                pnanovdb_editor::CodeEditor::getInstance().setSelectedShader(ptr->pending.viewport_shader_name);
+                ptr->shader_name = ptr->pending.viewport_shader_name;
+                ptr->pending.update_shader = true;
+            }
+            ImGui::EndGroup();
+        }
+        ImGui::Separator();
+
         // viewport options
         {
             ImGui::BeginGroup();
@@ -264,32 +470,6 @@ void showRenderSettingsWindow(imgui_instance_user::Instance* ptr)
 
     if (ImGui::Begin(RENDER_SETTINGS, &ptr->window.show_render_settings))
     {
-        ImGui::Text("Viewport Shader");
-        {
-            ImGui::BeginGroup();
-            if (ImGui::BeginCombo("##viewport_shader", "Select..."))
-            {
-                for (const auto& shader : ptr->viewport_shaders)
-                {
-                    if (ImGui::Selectable(shader.c_str()))
-                    {
-                        ptr->pending.viewport_shader_name = shader;
-                    }
-                }
-                ImGui::EndCombo();
-            }
-            ImGui::InputText("##viewport_shader_name", &ptr->pending.viewport_shader_name);
-            ImGui::SameLine();
-            if (ImGui::Button("Update"))
-            {
-                pnanovdb_editor::CodeEditor::getInstance().setSelectedShader(ptr->pending.viewport_shader_name);
-                ptr->shader_name = ptr->pending.viewport_shader_name;
-                ptr->pending.update_shader = true;
-            }
-            ImGui::EndGroup();
-        }
-        ImGui::Separator();
-
         auto settings = ptr->render_settings;
 
         ImGui::SeparatorText("Camera");
@@ -315,21 +495,39 @@ void showRenderSettingsWindow(imgui_instance_user::Instance* ptr)
                 ptr->render_settings->camera_config.is_orthographic = PNANOVDB_TRUE;
             }
         }
-        ImGui::DragFloat("Camera Speed Multiplier", &settings->camera_speed_multiplier, 0.f, 1.f, 10000.f, "%.1f",
+        ImGui::DragFloat("Speed Multiplier", &settings->camera_speed_multiplier, 0.f, 1.f, 10000.f, "%.1f",
                          ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
 
-        ImGui::SeparatorText("Advanced Settings");
-        IMGUI_CHECKBOX_SYNC("VSync", settings->vsync);
-        IMGUI_CHECKBOX_SYNC("Projection RH", settings->is_projection_rh);
-        IMGUI_CHECKBOX_SYNC("Reverse Z Buffer", settings->is_reverse_z);
-
-        ImGui::SeparatorText("Video Streaming");
+        ImGui::SeparatorText("Streaming");
         ImGui::InputText("Server Address", settings->server_address, 256u);
         ImGui::InputInt("Server Port", &settings->server_port);
         if (settings->enable_encoder)
         {
             ImGui::AlignTextToFramePadding();
             ImGui::Text("Streaming is running...");
+
+            if (ImGui::BeginCombo("Resolution", "Select..."))
+            {
+                const char* labels[4] = { "1440x720", "1920x1080", "2560x1440", "3840x2160" };
+                const int widths[4] = { 1440, 1920, 2560, 3840 };
+                const int heights[4] = { 720, 1080, 1440, 2160 };
+                for (int i = 0; i < 4; i++)
+                {
+                    if (ImGui::Selectable(labels[i]))
+                    {
+                        settings->encode_width = widths[i];
+                        settings->encode_height = heights[i];
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            IMGUI_CHECKBOX_SYNC("Fit Resolution", settings->encode_resize);
+            IMGUI_CHECKBOX_SYNC("Stream To File", settings->encode_to_file);
+
+            ImGui::SeparatorText("Advanced");
+            IMGUI_CHECKBOX_SYNC("VSync", settings->vsync);
+            IMGUI_CHECKBOX_SYNC("Projection RH", settings->is_projection_rh);
+            IMGUI_CHECKBOX_SYNC("Reverse Z Buffer", settings->is_reverse_z);
         }
         else
         {
@@ -338,23 +536,6 @@ void showRenderSettingsWindow(imgui_instance_user::Instance* ptr)
                 settings->enable_encoder = PNANOVDB_TRUE;
             }
         }
-        if (ImGui::BeginCombo("Resolution", "Select..."))
-        {
-            const char* labels[4] = { "1440x720", "1920x1080", "2560x1440", "3840x2160" };
-            const int widths[4] = { 1440, 1920, 2560, 3840 };
-            const int heights[4] = { 720, 1080, 1440, 2160 };
-            for (int i = 0; i < 4; i++)
-            {
-                if (ImGui::Selectable(labels[i]))
-                {
-                    settings->encode_width = widths[i];
-                    settings->encode_height = heights[i];
-                }
-            }
-            ImGui::EndCombo();
-        }
-        IMGUI_CHECKBOX_SYNC("Fit Resolution", settings->encode_resize);
-        IMGUI_CHECKBOX_SYNC("Video Record", settings->encode_to_file);
     }
     ImGui::End();
 }

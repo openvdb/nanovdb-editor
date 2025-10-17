@@ -16,6 +16,22 @@
 // TODO: this will be in json
 
 const std::string viewer_ini = R"(
+[Window][Settings]
+Pos=1008,21
+Size=432,699
+Collapsed=0
+DockId=0x00000003,1
+
+[Window][Viewport]
+Pos=1008,21
+Size=432,699
+Collapsed=0
+DockId=0x00000003,0
+
+[Window][Compiler]
+Collapsed=0
+DockId=0x00000003
+
 [Window][Shader Editor]
 Collapsed=0
 DockId=0x00000003
@@ -29,38 +45,26 @@ Collapsed=0
 DockId=0x00000003
 
 [Window][Log]
+Pos=0,576
+Size=1006,144
 Collapsed=0
-DockId=0x00000009
+DockId=0x00000009,0
 
 [Window][Scene]
 Pos=0,21
-Size=360,348
+Size=288,275
 Collapsed=0
 DockId=0x0000000C,0
 
-[Window][Viewport]
-Pos=0,21
-Size=360,348
-Collapsed=0
-DockId=0x0000000C,1
-
-[Window][Render Settings]
-Pos=0,21
-Size=360,348
-Collapsed=0
-DockId=0x0000000C,2
-
-[Window][Compiler Settings]
-Collapsed=0
-DockId=0x0000000C
-
 [Window][Properties]
+Pos=0,298
+Size=288,276
 Collapsed=0
-DockId=0x0000000D
+DockId=0x0000000D,1
 
 [Window][Params]
-Pos=0,371
-Size=360,349
+Pos=0,298
+Size=288,276
 Collapsed=0
 DockId=0x0000000D,0
 
@@ -83,15 +87,15 @@ DockSpace           ID=0x00000001 Window=0x1BBC0F80 Pos=0,21 Size=1440,699 Split
   DockNode          ID=0x00000002 Parent=0x00000001 SizeRef=64,0 Split=X
     DockNode        ID=0x00000004 Parent=0x00000002 SizeRef=64,0 Split=Y
       DockNode      ID=0x00000008 Parent=0x00000004 SizeRef=0,64 Split=X
-        DockNode    ID=0x0000000A Parent=0x00000008 SizeRef=360,720 Split=Y
-          DockNode  ID=0x0000000C Parent=0x0000000A SizeRef=360,718 Selected=0xE601B12F
-          DockNode  ID=0x0000000D Parent=0x0000000A SizeRef=360,720 Selected=0x3F5D5ECA
+        DockNode    ID=0x0000000A Parent=0x00000008 SizeRef=288,720 Split=Y
+          DockNode  ID=0x0000000C Parent=0x0000000A SizeRef=288,718 Selected=0xE601B12F
+          DockNode  ID=0x0000000D Parent=0x0000000A SizeRef=288,720 Selected=0x3F5D5ECA
         DockNode    ID=0x0000000B Parent=0x00000008 SizeRef=64,0 CentralNode=1
-      DockNode      ID=0x00000009 Parent=0x00000004 SizeRef=1440,144
+      DockNode      ID=0x00000009 Parent=0x00000004 SizeRef=1440,144 Selected=0x139FDA3F
     DockNode        ID=0x00000005 Parent=0x00000002 SizeRef=288,720 Split=Y
       DockNode      ID=0x00000006 Parent=0x00000005 SizeRef=288,287
       DockNode      ID=0x00000007 Parent=0x00000005 SizeRef=288,431
-  DockNode          ID=0x00000003 Parent=0x00000001 SizeRef=432,720
+  DockNode          ID=0x00000003 Parent=0x00000001 SizeRef=432,720 Selected=0x4746B4B8
 
 [RenderSettings][default]
 vsync=1
