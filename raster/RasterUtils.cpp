@@ -95,12 +95,9 @@ static pnanovdb_compute_array_t* process_gaussian_arrays_common(const pnanovdb_c
     for (pnanovdb_uint64_t point_idx = 0u; point_idx < point_count; point_idx++)
     {
         const float c0 = 0.28209479177387814f;
-        mapped_color[3u * point_idx + 0u] =
-            c0 * mapped_sh_0[3u * point_idx] + 0.5f;
-        mapped_color[3u * point_idx + 1u] =
-            c0 * mapped_sh_0[3u * point_idx] + 0.5f;
-        mapped_color[3u * point_idx + 2u] =
-            c0 * mapped_sh_0[3u * point_idx] + 0.5f;
+        mapped_color[3u * point_idx + 0u] = c0 * mapped_sh_0[3u * point_idx] + 0.5f;
+        mapped_color[3u * point_idx + 1u] = c0 * mapped_sh_0[3u * point_idx] + 0.5f;
+        mapped_color[3u * point_idx + 2u] = c0 * mapped_sh_0[3u * point_idx] + 0.5f;
     }
     compute->unmap_array(sh_0_arr);
     compute->unmap_array(color_arr);
@@ -171,9 +168,9 @@ static pnanovdb_bool_t process_arrays_to_raster_to_nanovdb(pnanovdb_raster_t* ra
     pnanovdb_compute_array_t* sh_n_arr = arrays_gaussian[5];
     pnanovdb_compute_array_t* color_arr = process_gaussian_arrays_common(compute, queue, arrays_gaussian, worker);
 
-    *nanovdb_arr = raster->raster_to_nanovdb(raster->compute, queue, voxel_size, means_arr, quat_arr, scale_arr,
-                                             color_arr, sh_0_arr, sh_n_arr, opacity_arr, shader_params_arrays,
-                                             profiler_report, userdata);
+    *nanovdb_arr =
+        raster->raster_to_nanovdb(raster->compute, queue, voxel_size, means_arr, quat_arr, scale_arr, color_arr,
+                                  sh_0_arr, sh_n_arr, opacity_arr, shader_params_arrays, profiler_report, userdata);
 
     compute->destroy_array(color_arr);
 

@@ -120,17 +120,22 @@ void createMenu(imgui_instance_user::Instance* ptr)
         // Center-aligned application label
         {
             std::string centerText;
+            if (!ptr->selected_scene_item.empty())
+            {
+                centerText += std::string(ptr->selected_scene_item) + " - ";
+            }
+            centerText += "NanoVDB Editor";
             if (isViewerProfile)
             {
-                centerText = "NanoVDB Editor";
-                if (ptr->render_settings->enable_encoder)
-                {
-                    centerText += std::string(ptr->render_settings->server_address) + ":" + std::to_string(ptr->render_settings->server_port);
-                }
+                centerText += "- fVDB (" + std::to_string(ptr->render_settings->server_port) + ")";
             }
             else
             {
-                centerText = "NanoVDB Editor - fVDB (" + std::to_string(ptr->render_settings->server_port) + ")";
+                if (ptr->render_settings->enable_encoder)
+                {
+                    centerText += " (" + std::string(ptr->render_settings->server_address) + ":" +
+                                  std::to_string(ptr->render_settings->server_port) + ")";
+                }
             }
             float windowWidth = ImGui::GetWindowWidth();
             float textWidth = ImGui::CalcTextSize(centerText.c_str()).x;
@@ -178,11 +183,15 @@ void createMenu(imgui_instance_user::Instance* ptr)
             ImVec4 drawColor = baseColor;
             if (held)
             {
-                drawColor.x *= 0.85f; drawColor.y *= 0.85f; drawColor.z *= 0.85f;
+                drawColor.x *= 0.85f;
+                drawColor.y *= 0.85f;
+                drawColor.z *= 0.85f;
             }
             else if (hovered)
             {
-                drawColor.x *= 1.20f; drawColor.y *= 1.20f; drawColor.z *= 1.20f;
+                drawColor.x *= 1.20f;
+                drawColor.y *= 1.20f;
+                drawColor.z *= 1.20f;
             }
 
             ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -196,7 +205,7 @@ void createMenu(imgui_instance_user::Instance* ptr)
 
             // Draw icon using primitives
             const float inner = size.y * 0.22f;
-            const float yOffset = 1.0f;
+            const float yOffset = 0.0f;
             const ImVec2 innerMin(pMin.x + inner, pMin.y + inner + yOffset);
             const ImVec2 innerMax(pMax.x - inner, pMax.y - inner + yOffset);
             const ImU32 iconCol = ImGui::GetColorU32(drawColor);

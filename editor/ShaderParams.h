@@ -190,7 +190,8 @@ public:
         std::vector<ShaderParam>& shader_params = *get(shader_name);
 
         // make constant array at 64KB limit of constant buffer
-        pnanovdb_compute_array_t* constant_array = compute->create_array(sizeof(char), PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE, nullptr);
+        pnanovdb_compute_array_t* constant_array =
+            compute->create_array(sizeof(char), PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE, nullptr);
 
         char* shader_param_write_ptr = reinterpret_cast<char*>(constant_array->data);
         size_t shader_param_write_offset = 0;

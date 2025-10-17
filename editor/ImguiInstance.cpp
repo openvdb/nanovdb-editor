@@ -148,11 +148,11 @@ static void initializeDocking(Instance* ptr)
 
         float window_width = ImGui::GetIO().DisplaySize.x;
         float window_height = ImGui::GetIO().DisplaySize.y;
-#define INIT_VIEWER_DOCKING
+
 #ifdef INIT_VIEWER_DOCKING
         float left_dock_width = window_width * 0.20f;
         float right_dock_width = window_width * 0.20f;
-        float far_right_dock_width = window_width * 0.30f;
+        float far_right_dock_width = window_width * 0.25f;
         float bottom_dock_height = window_height * 0.2f;
 
         // clear existing layout

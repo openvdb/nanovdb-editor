@@ -1113,8 +1113,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 editor_params.width = image_width;
                 editor_params.height = image_height;
 
-                EditorParams* mapped =
-                    (EditorParams*)pnanovdb_compute_upload_buffer_map(compute_context, &compute_upload_buffer, sizeof(EditorParams));
+                EditorParams* mapped = (EditorParams*)pnanovdb_compute_upload_buffer_map(
+                    compute_context, &compute_upload_buffer, sizeof(EditorParams));
                 *mapped = editor_params;
                 auto* upload_transient = pnanovdb_compute_upload_buffer_unmap(compute_context, &compute_upload_buffer);
 
@@ -1122,9 +1122,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                     compute_context, &shader_params_upload_buffer, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
 
                 editor->impl->compute->destroy_array(viewport_shader_params_array);
-                viewport_shader_params_array =
-                    imgui_user_instance->shader_params.get_compute_array_for_shader(
-                        imgui_user_instance->shader_name.c_str(), editor->impl->compute);
+                viewport_shader_params_array = imgui_user_instance->shader_params.get_compute_array_for_shader(
+                    imgui_user_instance->shader_name.c_str(), editor->impl->compute);
                 if (viewport_shader_params_array)
                 {
                     size_t data_size =

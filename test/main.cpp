@@ -32,7 +32,7 @@
 #define TEST_EDITOR
 // #define TEST_EDITOR_START_STOP
 // #define TEST_RASTER
-// #define TEST_RASTER_2D
+#define TEST_RASTER_2D
 // #define TEST_SVRASTER
 // #define TEST_E57
 #define TEST_CAMERA
@@ -432,7 +432,7 @@ int main(int argc, char* argv[])
     // editor.update_camera(&editor, &camera);
 
     const char* raster_file = "./data/ficus.ply";
-    const char* raster_file_garden = "./data/garden.npz";
+    const char* raster_file_garden = "./data/garden.ply";
     pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
 
     pnanovdb_raster_t raster = {};
@@ -490,8 +490,8 @@ int main(int argc, char* argv[])
 #    endif
 
     pnanovdb_editor_config_t config = {};
-    config.headless = PNANOVDB_FALSE;
-    config.streaming = PNANOVDB_FALSE;
+    config.headless = PNANOVDB_TRUE;
+    config.streaming = PNANOVDB_TRUE;
     config.ip_address = "127.0.0.1";
     config.port = 8080;
     config.ui_profile_name = "viewer";

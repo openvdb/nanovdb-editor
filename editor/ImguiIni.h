@@ -17,14 +17,14 @@
 
 const std::string viewer_ini = R"(
 [Window][Settings]
-Pos=1008,21
-Size=432,699
+Pos=1080,21
+Size=360,699
 Collapsed=0
 DockId=0x00000003,1
 
 [Window][Viewport]
-Pos=1008,21
-Size=432,699
+Pos=1080,21
+Size=360,699
 Collapsed=0
 DockId=0x00000003,0
 
@@ -46,7 +46,7 @@ DockId=0x00000003
 
 [Window][Log]
 Pos=0,576
-Size=1006,144
+Size=1078,144
 Collapsed=0
 DockId=0x00000009,0
 
@@ -95,7 +95,7 @@ DockSpace           ID=0x00000001 Window=0x1BBC0F80 Pos=0,21 Size=1440,699 Split
     DockNode        ID=0x00000005 Parent=0x00000002 SizeRef=288,720 Split=Y
       DockNode      ID=0x00000006 Parent=0x00000005 SizeRef=288,287
       DockNode      ID=0x00000007 Parent=0x00000005 SizeRef=288,431
-  DockNode          ID=0x00000003 Parent=0x00000001 SizeRef=432,720 Selected=0x4746B4B8
+  DockNode          ID=0x00000003 Parent=0x00000001 SizeRef=360,720 Selected=0x4746B4B8
 
 [RenderSettings][default]
 vsync=1
