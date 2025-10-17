@@ -534,12 +534,12 @@ pnanovdb_compute_array_t* create_array(size_t element_size, pnanovdb_uint64_t el
     array->element_count = element_count;
     array->element_size = element_size;
     size_t alloc_size = array->element_size * array->element_count;
-    if (alloc_size < 16u)
+    if (alloc_size < 65536u)
     {
-        alloc_size = 16u;
+        alloc_size = 65536u;
     }
     array->data = new char[alloc_size];
-    memset(array->data, 0, 16u);
+    memset(array->data, 0, 65536u);
     if (data)
     {
         memcpy(array->data, data, array->element_size * array->element_count);
