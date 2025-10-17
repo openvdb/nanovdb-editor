@@ -461,6 +461,7 @@ struct ComputePipeline
     pnanovdb_uint32_t totalDescriptors = 0u;
 
     pnanovdb_uint64_t lastActive = ~0llu;
+    pnanovdb_bool_t has_warned_grid_dim = PNANOVDB_FALSE;
 
     VkShaderModule module = VK_NULL_HANDLE;
 
