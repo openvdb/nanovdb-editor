@@ -420,8 +420,9 @@ void computePipeline_dispatch(Context* context, const pnanovdb_compute_dispatch_
 
     loader->vkCmdBindPipeline(context->deviceQueue->commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, ptr->pipeline);
 
-    if (grid_dim_x > 65535 || grid_dim_y > 65535 || grid_dim_z > 65535)
+    if ((grid_dim_x > 65535 || grid_dim_y > 65535 || grid_dim_z > 65535) && !ptr->has_warned_grid_dim)
     {
+        ptr->has_warned_grid_dim = PNANOVDB_TRUE;
         context->logPrint(PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG,
                           "Dispatch(%s) gridDim of (%d, %d, %d) exceeds maximum gridDim of 65535.",
                           params->debug_label ? params->debug_label : "invalid", grid_dim_x, grid_dim_y, grid_dim_z);
