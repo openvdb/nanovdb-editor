@@ -47,7 +47,7 @@ static pnanovdb_compute_array_t* process_gaussian_arrays_common(const pnanovdb_c
     pnanovdb_compute_array_t* sh_n_arr = arrays_gaussian[5];
     pnanovdb_compute_array_t* color_arr = compute->create_array(4u, point_count * 3u, nullptr);
 
-    pnanovdb_uint32_t sh_stride = (pnanovdb_uint32_t)(sh_n_arr->element_count / means_arr->element_count);
+    pnanovdb_uint32_t sh_stride = !sh_n_arr ? 0u : (pnanovdb_uint32_t)(sh_n_arr->element_count / means_arr->element_count);
 
     if (worker)
     {

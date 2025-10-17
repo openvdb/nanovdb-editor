@@ -106,7 +106,7 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
     auto ptr = new gaussian_data_t();
 
     ptr->point_count = means->element_count / 3u;
-    ptr->sh_stride = (pnanovdb_uint32_t)(sh_n->element_count / means->element_count);
+    ptr->sh_stride = !sh_n ? 0u : (pnanovdb_uint32_t)(sh_n->element_count / means->element_count);
 
     ptr->has_uploaded = PNANOVDB_FALSE;
 
@@ -125,7 +125,15 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
     ptr->scales_cpu_array = compute->create_array(scales->element_size, scales->element_count, scales->data);
     ptr->colors_cpu_array = compute->create_array(colors->element_size, colors->element_count, colors->data);
     ptr->sh_0_cpu_array = compute->create_array(sh_0->element_size, sh_0->element_count, sh_0->data);
-    ptr->sh_n_cpu_array = compute->create_array(sh_n->element_size, sh_n->element_count, sh_n->data);
+    if (sh_n)
+    {
+        ptr->sh_n_cpu_array = compute->create_array(sh_n->element_size, sh_n->element_count, sh_n->data);
+    }
+    else
+    {
+        // create small array of zeros, so buffer is valid but null
+        ptr->sh_n_cpu_array = compute->create_array(4u, 15u, nullptr);
+    }
     ptr->opacities_cpu_array = compute->create_array(opacities->element_size, opacities->element_count, opacities->data);
     ptr->shader_params_cpu_arrays = new pnanovdb_compute_array_t*[shader_param_count];
 
