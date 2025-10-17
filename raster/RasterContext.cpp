@@ -132,7 +132,7 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
     else
     {
         // create small array of zeros, so buffer is valid but null
-        ptr->sh_n_cpu_array = compute->create_array(4u, 15u, nullptr);
+        ptr->sh_n_cpu_array = compute->create_array(4u, 45u, nullptr);
     }
     ptr->opacities_cpu_array = compute->create_array(opacities->element_size, opacities->element_count, opacities->data);
     ptr->shader_params_cpu_arrays = new pnanovdb_compute_array_t*[shader_param_count];
