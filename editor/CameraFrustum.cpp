@@ -11,6 +11,7 @@
 
 #include "ImguiInstance.h"
 #include "CameraFrustum.h"
+#include "EditorScene.h"
 
 #include "nanovdb_editor/putil/Camera.h"
 
@@ -326,7 +327,7 @@ static void drawCameraFrustum(imgui_instance_user::Instance* ptr,
 
 void CameraFrustum::render(imgui_instance_user::Instance* ptr)
 {
-    if (!ptr->camera_views)
+    if (!ptr->editor_scene)
     {
         return;
     }
@@ -351,7 +352,8 @@ void CameraFrustum::render(imgui_instance_user::Instance* ptr)
         ImVec2 windowPos = ImGui::GetWindowPos();
         ImVec2 windowSize = ImGui::GetWindowSize();
 
-        for (const auto& cameraPair : *ptr->camera_views)
+        const auto& camera_views = ptr->editor_scene->get_camera_views();
+        for (const auto& cameraPair : camera_views)
         {
             pnanovdb_camera_view_t* camera = cameraPair.second;
             if (!camera)
@@ -361,8 +363,9 @@ void CameraFrustum::render(imgui_instance_user::Instance* ptr)
 
             if (camera->is_visible)
             {
-                bool isViewSelected = (!ptr->selected_scene_item.empty() && ptr->selected_scene_item == cameraPair.first);
-                int selected = isViewSelected ? ptr->camera_frustum_index[ptr->selected_scene_item] : -1;
+                auto selection = ptr->editor_scene->get_selection();
+                bool isViewSelected = (!selection.name.empty() && selection.name == cameraPair.first);
+                int selected = isViewSelected ? ptr->editor_scene->get_camera_frustum_index(selection.name) : -1;
                 // first draw non-selected cameras with lower alpha
                 for (int i = 0; i < camera->num_cameras; i++)
                 {

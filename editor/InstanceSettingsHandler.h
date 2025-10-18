@@ -84,11 +84,15 @@ static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* ent
             if (!instance->is_viewer())
             {
                 // Load camera state when profile is loaded from INI
-                auto it = instance->saved_camera_states.find(instance->render_settings_name);
-                if (it != instance->saved_camera_states.end())
+                if (instance->editor_scene)
                 {
-                    instance->render_settings->camera_state = it->second;
-                    instance->render_settings->sync_camera = PNANOVDB_TRUE;
+                    const pnanovdb_camera_state_t* state =
+                        instance->editor_scene->get_saved_camera_state(instance->render_settings_name);
+                    if (state)
+                    {
+                        instance->render_settings->camera_state = *state;
+                        instance->render_settings->sync_camera = PNANOVDB_TRUE;
+                    }
                 }
             }
         }
