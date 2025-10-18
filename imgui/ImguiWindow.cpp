@@ -721,7 +721,7 @@ pnanovdb_imgui_instance_t* imgui_create(void* userdata,
     }
 
     IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
+    ImGuiTLS = ImGui::CreateContext();
 
     return cast(ptr);
 }

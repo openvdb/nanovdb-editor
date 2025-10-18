@@ -63,6 +63,7 @@ PNANOVDB_INLINE float timestamp_diff(pnanovdb_uint64_t begin, pnanovdb_uint64_t 
     return (float)(((double)(end - begin) / (double)(freq)));
 }
 
+thread_local ImGuiContext* ImGuiTLS = nullptr;
 
 namespace imgui_instance_user
 {
@@ -81,7 +82,7 @@ pnanovdb_imgui_instance_t* create(void* userdata,
     *((Instance**)userdata) = ptr;
 
     IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
+    ImGuiTLS = ImGui::CreateContext();
 
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
