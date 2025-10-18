@@ -11,8 +11,6 @@
 
 #pragma once
 
-#include <imgui/ImguiTLS.h>
-
 #include "ShaderParams.h"
 #include "imgui/ImguiWindow.h"
 

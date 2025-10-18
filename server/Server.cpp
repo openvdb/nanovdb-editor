@@ -27,7 +27,6 @@
 #include <thread>
 #include <mutex>
 
-#include <imgui/ImguiTLS.h>
 #include <imgui.h>
 
 namespace rws = restinio::websocket::basic;

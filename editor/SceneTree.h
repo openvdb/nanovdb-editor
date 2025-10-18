@@ -15,7 +15,6 @@
 #include <nanovdb/PNanoVDB.h>
 #undef PNANOVDB_C
 
-#include <imgui/ImguiTLS.h>
 #include <imgui.h>
 
 namespace imgui_instance_user

@@ -18,7 +18,6 @@
 #    define IMGUI_DEFINE_MATH_OPERATORS
 #endif // IMGUI_DEFINE_MATH_OPERATORS
 
-#include <imgui/ImguiTLS.h>
 #include <imgui.h>
 #include <TextEditor.h>
 

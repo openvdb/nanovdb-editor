@@ -11,8 +11,6 @@
 
 #pragma once
 
-#include <imgui/ImguiTLS.h>
-
 #include "ImguiInstance.h"
 
 #include <imgui_internal.h>

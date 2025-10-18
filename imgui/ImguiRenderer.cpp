@@ -10,7 +10,6 @@
     \brief  This file is part of the PNanoVDB Compute Vulkan reference implementation.
 */
 
-#include <imgui/ImguiTLS.h>
 #include <imgui.h>
 
 #include "ImguiRenderer.h"

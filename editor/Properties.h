@@ -11,7 +11,6 @@
 
 #pragma once
 
-#include <imgui/ImguiTLS.h>
 #include <imgui.h>
 
 namespace imgui_instance_user
