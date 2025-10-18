@@ -171,7 +171,7 @@ void createMenu(imgui_instance_user::Instance* ptr)
             const bool held = ImGui::IsItemActive();
             if (ImGui::IsItemClicked())
             {
-                ptr->render_settings->encode_to_file = ~ptr->render_settings->encode_to_file;
+                ptr->render_settings->encode_to_file ^= PNANOVDB_TRUE;
             }
 
             if (hovered)
