@@ -11,6 +11,7 @@
 
 #include "SceneTree.h"
 #include "ImguiInstance.h"
+#include "EditorScene.h"
 
 namespace pnanovdb_editor
 {
@@ -119,44 +120,45 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
         // ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 4.0f));
 
         // Viewer tree node - root parent of all scene items
-        bool isRootSelected = (ptr->selected_scene_item == SCENE_ROOT_NODE);
+        bool isRootSelected = (ptr->editor_scene->get_selection().name == SCENE_ROOT_NODE);
         if (renderTreeNodeHeader(SCENE_ROOT_NODE, nullptr, isRootSelected))
         {
             if (ImGui::IsItemClicked())
             {
-                ptr->selected_scene_item = SCENE_ROOT_NODE;
-                ptr->selected_view_type = ViewsTypes::Root;
-                ImGui::SetWindowFocus(PROPERTIES);
+                ptr->editor_scene->set_selection(ViewType::Root, SCENE_ROOT_NODE);
             }
 
             // Show viewport camera as child of Viewer
-            if (!ptr->camera_views->empty())
+            if (ptr->editor_scene)
             {
-                auto viewportCamIt = ptr->camera_views->find(VIEWPORT_CAMERA);
-                if (viewportCamIt != ptr->camera_views->end() && viewportCamIt->second)
+                const auto& camera_views = ptr->editor_scene->get_camera_views();
+                if (!camera_views.empty())
                 {
-                    // Add partial indentation to distinguish from tree nodes
-                    ImGui::Indent(indentSpacing);
-
-                    const std::string& cameraName = VIEWPORT_CAMERA;
-                    bool isSelected = (ptr->selected_scene_item == cameraName);
-
-                    if (renderSceneItem(cameraName.c_str(), isSelected, indentSpacing, false))
+                    auto viewportCamIt = camera_views.find(VIEWPORT_CAMERA);
+                    if (viewportCamIt != camera_views.end() && viewportCamIt->second)
                     {
-                        ptr->selected_scene_item = cameraName;
-                        ptr->selected_view_type = ViewsTypes::Cameras;
-                        ImGui::SetWindowFocus(PROPERTIES);
-                    }
+                        // Add partial indentation to distinguish from tree nodes
+                        ImGui::Indent(indentSpacing);
 
-                    ImGui::Unindent(indentSpacing);
+                        const std::string& cameraName = VIEWPORT_CAMERA;
+                        bool isSelected = (ptr->editor_scene->get_selection().name == cameraName);
+
+                        if (renderSceneItem(cameraName.c_str(), isSelected, indentSpacing, false))
+                        {
+                            ptr->editor_scene->set_selection(ViewType::Cameras, cameraName);
+                        }
+
+                        ImGui::Unindent(indentSpacing);
+                    }
                 }
             }
 
             // Show other loaded camera views in tree
-            if (ptr->camera_views->size() > 1)
+            if (ptr->editor_scene && ptr->editor_scene->get_camera_views().size() > 1)
             {
+                const auto& camera_views = ptr->editor_scene->get_camera_views();
                 bool allVisible = true;
-                for (const auto& cameraPair : *ptr->camera_views)
+                for (const auto& cameraPair : camera_views)
                 {
                     if (cameraPair.first == VIEWPORT_CAMERA || !cameraPair.second)
                         continue;
@@ -171,19 +173,24 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                 bool treeNodeOpen = renderTreeNodeHeader("Camera Views", &commonVisible);
 
                 // Update all camera views if visibility checkbox was toggled
-                if (commonVisible != allVisible)
+                if (commonVisible != allVisible && ptr->editor_scene)
                 {
-                    for (auto& cameraPair : *ptr->camera_views)
+                    // Note: We need mutable access to update visibility
+                    const auto& camera_views_const = ptr->editor_scene->get_camera_views();
+                    for (const auto& cameraPair : camera_views_const)
                     {
                         if (cameraPair.first == VIEWPORT_CAMERA || !cameraPair.second)
+                        {
                             continue;
+                        }
                         cameraPair.second->is_visible = commonVisible ? PNANOVDB_TRUE : PNANOVDB_FALSE;
                     }
                 }
 
                 if (treeNodeOpen)
                 {
-                    for (auto& cameraPair : *ptr->camera_views)
+                    const auto& camera_views_iter = ptr->editor_scene->get_camera_views();
+                    for (const auto& cameraPair : camera_views_iter)
                     {
                         pnanovdb_camera_view_t* camera = cameraPair.second;
                         if (!camera)
@@ -197,12 +204,10 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                             continue;
                         }
 
-                        bool isSelected = (ptr->selected_scene_item == cameraName);
+                        bool isSelected = (ptr->editor_scene->get_selection().name == cameraName);
                         if (renderSceneItem(cameraName.c_str(), isSelected, indentSpacing, false, &camera->is_visible))
                         {
-                            ptr->selected_scene_item = cameraName;
-                            ptr->selected_view_type = ViewsTypes::Cameras;
-                            ImGui::SetWindowFocus(PROPERTIES);
+                            ptr->editor_scene->set_selection(ViewType::Cameras, cameraName);
                         }
                     }
                     ImGui::TreePop();
@@ -211,35 +216,39 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
 
             // Show other scene items
             auto renderSceneItems = [this, ptr, indentSpacing](const auto& itemMap, const char* treeLabel,
-                                                               auto& pendingField, ViewsTypes viewType)
+                                                               auto& pendingField, ViewType viewType)
             {
                 if (renderTreeNodeHeader(treeLabel))
                 {
                     for (auto& pair : itemMap)
                     {
                         const std::string& name = pair.first;
-                        bool isSelected = (ptr->selected_scene_item == name);
+                        bool isSelected = (ptr->editor_scene->get_selection().name == name);
                         if (renderSceneItem(name.c_str(), isSelected, indentSpacing, false))
                         {
+                            // Set pending field - will be handled by handle_pending_view_changes()
                             pendingField = name;
-                            ptr->selected_view_type = viewType;
-                            ImGui::SetWindowFocus(PROPERTIES);
                         }
                     }
                     ImGui::TreePop();
                 }
             };
 
-            if (ptr->nanovdb_arrays && !ptr->nanovdb_arrays->empty())
+            if (ptr->editor_scene)
             {
-                renderSceneItems(
-                    *ptr->nanovdb_arrays, "NanoVDB Scenes", ptr->pending.viweport_nanovdb_array, ViewsTypes::NanoVDBs);
-            }
+                const auto& nanovdb_views = ptr->editor_scene->get_nanovdb_views();
+                if (!nanovdb_views.empty())
+                {
+                    renderSceneItems(
+                        nanovdb_views, "NanoVDB Views", ptr->pending.viewport_nanovdb_array, ViewType::NanoVDBs);
+                }
 
-            if (ptr->gaussian_views && !ptr->gaussian_views->empty())
-            {
-                renderSceneItems(*ptr->gaussian_views, "Gaussian Views", ptr->pending.viewport_gaussian_view,
-                                 ViewsTypes::GaussianScenes);
+                const auto& gaussian_views = ptr->editor_scene->get_gaussian_views();
+                if (!gaussian_views.empty())
+                {
+                    renderSceneItems(gaussian_views, "Gaussian Views", ptr->pending.viewport_gaussian_view,
+                                     ViewType::GaussianScenes);
+                }
             }
 
             ImGui::TreePop(); // Close Viewer tree node

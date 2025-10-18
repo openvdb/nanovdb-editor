@@ -11,6 +11,7 @@
 
 #include "Properties.h"
 #include "ImguiInstance.h"
+#include "EditorScene.h"
 
 #include <cmath>
 
@@ -26,12 +27,14 @@ const float EPSILON = 1e-6f;
 
 void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
 {
-    if (!ptr->camera_views)
+    if (!ptr->editor_scene)
     {
         return;
     }
-    auto it = ptr->camera_views->find(ptr->selected_scene_item);
-    if (it == ptr->camera_views->end())
+    const auto& camera_views = ptr->editor_scene->get_camera_views();
+    auto selection = ptr->editor_scene->get_selection();
+    auto it = camera_views.find(selection.name);
+    if (it == camera_views.end())
     {
         return;
     }
@@ -41,10 +44,10 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
         return;
     }
 
-    int cameraIdx = ptr->camera_frustum_index[ptr->selected_scene_item];
+    int cameraIdx = ptr->editor_scene->get_camera_frustum_index(selection.name);
     pnanovdb_camera_state_t* state = &camera->states[cameraIdx];
 
-    bool isViewportCamera = (ptr->selected_scene_item == VIEWPORT_CAMERA);
+    bool isViewportCamera = (selection.name == VIEWPORT_CAMERA);
     if (isViewportCamera)
     {
         // Projection mode: Perspective vs Orthographic
@@ -131,17 +134,21 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
 #endif
         if (ImGui::Button("Reset"))
         {
-            auto camera_it = ptr->saved_camera_states.find(s_render_settings_default);
-            if (camera_it != ptr->saved_camera_states.end())
+            if (ptr->editor_scene)
             {
-                ptr->render_settings->camera_state = camera_it->second;
-            }
-            else
-            {
-                // Fallback to default camera state if not found
-                pnanovdb_camera_state_t default_state = {};
-                pnanovdb_camera_state_default(&default_state, ptr->render_settings->is_y_up);
-                ptr->render_settings->camera_state = default_state;
+                const pnanovdb_camera_state_t* state =
+                    ptr->editor_scene->get_saved_camera_state(s_render_settings_default);
+                if (state)
+                {
+                    ptr->render_settings->camera_state = *state;
+                }
+                else
+                {
+                    // Fallback to default camera state if not found
+                    pnanovdb_camera_state_t default_state = {};
+                    pnanovdb_camera_state_default(&default_state, ptr->render_settings->is_y_up);
+                    ptr->render_settings->camera_state = default_state;
+                }
             }
 
             pnanovdb_camera_config_t default_config = {};
@@ -171,7 +178,11 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
         int maxIndex = (camera->num_cameras > 0) ? ((int)camera->num_cameras - 1) : 0;
         if (maxIndex > 0)
         {
-            ImGui::SliderInt("Camera Index", &ptr->camera_frustum_index[ptr->selected_scene_item], 0, maxIndex, "%d");
+            int current_index = ptr->editor_scene->get_camera_frustum_index(selection.name);
+            if (ImGui::SliderInt("Camera Index", &current_index, 0, maxIndex, "%d"))
+            {
+                ptr->editor_scene->set_camera_frustum_index(selection.name, current_index);
+            }
         }
         else
         {
@@ -348,13 +359,14 @@ void Properties::render(imgui_instance_user::Instance* ptr)
 {
     if (ImGui::Begin(PROPERTIES, &ptr->window.show_scene_properties))
     {
-        if (ptr->selected_scene_item.empty() || ptr->selected_view_type == imgui_instance_user::ViewsTypes::None)
+        auto selection = ptr->editor_scene->get_selection();
+        if (selection.name.empty() || selection.type == pnanovdb_editor::ViewType::None)
         {
             ImGui::TextDisabled("Scene is empty");
             ImGui::End();
             return;
         }
-        if (ptr->selected_view_type == imgui_instance_user::ViewsTypes::Root)
+        if (selection.type == pnanovdb_editor::ViewType::Root)
         {
             auto settings = ptr->render_settings;
 
@@ -388,15 +400,15 @@ void Properties::render(imgui_instance_user::Instance* ptr)
                 ImGui::EndCombo();
             }
         }
-        else if (ptr->selected_view_type == imgui_instance_user::ViewsTypes::GaussianScenes)
+        else if (selection.type == pnanovdb_editor::ViewType::GaussianScenes)
         {
             ptr->shader_params.renderGroup(imgui_instance_user::s_raster2d_shader_group);
         }
-        else if (ptr->selected_view_type == imgui_instance_user::ViewsTypes::NanoVDBs)
+        else if (selection.type == pnanovdb_editor::ViewType::NanoVDBs)
         {
             ptr->shader_params.render(ptr->shader_name);
         }
-        else if (ptr->selected_view_type == imgui_instance_user::ViewsTypes::Cameras)
+        else if (selection.type == pnanovdb_editor::ViewType::Cameras)
         {
             showCameraViews(ptr);
         }

@@ -228,7 +228,7 @@ int main(int argc, char* argv[])
 #if TEST_NODE2
     const char* nvdb_filepath = "./data/dragon_node2.nvdb";
 #else
-    const char* nvdb_filepath = "";
+    const char* nvdb_filepath = "./data/dragon.nvdb";
 #endif
 
     // uses dlopen to load compiler and get symbols
@@ -341,6 +341,14 @@ int main(int argc, char* argv[])
     // add editing optionally and late
     pnanovdb_editor_t editor = {};
     pnanovdb_editor_load(&editor, &compute, &compiler);
+
+    editor.add_nanovdb(&editor, data_nanovdb);
+
+    pnanovdb_compute_array_t* data_nanovdb2 = compute.load_nanovdb("./data/hexagon_flow_test2.nvdb");
+    if (data_nanovdb2)
+    {
+        editor.add_nanovdb(&editor, data_nanovdb2);
+    }
 
 #    ifdef TEST_CAMERA
     pnanovdb_camera_config_t default_config = {};
@@ -490,8 +498,8 @@ int main(int argc, char* argv[])
 #    endif
 
     pnanovdb_editor_config_t config = {};
-    config.headless = PNANOVDB_TRUE;
-    config.streaming = PNANOVDB_TRUE;
+    config.headless = PNANOVDB_FALSE;
+    config.streaming = PNANOVDB_FALSE;
     config.ip_address = "127.0.0.1";
     config.port = 8080;
     // config.ui_profile_name = "viewer";
@@ -502,6 +510,9 @@ int main(int argc, char* argv[])
     //     pnanovdb_vec3_t position = editor.camera->state.position;
     //     printf("Camera position: %f, %f, %f\n", position.x, position.y, position.z);
     // }
+
+    compute.destroy_array(data_nanovdb);
+    compute.destroy_array(data_nanovdb2);
 
 #    ifdef TEST_RASTER_2D
     raster.destroy_gaussian_data(raster.compute, queue, gaussian_data);

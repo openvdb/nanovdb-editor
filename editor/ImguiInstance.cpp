@@ -452,11 +452,15 @@ void update(pnanovdb_imgui_instance_t* instance)
             }
 
             // Apply loaded camera state from INI
-            auto camera_it = ptr->saved_camera_states.find(ptr->render_settings_name);
-            if (camera_it != ptr->saved_camera_states.end())
+            if (ptr->editor_scene)
             {
-                ptr->render_settings->camera_state = camera_it->second;
-                ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                const pnanovdb_camera_state_t* state =
+                    ptr->editor_scene->get_saved_camera_state(ptr->render_settings_name);
+                if (state)
+                {
+                    ptr->render_settings->camera_state = *state;
+                    ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                }
             }
         }
     }

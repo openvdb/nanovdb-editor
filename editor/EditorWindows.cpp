@@ -12,6 +12,7 @@
 #include "EditorWindows.h"
 
 #include "ImguiInstance.h"
+#include "EditorScene.h"
 #include "CodeEditor.h"
 #include "Console.h"
 #include "Profiler.h"
@@ -79,11 +80,15 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
                 if (!ptr->is_viewer())
                 {
                     // Load camera state
-                    auto it = ptr->saved_camera_states.find(ptr->render_settings_name);
-                    if (it != ptr->saved_camera_states.end())
+                    if (ptr->editor_scene)
                     {
-                        ptr->render_settings->camera_state = it->second;
-                        ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                        const pnanovdb_camera_state_t* state =
+                            ptr->editor_scene->get_saved_camera_state(ptr->render_settings_name);
+                        if (state)
+                        {
+                            ptr->render_settings->camera_state = *state;
+                            ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                        }
                     }
                 }
             }
@@ -95,11 +100,15 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
                 if (!ptr->is_viewer())
                 {
                     // Load camera state
-                    auto it = ptr->saved_camera_states.find(ptr->render_settings_name);
-                    if (it != ptr->saved_camera_states.end())
+                    if (ptr->editor_scene)
                     {
-                        ptr->render_settings->camera_state = it->second;
-                        ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                        const pnanovdb_camera_state_t* state =
+                            ptr->editor_scene->get_saved_camera_state(ptr->render_settings_name);
+                        if (state)
+                        {
+                            ptr->render_settings->camera_state = *state;
+                            ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                        }
                     }
                 }
             }
@@ -118,20 +127,24 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
                         ptr->viewport_settings[(int)ptr->viewport_option].render_settings_name =
                             ptr->render_settings_name;
 
-                        auto it = ptr->saved_camera_states.find(ptr->render_settings_name);
-                        if (it != ptr->saved_camera_states.end())
+                        if (ptr->editor_scene)
                         {
-                            ptr->render_settings->camera_state = it->second;
+                            const pnanovdb_camera_state_t* state =
+                                ptr->editor_scene->get_saved_camera_state(ptr->render_settings_name);
+                            if (state)
+                            {
+                                ptr->render_settings->camera_state = *state;
+                            }
                             ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+
+                            // TODO: clear selected debug camera when switching to saved camera
+
+                            ImGui::MarkIniSettingsDirty();
                         }
-
-                        // TODO: clear selected debug camera when switching to saved camera
-
-                        ImGui::MarkIniSettingsDirty();
-                    }
-                    if (is_selected)
-                    {
-                        ImGui::SetItemDefaultFocus();
+                        if (is_selected)
+                        {
+                            ImGui::SetItemDefaultFocus();
+                        }
                     }
                 }
                 ImGui::EndCombo();
@@ -144,7 +157,11 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
                 {
                     if (ptr->saved_render_settings.find(ptr->render_settings_name) == ptr->saved_render_settings.end())
                     {
-                        ptr->saved_camera_states[ptr->render_settings_name] = ptr->render_settings->camera_state;
+                        if (ptr->editor_scene)
+                        {
+                            ptr->editor_scene->save_camera_state(
+                                ptr->render_settings_name, ptr->render_settings->camera_state);
+                        }
 
                         imgui_instance_user::copyPersistentFields(
                             ptr->saved_render_settings[ptr->render_settings_name], *ptr->render_settings);
@@ -621,13 +638,14 @@ void showFileHeaderWindow(imgui_instance_user::Instance* ptr)
     if (ImGui::Begin(FILE_HEADER, &ptr->window.show_file_header))
     {
         pnanovdb_compute_array_t* current_array = nullptr;
-        if (ptr->selected_view_type == ViewsTypes::NanoVDBs && ptr->nanovdb_arrays)
+        auto selection = ptr->editor_scene->get_selection();
+        if (selection.type == ViewType::NanoVDBs && ptr->editor_scene)
         {
-            auto it = ptr->nanovdb_arrays->find(ptr->selected_scene_item);
-            if (it != ptr->nanovdb_arrays->end())
+            const auto& nanovdb_views = ptr->editor_scene->get_nanovdb_views();
+            auto it = nanovdb_views.find(selection.name);
+            if (it != nanovdb_views.end())
             {
-                // TODO: fixed on a branch
-                // current_array = it->second.nanovdb_array;
+                current_array = it->second.nanovdb_array;
             }
         }
         pnanovdb_editor::FileHeaderInfo::getInstance().render(current_array);
@@ -790,7 +808,6 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
         }
     }
 }
-
 
 void showAboutWindow(imgui_instance_user::Instance* ptr)
 {

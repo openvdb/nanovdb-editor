@@ -15,6 +15,7 @@
 #include "imgui/ImguiWindow.h"
 
 #include "nanovdb_editor/putil/Editor.h"
+#include "nanovdb_editor/putil/Raster.h"
 #include "nanovdb_editor/putil/Shader.hpp"
 
 #ifndef IMGUI_DEFINE_MATH_OPERATORS
@@ -81,34 +82,16 @@ struct ViewportSettings
     std::string render_settings_name = s_render_settings_default;
 };
 
-enum class ViewsTypes
-{
-    Root,
-    Cameras,
-    GaussianScenes,
-    NanoVDBs,
-    None
-};
+} // namespace imgui_instance_user
 
-struct GaussianDataContext
+// Forward declaration
+namespace pnanovdb_editor
 {
-    pnanovdb_raster_context_t* raster_ctx;
-    pnanovdb_raster_gaussian_data_t* gaussian_data;
-    pnanovdb_raster_shader_params_t* shader_params;
-};
+class EditorScene;
+}
 
-struct GaussianDataLoadedContext
+namespace imgui_instance_user
 {
-    pnanovdb_raster_context_t* raster_ctx;
-    std::shared_ptr<pnanovdb_raster_gaussian_data_t> gaussian_data;
-    pnanovdb_raster_shader_params_t* shader_params;
-};
-struct EditorLoaded
-{
-    std::deque<std::string> filenames;
-    std::vector<pnanovdb_compute_array_t*> nanovdb_arrays;
-    std::vector<GaussianDataLoadedContext> gaussian_views;
-};
 
 struct PendingState
 {
@@ -124,7 +107,7 @@ struct PendingState
     bool save_file = false;
     std::string viewport_shader_name = "";
     std::string viewport_gaussian_view = "";
-    std::string viweport_nanovdb_array = "";
+    std::string viewport_nanovdb_array = "";
     bool update_memory_stats = false;
     bool update_raster = false;
     bool find_shader_directory = false;
@@ -197,7 +180,6 @@ struct Instance
 
     std::string render_settings_name = s_render_settings_default;
     std::map<std::string, pnanovdb_imgui_settings_render_t> saved_render_settings;
-    std::map<std::string, pnanovdb_camera_state_t> saved_camera_states;
 
     std::vector<std::string> viewport_shaders;
 
@@ -206,19 +188,10 @@ struct Instance
 
     ProgressBar progress;
 
-    std::shared_ptr<pnanovdb_compute_array_t> nanovdb_array = nullptr;
+    // Scene management and selection (delegated to EditorScene)
+    pnanovdb_editor::EditorScene* editor_scene = nullptr;
 
-    EditorLoaded loaded;
-    std::string selected_scene_item = "";
-    ViewsTypes selected_view_type = ViewsTypes::None;
-
-    std::map<std::string, pnanovdb_camera_view_t*>* camera_views = nullptr;
-    std::map<std::string, int> camera_frustum_index; // map of camera view name to state index for frustum overlay
-    std::map<std::string, pnanovdb_compute_array_t>* nanovdb_arrays = nullptr;
-    std::map<std::string, GaussianDataContext>* gaussian_views = nullptr;
     std::string raster_shader_group = s_raster2d_shader_group;
-    std::map<std::string, pnanovdb_camera_state_t> views_camera_state;
-
     pnanovdb_camera_view_t default_camera_view; // default camera view that syncs with viewport
 
     bool is_docking_setup = false;
