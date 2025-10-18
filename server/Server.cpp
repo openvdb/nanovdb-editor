@@ -65,6 +65,8 @@ struct server_frame_metadata_t
 
 struct server_instance_t
 {
+    uint32_t instance_idx = 0u;
+
     std::shared_ptr<restinio::asio_ns::io_context> ioctx;
     restinio::running_server_handle_t<traits_t> server;
 
@@ -82,36 +84,40 @@ struct server_instance_t
 
 PNANOVDB_CAST_PAIR(pnanovdb_server_instance_t, server_instance_t)
 
-ws_registry_t ws_registry;
-std::mutex g_mutex;
-server_instance_t* g_server_instance = nullptr;
-restinio::asio_ns::io_context* g_ioctx;
-std::shared_ptr<restinio::asio_ns::steady_timer> g_timer;
+static const uint32_t max_instances = 16;
+std::atomic<uint32_t> g_instance_counter = 0u;
 
+ws_registry_t g_ws_registry[max_instances];
+std::mutex g_mutex[max_instances];
+server_instance_t* g_server_instance[max_instances] = {};
+restinio::asio_ns::io_context* g_ioctx[max_instances] = {};
+std::shared_ptr<restinio::asio_ns::steady_timer> g_timer[max_instances] = {};
+
+template<uint32_t instance_idx>
 void send_video(const asio::error_code& ec)
 {
     if (!ec)
     {
-        std::lock_guard<std::mutex> guard(g_mutex);
+        std::lock_guard<std::mutex> guard(g_mutex[instance_idx]);
 
-        if (g_server_instance && g_server_instance->buffers.size() != 0u && ws_registry.size() != 0u)
+        if (g_server_instance[instance_idx] && g_server_instance[instance_idx]->buffers.size() != 0u && g_ws_registry[instance_idx].size() != 0u)
         {
-            for (auto wsh_itr = ws_registry.begin(); wsh_itr != ws_registry.end(); wsh_itr++)
+            for (auto wsh_itr = g_ws_registry[instance_idx].begin(); wsh_itr != g_ws_registry[instance_idx].end(); wsh_itr++)
             {
                 uint64_t connection_id = wsh_itr->first;
-                auto ring_buf_it = g_server_instance->client_ring_buffer_idx.find(connection_id);
-                if (ring_buf_it == g_server_instance->client_ring_buffer_idx.end())
+                auto ring_buf_it = g_server_instance[instance_idx]->client_ring_buffer_idx.find(connection_id);
+                if (ring_buf_it == g_server_instance[instance_idx]->client_ring_buffer_idx.end())
                 {
                     continue;
                 }
-                if (ring_buf_it->second == ~0u && g_server_instance->ring_buffer_idx == 1u)
+                if (ring_buf_it->second == ~0u && g_server_instance[instance_idx]->ring_buffer_idx == 1u)
                 {
                     ring_buf_it->second = 0u;
                 }
-                while (ring_buf_it->second != ~0u && ring_buf_it->second != g_server_instance->ring_buffer_idx)
+                while (ring_buf_it->second != ~0u && ring_buf_it->second != g_server_instance[instance_idx]->ring_buffer_idx)
                 {
-                    auto& front = g_server_instance->buffers[ring_buf_it->second];
-                    server_frame_metadata_t metadata = g_server_instance->frame_metadatas[ring_buf_it->second];
+                    auto& front = g_server_instance[instance_idx]->buffers[ring_buf_it->second];
+                    server_frame_metadata_t metadata = g_server_instance[instance_idx]->frame_metadatas[ring_buf_it->second];
                     ring_buf_it->second = (ring_buf_it->second + 1) % ring_buffer_size;
 
                     // printf("Sending %zu bytes of video\n", front.size());
@@ -132,12 +138,13 @@ void send_video(const asio::error_code& ec)
             }
         }
 
-        g_timer = std::make_shared<restinio::asio_ns::steady_timer>(*g_ioctx);
-        g_timer->expires_after(std::chrono::milliseconds(5));
-        g_timer->async_wait(send_video);
+        g_timer[instance_idx] = std::make_shared<restinio::asio_ns::steady_timer>(*g_ioctx[instance_idx]);
+        g_timer[instance_idx]->expires_after(std::chrono::milliseconds(5));
+        g_timer[instance_idx]->async_wait(send_video<instance_idx>);
     }
 };
 
+template<uint32_t instance_idx>
 std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
 {
     auto router = std::make_unique<router_t>();
@@ -192,7 +199,7 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
                                          nlohmann::json msg = nlohmann::json::parse(str);
                                          if (msg["type"] == "event")
                                          {
-                                             std::lock_guard<std::mutex> guard(g_mutex);
+                                             std::lock_guard<std::mutex> guard(g_mutex[instance_idx]);
                                              pnanovdb_server_event_t event = {};
                                              const auto eventType = msg["eventType"];
                                              if (eventType == "mousemove")
@@ -260,9 +267,9 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
                                                  event.height = msg["height"];
                                              }
 
-                                             if (g_server_instance)
+                                             if (g_server_instance[instance_idx])
                                              {
-                                                 g_server_instance->events.push_back(event);
+                                                 g_server_instance[instance_idx]->events.push_back(event);
                                              }
                                          }
 
@@ -279,25 +286,25 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
                                      else if (m->opcode() == rws::opcode_t::connection_close_frame)
                                      {
                                          // printf("WebSocket connection close\n");
-                                         ws_registry.erase(wsh->connection_id());
-                                         if (g_server_instance)
+                                         g_ws_registry[instance_idx].erase(wsh->connection_id());
+                                         if (g_server_instance[instance_idx])
                                          {
-                                             g_server_instance->client_ring_buffer_idx.erase(wsh->connection_id());
+                                             g_server_instance[instance_idx]->client_ring_buffer_idx.erase(wsh->connection_id());
                                          }
                                      }
                                  });
                              // printf("WebSocket upgrade complete!\n");
-                             ws_registry.emplace(wsh->connection_id(), wsh);
-                             if (g_server_instance)
+                             g_ws_registry[instance_idx].emplace(wsh->connection_id(), wsh);
+                             if (g_server_instance[instance_idx])
                              {
-                                 g_server_instance->client_ring_buffer_idx.emplace(wsh->connection_id(), ~0u);
+                                 g_server_instance[instance_idx]->client_ring_buffer_idx.emplace(wsh->connection_id(), ~0u);
                              }
 
-                             if (g_timer == nullptr)
+                             if (g_timer[instance_idx] == nullptr)
                              {
-                                 g_timer = std::make_shared<restinio::asio_ns::steady_timer>(ioctx);
-                                 g_timer->expires_after(std::chrono::milliseconds(5));
-                                 g_timer->async_wait(send_video);
+                                 g_timer[instance_idx] = std::make_shared<restinio::asio_ns::steady_timer>(ioctx);
+                                 g_timer[instance_idx]->expires_after(std::chrono::milliseconds(5));
+                                 g_timer[instance_idx]->async_wait(send_video<instance_idx>);
                              }
 
                              // printf("WebSocket connection id(%llu)\n", (long long unsigned int)wsh->connection_id());
@@ -313,12 +320,23 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
     return router;
 }
 
+typedef std::unique_ptr<router_t> (*server_handler_t)(restinio::asio_ns::io_context& ioctx);
+server_handler_t server_handlers[max_instances] = {
+    server_handler<0>, server_handler<1>, server_handler<2>, server_handler<3>,
+    server_handler<4>, server_handler<5>, server_handler<6>, server_handler<7>,
+    server_handler<8>, server_handler<9>, server_handler<10>, server_handler<11>,
+    server_handler<12>, server_handler<13>, server_handler<14>, server_handler<15>,
+};
+
 pnanovdb_server_instance_t* create_instance(const char* serveraddress,
                                             int port,
                                             int max_attempts,
                                             pnanovdb_compute_log_print_t log_print)
 {
     auto ptr = new server_instance_t();
+
+    uint32_t instance_idx = g_instance_counter.fetch_add(1u) % max_instances;
+    ptr->instance_idx = instance_idx;
 
     ptr->buffers.resize(ring_buffer_size);
     ptr->frame_metadatas.resize(ring_buffer_size);
@@ -347,13 +365,13 @@ pnanovdb_server_instance_t* create_instance(const char* serveraddress,
     int attempt = 0;
     for (; attempt < max_attempts; attempt++)
     {
-        std::lock_guard<std::mutex> guard(g_mutex);
+        std::lock_guard<std::mutex> guard(g_mutex[instance_idx]);
 
         using namespace std::chrono;
 
         ptr->ioctx = std::make_shared<restinio::asio_ns::io_context>();
 
-        g_ioctx = ptr->ioctx.get();
+        g_ioctx[instance_idx] = ptr->ioctx.get();
         bool success = true;
         try
         {
@@ -361,11 +379,11 @@ pnanovdb_server_instance_t* create_instance(const char* serveraddress,
                                                         restinio::server_settings_t<traits_t>{}
                                                             .port(ptr->port)
                                                             .address(restinio_address)
-                                                            .request_handler(server_handler(*(ptr->ioctx.get())))
+                                                            .request_handler(server_handlers[instance_idx](*g_ioctx[instance_idx]))
                                                             //.read_next_http_message_timelimit(10s)
                                                             //.write_http_response_timelimit(1s)
                                                             //.handle_request_timeout(1s)
-                                                            .cleanup_func([&]() { ws_registry.clear(); }),
+                                                            .cleanup_func([&,instance_idx]() { g_ws_registry[instance_idx].clear(); }),
                                                         1u);
         }
         catch (const std::system_error& e)
@@ -378,7 +396,7 @@ pnanovdb_server_instance_t* create_instance(const char* serveraddress,
         }
         if (success)
         {
-            g_server_instance = ptr;
+            g_server_instance[instance_idx] = ptr;
             break;
         }
         ptr->port++;
@@ -401,8 +419,9 @@ void push_h264(pnanovdb_server_instance_t* instance,
                pnanovdb_uint32_t height)
 {
     auto ptr = cast(instance);
+    uint32_t instance_idx = ptr->instance_idx;
 
-    std::lock_guard<std::mutex> guard(g_mutex);
+    std::lock_guard<std::mutex> guard(g_mutex[instance_idx]);
 
     const char* data_char = (const char*)data;
 
@@ -421,8 +440,9 @@ void push_h264(pnanovdb_server_instance_t* instance,
 pnanovdb_bool_t pop_event(pnanovdb_server_instance_t* instance, pnanovdb_server_event_t* out_event)
 {
     auto ptr = cast(instance);
+    uint32_t instance_idx = ptr->instance_idx;
 
-    std::lock_guard<std::mutex> guard(g_mutex);
+    std::lock_guard<std::mutex> guard(g_mutex[instance_idx]);
 
     if (ptr->events.size() == 0 && ptr->client_ring_buffer_idx.empty())
     {
@@ -438,11 +458,11 @@ pnanovdb_bool_t pop_event(pnanovdb_server_instance_t* instance, pnanovdb_server_
     }
 
     *out_event = ptr->events.front();
-    for (size_t idx = 1u; idx < g_server_instance->events.size(); idx++)
+    for (size_t idx = 1u; idx < g_server_instance[instance_idx]->events.size(); idx++)
     {
-        g_server_instance->events[idx - 1u] = g_server_instance->events[idx];
+        g_server_instance[instance_idx]->events[idx - 1u] = g_server_instance[instance_idx]->events[idx];
     }
-    g_server_instance->events.pop_back();
+    g_server_instance[instance_idx]->events.pop_back();
 
     return PNANOVDB_TRUE;
 }
@@ -452,6 +472,7 @@ void wait_until_active(pnanovdb_server_instance_t* instance,
                        void* external_active_count)
 {
     auto ptr = cast(instance);
+    uint32_t instance_idx = ptr->instance_idx;
 
     if (ptr->log_print)
     {
@@ -461,7 +482,7 @@ void wait_until_active(pnanovdb_server_instance_t* instance,
     while (!is_active)
     {
         {
-            std::lock_guard<std::mutex> guard(g_mutex);
+            std::lock_guard<std::mutex> guard(g_mutex[instance_idx]);
             if (!ptr->client_ring_buffer_idx.empty())
             {
                 is_active = true;
@@ -489,8 +510,9 @@ void wait_until_active(pnanovdb_server_instance_t* instance,
 void destroy_instance(pnanovdb_server_instance_t* instance)
 {
     auto ptr = cast(instance);
+    uint32_t instance_idx = ptr->instance_idx;
 
-    std::lock_guard<std::mutex> guard(g_mutex);
+    std::lock_guard<std::mutex> guard(g_mutex[instance_idx]);
 
     ptr->server->stop();
     ptr->server->wait();

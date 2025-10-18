@@ -63,6 +63,7 @@ PNANOVDB_INLINE float timestamp_diff(pnanovdb_uint64_t begin, pnanovdb_uint64_t 
     return (float)(((double)(end - begin) / (double)(freq)));
 }
 
+thread_local ImGuiContext* ImGuiTLS = nullptr;
 
 namespace imgui_instance_user
 {

@@ -107,6 +107,10 @@ struct EditorWorker
     PendingData<pnanovdb_camera_t> pending_camera;
     PendingData<void> pending_shader_params;
     ConstPendingData<pnanovdb_reflect_data_type_t> pending_shader_params_data_type;
+
+    pnanovdb_editor_config_t config = {};
+    std::string config_ip_address;
+    std::string config_ui_profile_name;
 };
 
 // views representing a loaded scene via editor's API, does not own the data
@@ -1262,22 +1266,32 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
 void start(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb_editor_config_t* config)
 {
-#if !defined(NANOVDB_EDITOR_USE_GLFW)
-    if (editor->impl->editor_worker)
+    if (config->headless)
     {
-        return;
+        if (editor->impl->editor_worker)
+        {
+            return;
+        }
+        auto* editor_worker = new EditorWorker();
+
+        // to be safe, we must make a deep copy of config
+        editor_worker->config = *config;
+        editor_worker->config_ip_address = config->ip_address ? std::string(config->ip_address) : std::string();
+        editor_worker->config_ui_profile_name = config->ui_profile_name ? std::string(config->ui_profile_name) : std::string();
+        editor_worker->config.ip_address = editor_worker->config_ip_address.c_str();
+        editor_worker->config.ui_profile_name = editor_worker->config_ui_profile_name.c_str();
+
+        editor_worker->thread = new std::thread([editor, device, editor_worker]() { editor->show(editor, device, &editor_worker->config); });
+        editor->impl->editor_worker = (void*)editor_worker;
     }
-    auto* editor_worker = new EditorWorker();
-    editor_worker->thread = new std::thread([editor, device, config]() { editor->show(editor, device, config); });
-    editor->impl->editor_worker = (void*)editor_worker;
-#else
-    editor->show(editor, device, config);
-#endif
+    else
+    {
+        editor->show(editor, device, config);
+    }
 }
 
 void stop(pnanovdb_editor_t* editor)
 {
-#if !defined(NANOVDB_EDITOR_USE_GLFW)
     if (!editor->impl->editor_worker)
     {
         return;
@@ -1288,7 +1302,6 @@ void stop(pnanovdb_editor_t* editor)
     delete editor_worker->thread;
     delete editor_worker;
     editor->impl->editor_worker = nullptr;
-#endif
 }
 
 
