@@ -167,6 +167,7 @@ CPMAddPackage(
     GIT_SHALLOW TRUE
     VERSION 1.92.0
     DOWNLOAD_ONLY YES
+    PATCH_COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_LIST_DIR}/patch_imgui.cmake
 )
 
 CPMAddPackage(

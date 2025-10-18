@@ -502,7 +502,7 @@ int main(int argc, char* argv[])
     config.streaming = PNANOVDB_FALSE;
     config.ip_address = "127.0.0.1";
     config.port = 8080;
-    // config.ui_profile_name = "viewer";
+    config.ui_profile_name = "viewer";
     editor.show(&editor, device, &config);
 
     // if (editor.camera)

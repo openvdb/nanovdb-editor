@@ -108,6 +108,10 @@ static void gpu_array_alloc_device(const pnanovdb_compute_t* compute,
         buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
         buf_desc.structure_stride = 4u;
         buf_desc.size_in_bytes = arr->element_count * arr->element_size;
+        if (buf_desc.size_in_bytes < 65536u)
+        {
+            buf_desc.size_in_bytes = 65536u;
+        }
         ptr->device_buffer = compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
     }
 }
@@ -127,6 +131,10 @@ static void gpu_array_upload(const pnanovdb_compute_t* compute,
         buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
         buf_desc.structure_stride = 0u;
         buf_desc.size_in_bytes = arr->element_count * arr->element_size;
+        if (buf_desc.size_in_bytes < 65536u)
+        {
+            buf_desc.size_in_bytes = 65536u;
+        }
         ptr->upload_buffer = compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &buf_desc);
     }
     gpu_array_alloc_device(compute, queue, ptr, arr);
@@ -180,6 +188,10 @@ static void gpu_array_readback(const pnanovdb_compute_t* compute,
         buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
         buf_desc.structure_stride = 0u;
         buf_desc.size_in_bytes = arr->element_count * arr->element_size;
+        if (buf_desc.size_in_bytes < 65536u)
+        {
+            buf_desc.size_in_bytes = 65536u;
+        }
         ptr->readback_buffer =
             compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_READBACK, &buf_desc);
     }

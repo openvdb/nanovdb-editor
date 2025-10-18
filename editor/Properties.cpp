@@ -211,6 +211,7 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
             }
             ptr->render_settings->camera_state = *state;
             ptr->render_settings->camera_state.eye_up = up;
+            ptr->render_settings->camera_config.is_orthographic = camera->configs[cameraIdx].is_orthographic;
             ptr->render_settings->sync_camera = PNANOVDB_TRUE;
         }
     }
@@ -381,9 +382,6 @@ void Properties::render(imgui_instance_user::Instance* ptr)
                     settings->is_y_up = (up_axis == 0);
                 }
             }
-
-            IMGUI_CHECKBOX_SYNC("VSync", settings->vsync);
-            IMGUI_CHECKBOX_SYNC("Projection RH", settings->is_projection_rh);
             if (ImGui::BeginCombo("Resolution", "Select..."))
             {
                 const char* labels[4] = { "1440x720", "1920x1080", "2560x1440", "3840x2160" };

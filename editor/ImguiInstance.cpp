@@ -63,27 +63,10 @@ PNANOVDB_INLINE float timestamp_diff(pnanovdb_uint64_t begin, pnanovdb_uint64_t 
     return (float)(((double)(end - begin) / (double)(freq)));
 }
 
+thread_local ImGuiContext* ImGuiTLS = nullptr;
 
 namespace imgui_instance_user
 {
-static void save_ini_settings(Instance* ptr)
-{
-    if (!ptr || ptr->is_viewer())
-    {
-        return;
-    }
-
-    ImGuiIO& io = ImGui::GetIO();
-    if (io.IniFilename && *io.IniFilename)
-    {
-        ptr->ini_window_width = (int)io.DisplaySize.x;
-        ptr->ini_window_height = (int)io.DisplaySize.y;
-
-        copyPersistentFields(ptr->saved_render_settings[ptr->render_settings_name], *ptr->render_settings);
-        ImGui::SaveIniSettingsToDisk(io.IniFilename);
-    }
-}
-
 pnanovdb_imgui_instance_t* create(void* userdata,
                                   void* user_settings,
                                   const pnanovdb_reflect_data_type_t* user_settings_data_type)
@@ -122,7 +105,7 @@ void destroy(pnanovdb_imgui_instance_t* instance)
 
     if (ImGui::GetCurrentContext())
     {
-        save_ini_settings(ptr);
+        pnanovdb_editor::saveIniSettings(ptr);
     }
 
     ImGui::DestroyContext();
@@ -168,9 +151,9 @@ static void initializeDocking(Instance* ptr)
         float window_height = ImGui::GetIO().DisplaySize.y;
 
 #ifdef INIT_VIEWER_DOCKING
-        float left_dock_width = window_width * 0.25f;
+        float left_dock_width = window_width * 0.20f;
         float right_dock_width = window_width * 0.20f;
-        float far_right_dock_width = window_width * 0.30f;
+        float far_right_dock_width = window_width * 0.25f;
         float bottom_dock_height = window_height * 0.2f;
 
         // clear existing layout
@@ -181,6 +164,9 @@ static void initializeDocking(Instance* ptr)
         ImGuiID dock_id_right_far =
             ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.f, nullptr, &dockspace_id);
         ImGui::DockBuilderSetNodeSize(dock_id_right_far, ImVec2(far_right_dock_width, window_height));
+        ImGui::DockBuilderDockWindow(RENDER_SETTINGS, dock_id_right_far);
+        ImGui::DockBuilderDockWindow(VIEWPORT_SETTINGS, dock_id_right_far);
+        ImGui::DockBuilderDockWindow(COMPILER_SETTINGS, dock_id_right_far);
         ImGui::DockBuilderDockWindow(CODE_EDITOR, dock_id_right_far);
         ImGui::DockBuilderDockWindow(PROFILER, dock_id_right_far);
         ImGui::DockBuilderDockWindow(FILE_HEADER, dock_id_right_far);
@@ -202,9 +188,6 @@ static void initializeDocking(Instance* ptr)
 
         ImGuiID dock_id_left_top = dock_id_left;
         ImGui::DockBuilderDockWindow(SCENE, dock_id_left_top);
-        ImGui::DockBuilderDockWindow(VIEWPORT_SETTINGS, dock_id_left_top);
-        ImGui::DockBuilderDockWindow(RENDER_SETTINGS, dock_id_left_top);
-        ImGui::DockBuilderDockWindow(COMPILER_SETTINGS, dock_id_left_top);
 
         ImGuiID dock_id_left_bottom =
             ImGui::DockBuilderSplitNode(dock_id_left_top, ImGuiDir_Down, 0.f, nullptr, &dock_id_left_top);
@@ -265,77 +248,11 @@ static void initializeDocking(Instance* ptr)
     }
 }
 
-static void createMenu(Instance* ptr)
-{
-    bool isViewerProfile = ptr->is_viewer();
-
-    if (ImGui::BeginMainMenuBar())
-    {
-        if (!isViewerProfile && ImGui::BeginMenu("File"))
-        {
-            ImGui::MenuItem("Open...", "", &ptr->pending.open_file);
-            ImGui::MenuItem("Save...", "", &ptr->pending.save_file);
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("Window"))
-        {
-            ImGui::MenuItem(CODE_EDITOR, "", &ptr->window.show_code_editor);
-            ImGui::MenuItem(PROFILER, "", &ptr->window.show_profiler);
-            ImGui::MenuItem(FILE_HEADER, "", &ptr->window.show_file_header);
-            ImGui::MenuItem(CONSOLE, "", &ptr->window.show_console);
-            ImGui::MenuItem(SHADER_PARAMS, "", &ptr->window.show_shader_params);
-            ImGui::MenuItem(SCENE, "", &ptr->window.show_scene);
-            ImGui::MenuItem(PROPERTIES, "", &ptr->window.show_scene_properties);
-            if (!isViewerProfile)
-            {
-                ImGui::MenuItem(BENCHMARK, "", &ptr->window.show_benchmark);
-            }
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("Settings"))
-        {
-            if (!isViewerProfile)
-            {
-                ImGui::MenuItem(VIEWPORT_SETTINGS, "", &ptr->window.show_viewport_settings);
-            }
-            ImGui::MenuItem(RENDER_SETTINGS, "", &ptr->window.show_render_settings);
-            ImGui::MenuItem(COMPILER_SETTINGS, "", &ptr->window.show_compiler_settings);
-
-            if (!isViewerProfile)
-            {
-                ImGui::Separator();
-                if (ImGui::MenuItem("Save INI"))
-                {
-                    save_ini_settings(ptr);
-                }
-                if (ImGui::MenuItem("Load INI"))
-                {
-                    ImGuiIO& io = ImGui::GetIO();
-                    if (io.IniFilename && *io.IniFilename)
-                    {
-                        ImGui::LoadIniSettingsFromDisk(io.IniFilename);
-                        copyPersistentFields(
-                            *ptr->render_settings, ptr->saved_render_settings[ptr->render_settings_name]);
-                        ptr->render_settings->sync_camera = PNANOVDB_TRUE;
-                    }
-                }
-            }
-
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("Help"))
-        {
-            ImGui::MenuItem("About", "", &ptr->window.show_about);
-            ImGui::EndMenu();
-        }
-        ImGui::EndMainMenuBar();
-    }
-}
-
 static void showWindows(Instance* ptr, float delta_time)
 {
     using namespace pnanovdb_editor;
 
+    createMenu(ptr);
     showSceneWindow(ptr);
     showViewportSettingsWindow(ptr);
     showRenderSettingsWindow(ptr);
@@ -470,8 +387,6 @@ void update(pnanovdb_imgui_instance_t* instance)
     initializeDocking(ptr);
 
     pnanovdb_editor::CameraFrustum::getInstance().render(ptr);
-
-    createMenu(ptr);
 
     // bool show_demo_window = true;
     // ImGui::ShowDemoWindow(&show_demo_window);

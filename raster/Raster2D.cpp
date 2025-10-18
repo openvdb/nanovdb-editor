@@ -383,10 +383,8 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
         compute_interface->register_buffer_as_transient(context, data->quaternions_gpu_array->device_buffer);
     scales_transient = compute_interface->register_buffer_as_transient(context, data->scales_gpu_array->device_buffer);
     colors_transient = compute_interface->register_buffer_as_transient(context, data->colors_gpu_array->device_buffer);
-    sh_0_transient =
-        compute_interface->register_buffer_as_transient(context, data->sh_0_gpu_array->device_buffer);
-    sh_n_transient =
-        compute_interface->register_buffer_as_transient(context, data->sh_n_gpu_array->device_buffer);
+    sh_0_transient = compute_interface->register_buffer_as_transient(context, data->sh_0_gpu_array->device_buffer);
+    sh_n_transient = compute_interface->register_buffer_as_transient(context, data->sh_n_gpu_array->device_buffer);
     opacities_transient =
         compute_interface->register_buffer_as_transient(context, data->opacities_gpu_array->device_buffer);
 

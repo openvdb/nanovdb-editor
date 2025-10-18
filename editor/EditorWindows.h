@@ -20,6 +20,8 @@ namespace pnanovdb_editor
 using namespace imgui_instance_user;
 
 // Window rendering functions
+void saveIniSettings(Instance* ptr);
+void createMenu(Instance* ptr);
 void showSceneWindow(Instance* ptr);
 void showCameraViews(Instance* ptr);
 void showPropertiesWindow(Instance* ptr);
