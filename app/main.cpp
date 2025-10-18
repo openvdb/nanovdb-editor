@@ -150,7 +150,7 @@ int main(int argc, char* argv[])
 
             pnanovdb_editor_config_t config = {};
             config.ip_address = args.ip_address.c_str();
-            config.port = args.port;
+            config.port = args.port + inst_idx;
             config.headless = args.headless ? PNANOVDB_TRUE : PNANOVDB_FALSE;
             config.streaming = args.streaming ? PNANOVDB_TRUE : PNANOVDB_FALSE;
             config.stream_to_file = args.stream_to_file ? PNANOVDB_TRUE : PNANOVDB_FALSE;
