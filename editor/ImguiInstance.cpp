@@ -82,7 +82,7 @@ pnanovdb_imgui_instance_t* create(void* userdata,
     *((Instance**)userdata) = ptr;
 
     IMGUI_CHECKVERSION();
-    ImGuiTLS = ImGui::CreateContext();
+    ImGui::CreateContext();
 
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
