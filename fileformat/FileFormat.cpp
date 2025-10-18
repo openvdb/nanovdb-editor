@@ -158,7 +158,7 @@ static pnanovdb_bool_t load_npz_file(const char* filename,
                 size_t sh_count = total_size / (vector_stride * vector_width);
                 for (size_t sh_idx = 0u; sh_idx < sh_count; sh_idx++)
                 {
-                    memcpy(out_arrays[i]->data + sh_idx * vector_width * npz_array.word_size,
+                    memcpy(static_cast<char*>(out_arrays[i]->data) + sh_idx * vector_width * npz_array.word_size,
                         npz_array.data<char>() + sh_idx * vector_stride * vector_width * npz_array.word_size,
                         vector_width * npz_array.word_size);
                 }
@@ -172,7 +172,7 @@ static pnanovdb_bool_t load_npz_file(const char* filename,
                 size_t sh_count = total_size / (vector_stride * vector_width);
                 for (size_t sh_idx = 0u; sh_idx < sh_count; sh_idx++)
                 {
-                    memcpy(out_arrays[i]->data + sh_idx * (vector_stride - 1u) * vector_width * npz_array.word_size,
+                    memcpy(static_cast<char*>(out_arrays[i]->data) + sh_idx * (vector_stride - 1u) * vector_width * npz_array.word_size,
                         npz_array.data<char>() + sh_idx * vector_stride * vector_width * npz_array.word_size + vector_width * npz_array.word_size,
                         (vector_stride - 1u) * vector_width * npz_array.word_size);
                 }
