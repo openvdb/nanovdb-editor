@@ -26,6 +26,7 @@
 
 #include "misc/cpp/imgui_stdlib.h" // for std::string text input
 
+#include <imgui/ImguiTLS.h>
 #include <ImGuiFileDialog.h>
 
 #include <cmath>

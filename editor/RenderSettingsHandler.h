@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include <imgui/ImguiTLS.h>
+
 #include "ImguiInstance.h"
 #include "RenderSettingsConfig.h"
 

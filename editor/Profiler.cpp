@@ -11,6 +11,7 @@
 
 #include "Profiler.h"
 
+#include <imgui/ImguiTLS.h>
 #include <imgui.h>
 
 namespace pnanovdb_editor

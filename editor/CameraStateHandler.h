@@ -15,6 +15,7 @@
 
 #include "nanovdb_editor/putil/Camera.h"
 
+#include <imgui/ImguiTLS.h>
 #include <imgui_internal.h>
 
 #include <string>
