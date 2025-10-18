@@ -84,7 +84,7 @@ struct server_instance_t
 
 PNANOVDB_CAST_PAIR(pnanovdb_server_instance_t, server_instance_t)
 
-static const uint32_t max_instances = 4;
+static const uint32_t max_instances = 16;
 std::atomic<uint32_t> g_instance_counter = 0u;
 
 ws_registry_t g_ws_registry[max_instances];
@@ -323,13 +323,9 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
 typedef std::unique_ptr<router_t> (*server_handler_t)(restinio::asio_ns::io_context& ioctx);
 server_handler_t server_handlers[max_instances] = {
     server_handler<0>, server_handler<1>, server_handler<2>, server_handler<3>,
-    //server_handler<4>, server_handler<5>, server_handler<6>, server_handler<7>,
-    //server_handler<8>, server_handler<9>, server_handler<10>, server_handler<11>,
-    //server_handler<12>, server_handler<13>, server_handler<14>, server_handler<15>,
-    //server_handler<16>, server_handler<17>, server_handler<18>, server_handler<19>,
-    //server_handler<20>, server_handler<21>, server_handler<22>, server_handler<23>,
-    //server_handler<24>, server_handler<25>, server_handler<26>, server_handler<27>,
-    //server_handler<28>, server_handler<29>, server_handler<30>, server_handler<31>
+    server_handler<4>, server_handler<5>, server_handler<6>, server_handler<7>,
+    server_handler<8>, server_handler<9>, server_handler<10>, server_handler<11>,
+    server_handler<12>, server_handler<13>, server_handler<14>, server_handler<15>,
 };
 
 pnanovdb_server_instance_t* create_instance(const char* serveraddress,
