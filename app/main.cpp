@@ -157,6 +157,14 @@ int main(int argc, char* argv[])
             inst.editor.start(&inst.editor, inst.device, &config);
         }
 
+        for (size_t inst_idx = 0u; inst_idx < instances.size(); inst_idx++)
+        {
+            auto& inst = instances[inst_idx];
+
+            pnanovdb_int32_t resolved_port = inst.editor.get_resolved_port(&inst.editor, PNANOVDB_TRUE);
+            printf("Server instance(%zu) resolved_port(%d)\n", inst_idx, resolved_port);
+        }
+
         std::this_thread::sleep_for(std::chrono::seconds(3600));
 
         printf("Timed out. Cleaning up\n");
