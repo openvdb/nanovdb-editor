@@ -39,6 +39,12 @@ function(ConfigureTest CMAKE_TEST_NAME)
   # Enable test-only hooks in the editor code when building tests
   target_compile_definitions(${CMAKE_TEST_NAME} PRIVATE NANOVDB_EDITOR_ENABLE_TEST_HOOKS)
 
+  # Force AddressSanitizer for tests to catch UAF deterministically (GNU/Clang)
+  if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(${CMAKE_TEST_NAME} PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+    target_link_options(${CMAKE_TEST_NAME} PRIVATE -fsanitize=address)
+  endif()
+
   if(UNIX AND NOT APPLE)
     target_link_libraries(${CMAKE_TEST_NAME} PRIVATE dl)
   endif()
