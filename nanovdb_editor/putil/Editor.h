@@ -30,6 +30,9 @@ typedef struct pnanovdb_editor_config_t
     const char* ui_profile_name;
 } pnanovdb_editor_config_t;
 
+#define PNANOVDB_EDITOR_RESOLVED_PORT_UNRESOLVED -1
+#define PNANOVDB_EDITOR_RESOLVED_PORT_PENDING -2
+
 struct pnanovdb_editor_impl_t;
 typedef struct pnanovdb_editor_impl_t pnanovdb_editor_impl_t;
 typedef struct pnanovdb_editor_t
@@ -63,6 +66,7 @@ typedef struct pnanovdb_editor_t
                                           void* params,
                                           const pnanovdb_reflect_data_type_t* data_type);
     void(PNANOVDB_ABI* sync_shader_params)(pnanovdb_editor_t* editor, void* shader_params, pnanovdb_bool_t set_data);
+    pnanovdb_int32_t(PNANOVDB_ABI* get_resolved_port)(pnanovdb_editor_t* editor, pnanovdb_bool_t should_wait);
 } pnanovdb_editor_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_editor_t
@@ -82,6 +86,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(update_camera, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_camera_view, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_shader_params, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(sync_shader_params, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(get_resolved_port, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE
