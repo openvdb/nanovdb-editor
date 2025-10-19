@@ -62,7 +62,7 @@ class pnanovdb_Compute(Structure):
         ("load_nanovdb", CFUNCTYPE(POINTER(pnanovdb_ComputeArray), c_char_p)),
         ("save_nanovdb", CFUNCTYPE(pnanovdb_bool_t, POINTER(pnanovdb_ComputeArray), c_char_p)),
         ("create_shader_context", CFUNCTYPE(c_void_p, c_char_p)),
-        ("destroy_shader_context", CFUNCTYPE(None, c_void_p)),
+        ("destroy_shader_context", CFUNCTYPE(None, c_void_p, c_void_p, c_void_p)),
         (
             "init_shader",
             CFUNCTYPE(

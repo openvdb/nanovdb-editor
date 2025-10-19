@@ -228,32 +228,27 @@ void shutdown(pnanovdb_editor_t* editor)
     }
 }
 
-void add_nanovdb(pnanovdb_editor_t* editor, pnanovdb_compute_array_t* nanovdb_array /*, void* shader_params*/)
+void add_nanovdb(pnanovdb_editor_t* editor, pnanovdb_compute_array_t* nanovdb_array)
 {
     if (!nanovdb_array)
     {
         return;
     }
 
-    // TODO: add shader params to argument (can be nullptr)
-    void* shader_params = nullptr;
-
     if (editor->impl->editor_worker)
     {
         EditorWorker* worker = static_cast<EditorWorker*>(editor->impl->editor_worker);
         worker->pending_nanovdb.set_pending(nanovdb_array);
-        worker->pending_shader_params.set_pending(shader_params);
     }
     else
     {
         editor->impl->nanovdb_array = nanovdb_array;
-        editor->impl->shader_params = shader_params;
     }
 
     EditorView* views = static_cast<EditorView*>(editor->impl->views);
     if (views)
     {
-        views->add_nanovdb_view(nanovdb_array, shader_params);
+        views->add_nanovdb_view(nanovdb_array, editor->impl->shader_params);
     }
 }
 
@@ -592,7 +587,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             auto* worker = static_cast<EditorWorker*>(editor->impl->editor_worker);
 
             pnanovdb_compute_array_t* old_nanovdb_array = nullptr;
-            worker->pending_nanovdb.process_pending(editor->impl->nanovdb_array, old_nanovdb_array);
+            updated = worker->pending_nanovdb.process_pending(editor->impl->nanovdb_array, old_nanovdb_array);
             pnanovdb_compute_array_t* old_array = nullptr;
             worker->pending_data_array.process_pending(editor->impl->data_array, old_array);
             pnanovdb_raster_context_t* old_raster_ctx = nullptr;
@@ -682,7 +677,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         }
 
         // update scene
-        editor_scene.handle_pending_view_changes();
         editor_scene.sync_selected_view_with_current();
 
         if (imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::Raster2D)

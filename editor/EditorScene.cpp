@@ -84,7 +84,7 @@ EditorScene::EditorScene(const EditorSceneConfig& config)
     m_imgui_instance->default_camera_view.is_visible = PNANOVDB_FALSE;
 
     // Add default viewport camera
-    add_camera_view(imgui_instance_user::VIEWPORT_CAMERA, &m_imgui_instance->default_camera_view);
+    m_views->add_camera(imgui_instance_user::VIEWPORT_CAMERA, &m_imgui_instance->default_camera_view);
 
     // Setup shader monitoring
     ShaderCallback callback =
@@ -115,25 +115,28 @@ EditorScene::~EditorScene()
     m_scene_data.gaussian_views.clear();
 }
 
+template <typename MapType, typename ContextType>
+UnifiedViewContext make_view_context(const std::string& name, const MapType& map, ViewType type)
+{
+    auto it = map.find(name);
+    if (it != map.end())
+        return UnifiedViewContext(name, const_cast<ContextType*>(&it->second));
+    return UnifiedViewContext();
+}
+
 UnifiedViewContext EditorScene::get_view_context(const std::string& view_name, ViewType view_type) const
 {
-    if (view_type == ViewType::GaussianScenes)
+    switch (view_type)
     {
-        auto it = m_views->get_gaussians().find(view_name);
-        if (it != m_views->get_gaussians().end())
-        {
-            return UnifiedViewContext(view_name, const_cast<GaussianDataContext*>(&it->second));
-        }
+    case ViewType::GaussianScenes:
+        return make_view_context<std::map<std::string, GaussianDataContext>, GaussianDataContext>(
+            view_name, m_views->get_gaussians(), ViewType::GaussianScenes);
+    case ViewType::NanoVDBs:
+        return make_view_context<std::map<std::string, NanoVDBContext>, NanoVDBContext>(
+            view_name, m_views->get_nanovdbs(), ViewType::NanoVDBs);
+    default:
+        return UnifiedViewContext();
     }
-    else if (view_type == ViewType::NanoVDBs)
-    {
-        auto it = m_views->get_nanovdbs().find(view_name);
-        if (it != m_views->get_nanovdbs().end())
-        {
-            return UnifiedViewContext(view_name, const_cast<NanoVDBContext*>(&it->second));
-        }
-    }
-    return UnifiedViewContext();
 }
 
 UnifiedViewContext EditorScene::get_current_view_context() const
@@ -162,60 +165,7 @@ void EditorScene::save_current_view_state()
         return;
     }
 
-    // Save shader params from UI back to the view
-    if (view_ctx.get_view_type() == ViewType::GaussianScenes)
-    {
-        auto* gaussian_ctx = view_ctx.get_gaussian_context();
-        if (m_imgui_instance->viewport_option == imgui_instance_user::ViewportOption::Raster2D && gaussian_ctx &&
-            gaussian_ctx->shader_params)
-        {
-            copy_shader_params_from_ui_to_view(&m_raster2d_params, (void*)&gaussian_ctx->shader_params);
-        }
-    }
-    else if (view_ctx.get_view_type() == ViewType::NanoVDBs)
-    {
-        auto* nanovdb_ctx = view_ctx.get_nanovdb_context();
-        if (m_imgui_instance->viewport_option == imgui_instance_user::ViewportOption::NanoVDB && nanovdb_ctx &&
-            nanovdb_ctx->shader_params)
-        {
-            copy_shader_params_from_ui_to_view(&m_nanovdb_params, nanovdb_ctx->shader_params);
-        }
-    }
-}
-
-void EditorScene::load_view_into_editor_and_ui(const UnifiedViewContext& view_ctx)
-{
-    if (!view_ctx.is_valid())
-    {
-        return;
-    }
-
-    clear_editor_view_state();
-
-    if (view_ctx.get_view_type() == ViewType::GaussianScenes)
-    {
-        auto* gaussian_ctx = view_ctx.get_gaussian_context();
-        if (gaussian_ctx)
-        {
-            m_editor->impl->gaussian_data = gaussian_ctx->gaussian_data;
-            m_editor->impl->raster_ctx = gaussian_ctx->raster_ctx;
-            m_editor->impl->shader_params = gaussian_ctx->shader_params;
-            m_editor->impl->shader_params_data_type = m_raster_shader_params_data_type;
-
-            copy_editor_shader_params_to_ui(&m_raster2d_params);
-        }
-    }
-    else if (view_ctx.get_view_type() == ViewType::NanoVDBs)
-    {
-        auto* nanovdb_ctx = view_ctx.get_nanovdb_context();
-        if (nanovdb_ctx)
-        {
-            m_editor->impl->nanovdb_array = nanovdb_ctx->nanovdb_array;
-            m_editor->impl->shader_params = nanovdb_ctx->shader_params;
-
-            copy_editor_shader_params_to_ui(&m_nanovdb_params);
-        }
-    }
+    copy_shader_params_for_view(view_ctx, &m_raster2d_params, true);
 }
 
 void EditorScene::clear_editor_view_state()
@@ -224,94 +174,6 @@ void EditorScene::clear_editor_view_state()
     m_editor->impl->nanovdb_array = nullptr;
     m_editor->impl->gaussian_data = nullptr;
     m_editor->impl->raster_ctx = nullptr;
-}
-
-void EditorScene::sync_selected_view_with_current()
-{
-    const std::string& view_current = m_views->get_current_view();
-    if (view_current.empty() || m_view_selection.name == view_current)
-    {
-        return;
-    }
-
-    // View changed - save current view state before switching
-    save_current_view_state();
-
-    // Determine the type of the new view
-    ViewType new_view_type = ViewType::None;
-    if (m_views->get_nanovdbs().find(view_current) != m_views->get_nanovdbs().end())
-    {
-        new_view_type = ViewType::NanoVDBs;
-    }
-    else if (m_views->get_gaussians().find(view_current) != m_views->get_gaussians().end())
-    {
-        new_view_type = ViewType::GaussianScenes;
-    }
-
-    if (new_view_type == ViewType::None)
-    {
-        clear_selection();
-        clear_editor_view_state();
-        return;
-    }
-
-    // Update selection
-    set_selection(new_view_type, view_current);
-
-    // Get the view context from EditorView
-    auto view_ctx = get_view_context(view_current, new_view_type);
-    if (!view_ctx.is_valid())
-    {
-        return;
-    }
-
-    // Load the view into editor and UI (this updates editor->impl and UI params)
-    load_view_into_editor_and_ui(view_ctx);
-
-    // Update viewport shader if switching view types
-    if (new_view_type == ViewType::NanoVDBs)
-    {
-        m_imgui_instance->viewport_option = imgui_instance_user::ViewportOption::NanoVDB;
-    }
-    else if (new_view_type == ViewType::GaussianScenes)
-    {
-        m_imgui_instance->viewport_option = imgui_instance_user::ViewportOption::Raster2D;
-    }
-}
-
-void EditorScene::handle_pending_view_changes()
-{
-    // Handle UI-triggered view changes (from scene tree)
-    // These set the current view in EditorView, which sync_selected_view_with_current will detect
-
-    if (!m_imgui_instance->pending.viewport_gaussian_view.empty() &&
-        m_imgui_instance->pending.viewport_gaussian_view != m_view_selection.name)
-    {
-        std::string pending_view_name = m_imgui_instance->pending.viewport_gaussian_view;
-        m_imgui_instance->pending.viewport_gaussian_view.clear();
-
-        // Set as current view - sync_selected_view_with_current will handle the rest
-        m_views->set_current_view(pending_view_name);
-    }
-    else if (!m_imgui_instance->pending.viewport_nanovdb_array.empty() &&
-             m_imgui_instance->pending.viewport_nanovdb_array != m_view_selection.name)
-    {
-        std::string pending_view_name = m_imgui_instance->pending.viewport_nanovdb_array;
-        m_imgui_instance->pending.viewport_nanovdb_array.clear();
-
-        // Set as current view - sync_selected_view_with_current will handle the rest
-        m_views->set_current_view(pending_view_name);
-    }
-}
-
-void EditorScene::update_viewport_shader(const char* new_shader)
-{
-    if (m_imgui_instance->shader_name != new_shader)
-    {
-        m_imgui_instance->shader_name = new_shader;
-        m_imgui_instance->pending.viewport_shader_name = new_shader;
-        m_imgui_instance->pending.update_shader = true;
-    }
 }
 
 void EditorScene::copy_editor_shader_params_to_ui(ShaderParams* params)
@@ -337,11 +199,165 @@ void EditorScene::copy_shader_params_from_ui_to_view(ShaderParams* params, void*
     std::memcpy(view_params, params->current_array->data, params->size);
 }
 
-void EditorScene::copy_shader_params_to_editor(ShaderParams* params)
+void EditorScene::copy_shader_params_from_ui_to_editor(ShaderParams* params)
 {
     if (params && params->current_array)
     {
         std::memcpy(m_editor->impl->shader_params, params->current_array->data, params->size);
+    }
+}
+
+void EditorScene::copy_shader_params_for_view(const UnifiedViewContext& view_ctx, ShaderParams* params, bool to_ui)
+{
+    if (!view_ctx.is_valid())
+    {
+        return;
+    }
+
+    void* target = nullptr;
+    if (view_ctx.get_view_type() == ViewType::GaussianScenes)
+    {
+        auto* gaussian_ctx = view_ctx.get_gaussian_context();
+        if (gaussian_ctx && gaussian_ctx->shader_params)
+        {
+            target = gaussian_ctx->shader_params;
+        }
+    }
+    else if (view_ctx.get_view_type() == ViewType::NanoVDBs)
+    {
+        auto* nanovdb_ctx = view_ctx.get_nanovdb_context();
+        if (nanovdb_ctx && nanovdb_ctx->shader_params)
+        {
+            target = nanovdb_ctx->shader_params;
+        }
+    }
+    if (target)
+    {
+        if (to_ui)
+        {
+            copy_editor_shader_params_to_ui(params);
+        }
+        else
+        {
+            copy_shader_params_from_ui_to_view(params, target);
+        }
+    }
+}
+
+void EditorScene::load_view_into_editor_and_ui(const UnifiedViewContext& view_ctx)
+{
+    if (!view_ctx.is_valid())
+    {
+        return;
+    }
+
+    clear_editor_view_state();
+
+    // Load selected view's pointers into the editor state so rendering uses the active selection
+    if (view_ctx.get_view_type() == ViewType::GaussianScenes)
+    {
+        auto* gaussian_ctx = view_ctx.get_gaussian_context();
+        if (gaussian_ctx)
+        {
+            m_editor->impl->gaussian_data = gaussian_ctx->gaussian_data;
+            m_editor->impl->raster_ctx = gaussian_ctx->raster_ctx;
+            m_editor->impl->shader_params = gaussian_ctx->shader_params;
+            m_editor->impl->shader_params_data_type = m_raster_shader_params_data_type;
+        }
+    }
+    else if (view_ctx.get_view_type() == ViewType::NanoVDBs)
+    {
+        auto* nanovdb_ctx = view_ctx.get_nanovdb_context();
+        if (nanovdb_ctx)
+        {
+            m_editor->impl->nanovdb_array = nanovdb_ctx->nanovdb_array;
+            m_editor->impl->shader_params = nanovdb_ctx->shader_params;
+            m_editor->impl->shader_params_data_type = nullptr;
+        }
+    }
+
+    copy_shader_params_for_view(view_ctx, &m_raster2d_params, true);
+}
+
+void EditorScene::handle_pending_view_changes()
+{
+    // Handle UI-triggered view changes (from scene tree)
+    std::string pending_view_name;
+
+    if (!m_imgui_instance->pending.viewport_gaussian_view.empty() &&
+        m_imgui_instance->pending.viewport_gaussian_view != m_view_selection.name)
+    {
+        pending_view_name = m_imgui_instance->pending.viewport_gaussian_view;
+        m_imgui_instance->pending.viewport_gaussian_view.clear();
+    }
+    else if (!m_imgui_instance->pending.viewport_nanovdb_array.empty() &&
+             m_imgui_instance->pending.viewport_nanovdb_array != m_view_selection.name)
+    {
+        pending_view_name = m_imgui_instance->pending.viewport_nanovdb_array;
+        m_imgui_instance->pending.viewport_nanovdb_array.clear();
+    }
+
+    if (!pending_view_name.empty())
+    {
+        m_views->set_current_view(pending_view_name);
+    }
+}
+
+void EditorScene::sync_selected_view_with_current()
+{
+    handle_pending_view_changes();
+
+    const std::string& view_current = m_views->get_current_view();
+    if (view_current.empty() || m_view_selection.name == view_current)
+    {
+        return;
+    }
+
+    save_current_view_state();
+
+    ViewType new_view_type = ViewType::None;
+    if (is_selection_valid(SceneSelection{ ViewType::NanoVDBs, view_current }))
+    {
+        new_view_type = ViewType::NanoVDBs;
+    }
+    else if (is_selection_valid(SceneSelection{ ViewType::GaussianScenes, view_current }))
+    {
+        new_view_type = ViewType::GaussianScenes;
+    }
+    if (new_view_type == ViewType::None)
+    {
+        clear_selection();
+        clear_editor_view_state();
+        return;
+    }
+
+    update_selection(new_view_type, view_current);
+
+    auto view_ctx = get_view_context(view_current, new_view_type);
+    if (!view_ctx.is_valid())
+    {
+        return;
+    }
+
+    load_view_into_editor_and_ui(view_ctx);
+
+    if (new_view_type == ViewType::NanoVDBs)
+    {
+        m_imgui_instance->viewport_option = imgui_instance_user::ViewportOption::NanoVDB;
+    }
+    else if (new_view_type == ViewType::GaussianScenes)
+    {
+        m_imgui_instance->viewport_option = imgui_instance_user::ViewportOption::Raster2D;
+    }
+}
+
+void EditorScene::update_viewport_shader(const char* new_shader)
+{
+    if (m_imgui_instance->shader_name != new_shader)
+    {
+        m_imgui_instance->shader_name = new_shader;
+        m_imgui_instance->pending.viewport_shader_name = new_shader;
+        m_imgui_instance->pending.update_shader = true;
     }
 }
 
@@ -514,11 +530,6 @@ EditorScene::ViewMapVariant EditorScene::get_views(ViewType type) const
     return std::monostate{};
 }
 
-void EditorScene::add_camera_view(const std::string& name, pnanovdb_camera_view_t* camera)
-{
-    m_views->add_camera(name, camera);
-}
-
 bool EditorScene::is_selection_valid(const SceneSelection& selection) const
 {
     if (!selection.is_valid())
@@ -547,13 +558,33 @@ bool EditorScene::is_selection_valid(const SceneSelection& selection) const
 // Scene Selection Management
 // ============================================================================
 
-void EditorScene::set_selection(ViewType type, const std::string& name)
+void EditorScene::update_selection(ViewType type, const std::string& name)
 {
-    // Update our selection with type info
-    m_view_selection = SceneSelection(type, name);
-
-    // Keep EditorView in sync (it's the source of truth for the view name)
-    m_views->set_current_view(name);
+    bool valid = false;
+    switch (type)
+    {
+    case ViewType::GaussianScenes:
+        valid = m_views->get_gaussians().count(name) > 0;
+        break;
+    case ViewType::NanoVDBs:
+        valid = m_views->get_nanovdbs().count(name) > 0;
+        break;
+    case ViewType::Cameras:
+        valid = m_views->get_cameras().count(name) > 0;
+        break;
+    default:
+        valid = false;
+    }
+    if (valid)
+    {
+        m_view_selection.type = type;
+        m_view_selection.name = name;
+    }
+    else
+    {
+        m_view_selection.type = ViewType::None;
+        m_view_selection.name.clear();
+    }
 }
 
 SceneSelection EditorScene::get_selection() const

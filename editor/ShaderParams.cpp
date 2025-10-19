@@ -355,6 +355,8 @@ void ShaderParams::set_compute_array_for_shader(const std::string& shader_name, 
     pending_arrays_.erase(shader_name);
 
     char* shader_param_ptr = reinterpret_cast<char*>(array->data);
+    const size_t capacity = static_cast<size_t>(array->element_size * array->element_count);
+    size_t remaining = capacity;
     size_t total_size = 0;
 
     for (auto& shader_param : shader_params)
@@ -366,15 +368,26 @@ void ShaderParams::set_compute_array_for_shader(const std::string& shader_name, 
         if (!pool_array.empty())
         {
             size_t shader_param_size = shader_param.num_elements * shader_param.size;
-            std::memcpy(pool_array.data(), shader_param_ptr, shader_param_size);
-            shader_param_ptr += shader_param_size;
-            total_size += shader_param_size;
+            if (remaining == 0)
+            {
+                break;
+            }
+            size_t to_copy = shader_param_size <= remaining ? shader_param_size : remaining;
+            std::memcpy(pool_array.data(), shader_param_ptr, to_copy);
+            shader_param_ptr += to_copy;
+            total_size += to_copy;
+            remaining -= to_copy;
+            if (to_copy < shader_param_size)
+            {
+                // Source blob shorter than declared params; stop to avoid OOB
+                break;
+            }
         }
     }
 
-    if (total_size > PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE)
+    if (total_size > PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE || total_size > capacity)
     {
-        printf("Error: Shader params size %zu exceeds max constant buffer size %u\n", total_size,
+        printf("Error: Shader params size %zu exceeds buffer capacity (cap=%zu, maxCB=%u)\n", total_size, capacity,
                PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
     }
 }
@@ -927,6 +940,8 @@ void ShaderParams::processPendingArrays(const std::string& shader_name)
         std::vector<ShaderParam>& shader_params = *get(shader_name);
 
         char* shader_param_ptr = reinterpret_cast<char*>(array->data);
+        const size_t capacity = static_cast<size_t>(array->element_size * array->element_count);
+        size_t remaining = capacity;
         size_t total_size = 0;
 
         for (auto& shader_param : shader_params)
@@ -938,9 +953,20 @@ void ShaderParams::processPendingArrays(const std::string& shader_name)
             if (!pool_array.empty())
             {
                 size_t shader_param_size = shader_param.num_elements * shader_param.size;
-                std::memcpy(pool_array.data(), shader_param_ptr, shader_param_size);
-                shader_param_ptr += shader_param_size;
-                total_size += shader_param_size;
+                if (remaining == 0)
+                {
+                    break;
+                }
+                size_t to_copy = shader_param_size <= remaining ? shader_param_size : remaining;
+                std::memcpy(pool_array.data(), shader_param_ptr, to_copy);
+                shader_param_ptr += to_copy;
+                total_size += to_copy;
+                remaining -= to_copy;
+                if (to_copy < shader_param_size)
+                {
+                    // Source blob shorter than declared params; stop to avoid OOB
+                    break;
+                }
             }
         }
 

@@ -69,13 +69,6 @@ bool CodeEditor::render()
             // {
             //     saveShaderParams();
             // }
-            if (ImGui::MenuItem("Quit", "Alt-F4"))
-            {
-                ImGui::EndMenu();
-                ImGui::EndMenuBar();
-                ImGui::End();
-                return false;
-            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Edit"))

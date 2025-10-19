@@ -22,6 +22,7 @@ function(ConfigureTest CMAKE_TEST_NAME)
     ..
     ${nanovdb_SOURCE_DIR}/nanovdb
     ${Slang_SOURCE_DIR}/include
+    ${imgui_SOURCE_DIR}
   )
 
   # Link against the editor libraries and gtest
@@ -30,9 +31,13 @@ function(ConfigureTest CMAKE_TEST_NAME)
     pnanovdbcompute
     pnanovdbfileformat
     pnanovdbeditor
+    nlohmann_json
     GTest::gtest
     GTest::gtest_main
   )
+
+  # Enable test-only hooks in the editor code when building tests
+  target_compile_definitions(${CMAKE_TEST_NAME} PRIVATE NANOVDB_EDITOR_ENABLE_TEST_HOOKS)
 
   if(UNIX AND NOT APPLE)
     target_link_libraries(${CMAKE_TEST_NAME} PRIVATE dl)
@@ -48,3 +53,4 @@ ConfigureTest(ComputeDispatchTest ComputeDispatchTest.cpp)
 ConfigureTest(ShaderCompileCpuTest ShaderCompileCpuTest.cpp)
 ConfigureTest(FileFormatTest FileFormatTest.cpp)
 ConfigureTest(EditorStartStopTest EditorStartStopTest.cpp)
+ConfigureTest(EditorViewSwitchTest EditorViewSwitchTest.cpp)

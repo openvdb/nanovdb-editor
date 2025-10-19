@@ -5,7 +5,9 @@ channels:
 dependencies:
   - python=3.11
   - pip
-  - numpy<2.3.0,>=2
+  - numpy
+  - gxx_linux-64
+  - libstdcxx-ng
   - scikit-build-core
   - pytest
   - parameterized

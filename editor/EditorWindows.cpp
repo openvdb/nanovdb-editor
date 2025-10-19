@@ -31,6 +31,7 @@
 
 #include <cmath>
 #include <filesystem>
+#include <type_traits>
 
 #ifndef M_PI_2
 #    define M_PI_2 1.57079632679489661923
@@ -50,10 +51,13 @@ void saveIniSettings(imgui_instance_user::Instance* ptr)
     ImGuiIO& io = ImGui::GetIO();
     if (io.IniFilename && *io.IniFilename)
     {
-        ptr->ini_window_width = (int)io.DisplaySize.x;
-        ptr->ini_window_height = (int)io.DisplaySize.y;
+        // Save unscaled (1.0f scale) window size to INI; ImGuiWindow (GLFW) scales on load
+        const float scale = (io.DisplayFramebufferScale.x > 0.f) ? io.DisplayFramebufferScale.x : 1.f;
+        ptr->ini_window_width = (int)(io.DisplaySize.x / scale);
+        ptr->ini_window_height = (int)(io.DisplaySize.y / scale);
 
-        copyPersistentFields(ptr->saved_render_settings[ptr->render_settings_name], *ptr->render_settings);
+        imgui_instance_user::copyPersistentFields(
+            ptr->saved_render_settings[ptr->render_settings_name], *ptr->render_settings);
         ImGui::SaveIniSettingsToDisk(io.IniFilename);
     }
 }
@@ -68,6 +72,15 @@ void createMenu(imgui_instance_user::Instance* ptr)
         {
             ImGui::MenuItem("Open...", "", &ptr->pending.open_file);
             ImGui::MenuItem("Save...", "", &ptr->pending.save_file);
+            ImGui::Separator();
+            if (ImGui::MenuItem("Save INI"))
+            {
+                saveIniSettings(ptr);
+            }
+            if (ImGui::MenuItem("Load INI"))
+            {
+                // INI loading disabled
+            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Windows"))
@@ -91,23 +104,6 @@ void createMenu(imgui_instance_user::Instance* ptr)
             if (!isViewerProfile)
             {
                 ImGui::MenuItem(BENCHMARK, "", &ptr->window.show_benchmark);
-
-                ImGui::Separator();
-                if (ImGui::MenuItem("Save INI"))
-                {
-                    saveIniSettings(ptr);
-                }
-                if (ImGui::MenuItem("Load INI"))
-                {
-                    ImGuiIO& io = ImGui::GetIO();
-                    if (io.IniFilename && *io.IniFilename)
-                    {
-                        ImGui::LoadIniSettingsFromDisk(io.IniFilename);
-                        copyPersistentFields(
-                            *ptr->render_settings, ptr->saved_render_settings[ptr->render_settings_name]);
-                        ptr->render_settings->sync_camera = PNANOVDB_TRUE;
-                    }
-                }
             }
             ImGui::EndMenu();
         }
@@ -551,6 +547,54 @@ void showRenderSettingsWindow(imgui_instance_user::Instance* ptr)
             IMGUI_CHECKBOX_SYNC("Fit Resolution", settings->encode_resize);
             IMGUI_CHECKBOX_SYNC("Stream To File", settings->encode_to_file);
 
+            {
+                const char* ffmpeg_cmd = "ffmpeg -i input.h264 -c:v copy -f mp4 output.mp4";
+                ImGui::Indent(16.0f);
+                ImGui::BeginGroup();
+                ImGui::TextDisabled("%s", ffmpeg_cmd);
+                ImGui::SameLine();
+
+                const float h = ImGui::GetFrameHeight() * 1.1f;
+                const ImVec2 size(h, h);
+                if (ImGui::InvisibleButton("##copy_ffmpeg_cmd", size))
+                {
+                    ImGui::SetClipboardText(ffmpeg_cmd);
+                }
+
+                const bool hovered = ImGui::IsItemHovered();
+                const bool held = ImGui::IsItemActive();
+                if (hovered)
+                {
+                    ImGui::SetTooltip("Copy to clipboard");
+                }
+
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                ImVec2 pMin = ImGui::GetItemRectMin();
+                ImVec2 pMax = ImGui::GetItemRectMax();
+
+                ImVec4 colV = hovered || held ? ImGui::GetStyleColorVec4(ImGuiCol_Text) :
+                                                ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
+                if (held)
+                {
+                    colV.x *= 0.9f;
+                    colV.y *= 0.9f;
+                    colV.z *= 0.9f;
+                }
+                const ImU32 col = ImGui::GetColorU32(colV);
+
+                const float pad = h * 0.22f;
+                const ImVec2 rectMin(pMin.x + pad, pMin.y + pad);
+                const ImVec2 rectMax(pMax.x - pad, pMax.y - pad);
+                const ImVec2 backOffset(-pad * 0.6f, -pad * 0.6f);
+
+                // Draw GitHub-like copy icon (two overlapping rounded rectangles)
+                dl->AddRect(rectMin + backOffset, rectMax + backOffset, col, 2.0f, 0, 1.5f);
+                dl->AddRect(rectMin, rectMax, col, 2.0f, 0, 2.0f);
+
+                ImGui::EndGroup();
+                ImGui::Unindent(16.0f);
+            }
+
             ImGui::SeparatorText("Advanced");
             IMGUI_CHECKBOX_SYNC("VSync", settings->vsync);
             IMGUI_CHECKBOX_SYNC("Projection RH", settings->is_projection_rh);
@@ -849,15 +893,18 @@ void showFileHeaderWindow(imgui_instance_user::Instance* ptr)
     {
         pnanovdb_compute_array_t* current_array = nullptr;
         auto selection = ptr->editor_scene->get_selection();
-        if (selection.type == ViewType::NanoVDBs && ptr->editor_scene)
-        {
-            const auto& nanovdb_views = ptr->editor_scene->get_nanovdb_views();
-            auto it = nanovdb_views.find(selection.name);
-            if (it != nanovdb_views.end())
-            {
-                current_array = it->second.nanovdb_array;
-            }
-        }
+        ptr->editor_scene->for_each_view(ViewType::NanoVDBs,
+                                         [&](const std::string& name, const auto& ctx)
+                                         {
+                                             using CtxT = std::decay_t<decltype(ctx)>;
+                                             if constexpr (std::is_same_v<CtxT, NanoVDBContext>)
+                                             {
+                                                 if (name == selection.name)
+                                                 {
+                                                     current_array = ctx.nanovdb_array;
+                                                 }
+                                             }
+                                         });
         pnanovdb_editor::FileHeaderInfo::getInstance().render(current_array);
     }
     ImGui::End();

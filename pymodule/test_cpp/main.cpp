@@ -12,6 +12,7 @@
 // #define TEST_RASTER
 #define TEST_RASTER_2D
 #define TEST_CAMERA
+#define TEST_NVDB
 // #define TEST_FILE_FORMAT
 // #define FORMAT_INGP
 #define FORMAT_PLY
@@ -58,18 +59,20 @@ int main(int argc, char* argv[])
     pnanovdb_compute_device_manager_t* device_manager = compute.device_interface.create_device_manager(PNANOVDB_FALSE);
     pnanovdb_compute_device_t* device = compute.device_interface.create_device(device_manager, &device_desc);
 
-#ifdef TEST_RASTER
-    float voxel_size = 1.f / 128.f;
-    const char* raster_file = "../../data/splats.npz";
+#if defined(TEST_RASTER) || defined(TEST_RASTER_2D)
     pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
 
     pnanovdb_raster_t raster = {};
     pnanovdb_raster_load(&raster, &compute);
-
     pnanovdb_raster_context_t* raster_context = nullptr;
+#endif
 
-    raster.raster_file&raster, &compute, queue, raster_file, voxel_size, &data_nanovdb, nullptr,
-                                 &raster_context, nullptr, nullptr, nullptr, nullptr);
+#ifdef TEST_RASTER
+    float voxel_size = 1.f / 128.f;
+    const char* raster_to_nvdb_file = "../../data/splats.npz";
+
+    raster.raster_file(&raster, &compute, queue, raster_to_nvdb_file, voxel_size, &data_nanovdb, nullptr,
+                       &raster_context, nullptr, nullptr, nullptr, nullptr);
 
     if (data_nanovdb)
     {
@@ -196,6 +199,20 @@ int main(int argc, char* argv[])
     editor.add_camera_view(&editor, &default_camera);
 #    endif
 
+#    ifdef TEST_NVDB
+    data_nanovdb = compute.load_nanovdb("../../data/dragon.nvdb");
+    if (data_nanovdb)
+    {
+        editor.add_nanovdb(&editor, data_nanovdb);
+    }
+
+    pnanovdb_compute_array_t* data_nanovdb2 = compute.load_nanovdb("../../data/splats.nvdb");
+    if (data_nanovdb2)
+    {
+        editor.add_nanovdb(&editor, data_nanovdb2);
+    }
+#    endif
+
 #    ifdef TEST_RASTER_2D
     pnanovdb_camera_t camera;
     pnanovdb_camera_init(&camera);
@@ -208,10 +225,6 @@ int main(int argc, char* argv[])
 
     const char* raster_file = "../../data/ficus.ply";
     const char* raster_file_garden = "../../data/garden.ply";
-    pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
-
-    pnanovdb_raster_t raster = {};
-    pnanovdb_raster_load(&raster, &compute);
 
     const pnanovdb_reflect_data_type_t* data_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t);
     const pnanovdb_raster_shader_params_t* defaults = (const pnanovdb_raster_shader_params_t*)data_type->default_value;
@@ -302,6 +315,10 @@ int main(int argc, char* argv[])
     gaussian_data_garden = nullptr;
     raster.destroy_context(raster.compute, queue, raster_ctx);
     raster_ctx = nullptr;
+#endif
+
+#if defined(TEST_RASTER) || defined(TEST_RASTER_2D)
+    pnanovdb_raster_free(&raster);
 #endif
 
     compute.device_interface.destroy_device(device_manager, device);

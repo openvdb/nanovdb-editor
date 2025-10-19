@@ -31,14 +31,20 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
     {
         return;
     }
-    const auto& camera_views = ptr->editor_scene->get_camera_views();
     auto selection = ptr->editor_scene->get_selection();
-    auto it = camera_views.find(selection.name);
-    if (it == camera_views.end())
-    {
-        return;
-    }
-    pnanovdb_camera_view_t* camera = it->second;
+    pnanovdb_camera_view_t* camera = nullptr;
+    ptr->editor_scene->for_each_view(ViewType::Cameras,
+                                     [&](const std::string& name, const auto& view_data)
+                                     {
+                                         using ViewT = std::decay_t<decltype(view_data)>;
+                                         if constexpr (std::is_same_v<ViewT, pnanovdb_camera_view_t*>)
+                                         {
+                                             if (!camera && name == selection.name)
+                                             {
+                                                 camera = view_data;
+                                             }
+                                         }
+                                     });
     if (!camera)
     {
         return;

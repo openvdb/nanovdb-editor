@@ -169,28 +169,23 @@ struct ShaderParams
 
 class EditorScene
 {
+private:
+    void copy_editor_shader_params_to_ui(ShaderParams* params);
+    void copy_shader_params_from_ui_to_view(ShaderParams* params, void* view_params);
+    void copy_shader_params_from_ui_to_editor(ShaderParams* params);
+
 public:
     explicit EditorScene(const EditorSceneConfig& config);
     ~EditorScene();
 
-    // Get unified view context for a specific view
     UnifiedViewContext get_view_context(const std::string& view_name, ViewType view_type) const;
-
-    // Get current view context
     UnifiedViewContext get_current_view_context() const;
 
-    // Save current view state before switching
-    void save_current_view_state();
-
-    void load_view_into_editor_and_ui(const UnifiedViewContext& view_ctx);
-    void clear_editor_view_state();
+    // Scene selection handling
     void sync_selected_view_with_current();
 
-    // Handle selection changes in Scene tree
-    void handle_pending_view_changes();
-
     // Scene selection management
-    void set_selection(ViewType type, const std::string& name);
+    void update_selection(ViewType type, const std::string& name);
     SceneSelection get_selection() const;
     bool has_valid_selection() const;
     void clear_selection();
@@ -211,14 +206,6 @@ public:
     // Camera frustum index management
     int get_camera_frustum_index(const std::string& camera_name) const;
     void set_camera_frustum_index(const std::string& camera_name, int index);
-    const std::map<std::string, int>& get_camera_frustum_indices() const
-    {
-        return m_camera_frustum_index;
-    }
-    std::map<std::string, int>& get_camera_frustum_indices_mutable()
-    {
-        return m_camera_frustum_index;
-    }
 
     // NanoVDB file operations
     void load_nanovdb_to_editor();
@@ -226,15 +213,6 @@ public:
 
     // Update shader if needed
     void update_viewport_shader(const char* new_shader);
-
-    // Copy shader params from editor to UI
-    void copy_editor_shader_params_to_ui(ShaderParams* params);
-
-    // Load UI params to the view
-    void copy_shader_params_from_ui_to_view(ShaderParams* params, void* view_params);
-
-    // Copy shader params from UI to editor
-    void copy_shader_params_to_editor(ShaderParams* params);
 
     // Handle NanoVDB load completion
     void handle_nanovdb_data_load(pnanovdb_compute_array_t* nanovdb_array, const std::string& filename);
@@ -266,37 +244,36 @@ public:
     // Sync default camera view with current viewport camera
     void sync_default_camera_view();
 
+    // Raster2D shader helpers
     const pnanovdb_raster_shader_params_t* get_raster2d_shader_params() const
     {
         const pnanovdb_raster_shader_params_t* raster_shader_params =
             (pnanovdb_raster_shader_params_t*)m_raster2d_params.current_array->data;
         return raster_shader_params;
     }
-
     const pnanovdb_reflect_data_type_t* get_raster_shader_params_data_type() const
     {
         return m_raster_shader_params_data_type;
     }
-
     void copy_editor_raster_params_to_ui(const void* editor_params)
     {
         copy_editor_shader_params_to_ui(&m_raster2d_params);
     }
-
     void copy_raster_params_from_ui()
     {
         copy_shader_params_from_ui_to_view(&m_raster2d_params, m_raster2d_params.current_array->data);
     }
-
     void copy_raster_params_to_editor()
     {
-        copy_shader_params_to_editor(&m_raster2d_params);
+        copy_shader_params_from_ui_to_editor(&m_raster2d_params);
     }
 
-    EditorSceneData& get_editor_data()
-    {
-        return m_scene_data;
-    }
+    // Test helpers (compiled only when NANOVDB_EDITOR_BUILD_TESTS=ON)
+#if defined(NANOVDB_EDITOR_ENABLE_TEST_HOOKS)
+    void test_init_raster_params_array_for_regression();
+    void test_copy_raster_params_current_to_self();
+#endif
+
     const EditorSceneData& get_editor_data() const
     {
         return m_scene_data;
@@ -312,9 +289,6 @@ public:
                                         const std::map<std::string, NanoVDBContext>*,
                                         const std::map<std::string, GaussianDataContext>*>;
     ViewMapVariant get_views(ViewType type) const;
-
-    // Specific operations for managing views
-    void add_camera_view(const std::string& name, pnanovdb_camera_view_t* camera);
 
     // Check if a selection is valid (item exists in the appropriate view map)
     bool is_selection_valid(const SceneSelection& selection) const;
@@ -342,7 +316,13 @@ public:
     }
 
 private:
+    void copy_shader_params_for_view(const UnifiedViewContext& view_ctx, ShaderParams* params, bool to_ui);
+    void save_current_view_state();
+    void clear_editor_view_state();
+    void load_view_into_editor_and_ui(const UnifiedViewContext& view_ctx);
+    void handle_pending_view_changes();
     void initialize_view_registry();
+
     std::map<ViewType, ViewMapVariant> m_view_registry;
 
     imgui_instance_user::Instance* m_imgui_instance;
@@ -368,6 +348,7 @@ private:
     pnanovdb_camera_config_t m_default_camera_view_config;
     pnanovdb_camera_state_t m_default_camera_view_state;
 
+    // Loaded scene data from files
     EditorSceneData m_scene_data;
 };
 

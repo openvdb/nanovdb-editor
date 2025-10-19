@@ -344,7 +344,7 @@ int main(int argc, char* argv[])
 
     editor.add_nanovdb(&editor, data_nanovdb);
 
-    pnanovdb_compute_array_t* data_nanovdb2 = compute.load_nanovdb("./data/hexagon_flow_test2.nvdb");
+    pnanovdb_compute_array_t* data_nanovdb2 = compute.load_nanovdb("./data/octree.nvdb");
     if (data_nanovdb2)
     {
         editor.add_nanovdb(&editor, data_nanovdb2);
@@ -502,7 +502,7 @@ int main(int argc, char* argv[])
     config.streaming = PNANOVDB_FALSE;
     config.ip_address = "127.0.0.1";
     config.port = 8080;
-    config.ui_profile_name = "viewer";
+    // config.ui_profile_name = "viewer";
     editor.show(&editor, device, &config);
 
     // if (editor.camera)

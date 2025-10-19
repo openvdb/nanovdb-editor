@@ -336,6 +336,11 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         ImGuiIO& io = *inst.instance_interface.get_io(inst.instance);
 
         io.DisplaySize = ImVec2(float(ptr->width), float(ptr->height));
+        // Expose framebuffer/content scale so UI code can save unscaled window size to INI
+        {
+            float scale = ptr->window_glfw ? windowGlfwGetScale(ptr->window_glfw) : 1.f;
+            io.DisplayFramebufferScale = ImVec2(scale, scale);
+        }
         io.DeltaTime = delta_time;
         for (int i = 0; i < IM_ARRAYSIZE(io.MouseDown); i++)
         {
@@ -1097,8 +1102,8 @@ void setStyle_NvidiaDark(ImGuiStyle& s)
     s.Colors[::ImGuiCol_TabActive] = ImVec4(0.35f, 0.35f, 0.35f, 1.00f);
     s.Colors[::ImGuiCol_TabUnfocused] = ImVec4(0.16f, 0.16f, 0.16f, 1.00f);
     s.Colors[::ImGuiCol_TabUnfocusedActive] = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
-    // s.Colors[::ImGuiCol_DockingPreview] = ImVec4(0.26f, 0.59f, 0.98f, 0.70f);
-    // s.Colors[::ImGuiCol_DockingEmptyBg] = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
+    s.Colors[::ImGuiCol_DockingPreview] = ImVec4(0.26f, 0.59f, 0.98f, 0.70f);
+    s.Colors[::ImGuiCol_DockingEmptyBg] = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
     s.Colors[::ImGuiCol_PlotLines] = ImVec4(0.61f, 0.61f, 0.61f, 1.00f);
     s.Colors[::ImGuiCol_PlotLinesHovered] = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
     s.Colors[::ImGuiCol_PlotHistogram] = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
