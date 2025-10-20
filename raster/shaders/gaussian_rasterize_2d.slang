@@ -6,6 +6,7 @@ ConstantBuffer<constants_t> constants;
 ConstantBuffer<shader_params_t> shader_params;
 
 StructuredBuffer<float2> means2d_in;
+StructuredBuffer<float> depth_in;
 StructuredBuffer<float> conics_in;
 StructuredBuffer<float> colors_in;
 StructuredBuffer<float> opacities_in;
@@ -13,12 +14,14 @@ StructuredBuffer<int> tile_offsets_in;
 StructuredBuffer<int> tile_gaussians_ids_in;
 
 RWTexture2D<float4> color_2d_out;
+RWTexture2D<float> depth_out;
 
 // RWStructuredBuffer<float3> render_colors_out;
 // RWStructuredBuffer<float> render_alphas_out;
 // RWStructuredBuffer<int> last_ids_out;
 
 groupshared uint smem[8u * 256u];
+groupshared uint smem_depth[256u];
 groupshared uint smem_should_run;
 
 void volume_render_tile(uint3 group_idx,
@@ -42,6 +45,7 @@ void volume_render_tile(uint3 group_idx,
     float py = float(i) + 0.5f;
 
     float accum_transmittance = 1.f;
+    float accum_depth = 0.f;
     uint cur_idx = 0u;
 
     float3 pix_out = float3(0.f, 0.f, 0.f);
@@ -70,6 +74,7 @@ void volume_render_tile(uint3 group_idx,
             float2 xy = means2d_in[g];
             float opac = opacities_in[g];
             float3 conic = float3(conics_in[3u * g + 0u], conics_in[3u * g + 1u], conics_in[3u * g + 2u]);
+            float depth = depth_in[g];
 
             smem[8u * tidx + 0] = uint(g);
             smem[8u * tidx + 1] = asuint(xy.x);
@@ -78,6 +83,8 @@ void volume_render_tile(uint3 group_idx,
             smem[8u * tidx + 4] = asuint(conic.x);
             smem[8u * tidx + 5] = asuint(conic.y);
             smem[8u * tidx + 6] = asuint(conic.z);
+
+            smem_depth[tidx] = asuint(depth);
         }
 
         GroupMemoryBarrierWithGroupSync();
@@ -113,9 +120,12 @@ void volume_render_tile(uint3 group_idx,
                 break;
             }
 
+            float depth = asfloat(smem_depth[t]);
+
             float vis = alpha * accum_transmittance;
             float3 color = float3(colors_in[3u * g + 0u], colors_in[3u * g + 1u], colors_in[3u * g + 2u]);
             pix_out += color * vis;
+            accum_depth += depth * vis;
 
             cur_idx = batch_start + t;
             accum_transmittance = next_transmittance;
@@ -125,9 +135,22 @@ void volume_render_tile(uint3 group_idx,
     if (write_pixel)
     {
         float3 background = float3(0.f, 0.f, 0.f);
+        float final_depth = 0.f;
+        if (accum_transmittance < 1.f)
+        {
+            final_depth = accum_depth / (1.f - accum_transmittance);
+            // go to standard depth buffer space
+            float4 ndc = mul(float4(0.f, 0.f, final_depth, 1.f), constants.projection);
+            if (ndc.w != 0.f)
+            {
+                ndc.z *= (1.f / ndc.w);
+            }
+            final_depth = ndc.z;
+        }
 
         color_2d_out[int2(j, constants.image_height - 1u - i)] =
             float4(pix_out + accum_transmittance * background, 1.f - accum_transmittance);
+        depth_out[int2(j, constants.image_height - 1u - i)] = final_depth;
         // render_alphas_out[pix_id] = 1.f - accum_transmittance;
         // render_colors_out[pix_id] = pix_out + accum_transmittance * background;
         // last_ids_out[pix_id] = int(cur_idx);

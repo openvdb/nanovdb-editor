@@ -3,6 +3,7 @@
 struct constants_t
 {
     float4x4 view;
+    float4x4 projection;
     float4 view_rot0;
     float4 view_rot1;
     float4 view_rot2;

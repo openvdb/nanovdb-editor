@@ -221,6 +221,7 @@ pnanovdb_bool_t dispatch_shader_on_nanovdb_array(const pnanovdb_compute_t* compu
                                                  pnanovdb_int32_t image_width,
                                                  pnanovdb_int32_t image_height,
                                                  pnanovdb_compute_texture_t* background_image,
+                                                 pnanovdb_compute_texture_t* depth_image,
                                                  pnanovdb_compute_buffer_transient_t* upload_buffer,
                                                  pnanovdb_compute_buffer_transient_t* user_upload_buffer,
                                                  pnanovdb_compute_buffer_t** nanovdb_buffer,
@@ -293,12 +294,13 @@ pnanovdb_bool_t dispatch_shader_on_nanovdb_array(const pnanovdb_compute_t* compu
     image_buf_desc.structure_stride = 4u;
     auto* image_buffer = compute_interface->get_buffer_transient(compute_context, &image_buf_desc);
 
-    pnanovdb_compute_resource_t resources[5u] = {};
+    pnanovdb_compute_resource_t resources[6u] = {};
     resources[0u].buffer_transient = compute_interface->register_buffer_as_transient(compute_context, *nanovdb_buffer);
     resources[1u].buffer_transient = image_buffer;
     resources[2u].texture_transient = compute_interface->register_texture_as_transient(compute_context, background_image);
-    resources[3u].buffer_transient = upload_buffer;
-    resources[4u].buffer_transient = user_upload_buffer;
+    resources[3u].texture_transient = compute_interface->register_texture_as_transient(compute_context, depth_image);
+    resources[4u].buffer_transient = upload_buffer;
+    resources[5u].buffer_transient = user_upload_buffer;
 
     compute->dispatch_shader(compute_interface, compute_context, shader_context, resources, (image_width + 31u) / 32u,
                              (image_height + 3u) / 4u, 1u, "dispatch_shader_on_nanovdb_array");

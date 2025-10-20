@@ -511,6 +511,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                                         PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT, PNANOVDB_COMPUTE_FORMAT_UNKNOWN, 0u);
 
     pnanovdb_compute_texture_t* background_image = nullptr;
+    pnanovdb_compute_texture_t* depth_image = nullptr;
     pnanovdb_compute_buffer_t* readback_buffer = nullptr;
 
     std::string capture_filename = "./data/pnanovdbeditor_capture.bmp";
@@ -634,6 +635,11 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             compute_interface->destroy_texture(compute_context, background_image);
         }
         background_image = nullptr;
+        if (depth_image)
+        {
+            compute_interface->destroy_texture(compute_context, depth_image);
+        }
+        depth_image = nullptr;
     };
 
     if (imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::Last)
@@ -722,6 +728,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         tex_desc.depth = 1u;
         tex_desc.mip_levels = 1u;
         background_image = compute_interface->create_texture(compute_context, &tex_desc);
+        tex_desc.format = PNANOVDB_COMPUTE_FORMAT_R32_FLOAT;
+        depth_image = compute_interface->create_texture(compute_context, &tex_desc);
 
         imgui_window_iface->get_camera_view_proj(imgui_window, &image_width, &image_height, &view, &projection);
         pnanovdb_camera_mat_t view_inv = pnanovdb_camera_mat_inverse(view);
@@ -1086,7 +1094,22 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         }
 
         // update viewport according to the selected option
-        if (imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::NanoVDB)
+        // else if (imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::Raster2D)
+        bool did_write_background = false;
+        {
+            if (editor->impl->gaussian_data && editor->impl->raster_ctx)
+            {
+                const pnanovdb_raster_shader_params_t* raster_shader_params =
+                    (pnanovdb_raster_shader_params_t*)raster2d_shader_params_array->data;
+                pnanovdb_raster_gaussian_data_t* current_gaussian_data = editor->impl->gaussian_data;
+
+                raster.raster_gaussian_2d(raster.compute, device_queue, editor->impl->raster_ctx, current_gaussian_data,
+                                          background_image, depth_image, image_width, image_height, &view, &projection,
+                                          raster_shader_params);
+                did_write_background = true;
+            }
+        }
+        //if (imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::NanoVDB)
         {
             if (imgui_user_instance->pending.update_shader)
             {
@@ -1100,7 +1123,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 {
                     // compilation has failed, don't dispatch the shader
                     dispatch_shader = false;
-                    cleanup_background();
                 }
                 else
                 {
@@ -1157,34 +1179,19 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
                 editor->impl->compute->dispatch_shader_on_nanovdb_array(
                     editor->impl->compute, device, shader_context, editor->impl->nanovdb_array, image_width, image_height,
-                    background_image, upload_transient, shader_upload_transient, &nanovdb_buffer, &readback_transient);
+                    background_image, depth_image, upload_transient, shader_upload_transient, &nanovdb_buffer, &readback_transient);
 
                 if (nanovdb_buffer)
                 {
                     uploaded_nanovdb_array = editor->impl->nanovdb_array;
                 }
-            }
-            else
-            {
-                cleanup_background();
+
+                did_write_background = true;
             }
         }
-        else if (imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::Raster2D)
+        if (!did_write_background)
         {
-            if (editor->impl->gaussian_data && editor->impl->raster_ctx)
-            {
-                const pnanovdb_raster_shader_params_t* raster_shader_params =
-                    (pnanovdb_raster_shader_params_t*)raster2d_shader_params_array->data;
-                pnanovdb_raster_gaussian_data_t* current_gaussian_data = editor->impl->gaussian_data;
-
-                raster.raster_gaussian_2d(raster.compute, device_queue, editor->impl->raster_ctx, current_gaussian_data,
-                                          background_image, image_width, image_height, &view, &projection,
-                                          raster_shader_params);
-            }
-            else
-            {
-                cleanup_background();
-            }
+            cleanup_background();
         }
 
         if (editor->impl->camera && imgui_user_settings->sync_camera == PNANOVDB_FALSE)
@@ -1228,6 +1235,10 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         if (background_image)
         {
             compute_interface->destroy_texture(compute_context, background_image);
+        }
+        if (depth_image)
+        {
+            compute_interface->destroy_texture(compute_context, depth_image);
         }
 
         if (should_capture && readback_buffer)

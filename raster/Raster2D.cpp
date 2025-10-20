@@ -68,6 +68,7 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
                         pnanovdb_raster_context_t* context_in,
                         pnanovdb_raster_gaussian_data_t* data_in,
                         pnanovdb_compute_texture_t* color_2d,
+                        pnanovdb_compute_texture_t* depth,
                         pnanovdb_uint32_t image_width,
                         pnanovdb_uint32_t image_height,
                         const pnanovdb_camera_mat_t* view,
@@ -104,6 +105,7 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
     struct constants_t
     {
         pnanovdb_camera_mat_t view;
+        pnanovdb_camera_mat_t projection;
         pnanovdb_vec4_t view_rot0;
         pnanovdb_vec4_t view_rot1;
         pnanovdb_vec4_t view_rot2;
@@ -149,6 +151,7 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
     extract_camera_info(*view, *projection, &view_dir, &near_plane, &far_plane);
 
     constants.view = pnanovdb_camera_mat_transpose(*view);
+    constants.projection = pnanovdb_camera_mat_transpose(*projection);
     constants.view_rot0 = view->x;
     constants.view_rot1 = view->y;
     constants.view_rot2 = view->z;
@@ -483,19 +486,23 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
 
         pnanovdb_compute_texture_transient_t* color_2d_transient =
             compute_interface->register_texture_as_transient(context, color_2d);
+        pnanovdb_compute_texture_transient_t* depth_transient =
+            compute_interface->register_texture_as_transient(context, depth);
 
         // raster
         {
-            pnanovdb_compute_resource_t resources[9u] = {};
+            pnanovdb_compute_resource_t resources[11u] = {};
             resources[0u].buffer_transient = constant_transient;
             resources[1u].buffer_transient = shader_params_transient;
             resources[2u].buffer_transient = means2d_transient;
-            resources[3u].buffer_transient = conics_transient;
-            resources[4u].buffer_transient = resolved_color_transient;
-            resources[5u].buffer_transient = opacities_transient;
-            resources[6u].buffer_transient = tile_offsets_transient;
-            resources[7u].buffer_transient = intersection_vals_transient;
-            resources[8u].texture_transient = color_2d_transient;
+            resources[3u].buffer_transient = depths_transient;
+            resources[4u].buffer_transient = conics_transient;
+            resources[5u].buffer_transient = resolved_color_transient;
+            resources[6u].buffer_transient = opacities_transient;
+            resources[7u].buffer_transient = tile_offsets_transient;
+            resources[8u].buffer_transient = intersection_vals_transient;
+            resources[9u].texture_transient = color_2d_transient;
+            resources[10u].texture_transient = depth_transient;
 
             compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_rasterize_2d_slang], resources,
                                      (constants.image_height + gpu_params.tile_size - 1u) / gpu_params.tile_size,
@@ -512,13 +519,16 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
     {
         pnanovdb_compute_texture_transient_t* color_2d_transient =
             compute_interface->register_texture_as_transient(context, color_2d);
+        pnanovdb_compute_texture_transient_t* depth_transient =
+            compute_interface->register_texture_as_transient(context, depth);
 
         // raster null
         {
-            pnanovdb_compute_resource_t resources[3u] = {};
+            pnanovdb_compute_resource_t resources[4u] = {};
             resources[0u].buffer_transient = constant_transient;
             resources[1u].buffer_transient = shader_params_transient;
             resources[2u].texture_transient = color_2d_transient;
+            resources[3u].texture_transient = depth_transient;
 
             compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_rasterize_2d_null_slang],
                                      resources,

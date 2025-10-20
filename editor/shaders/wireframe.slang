@@ -40,6 +40,7 @@ struct shader_params_t
 StructuredBuffer<uint2> buf;
 RWStructuredBuffer<uint> image_out;
 RWTexture2D<float4> texture_out;
+RWTexture2D<float> depth_out;
 ConstantBuffer<EditorParams> editor_params;
 ConstantBuffer<shader_params_t> shader_params;
 
@@ -199,18 +200,21 @@ void ray_march_bbox(float3 rayOrigin,
         }
 
         float4 color = float4(0.f, 0.f, 0.f, 0.f);
+        float finalT = 0.f;
         if (nearCount >= 2u)
         {
             color.rgb = 0.75f * baseColor;
             color.a = 1.f;
+            finalT = boxMinT;
         }
         else if (farCount >= 2u)
         {
             color.rgb = 0.25f * baseColor;
             color.a = 1.f;
+            finalT = boxMaxT;
         }
 
-        nominalT = sum.a * (color.a * boxMinT) + nominalT;
+        nominalT = sum.a * (color.a * finalT) + nominalT;
         sum.rgb = sum.a * (color.a * color.rgb) + sum.rgb;
         sum.a = (1.f - color.a) * sum.a;
     }
@@ -310,6 +314,9 @@ void ray_march_nanovdb(StructuredBuffer<uint2> buf,
             ray_march_advance_ray(float3(8.f, 8.f, 8.f), rayDir, rayDirInv, rayOrigin, location, blockHitT);
         }
     }
+
+    // put nominalT back to world space
+    nominalT /= rayDirMagn;
 }
 
 void ray_march_nanovdb_node2_intern(StructuredBuffer<uint2> buf,
@@ -407,6 +414,9 @@ void ray_march_nanovdb_node2_intern(StructuredBuffer<uint2> buf,
             ray_march_advance_ray(float3(8.f, 8.f, 8.f), rayDir, rayDirInv, rayOrigin, location, blockHitT);
         }
     }
+
+    // put nominalT back to world space
+    nominalT /= rayDirMagn;
 }
 
 void ray_march_nanovdb_node2(StructuredBuffer<uint2> buf,
@@ -503,12 +513,32 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
         ray_march_nanovdb(buf, rayOrigin, 0.f, rayDir, 1e9f, rayDirInv, dx_origin, dx_per_T, sum, nominalT);
     }
 
+    if (sum.a < 1.f)
+    {
+        nominalT *= (1.f / (1.f - sum.a));
+
+        float3 world_pos = rayDir * nominalT + rayOrigin;
+        float4 ndc = mat_mul(float4(world_pos, 1.f), editor_params.view_x, editor_params.view_y,
+            editor_params.view_z, editor_params.view_w);
+        ndc = mat_mul(ndc, editor_params.projection_x, editor_params.projection_y,
+            editor_params.projection_z, editor_params.projection_w);
+        if (ndc.w != 0.f)
+        {
+            ndc.z *= (1.f / ndc.w);
+        }
+
+        float cmp_depth = depth_out[tidx];
+        if (cmp_depth < ndc.z)
+        {
+            depth_out[tidx] = ndc.z;
+            texture_out[tidx] = sum;
+        }
+    }
+
     float4 value = sum;
     // Note: BGRA target
     uint rawValue = uint(255.f * max(0.f, min(1.f, value.z))) | (uint(255.f * max(0.f, min(1.f, value.y))) << 8u) |
                     (uint(255.f * max(0.f, min(1.f, value.x))) << 16u) |
                     (uint(255.f * max(0.f, min(1.f, value.w))) << 24u);
     image_out[(editor_params.height - 1 - tidx.y) * editor_params.width + tidx.x] = rawValue;
-
-    texture_out[tidx] = value;
 }

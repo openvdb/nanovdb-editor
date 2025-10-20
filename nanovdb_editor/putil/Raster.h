@@ -95,6 +95,7 @@ typedef struct pnanovdb_raster_t
                                            pnanovdb_raster_context_t* context,
                                            pnanovdb_raster_gaussian_data_t* data,
                                            pnanovdb_compute_texture_t* color_2d,
+                                           pnanovdb_compute_texture_t* depth,
                                            pnanovdb_uint32_t image_width,
                                            pnanovdb_uint32_t image_height,
                                            const pnanovdb_camera_mat_t* view,

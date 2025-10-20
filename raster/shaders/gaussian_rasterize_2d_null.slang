@@ -6,6 +6,7 @@ ConstantBuffer<constants_t> constants;
 ConstantBuffer<shader_params_t> shader_params;
 
 RWTexture2D<float4> color_2d_out;
+RWTexture2D<float> depth_out;
 
 [shader("compute")][numthreads(16, 16, 1)]
 void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
@@ -27,6 +28,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     if (pixel_in_image)
     {
         float3 background = float3(0.f, 0.f, 0.f);
-        color_2d_out[int2(global_j, constants.image_height - 1u - global_i)] = float4(background, 1.f);
+        color_2d_out[int2(global_j, constants.image_height - 1u - global_i)] = float4(background, 0.f);
+        depth_out[int2(global_j, constants.image_height - 1u - global_i)] = 0.f;
     }
 }

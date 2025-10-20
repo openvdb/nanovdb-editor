@@ -823,6 +823,7 @@ typedef struct pnanovdb_compute_t
                                                                     pnanovdb_int32_t image_width,
                                                                     pnanovdb_int32_t image_height,
                                                                     pnanovdb_compute_texture_t* background_image,
+                                                                    pnanovdb_compute_texture_t* depth_image,
                                                                     pnanovdb_compute_buffer_transient_t* upload_buffer,
                                                                     pnanovdb_compute_buffer_transient_t* user_upload_buffer,
                                                                     pnanovdb_compute_buffer_t** nanovdb_buffer,
