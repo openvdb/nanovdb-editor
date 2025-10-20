@@ -366,7 +366,7 @@ void Properties::render(imgui_instance_user::Instance* ptr)
 {
     if (ImGui::Begin(PROPERTIES, &ptr->window.show_scene_properties))
     {
-        
+
         auto selection = ptr->editor_scene->get_properties_selection();
         if (selection.name.empty() || selection.type == pnanovdb_editor::ViewType::None)
         {
