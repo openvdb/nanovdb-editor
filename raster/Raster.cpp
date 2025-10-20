@@ -828,6 +828,7 @@ pnanovdb_raster_t* pnanovdb_get_raster()
     raster.create_gaussian_data = pnanovdb_raster::create_gaussian_data;
     raster.upload_gaussian_data = pnanovdb_raster::upload_gaussian_data;
     raster.destroy_gaussian_data = pnanovdb_raster::destroy_gaussian_data;
+    raster.clear_2d = pnanovdb_raster::clear_2d;
     raster.raster_gaussian_3d = pnanovdb_raster::raster_gaussian_3d;
     raster.raster_gaussian_2d = pnanovdb_raster::raster_gaussian_2d;
     raster.raster_to_nanovdb = pnanovdb_raster::raster_to_nanovdb;

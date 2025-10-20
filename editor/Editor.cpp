@@ -524,6 +524,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     pnanovdb_raster_t raster = {};
     pnanovdb_raster_load(&raster, editor->impl->compute);
 
+    pnanovdb_raster_context_t* clear_ctx = nullptr;
+
     pnanovdb_util::WorkerThread raster_worker;
     pnanovdb_util::WorkerThread::TaskId raster_task_id = pnanovdb_util::WorkerThread::invalidTaskId();
     std::string pending_raster_filepath;
@@ -734,6 +736,30 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         imgui_window_iface->get_camera_view_proj(imgui_window, &image_width, &image_height, &view, &projection);
         pnanovdb_camera_mat_t view_inv = pnanovdb_camera_mat_inverse(view);
         pnanovdb_camera_mat_t projection_inv = pnanovdb_camera_mat_inverse(projection);
+
+        // clear background image
+        {
+            if (!clear_ctx)
+            {
+                clear_ctx = raster.create_context(editor->impl->compute, device_queue);
+            }
+
+            pnanovdb_camera_mat_t proj_inv = pnanovdb_camera_mat_inverse(projection);
+
+            pnanovdb_vec4_t pos_d0 = pnanovdb_camera_vec4_transform(pnanovdb_vec4_t{ 0.f, 0.f, 0.f, 1.f }, proj_inv);
+            pnanovdb_vec4_t pos_d1 = pnanovdb_camera_vec4_transform(pnanovdb_vec4_t{ 0.f, 0.f, 1.f, 1.f }, proj_inv);
+
+            float z_d0 = pos_d0.z * (1.f / pos_d0.w);
+            float z_d1 = pos_d1.z * (1.f / pos_d1.w);
+            bool is_reverse_z = abs(z_d0) > abs(z_d1);
+
+            pnanovdb_raster_clear_2d_values_t clear_values = {};
+            clear_values.depth = is_reverse_z ? 0.f : 1.f;
+
+            raster.clear_2d(raster.compute, device_queue, clear_ctx,
+                            background_image, depth_image, image_width, image_height,
+                            &clear_values);
+        }
 
         bool should_capture = false;
 #ifdef USE_IMGUI_INSTANCE
@@ -1261,6 +1287,11 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     // }
 
     imgui_user_instance->loaded.gaussian_views.clear();
+
+    if (clear_ctx)
+    {
+        raster.destroy_context(editor->impl->compute, device_queue, clear_ctx);
+    }
 
     pnanovdb_raster_free(&raster);
 

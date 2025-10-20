@@ -30,7 +30,9 @@ static const char* s_shader_names[shader_count] = { "raster/gaussian_frag_alloc.
                                                     "raster/gaussian_rasterize_2d_null.slang",
                                                     "raster/gaussian_spherical_harmonics.slang",
                                                     "raster/gaussian_tile_intersections.slang",
-                                                    "raster/gaussian_tile_offsets.slang" };
+                                                    "raster/gaussian_tile_offsets.slang",
+
+                                                    "raster/clear_2d.slang" };
 
 struct raster_context_t
 {
@@ -103,6 +105,15 @@ void upload_gaussian_data(const pnanovdb_compute_t* compute,
 void destroy_gaussian_data(const pnanovdb_compute_t* compute,
                            pnanovdb_compute_queue_t* queue,
                            pnanovdb_raster_gaussian_data_t* data);
+
+void clear_2d(const pnanovdb_compute_t* compute,
+              pnanovdb_compute_queue_t* queue,
+              pnanovdb_raster_context_t* context,
+              pnanovdb_compute_texture_t* color_2d,
+              pnanovdb_compute_texture_t* depth,
+              pnanovdb_uint32_t image_width,
+              pnanovdb_uint32_t image_height,
+              const pnanovdb_raster_clear_2d_values_t* clear_values);
 
 void raster_gaussian_2d(const pnanovdb_compute_t* compute,
                         pnanovdb_compute_queue_t* queue,

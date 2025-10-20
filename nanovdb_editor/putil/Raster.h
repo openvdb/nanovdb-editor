@@ -55,6 +55,15 @@ PNANOVDB_REFLECT_VALUE(pnanovdb_uint32_t, sh_stride_rgbrgbrgb_override, 0, 0)
 PNANOVDB_REFLECT_END(&default_shader_params)
 #undef PNANOVDB_REFLECT_TYPE
 
+typedef struct pnanovdb_raster_clear_2d_values_t
+{
+    float red;
+    float green;
+    float blue;
+    float alpha;
+    float depth;
+}pnanovdb_raster_clear_2d_values_t;
+
 typedef struct pnanovdb_raster_t
 {
     PNANOVDB_REFLECT_INTERFACE();
@@ -89,6 +98,15 @@ typedef struct pnanovdb_raster_t
     void(PNANOVDB_ABI* destroy_gaussian_data)(const pnanovdb_compute_t* compute,
                                               pnanovdb_compute_queue_t* queue,
                                               pnanovdb_raster_gaussian_data_t* data);
+
+    void(PNANOVDB_ABI* clear_2d)(const pnanovdb_compute_t* compute,
+                                           pnanovdb_compute_queue_t* queue,
+                                           pnanovdb_raster_context_t* context,
+                                           pnanovdb_compute_texture_t* color_2d,
+                                           pnanovdb_compute_texture_t* depth,
+                                           pnanovdb_uint32_t image_width,
+                                           pnanovdb_uint32_t image_height,
+                                           const pnanovdb_raster_clear_2d_values_t* clear_values);
 
     void(PNANOVDB_ABI* raster_gaussian_2d)(const pnanovdb_compute_t* compute,
                                            pnanovdb_compute_queue_t* queue,
@@ -171,6 +189,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(destroy_context, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(create_gaussian_data, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(upload_gaussian_data, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(destroy_gaussian_data, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(clear_2d, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(raster_gaussian_2d, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(raster_gaussian_3d, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(raster_to_nanovdb, 0, 0)
@@ -223,6 +242,9 @@ enum shader
     gaussian_spherical_harmonics_slang,
     gaussian_tile_intersections_slang,
     gaussian_tile_offsets_slang,
+
+    // clear shader
+    clear_2d_slang,
 
     shader_count
 };

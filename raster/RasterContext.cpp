@@ -292,4 +292,70 @@ void destroy_gaussian_data(const pnanovdb_compute_t* compute,
     compute->device_interface.set_resource_min_lifetime(context, 60u);
 }
 
+void clear_2d(const pnanovdb_compute_t* compute,
+              pnanovdb_compute_queue_t* queue,
+              pnanovdb_raster_context_t* context_in,
+              pnanovdb_compute_texture_t* color_2d,
+              pnanovdb_compute_texture_t* depth,
+              pnanovdb_uint32_t image_width,
+              pnanovdb_uint32_t image_height,
+              const pnanovdb_raster_clear_2d_values_t* clear_values)
+{
+    auto ctx = cast(context_in);
+    pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
+    pnanovdb_compute_context_t* compute_context = compute->device_interface.get_compute_context(queue);
+
+    struct constants_t
+    {
+        uint image_width;
+        uint image_height;
+        float depth_value;
+        float pad1;
+        float red;
+        float green;
+        float blue;
+        float alpha;
+    };
+    constants_t constants = {};
+    constants.image_width = image_width;
+    constants.image_height = image_height;
+    constants.depth_value = clear_values->depth;
+    constants.red = clear_values->red;
+    constants.green = clear_values->green;
+    constants.blue = clear_values->blue;
+    constants.alpha = clear_values->alpha;
+
+    pnanovdb_compute_buffer_desc_t buf_desc = {};
+    buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT;
+    buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+    buf_desc.structure_stride = 0u;
+    buf_desc.size_in_bytes = sizeof(constants_t);
+    pnanovdb_compute_buffer_t* constant_buffer =
+        compute_interface->create_buffer(compute_context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &buf_desc);
+
+    void* mapped_constants = compute_interface->map_buffer(compute_context, constant_buffer);
+    memcpy(mapped_constants, &constants, sizeof(constants_t));
+    compute_interface->unmap_buffer(compute_context, constant_buffer);
+
+    pnanovdb_compute_buffer_transient_t* constant_transient =
+        compute_interface->register_buffer_as_transient(compute_context, constant_buffer);
+    pnanovdb_compute_texture_transient_t* color_2d_transient =
+        compute_interface->register_texture_as_transient(compute_context, color_2d);
+    pnanovdb_compute_texture_transient_t* depth_transient =
+        compute_interface->register_texture_as_transient(compute_context, depth);
+
+    {
+        pnanovdb_compute_resource_t resources[3u] = {};
+        resources[0u].buffer_transient = constant_transient;
+        resources[1u].texture_transient = color_2d_transient;
+        resources[2u].texture_transient = depth_transient;
+
+        compute->dispatch_shader(compute_interface, compute_context, ctx->shader_ctx[clear_2d_slang],
+                                resources,
+                                (constants.image_width + 16 - 1u) / 16,
+                                (constants.image_height + 16 - 1u) / 16, 1u,
+                                "gaussian_clear_2d");
+    }
+}
+
 }
