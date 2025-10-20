@@ -6,6 +6,7 @@ from ctypes import *
 
 import os
 import sys
+import gc
 import numpy as np
 import unittest
 
@@ -28,6 +29,12 @@ class TestDispatch(unittest.TestCase):
         self.compute = Compute(self.compiler)
         self.compute.device_interface().create_device_manager()
         self.compute.device_interface().create_device()
+
+    def tearDown(self):
+        """Clean up resources between tests"""
+        self.compute = None
+        self.compiler = None
+        gc.collect()
 
     def assert_addition_result(self, result):
         for i, val in enumerate(self.input_data):
