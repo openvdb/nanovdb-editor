@@ -136,6 +136,7 @@ pnanovdb_compute_device_interface_t* pnanovdb_get_compute_device_interface(pnano
 
     iface.get_device_queue = getDeviceQueue;
     iface.get_compute_queue = getComputeQueue;
+    iface.get_device_index = getDeviceIndex;
     iface.flush = flush;
     iface.get_frame_global_completed = getLastFrameCompleted;
     iface.wait_for_frame = waitForFrame;

@@ -78,6 +78,7 @@ typedef struct pnanovdb_imgui_settings_render_t
     pnanovdb_bool_t encode_resize = false;
     pnanovdb_int32_t encode_width = -1;
     pnanovdb_int32_t encode_height = -1;
+    char encode_filename[256u] = { 'c', 'a', 'p', 't', 'u', 'r', 'e', '_', 's', 't', 'r', 'e', 'a', 'm', '\0' };
     char server_address[256u] = { 'l', 'o', 'c', 'a', 'l', 'h', 'o', 's', 't', '\0' };
     pnanovdb_int32_t server_port = 8080;
     pnanovdb_int32_t server_create_max_attempts = 32;
@@ -104,6 +105,7 @@ PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, encode_to_file, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, encode_resize, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_int32_t, encode_width, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_int32_t, encode_height, 0, 0)
+PNANOVDB_REFLECT_VALUE(char, encode_filename[0], 0, 0)
 PNANOVDB_REFLECT_VALUE(char, server_address[0], 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_int32_t, server_port, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_int32_t, server_create_max_attempts, 0, 0)

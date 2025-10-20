@@ -301,8 +301,8 @@ typedef struct pnanovdb_compute_interop_handle_t
 #define pnanovdb_compute_interop_handle_default_init                                                                   \
     {                                                                                                                  \
         PNANOVDB_COMPUTE_INTEROP_HANDLE_TYPE_UNKNOWN, /*type*/                                                         \
-            0u, /*value*/                                                                                              \
-            0u, /*resource_size_in_bytes*/                                                                             \
+        0u, /*value*/                                                                                                  \
+        0u, /*resource_size_in_bytes*/                                                                                 \
     }
 static const pnanovdb_compute_interop_handle_t pnanovdb_compute_interop_handle_default =
     pnanovdb_compute_interop_handle_default_init;
@@ -489,6 +489,7 @@ typedef struct pnanovdb_compute_device_manager_t pnanovdb_compute_device_manager
 
 typedef struct pnanovdb_compute_physical_device_desc_t
 {
+    char device_name[256];
     pnanovdb_uint8_t device_uuid[16u];
     pnanovdb_uint8_t device_luid[8u];
     pnanovdb_uint32_t device_node_mask;
@@ -597,6 +598,8 @@ typedef struct pnanovdb_compute_device_interface_t
 
     pnanovdb_compute_queue_t*(PNANOVDB_ABI* get_compute_queue)(const pnanovdb_compute_device_t* device);
 
+    pnanovdb_uint32_t(PNANOVDB_ABI* get_device_index)(const pnanovdb_compute_device_t* device);
+
     int(PNANOVDB_ABI* flush)(pnanovdb_compute_queue_t* queue,
                              pnanovdb_uint64_t* flushed_frame,
                              pnanovdb_compute_semaphore_t* waitSemaphore,
@@ -667,6 +670,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(get_semaphore_external_handle, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(close_semaphore_external_handle, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_device_queue, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_compute_queue, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(get_device_index, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(flush, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_frame_global_completed, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(wait_for_frame, 0, 0)

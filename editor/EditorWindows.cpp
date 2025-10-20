@@ -30,6 +30,7 @@
 #include <ImGuiFileDialog.h>
 
 #include <cmath>
+#include <string>
 #include <filesystem>
 #include <type_traits>
 
@@ -40,6 +41,19 @@
 namespace pnanovdb_editor
 {
 const float EPSILON = 1e-6f;
+
+static inline void logRecordingSavedOnStop(bool wasRecording, pnanovdb_imgui_settings_render_t* settings)
+{
+    const bool isRecording = (settings->encode_to_file != 0);
+    if (wasRecording && !isRecording)
+    {
+        const char* encodeFilename = settings->encode_filename;
+        const char* basePtr = (encodeFilename && encodeFilename[0]) ? encodeFilename : "capture_stream";
+        std::string base(basePtr);
+        std::string filename = base + ".h264";
+        pnanovdb_editor::Console::getInstance().addLog("Saved recording to '%s'", filename.c_str());
+    }
+}
 
 void saveIniSettings(imgui_instance_user::Instance* ptr)
 {
@@ -169,7 +183,9 @@ void createMenu(imgui_instance_user::Instance* ptr)
             const bool held = ImGui::IsItemActive();
             if (ImGui::IsItemClicked())
             {
+                const bool wasRecording = isRecording;
                 ptr->render_settings->encode_to_file ^= PNANOVDB_TRUE;
+                logRecordingSavedOnStop(wasRecording, ptr->render_settings);
             }
 
             if (hovered)
@@ -545,20 +561,33 @@ void showRenderSettingsWindow(imgui_instance_user::Instance* ptr)
                 ImGui::EndCombo();
             }
             IMGUI_CHECKBOX_SYNC("Fit Resolution", settings->encode_resize);
-            IMGUI_CHECKBOX_SYNC("Stream To File", settings->encode_to_file);
+            {
+                const bool wasRecording = (settings->encode_to_file != 0);
+                bool temp_bool = wasRecording;
+                if (ImGui::Checkbox("Stream To File", &temp_bool))
+                {
+                    settings->encode_to_file = temp_bool ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+                    logRecordingSavedOnStop(wasRecording, settings);
+                }
+            }
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(220.0f);
+            ImGui::InputText("##StreamFileName", settings->encode_filename, IM_ARRAYSIZE(settings->encode_filename));
 
             {
-                const char* ffmpeg_cmd = "ffmpeg -i input.h264 -c:v copy -f mp4 output.mp4";
+                std::string baseName = settings->encode_filename[0] ? settings->encode_filename : "capture_stream";
+                std::string inputFile = baseName + ".h264";
+                std::string outputFile = baseName + ".mp4";
+                std::string ffmpeg_cmd =
+                    std::string("ffmpeg -i \"") + inputFile + "\" -c:v copy -f mp4 \"" + outputFile + "\"";
                 ImGui::Indent(16.0f);
                 ImGui::BeginGroup();
-                ImGui::TextDisabled("%s", ffmpeg_cmd);
-                ImGui::SameLine();
 
                 const float h = ImGui::GetFrameHeight() * 1.1f;
                 const ImVec2 size(h, h);
                 if (ImGui::InvisibleButton("##copy_ffmpeg_cmd", size))
                 {
-                    ImGui::SetClipboardText(ffmpeg_cmd);
+                    ImGui::SetClipboardText(ffmpeg_cmd.c_str());
                 }
 
                 const bool hovered = ImGui::IsItemHovered();
@@ -587,24 +616,84 @@ void showRenderSettingsWindow(imgui_instance_user::Instance* ptr)
                 const ImVec2 rectMax(pMax.x - pad, pMax.y - pad);
                 const ImVec2 backOffset(-pad * 0.6f, -pad * 0.6f);
 
-                // Draw GitHub-like copy icon (two overlapping rounded rectangles)
+                // Draw copy icon (two overlapping rounded rectangles)
                 dl->AddRect(rectMin + backOffset, rectMax + backOffset, col, 2.0f, 0, 1.5f);
                 dl->AddRect(rectMin, rectMax, col, 2.0f, 0, 2.0f);
+
+                ImGui::SameLine();
+                ImGui::AlignTextToFramePadding();
+                // ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (h - ImGui::GetTextLineHeight()) * 0.20f);
+                ImGui::TextDisabled("%s", ffmpeg_cmd.c_str());
 
                 ImGui::EndGroup();
                 ImGui::Unindent(16.0f);
             }
-
-            ImGui::SeparatorText("Advanced");
-            IMGUI_CHECKBOX_SYNC("VSync", settings->vsync);
-            IMGUI_CHECKBOX_SYNC("Projection RH", settings->is_projection_rh);
-            IMGUI_CHECKBOX_SYNC("Reverse Z Buffer", settings->is_reverse_z);
         }
         else
         {
             if (ImGui::Button("Start Streaming"))
             {
                 settings->enable_encoder = PNANOVDB_TRUE;
+            }
+        }
+
+        ImGui::SeparatorText("Advanced");
+        IMGUI_CHECKBOX_SYNC("VSync", settings->vsync);
+        IMGUI_CHECKBOX_SYNC("Projection RH", settings->is_projection_rh);
+        IMGUI_CHECKBOX_SYNC("Reverse Z Buffer", settings->is_reverse_z);
+
+        {
+            static bool s_device_list_built = false;
+            static std::vector<std::string> s_device_labels;
+            static std::vector<const char*> s_device_label_ptrs;
+
+            if (!s_device_list_built && ptr->compute)
+            {
+                pnanovdb_compute_device_manager_t* device_manager =
+                    ptr->compute->device_interface.create_device_manager(PNANOVDB_FALSE);
+                if (device_manager)
+                {
+                    for (pnanovdb_uint32_t idx = 0u;; idx++)
+                    {
+                        pnanovdb_compute_physical_device_desc_t desc = {};
+                        if (!ptr->compute->device_interface.enumerate_devices(device_manager, idx, &desc))
+                        {
+                            break;
+                        }
+
+                        const char* name = desc.device_name[0] ? desc.device_name : "Unknown";
+                        std::string label = std::to_string(idx) + " - " + name;
+                        s_device_labels.push_back(label);
+                    }
+
+                    ptr->compute->device_interface.destroy_device_manager(device_manager);
+                }
+
+                s_device_label_ptrs.clear();
+                s_device_label_ptrs.reserve(s_device_labels.size());
+                for (const auto& s : s_device_labels)
+                {
+                    s_device_label_ptrs.push_back(s.c_str());
+                }
+                s_device_list_built = true;
+            }
+
+            // Use preselected device index captured during initialization
+            int device_index = ptr->device_index;
+            if (!s_device_label_ptrs.empty())
+            {
+                ImGui::SeparatorText("Devices");
+                ImGui::BeginDisabled(true);
+                for (int i = 0; i < (int)s_device_label_ptrs.size(); ++i)
+                {
+                    bool selected = (i == device_index);
+                    ImGui::Selectable(s_device_label_ptrs[i], selected);
+                }
+                ImGui::EndDisabled();
+            }
+            else
+            {
+                ImGui::TextDisabled("No devices found");
             }
         }
     }

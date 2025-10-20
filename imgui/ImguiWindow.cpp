@@ -15,6 +15,7 @@
 #include <vector>
 #include <thread>
 #include <chrono>
+#include <string>
 
 #include "Socket.h"
 #include <server/Server.h>
@@ -309,6 +310,17 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         ptr->encoder = nullptr;
         if (ptr->encode_file)
         {
+            // Log saved file when recording stops
+            if (!user_settings->encode_to_file && ptr->encode_to_file_active)
+            {
+                // We previously opened the file from encode_filename with .h264 extension
+                std::string base = user_settings->encode_filename[0] ? user_settings->encode_filename : "capture_stream";
+                std::string filename = base + ".h264";
+                if (log_print)
+                {
+                    log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Saved recording to '%s'", filename.c_str());
+                }
+            }
             fclose(ptr->encode_file);
             ptr->encode_file = nullptr;
             ptr->encode_to_file_active = PNANOVDB_FALSE;
@@ -367,7 +379,9 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         ptr->encoder = ptr->device_interface.create_encoder(compute_queue, &encoder_desc);
         if (user_settings->encode_to_file)
         {
-            ptr->encode_file = fopen("capture_stream.h264", "wb");
+            std::string base = user_settings->encode_filename[0] ? user_settings->encode_filename : "capture_stream";
+            std::string filename = base + ".h264";
+            ptr->encode_file = fopen(filename.c_str(), "wb");
             ptr->encode_to_file_active = PNANOVDB_TRUE;
         }
 #if 0

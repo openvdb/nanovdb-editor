@@ -32,7 +32,7 @@
 #define TEST_EDITOR
 // #define TEST_EDITOR_START_STOP
 // #define TEST_RASTER
-#define TEST_RASTER_2D
+// #define TEST_RASTER_2D
 // #define TEST_SVRASTER
 // #define TEST_E57
 #define TEST_CAMERA
@@ -241,6 +241,7 @@ int main(int argc, char* argv[])
 
     pnanovdb_compute_device_desc_t device_desc = {};
     device_desc.log_print = pnanovdb_compute_log_print;
+    device_desc.device_index = 1u;
 
     pnanovdb_compute_device_manager_t* device_manager = compute.device_interface.create_device_manager(PNANOVDB_FALSE);
     pnanovdb_compute_device_t* device = compute.device_interface.create_device(device_manager, &device_desc);
