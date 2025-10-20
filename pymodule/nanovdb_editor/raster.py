@@ -32,8 +32,8 @@ class pnanovdb_Raster(Structure):
                 POINTER(pnanovdb_ComputeArray),  # sh_0
                 POINTER(pnanovdb_ComputeArray),  # sh_n
                 POINTER(pnanovdb_ComputeArray),  # opacities
-                POINTER(pnanovdb_ComputeArray),  # shader_params_arrays
-                c_uint32,  # shader_param_count
+                POINTER(POINTER(pnanovdb_ComputeArray)),  # shader_params_arrays
+                c_void_p,  # raster_params (pnanovdb_raster_shader_params_t*)
             ),
         ),  # shader_params_arrays
         (
@@ -141,7 +141,7 @@ class Raster:
                 pointer(scales),
                 pointer(colors),
                 pointer(sh_0),
-                pointer(sh_1),
+                pointer(sh_n),
                 pointer(opacities),
                 shader_params_arrays,
                 profiler_report or c_void_p(),

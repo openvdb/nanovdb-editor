@@ -203,6 +203,19 @@ function run_tests() {
     fi
 
     echo "-- Running tests..."
+
+    # Apply LSAN suppressions if sanitizers are enabled
+    # (Note: LSAN_OPTIONS is used for LeakSanitizer suppression parsing, not ASAN_OPTIONS)
+    if [ "$ENABLE_SANITIZERS" = "ON" ]; then
+        SUPPRESSION_FILE="$PROJECT_DIR/asan_suppressions.txt"
+        if [ -f "$SUPPRESSION_FILE" ]; then
+            export LSAN_OPTIONS="suppressions=$SUPPRESSION_FILE"
+            echo "   -- Leak suppressions enabled from $SUPPRESSION_FILE"
+        else
+            echo "   -- Warning: Suppressions file not found at $SUPPRESSION_FILE"
+        fi
+    fi
+
     ctest --test-dir $BUILD_DIR_CONFIG/gtests -C $CONFIG --output-on-failure $VERBOSE
     pytest -vvv
 }

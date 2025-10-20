@@ -11,11 +11,13 @@
 
 #include "ImguiInstance.h"
 #include "CameraFrustum.h"
+#include "EditorScene.h"
 
 #include "nanovdb_editor/putil/Camera.h"
 
 #include <cmath>
 #include <limits>
+#include <type_traits>
 
 #ifndef M_PI_2
 #    define M_PI_2 1.57079632679489661923
@@ -326,7 +328,7 @@ static void drawCameraFrustum(imgui_instance_user::Instance* ptr,
 
 void CameraFrustum::render(imgui_instance_user::Instance* ptr)
 {
-    if (!ptr->camera_views)
+    if (!ptr->editor_scene)
     {
         return;
     }
@@ -351,34 +353,41 @@ void CameraFrustum::render(imgui_instance_user::Instance* ptr)
         ImVec2 windowPos = ImGui::GetWindowPos();
         ImVec2 windowSize = ImGui::GetWindowSize();
 
-        for (const auto& cameraPair : *ptr->camera_views)
-        {
-            pnanovdb_camera_view_t* camera = cameraPair.second;
-            if (!camera)
+        ptr->editor_scene->for_each_view(
+            ViewType::Cameras,
+            [&](const std::string& name, const auto& view_data)
             {
-                continue;
-            }
-
-            if (camera->is_visible)
-            {
-                bool isViewSelected = (!ptr->selected_scene_item.empty() && ptr->selected_scene_item == cameraPair.first);
-                int selected = isViewSelected ? ptr->camera_frustum_index[ptr->selected_scene_item] : -1;
-                // first draw non-selected cameras with lower alpha
-                for (int i = 0; i < camera->num_cameras; i++)
+                using ViewT = std::decay_t<decltype(view_data)>;
+                if constexpr (std::is_same_v<ViewT, pnanovdb_camera_view_t*>)
                 {
-                    if (i == selected)
+                    pnanovdb_camera_view_t* camera = view_data;
+                    if (!camera)
                     {
-                        continue;
+                        return;
                     }
-                    drawCameraFrustum(ptr, windowPos, windowSize, *camera, i, isViewSelected ? 0.8f : 1.f);
+
+                    if (camera->is_visible)
+                    {
+                        auto selection = ptr->editor_scene->get_properties_selection();
+                        bool isViewSelected = (!selection.name.empty() && selection.name == name);
+                        int selected = isViewSelected ? ptr->editor_scene->get_camera_frustum_index(selection.name) : -1;
+                        // first draw non-selected cameras with lower alpha
+                        for (int i = 0; i < camera->num_cameras; i++)
+                        {
+                            if (i == selected)
+                            {
+                                continue;
+                            }
+                            drawCameraFrustum(ptr, windowPos, windowSize, *camera, i, isViewSelected ? 0.8f : 1.f);
+                        }
+                        // than draw selected camera with even lower alpha
+                        if (selected >= 0)
+                        {
+                            drawCameraFrustum(ptr, windowPos, windowSize, *camera, selected, 0.4f);
+                        }
+                    }
                 }
-                // than draw selected camera with even lower alpha
-                if (selected >= 0)
-                {
-                    drawCameraFrustum(ptr, windowPos, windowSize, *camera, selected, 0.4f);
-                }
-            }
-        }
+            });
     }
     ImGui::End();
 }

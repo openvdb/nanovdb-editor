@@ -88,7 +88,8 @@ int main(int argc, char* argv[])
         pnanovdb_compute_device_desc_t device_desc = {};
         device_desc.log_print = pnanovdb_compute_log_print;
 
-        pnanovdb_compute_device_manager_t* device_manager = compute.device_interface.create_device_manager(PNANOVDB_FALSE);
+        pnanovdb_compute_device_manager_t* device_manager =
+            compute.device_interface.create_device_manager(PNANOVDB_FALSE);
         pnanovdb_compute_device_t* device = compute.device_interface.create_device(device_manager, &device_desc);
 
         const char* file = args.input_file.c_str();

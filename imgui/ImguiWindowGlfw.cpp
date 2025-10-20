@@ -263,7 +263,7 @@ WindowGlfw* createWindowGlfw(Window* window_parent,
     ptr->p_glfwGetWindowContentScale(ptr->window, &xscale, &yscale);
     if (log_print)
     {
-        log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "GLFW window content scale: %.1f, %.1f", xscale, yscale);
+        log_print(PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "GLFW window content scale: %.1f, %.1f", xscale, yscale);
     }
 
     ptr->window_scale = xscale;

@@ -12,6 +12,7 @@
 #pragma once
 
 #include "ImguiInstance.h"
+#include "EditorScene.h"
 
 #include "nanovdb_editor/putil/Camera.h"
 
@@ -33,7 +34,10 @@ static const char* FIELD_ORTHOGRAPHIC_SCALE = "orthographic_scale";
 static void ClearAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler)
 {
     Instance* instance = (Instance*)handler->UserData;
-    instance->saved_camera_states.clear();
+    if (instance->editor_scene)
+    {
+        instance->editor_scene->get_views_camera_states_mutable().clear();
+    }
 }
 
 static void* ReadOpen(ImGuiContext* ctx, ImGuiSettingsHandler* handler, const char* name)
@@ -41,16 +45,18 @@ static void* ReadOpen(ImGuiContext* ctx, ImGuiSettingsHandler* handler, const ch
     Instance* instance = (Instance*)handler->UserData;
 
     // name is the camera state profile name after [CameraState][name]
-    if (instance->saved_camera_states.find(name) == instance->saved_camera_states.end())
+    if (instance->editor_scene && !instance->editor_scene->get_saved_camera_state(name))
     {
         // Get is_y_up from render settings for proper initialization
-        bool is_y_up = true;
+        pnanovdb_bool_t is_y_up = PNANOVDB_FALSE;
         auto it = instance->saved_render_settings.find(name);
         if (it != instance->saved_render_settings.end())
         {
             is_y_up = it->second.is_y_up;
         }
-        pnanovdb_camera_state_default(&instance->saved_camera_states[name], is_y_up);
+        pnanovdb_camera_state_t default_state;
+        pnanovdb_camera_state_default(&default_state, is_y_up);
+        instance->editor_scene->save_camera_state(name, default_state);
     }
 
     return (void*)name;
@@ -61,36 +67,54 @@ static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* ent
     const char* name = (const char*)entry;
     Instance* instance = (Instance*)handler->UserData;
 
+    if (!instance->editor_scene)
+    {
+        return;
+    }
+
+    pnanovdb_camera_state_t state;
+    const pnanovdb_camera_state_t* existing = instance->editor_scene->get_saved_camera_state(name);
+    if (existing)
+    {
+        state = *existing;
+    }
+    else
+    {
+        pnanovdb_camera_state_default(&state, PNANOVDB_FALSE);
+    }
+
     float x, y, z;
     char fmt[128];
 
     snprintf(fmt, sizeof(fmt), "%s=%%f,%%f,%%f", FIELD_POSITION);
     if (sscanf(line, fmt, &x, &y, &z) == 3)
     {
-        instance->saved_camera_states[name].position.x = x;
-        instance->saved_camera_states[name].position.y = y;
-        instance->saved_camera_states[name].position.z = z;
+        state.position.x = x;
+        state.position.y = y;
+        state.position.z = z;
     }
     else if (snprintf(fmt, sizeof(fmt), "%s=%%f,%%f,%%f", FIELD_EYE_DIRECTION), sscanf(line, fmt, &x, &y, &z) == 3)
     {
-        instance->saved_camera_states[name].eye_direction.x = x;
-        instance->saved_camera_states[name].eye_direction.y = y;
-        instance->saved_camera_states[name].eye_direction.z = z;
+        state.eye_direction.x = x;
+        state.eye_direction.y = y;
+        state.eye_direction.z = z;
     }
     else if (snprintf(fmt, sizeof(fmt), "%s=%%f,%%f,%%f", FIELD_EYE_UP), sscanf(line, fmt, &x, &y, &z) == 3)
     {
-        instance->saved_camera_states[name].eye_up.x = x;
-        instance->saved_camera_states[name].eye_up.y = y;
-        instance->saved_camera_states[name].eye_up.z = z;
+        state.eye_up.x = x;
+        state.eye_up.y = y;
+        state.eye_up.z = z;
     }
     else if (snprintf(fmt, sizeof(fmt), "%s=%%f", FIELD_EYE_DISTANCE), sscanf(line, fmt, &x) == 1)
     {
-        instance->saved_camera_states[name].eye_distance_from_position = x;
+        state.eye_distance_from_position = x;
     }
     else if (snprintf(fmt, sizeof(fmt), "%s=%%f", FIELD_ORTHOGRAPHIC_SCALE), sscanf(line, fmt, &x) == 1)
     {
-        instance->saved_camera_states[name].orthographic_scale = x;
+        state.orthographic_scale = x;
     }
+
+    instance->editor_scene->save_camera_state(name, state);
 }
 
 static void WriteAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler, ImGuiTextBuffer* buf)
@@ -110,9 +134,13 @@ static void WriteAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler, ImGuiText
         buf->append("\n");
     };
 
-    for (const auto& pair : instance->saved_camera_states)
+    if (instance->editor_scene)
     {
-        save_camera_state(pair.first, pair.second);
+        const auto& saved_states = instance->editor_scene->get_views_camera_states();
+        for (const auto& pair : saved_states)
+        {
+            save_camera_state(pair.first, pair.second);
+        }
     }
 }
 

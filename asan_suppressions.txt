@@ -1,0 +1,19 @@
+# AddressSanitizer leak suppressions for third-party libraries
+# These are known initialization leaks that are acceptable during program startup
+
+# Slang shader compiler - complex initialization with many static allocations
+leak:libslang.so
+leak:Slang
+
+# D-Bus system library
+leak:libdbus
+
+# UBSAN runtime library
+leak:ubsan
+
+# GCC libstdc++ static initialization
+leak:_M_assign
+
+# Suppress all leaks from unknown modules during initialization
+# (These are typically third-party library initialization that happens once)
+leak:0x

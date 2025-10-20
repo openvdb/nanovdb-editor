@@ -22,6 +22,7 @@ function(ConfigureTest CMAKE_TEST_NAME)
     ..
     ${nanovdb_SOURCE_DIR}/nanovdb
     ${Slang_SOURCE_DIR}/include
+    ${imgui_SOURCE_DIR}
   )
 
   # Link against the editor libraries and gtest
@@ -30,9 +31,15 @@ function(ConfigureTest CMAKE_TEST_NAME)
     pnanovdbcompute
     pnanovdbfileformat
     pnanovdbeditor
+    nlohmann_json
     GTest::gtest
     GTest::gtest_main
   )
+
+  if (NANOVDB_EDITOR_ENABLE_SANITIZERS AND CMAKE_BUILD_TYPE STREQUAL "Debug" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(${CMAKE_TEST_NAME} PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+    target_link_options(${CMAKE_TEST_NAME} PRIVATE -fsanitize=address)
+  endif()
 
   if(UNIX AND NOT APPLE)
     target_link_libraries(${CMAKE_TEST_NAME} PRIVATE dl)

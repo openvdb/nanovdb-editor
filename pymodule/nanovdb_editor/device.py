@@ -55,7 +55,7 @@ class pnanovdb_DeviceInterface(Structure):
 
     _fields_ = [
         ("interface_pnanovdb_reflect_data_type", c_void_p),  # PNANOVDB_REFLECT_INTERFACE()
-        ("create_device_manager", CFUNCTYPE(POINTER(pnanovdb_DeviceManager), c_bool)),
+        ("create_device_manager", CFUNCTYPE(POINTER(pnanovdb_DeviceManager), c_int32)),
         ("destroy_device_manager", CFUNCTYPE(None, POINTER(pnanovdb_DeviceManager))),
         ("enumerate_devices", CFUNCTYPE(pnanovdb_bool_t, POINTER(pnanovdb_DeviceManager), c_uint32, POINTER(c_void_p))),
         (
