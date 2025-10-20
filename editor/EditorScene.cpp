@@ -346,13 +346,13 @@ void EditorScene::handle_pending_view_changes()
 
 void EditorScene::process_pending_editor_changes()
 {
-    if (!m_editor->impl->editor_worker)
+    auto* worker = m_editor->impl->editor_worker;
+    if (!worker)
     {
         return;
     }
 
     bool updated = false;
-    auto* worker = static_cast<EditorWorker*>(m_editor->impl->editor_worker);
 
     pnanovdb_compute_array_t* old_nanovdb_array = nullptr;
     updated = worker->pending_nanovdb.process_pending(m_editor->impl->nanovdb_array, old_nanovdb_array);
@@ -462,19 +462,18 @@ void EditorScene::sync_shader_params_from_editor()
 {
     if (m_editor->impl->editor_worker)
     {
-        EditorWorker* worker = static_cast<EditorWorker*>(m_editor->impl->editor_worker);
-        if (worker->set_params.load() > 0)
+        if (m_editor->impl->editor_worker->set_params.load() > 0)
         {
             // Push editor params to UI
             sync_current_view_state(SyncDirection::EditorToUI);
-            worker->set_params.fetch_sub(1);
+            m_editor->impl->editor_worker->set_params.fetch_sub(1);
         }
 
-        if (worker->get_params.load() > 0)
+        if (m_editor->impl->editor_worker->get_params.load() > 0)
         {
             // Copy UI params back to editor
             sync_current_view_state(SyncDirection::UIToEditor);
-            worker->get_params.fetch_sub(1);
+            m_editor->impl->editor_worker->get_params.fetch_sub(1);
         }
     }
     else

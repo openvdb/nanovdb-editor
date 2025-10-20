@@ -16,11 +16,17 @@
 #include <atomic>
 #include <string>
 
+namespace pnanovdb_editor
+{
+struct EditorWorker;
+class EditorView;
+}
+
 struct pnanovdb_editor_impl_t
 {
     const pnanovdb_compiler_t* compiler;
     const pnanovdb_compute_t* compute;
-    void* editor_worker;
+    pnanovdb_editor::EditorWorker* editor_worker;
     pnanovdb_compute_array_t* nanovdb_array;
     pnanovdb_compute_array_t* data_array;
     pnanovdb_raster_gaussian_data_t* gaussian_data;
@@ -28,7 +34,7 @@ struct pnanovdb_editor_impl_t
     pnanovdb_raster_context_t* raster_ctx;
     void* shader_params;
     const pnanovdb_reflect_data_type_t* shader_params_data_type;
-    void* views;
+    pnanovdb_editor::EditorView* views;
 };
 
 namespace pnanovdb_editor

@@ -96,7 +96,7 @@ void shutdown(pnanovdb_editor_t* editor)
     }
     if (editor->impl->views)
     {
-        delete static_cast<EditorView*>(editor->impl->views);
+        delete editor->impl->views;
     }
     if (editor->impl)
     {
@@ -114,7 +114,7 @@ void add_nanovdb(pnanovdb_editor_t* editor, pnanovdb_compute_array_t* nanovdb_ar
 
     if (editor->impl->editor_worker)
     {
-        EditorWorker* worker = static_cast<EditorWorker*>(editor->impl->editor_worker);
+        EditorWorker* worker = editor->impl->editor_worker;
         worker->pending_nanovdb.set_pending(nanovdb_array);
     }
     else
@@ -122,7 +122,7 @@ void add_nanovdb(pnanovdb_editor_t* editor, pnanovdb_compute_array_t* nanovdb_ar
         editor->impl->nanovdb_array = nanovdb_array;
     }
 
-    EditorView* views = static_cast<EditorView*>(editor->impl->views);
+    EditorView* views = editor->impl->views;
     if (views)
     {
         views->add_nanovdb_view(nanovdb_array, editor->impl->shader_params);
@@ -137,7 +137,7 @@ void add_array(pnanovdb_editor_t* editor, pnanovdb_compute_array_t* data_array)
     }
     if (editor->impl->editor_worker)
     {
-        EditorWorker* worker = static_cast<EditorWorker*>(editor->impl->editor_worker);
+        EditorWorker* worker = editor->impl->editor_worker;
         worker->pending_data_array.set_pending(data_array);
     }
     else
@@ -165,7 +165,7 @@ void add_gaussian_data(pnanovdb_editor_t* editor,
 
     if (editor->impl->editor_worker)
     {
-        EditorWorker* worker = static_cast<EditorWorker*>(editor->impl->editor_worker);
+        EditorWorker* worker = editor->impl->editor_worker;
         worker->pending_gaussian_data.set_pending(gaussian_data);
         worker->pending_raster_ctx.set_pending(raster_ctx);
         worker->pending_shader_params.set_pending(raster_params);
@@ -179,7 +179,7 @@ void add_gaussian_data(pnanovdb_editor_t* editor,
         editor->impl->shader_params_data_type = ptr->shader_params_data_type;
     }
 
-    EditorView* views = static_cast<EditorView*>(editor->impl->views);
+    EditorView* views = editor->impl->views;
     if (views)
     {
         views->add_gaussian_view(raster_ctx, gaussian_data, raster_params);
@@ -190,7 +190,7 @@ void update_camera(pnanovdb_editor_t* editor, pnanovdb_camera_t* camera)
 {
     if (editor->impl->editor_worker)
     {
-        EditorWorker* worker = static_cast<EditorWorker*>(editor->impl->editor_worker);
+        EditorWorker* worker = editor->impl->editor_worker;
         worker->pending_camera.set_pending(camera);
     }
     else
@@ -201,7 +201,7 @@ void update_camera(pnanovdb_editor_t* editor, pnanovdb_camera_t* camera)
 
 void add_camera_view(pnanovdb_editor_t* editor, pnanovdb_camera_view_t* camera)
 {
-    EditorView* views = static_cast<EditorView*>(editor->impl->views);
+    EditorView* views = editor->impl->views;
     if (!views || !camera)
     {
         return;
@@ -221,7 +221,7 @@ void add_shader_params(pnanovdb_editor_t* editor, void* params, const pnanovdb_r
     }
     if (editor->impl->editor_worker)
     {
-        EditorWorker* worker = static_cast<EditorWorker*>(editor->impl->editor_worker);
+        EditorWorker* worker = editor->impl->editor_worker;
         worker->pending_shader_params.set_pending(params);
         worker->pending_shader_params_data_type.set_pending(data_type);
     }
@@ -244,7 +244,7 @@ void sync_shader_params(pnanovdb_editor_t* editor, void* shader_params, pnanovdb
         return;
     }
 
-    EditorWorker* worker = static_cast<EditorWorker*>(editor->impl->editor_worker);
+    EditorWorker* worker = editor->impl->editor_worker;
     if (set_data)
     {
         worker->set_params.fetch_add(1);
@@ -271,7 +271,7 @@ pnanovdb_int32_t editor_get_external_active_count(void* external_active_count)
         return 0;
     }
 
-    auto worker = static_cast<EditorWorker*>(editor->impl->editor_worker);
+    auto worker = editor->impl->editor_worker;
     pnanovdb_int32_t count = 0;
     if (worker->set_params.load() > 0 || worker->get_params.load() > 0 || worker->should_stop.load())
     {
@@ -467,7 +467,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     bool should_run = true;
     while (should_run)
     {
-        if (editor->impl->editor_worker && static_cast<EditorWorker*>(editor->impl->editor_worker)->should_stop.load())
+        if (editor->impl->editor_worker && editor->impl->editor_worker->should_stop.load())
         {
             auto log_print = compute_interface->get_log_print(compute_context);
             if (log_print)
@@ -732,7 +732,7 @@ void start(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovd
 
         editor_worker->thread =
             new std::thread([editor, device, editor_worker]() { editor->show(editor, device, &editor_worker->config); });
-        editor->impl->editor_worker = (void*)editor_worker;
+        editor->impl->editor_worker = editor_worker;
     }
     else
     {
@@ -746,7 +746,7 @@ void stop(pnanovdb_editor_t* editor)
     {
         return;
     }
-    auto* editor_worker = static_cast<EditorWorker*>(editor->impl->editor_worker);
+    auto* editor_worker = editor->impl->editor_worker;
     editor_worker->should_stop.store(true);
     editor_worker->thread->join();
     delete editor_worker->thread;
