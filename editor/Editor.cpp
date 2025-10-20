@@ -79,6 +79,7 @@ static pnanovdb_bool_t init_impl(pnanovdb_editor_t* editor,
     editor->impl->shader_params = NULL;
     editor->impl->shader_params_data_type = NULL;
     editor->impl->views = NULL;
+    editor->impl->resolved_port = PNANOVDB_EDITOR_RESOLVED_PORT_PENDING;
 
     return PNANOVDB_TRUE;
 }
@@ -689,7 +690,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             editor->impl->compute, device_queue,
             background_image ? compute_interface->register_texture_as_transient(compute_context, background_image) :
                                nullptr,
-            &image_width, &image_height, imgui_window, imgui_user_settings, editor_get_external_active_count, editor);
+            &image_width, &image_height, &editor->impl->resolved_port, imgui_window, imgui_user_settings, editor_get_external_active_count, editor);
 
         if (background_image)
         {
@@ -710,6 +711,16 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     pnanovdb_compute_upload_buffer_destroy(compute_context, &shader_params_upload_buffer);
 
     imgui_window_iface->destroy(editor->impl->compute, device_queue, imgui_window, imgui_user_settings);
+}
+
+pnanovdb_int32_t get_resolved_port(pnanovdb_editor_t* editor, pnanovdb_bool_t should_wait)
+{
+    auto port_atomic = reinterpret_cast<std::atomic<pnanovdb_int32_t>*>(&editor->impl->resolved_port);
+    while (should_wait && port_atomic->load() == PNANOVDB_EDITOR_RESOLVED_PORT_PENDING)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return port_atomic->load();
 }
 
 void start(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb_editor_config_t* config)
@@ -772,6 +783,7 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
     editor.add_gaussian_data = add_gaussian_data;
     editor.update_camera = update_camera;
     editor.add_camera_view = add_camera_view;
+    editor.get_resolved_port = get_resolved_port;
 
     return &editor;
 }

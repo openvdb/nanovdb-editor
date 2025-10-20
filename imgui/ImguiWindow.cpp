@@ -20,6 +20,7 @@
 #include <server/Server.h>
 
 #include <stdlib.h>
+#include <atomic>
 
 namespace pnanovdb_imgui_window_default
 {
@@ -85,6 +86,7 @@ struct Window
     pnanovdb_uint32_t height = 0;
     pnanovdb_uint32_t width_encode_resize = 0;
     pnanovdb_uint32_t height_encode_resize = 0;
+    pnanovdb_int32_t resolved_port = -1;
 
     pnanovdb_camera_t camera = {};
 
@@ -279,6 +281,7 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
                        pnanovdb_compute_texture_transient_t* background,
                        pnanovdb_int32_t* out_width,
                        pnanovdb_int32_t* out_height,
+                       pnanovdb_int32_t* out_resolved_port,
                        pnanovdb_imgui_window_t* window,
                        pnanovdb_imgui_settings_render_t* user_settings,
                        pnanovdb_int32_t (*get_external_active_count)(void* external_active_count),
@@ -377,7 +380,13 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         {
             ptr->server =
                 pnanovdb_get_server()->create_instance(user_settings->server_address, user_settings->server_port,
-                                                       user_settings->server_create_max_attempts, log_print);
+                                                       user_settings->server_create_max_attempts, &ptr->resolved_port, log_print);
+            // make resolved port available ASAP
+            if (out_resolved_port)
+            {
+                auto port_atomic = reinterpret_cast<std::atomic<pnanovdb_int32_t>*>(out_resolved_port);
+                port_atomic->store(ptr->resolved_port);
+            }
             if (!ptr->server)
             {
                 if (log_print)
@@ -582,6 +591,11 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
     if (out_height)
     {
         *out_height = ptr->height;
+    }
+    if (out_resolved_port)
+    {
+        auto port_atomic = reinterpret_cast<std::atomic<pnanovdb_int32_t>*>(out_resolved_port);
+        port_atomic->store(ptr->resolved_port);
     }
 
     if (ptr->window_glfw && windowGlfwShouldClose(ptr->window_glfw))

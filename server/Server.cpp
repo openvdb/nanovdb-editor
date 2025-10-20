@@ -71,7 +71,7 @@ struct server_instance_t
     restinio::running_server_handle_t<traits_t> server;
 
     std::string serveraddress;
-    int port;
+    pnanovdb_int32_t port;
     pnanovdb_compute_log_print_t log_print;
 
     std::vector<std::vector<char>> buffers;
@@ -333,8 +333,9 @@ server_handler_t server_handlers[max_instances] = {
 };
 
 pnanovdb_server_instance_t* create_instance(const char* serveraddress,
-                                            int port,
-                                            int max_attempts,
+                                            pnanovdb_int32_t port,
+                                            pnanovdb_int32_t max_attempts,
+                                            pnanovdb_int32_t* out_resolved_port,
                                             pnanovdb_compute_log_print_t log_print)
 {
     auto ptr = new server_instance_t();
@@ -366,7 +367,7 @@ pnanovdb_server_instance_t* create_instance(const char* serveraddress,
         max_attempts = 65535;
     }
 
-    int attempt = 0;
+    pnanovdb_int32_t attempt = 0;
     for (; attempt < max_attempts; attempt++)
     {
         std::lock_guard<std::mutex> guard(g_mutex[instance_idx]);
@@ -413,6 +414,11 @@ pnanovdb_server_instance_t* create_instance(const char* serveraddress,
         return nullptr;
     }
     ptr->log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Server created on port(%d)", ptr->port);
+
+    if (out_resolved_port)
+    {
+        *out_resolved_port = ptr->port;
+    }
 
     return cast(ptr);
 }

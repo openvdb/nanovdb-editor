@@ -55,8 +55,9 @@ typedef struct pnanovdb_server_t
     PNANOVDB_REFLECT_INTERFACE();
 
     pnanovdb_server_instance_t*(PNANOVDB_ABI* create_instance)(const char* serveraddress,
-                                                               int port,
-                                                               int max_attempts,
+                                                               pnanovdb_int32_t port,
+                                                               pnanovdb_int32_t max_attempts,
+                                                               pnanovdb_int32_t* out_resolved_port,
                                                                pnanovdb_compute_log_print_t log_print);
 
     void(PNANOVDB_ABI* push_h264)(pnanovdb_server_instance_t* instance,

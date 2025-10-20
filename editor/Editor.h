@@ -35,6 +35,7 @@ struct pnanovdb_editor_impl_t
     void* shader_params;
     const pnanovdb_reflect_data_type_t* shader_params_data_type;
     pnanovdb_editor::EditorView* views;
+    pnanovdb_int32_t resolved_port;
 };
 
 namespace pnanovdb_editor

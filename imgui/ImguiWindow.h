@@ -177,6 +177,7 @@ typedef struct pnanovdb_imgui_window_interface_t
                                           pnanovdb_compute_texture_transient_t* background,
                                           pnanovdb_int32_t* out_width,
                                           pnanovdb_int32_t* out_height,
+                                          pnanovdb_int32_t* out_resolved_port,
                                           pnanovdb_imgui_window_t* window,
                                           pnanovdb_imgui_settings_render_t* user_settings,
                                           pnanovdb_int32_t (*get_external_active_count)(void* external_active_count),
