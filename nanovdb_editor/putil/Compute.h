@@ -598,8 +598,6 @@ typedef struct pnanovdb_compute_device_interface_t
 
     pnanovdb_compute_queue_t*(PNANOVDB_ABI* get_compute_queue)(const pnanovdb_compute_device_t* device);
 
-    pnanovdb_uint32_t(PNANOVDB_ABI* get_device_index)(const pnanovdb_compute_device_t* device);
-
     int(PNANOVDB_ABI* flush)(pnanovdb_compute_queue_t* queue,
                              pnanovdb_uint64_t* flushed_frame,
                              pnanovdb_compute_semaphore_t* waitSemaphore,
@@ -654,6 +652,8 @@ typedef struct pnanovdb_compute_device_interface_t
 
     void(PNANOVDB_ABI* set_resource_min_lifetime)(pnanovdb_compute_context_t* context, pnanovdb_uint64_t min_lifetime);
 
+    pnanovdb_uint32_t(PNANOVDB_ABI* get_device_index)(const pnanovdb_compute_device_t* device);
+
 } pnanovdb_compute_device_interface_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_compute_device_interface_t
@@ -670,7 +670,6 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(get_semaphore_external_handle, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(close_semaphore_external_handle, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_device_queue, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_compute_queue, 0, 0)
-PNANOVDB_REFLECT_FUNCTION_POINTER(get_device_index, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(flush, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_frame_global_completed, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(wait_for_frame, 0, 0)
@@ -691,6 +690,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(unmap_encoder_data, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(enable_profiler, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(disable_profiler, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(set_resource_min_lifetime, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(get_device_index, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE
