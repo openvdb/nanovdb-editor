@@ -98,6 +98,7 @@ class pnanovdb_DeviceInterface(Structure):
         ),
         ("disable_profiler", CFUNCTYPE(None, POINTER(pnanovdb_Device))),
         ("set_resource_min_lifetime", CFUNCTYPE(None, POINTER(pnanovdb_Device), c_uint64)),
+        ("get_device_index", CFUNCTYPE(c_uint32, POINTER(pnanovdb_Device))),
     ]
 
 

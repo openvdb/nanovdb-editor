@@ -38,6 +38,7 @@ class EditorConfig(Structure):
         ("streaming", c_int32),  # pnanovdb_bool_t is int32_t in C
         ("stream_to_file", c_int32),  # pnanovdb_bool_t is int32_t in C
         ("ui_profile_name", c_char_p),
+        ("device_index", c_int32),
     ]
 
 
@@ -233,6 +234,39 @@ class Editor:
         if result != 0:
             self._editor.contents.init(self._editor)
 
+    def _get_or_default_config(self, config: EditorConfig | None) -> EditorConfig:
+        if config is not None:
+            return config
+        cfg = EditorConfig()
+        cfg.ip_address = b"127.0.0.1"
+        cfg.port = 8080
+        cfg.headless = 0
+        cfg.streaming = 0
+        cfg.stream_to_file = 0
+        cfg.device_index = 0
+        return cfg
+
+    def _ensure_device(self, config: EditorConfig) -> None:
+        di = self._compute.device_interface()
+        has_device = False
+        try:
+            _ = di.get_device()
+            has_device = True
+        except RuntimeError:
+            has_device = False
+        if not has_device:
+            di.create_device_manager(False)
+            di.create_device(
+                device_index=int(
+                    getattr(
+                        config,
+                        "device_index",
+                        0,
+                    )
+                ),
+                enable_external_usage=False,
+            )
+
     def shutdown(self) -> None:
         shutdown_func = self._editor.contents.shutdown
         shutdown_func(self._editor)
@@ -272,18 +306,12 @@ class Editor:
         show_func = self._editor.contents.show
 
         try:
-            if config is None:
-                # Create default config
-                config = EditorConfig()
-                config.ip_address = b"127.0.0.1"
-                config.port = 8080
-                config.headless = 0  # pnanovdb_bool_t
-                config.streaming = 0  # pnanovdb_bool_t
-                config.stream_to_file = 0  # pnanovdb_bool_t
+            cfg = self._get_or_default_config(config)
+            self._ensure_device(cfg)
             show_func(
                 self._editor,
                 self._compute.device_interface().get_device(),
-                byref(config),
+                byref(cfg),
             )
         except (OSError, ValueError, RuntimeError) as e:
             print(f"Error: Editor runtime error ({e})")
@@ -293,18 +321,12 @@ class Editor:
         start_func = self._editor.contents.start
 
         try:
-            if config is None:
-                # Create default config
-                config = EditorConfig()
-                config.ip_address = b"127.0.0.1"
-                config.port = 8080
-                config.headless = 0  # pnanovdb_bool_t
-                config.streaming = 0  # pnanovdb_bool_t
-                config.stream_to_file = 0  # pnanovdb_bool_t
+            cfg = self._get_or_default_config(config)
+            self._ensure_device(cfg)
             start_func(
                 self._editor,
                 self._compute.device_interface().get_device(),
-                byref(config),
+                byref(cfg),
             )
         except (OSError, ValueError, RuntimeError) as e:
             print(f"Error: Editor start error ({e})")

@@ -301,8 +301,8 @@ typedef struct pnanovdb_compute_interop_handle_t
 #define pnanovdb_compute_interop_handle_default_init                                                                   \
     {                                                                                                                  \
         PNANOVDB_COMPUTE_INTEROP_HANDLE_TYPE_UNKNOWN, /*type*/                                                         \
-            0u, /*value*/                                                                                              \
-            0u, /*resource_size_in_bytes*/                                                                             \
+        0u, /*value*/                                                                                                  \
+        0u, /*resource_size_in_bytes*/                                                                                 \
     }
 static const pnanovdb_compute_interop_handle_t pnanovdb_compute_interop_handle_default =
     pnanovdb_compute_interop_handle_default_init;
@@ -489,6 +489,7 @@ typedef struct pnanovdb_compute_device_manager_t pnanovdb_compute_device_manager
 
 typedef struct pnanovdb_compute_physical_device_desc_t
 {
+    char device_name[256];
     pnanovdb_uint8_t device_uuid[16u];
     pnanovdb_uint8_t device_luid[8u];
     pnanovdb_uint32_t device_node_mask;
@@ -651,6 +652,8 @@ typedef struct pnanovdb_compute_device_interface_t
 
     void(PNANOVDB_ABI* set_resource_min_lifetime)(pnanovdb_compute_context_t* context, pnanovdb_uint64_t min_lifetime);
 
+    pnanovdb_uint32_t(PNANOVDB_ABI* get_device_index)(const pnanovdb_compute_device_t* device);
+
 } pnanovdb_compute_device_interface_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_compute_device_interface_t
@@ -687,6 +690,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(unmap_encoder_data, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(enable_profiler, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(disable_profiler, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(set_resource_min_lifetime, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(get_device_index, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE

@@ -182,6 +182,8 @@ pnanovdb_compute_device_manager_t* createDeviceManager(pnanovdb_bool_t enableVal
 
         for (uint32_t i = 0; i < gpuCount; i++)
         {
+            pnanovdb_compute_physical_device_desc_t physicalDeviceDesc = {};
+
             if (ptr->enabledExtensions.VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2 &&
                 ptr->enabledExtensions.VK_KHR_EXTERNAL_FENCE_CAPABILITIES)
             {
@@ -193,8 +195,6 @@ pnanovdb_compute_device_manager_t* createDeviceManager(pnanovdb_bool_t enableVal
                 devicePropsVulkan.pNext = &deviceIdVulkan;
 
                 loader->vkGetPhysicalDeviceProperties2KHR(ptr->physicalDevices[i], &devicePropsVulkan);
-
-                pnanovdb_compute_physical_device_desc_t physicalDeviceDesc = {};
                 pnanovdb_uint64_t uuidNumBytes =
                     sizeof(deviceIdVulkan.deviceUUID) < sizeof(physicalDeviceDesc.device_uuid) ?
                         sizeof(deviceIdVulkan.deviceUUID) :
@@ -215,15 +215,26 @@ pnanovdb_compute_device_manager_t* createDeviceManager(pnanovdb_bool_t enableVal
                 physicalDeviceDesc.device_luid_valid = deviceIdVulkan.deviceLUIDValid;
 
                 ptr->deviceProps[i] = devicePropsVulkan.properties;
-                ptr->physicalDeviceDescs[i] = physicalDeviceDesc;
             }
             else
             {
-                pnanovdb_compute_physical_device_desc_t physicalDeviceDesc = {};
-
                 loader->vkGetPhysicalDeviceProperties(ptr->physicalDevices[i], &ptr->deviceProps[i]);
-                ptr->physicalDeviceDescs[i] = physicalDeviceDesc;
             }
+
+            // copy device name (common path)
+            const char* src = ptr->deviceProps[i].deviceName;
+            size_t n = 0u;
+            while (src && src[n] && n + 1u < sizeof(physicalDeviceDesc.device_name))
+            {
+                physicalDeviceDesc.device_name[n] = src[n];
+                n++;
+            }
+            if (n < sizeof(physicalDeviceDesc.device_name))
+            {
+                physicalDeviceDesc.device_name[n] = '\0';
+            }
+
+            ptr->physicalDeviceDescs[i] = physicalDeviceDesc;
         }
     }
 
@@ -515,6 +526,12 @@ pnanovdb_compute_queue_t* getComputeQueue(const pnanovdb_compute_device_t* devic
 {
     auto ptr = cast(device);
     return cast(ptr->computeQueue);
+}
+
+pnanovdb_uint32_t getDeviceIndex(const pnanovdb_compute_device_t* device)
+{
+    auto ptr = cast(device);
+    return ptr->desc.device_index;
 }
 
 void getMemoryStats(pnanovdb_compute_device_t* device, pnanovdb_compute_device_memory_stats_t* dstStats)

@@ -342,6 +342,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     {
         return;
     }
+
+    imgui_user_instance->device_index = editor->impl->compute->device_interface.get_device_index(device);
     pnanovdb_compiler_settings_init(&imgui_user_instance->compiler_settings);
 
     pnanovdb_compiler_instance_t* compiler_inst = editor->impl->compiler->create_instance();

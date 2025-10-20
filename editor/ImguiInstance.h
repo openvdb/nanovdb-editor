@@ -201,6 +201,8 @@ struct Instance
     int ini_window_width = 0;
     int ini_window_height = 0;
 
+    pnanovdb_uint32_t device_index = 0;
+
     void set_default_shader(const std::string& shaderName);
     void update_ini_filename_for_profile(const char* profile_name);
 

@@ -120,6 +120,7 @@ void destroyDevice(pnanovdb_compute_device_manager_t* deviceManager, pnanovdb_co
 pnanovdb_compute_queue_t* getDeviceQueue(const pnanovdb_compute_device_t* device);
 pnanovdb_compute_queue_t* getComputeQueue(const pnanovdb_compute_device_t* device);
 void getMemoryStats(pnanovdb_compute_device_t* device, pnanovdb_compute_device_memory_stats_t* dstStats);
+pnanovdb_uint32_t getDeviceIndex(const pnanovdb_compute_device_t* device);
 
 void device_reportMemoryAllocate(Device* device, pnanovdb_compute_memory_type_t type, pnanovdb_uint64_t bytes);
 void device_reportMemoryFree(Device* device, pnanovdb_compute_memory_type_t type, pnanovdb_uint64_t bytes);
