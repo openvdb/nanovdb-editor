@@ -97,7 +97,6 @@ struct PendingState
 {
     std::atomic<bool> update_shader = true; // needs to be initialized with true to map the shader after init
     std::atomic<bool> update_generated = false;
-    bool capture_image = false;
     bool print_slice = false;
     bool load_nvdb = false;
     bool save_nanovdb = false;

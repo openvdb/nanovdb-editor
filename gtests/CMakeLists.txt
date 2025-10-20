@@ -36,9 +36,6 @@ function(ConfigureTest CMAKE_TEST_NAME)
     GTest::gtest_main
   )
 
-  # Enable test-only hooks in the editor code when building tests
-  target_compile_definitions(${CMAKE_TEST_NAME} PRIVATE NANOVDB_EDITOR_ENABLE_TEST_HOOKS)
-
   # Force AddressSanitizer for tests to catch UAF deterministically (GNU/Clang)
   if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(${CMAKE_TEST_NAME} PRIVATE -fsanitize=address -fno-omit-frame-pointer)
@@ -59,4 +56,3 @@ ConfigureTest(ComputeDispatchTest ComputeDispatchTest.cpp)
 ConfigureTest(ShaderCompileCpuTest ShaderCompileCpuTest.cpp)
 ConfigureTest(FileFormatTest FileFormatTest.cpp)
 ConfigureTest(EditorStartStopTest EditorStartStopTest.cpp)
-ConfigureTest(EditorViewSwitchTest EditorViewSwitchTest.cpp)

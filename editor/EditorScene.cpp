@@ -16,6 +16,9 @@
 #include "ShaderCompileUtils.h"
 #include "Console.h"
 
+#include <nanovdb/io/IO.h>
+
+#include <cstddef>
 #include <filesystem>
 
 namespace pnanovdb_editor
@@ -28,8 +31,6 @@ EditorScene::EditorScene(const EditorSceneConfig& config)
       m_views(static_cast<EditorView*>(config.editor->impl->views)),
       m_compute(config.editor->impl->compute),
       m_imgui_settings(config.imgui_settings),
-      m_window_iface(config.window_iface),
-      m_window(config.window),
       m_device_queue(config.device_queue)
 {
     // Setup views UI - ImguiInstance accesses views through EditorScene
@@ -149,7 +150,7 @@ UnifiedViewContext EditorScene::get_current_view_context() const
     return get_view_context(m_view_selection.name, m_view_selection.type);
 }
 
-void EditorScene::save_current_view_state()
+void EditorScene::sync_current_view_state(SyncDirection sync_direction)
 {
     std::string current_scene_item = m_view_selection.name;
     ViewType current_view_type = m_view_selection.type;
@@ -165,7 +166,7 @@ void EditorScene::save_current_view_state()
         return;
     }
 
-    copy_shader_params_for_view(view_ctx, &m_raster2d_params, true);
+    copy_shader_params(view_ctx, sync_direction);
 }
 
 void EditorScene::clear_editor_view_state()
@@ -194,12 +195,34 @@ void EditorScene::copy_shader_params_from_ui_to_view(ShaderParams* params, void*
         return;
     }
 
-    m_compute->destroy_array(params->current_array);
-    params->current_array = m_imgui_instance->shader_params.get_compute_array_for_shader(params->shader_name, m_compute);
-    std::memcpy(view_params, params->current_array->data, params->size);
+    auto* old_array = params->current_array;
+    auto* new_array = m_imgui_instance->shader_params.get_compute_array_for_shader(params->shader_name, m_compute);
+
+    if (!new_array || !new_array->data)
+    {
+        return;
+    }
+
+    // If view_params points to the same buffer as the old array, update in place
+    if (old_array && view_params == old_array->data)
+    {
+        std::memcpy(old_array->data, new_array->data, params->size);
+        m_compute->destroy_array(new_array);
+        return;
+    }
+
+    // Otherwise, switch to the new array and copy to the external target
+    auto* to_destroy = old_array;
+    params->current_array = new_array;
+    std::memcpy(view_params, new_array->data, params->size);
+
+    if (to_destroy && to_destroy != params->default_array)
+    {
+        m_compute->destroy_array(to_destroy);
+    }
 }
 
-void EditorScene::copy_shader_params_from_ui_to_editor(ShaderParams* params)
+void EditorScene::copy_ui_shader_params_from_to_editor(ShaderParams* params)
 {
     if (params && params->current_array)
     {
@@ -207,39 +230,57 @@ void EditorScene::copy_shader_params_from_ui_to_editor(ShaderParams* params)
     }
 }
 
-void EditorScene::copy_shader_params_for_view(const UnifiedViewContext& view_ctx, ShaderParams* params, bool to_ui)
+void EditorScene::copy_shader_params(const UnifiedViewContext& view_ctx,
+                                     SyncDirection sync_direction,
+                                     void** view_params_out)
 {
     if (!view_ctx.is_valid())
     {
         return;
     }
 
-    void* target = nullptr;
+    ShaderParams* params = nullptr;
+    void* view_params = nullptr;
     if (view_ctx.get_view_type() == ViewType::GaussianScenes)
     {
+        params = &m_raster2d_params;
         auto* gaussian_ctx = view_ctx.get_gaussian_context();
-        if (gaussian_ctx && gaussian_ctx->shader_params)
+        if (!gaussian_ctx->shader_params)
         {
-            target = gaussian_ctx->shader_params;
+            gaussian_ctx->shader_params = m_raster2d_params.default_array ?
+                                              (pnanovdb_raster_shader_params_t*)m_raster2d_params.default_array->data :
+                                              nullptr;
         }
+        view_params = gaussian_ctx->shader_params;
     }
     else if (view_ctx.get_view_type() == ViewType::NanoVDBs)
     {
+        params = &m_nanovdb_params;
         auto* nanovdb_ctx = view_ctx.get_nanovdb_context();
-        if (nanovdb_ctx && nanovdb_ctx->shader_params)
+        if (!nanovdb_ctx->shader_params)
         {
-            target = nanovdb_ctx->shader_params;
+            nanovdb_ctx->shader_params = m_nanovdb_params.default_array ? m_nanovdb_params.default_array->data : nullptr;
         }
+        view_params = nanovdb_ctx->shader_params;
     }
-    if (target)
+
+    if (params && view_params)
     {
-        if (to_ui)
+        if (sync_direction == SyncDirection::UIToEditor)
+        {
+            copy_ui_shader_params_from_to_editor(params);
+        }
+        else if (sync_direction == SyncDirection::EditorToUI)
         {
             copy_editor_shader_params_to_ui(params);
         }
-        else
+        else if (sync_direction == SyncDirection::UiToView)
         {
-            copy_shader_params_from_ui_to_view(params, target);
+            copy_shader_params_from_ui_to_view(params, view_params);
+            if (view_params_out)
+            {
+                *view_params_out = view_params;
+            }
         }
     }
 }
@@ -276,7 +317,7 @@ void EditorScene::load_view_into_editor_and_ui(const UnifiedViewContext& view_ct
         }
     }
 
-    copy_shader_params_for_view(view_ctx, &m_raster2d_params, true);
+    copy_shader_params(view_ctx, SyncDirection::EditorToUI);
 }
 
 void EditorScene::handle_pending_view_changes()
@@ -303,6 +344,72 @@ void EditorScene::handle_pending_view_changes()
     }
 }
 
+void EditorScene::process_pending_editor_changes()
+{
+    if (!m_editor->impl->editor_worker)
+    {
+        return;
+    }
+
+    bool updated = false;
+    auto* worker = static_cast<EditorWorker*>(m_editor->impl->editor_worker);
+
+    pnanovdb_compute_array_t* old_nanovdb_array = nullptr;
+    updated = worker->pending_nanovdb.process_pending(m_editor->impl->nanovdb_array, old_nanovdb_array);
+
+    pnanovdb_compute_array_t* old_array = nullptr;
+    worker->pending_data_array.process_pending(m_editor->impl->data_array, old_array);
+
+    pnanovdb_raster_context_t* old_raster_ctx = nullptr;
+    worker->pending_raster_ctx.process_pending(m_editor->impl->raster_ctx, old_raster_ctx);
+
+    pnanovdb_raster_gaussian_data_t* old_gaussian_data = nullptr;
+    worker->pending_gaussian_data.process_pending(m_editor->impl->gaussian_data, old_gaussian_data);
+
+    pnanovdb_camera_t* old_camera = nullptr;
+    updated = worker->pending_camera.process_pending(m_editor->impl->camera, old_camera);
+    if (updated)
+    {
+        m_imgui_settings->camera_state = m_editor->impl->camera->state;
+        m_imgui_settings->camera_config = m_editor->impl->camera->config;
+        m_imgui_settings->sync_camera = PNANOVDB_TRUE;
+    }
+
+    void* old_shader_params = nullptr;
+    worker->pending_shader_params.process_pending(m_editor->impl->shader_params, old_shader_params);
+
+    const pnanovdb_reflect_data_type_t* old_shader_params_data_type = nullptr;
+    worker->pending_shader_params_data_type.process_pending(
+        m_editor->impl->shader_params_data_type, old_shader_params_data_type);
+}
+
+void EditorScene::process_pending_ui_changes()
+{
+    // update pending GUI states
+    if (m_imgui_instance->pending.load_nvdb)
+    {
+        m_imgui_instance->pending.load_nvdb = false;
+        load_nanovdb_to_editor();
+        update_viewport_shader(m_nanovdb_params.shader_name.c_str());
+    }
+    if (m_imgui_instance->pending.save_nanovdb)
+    {
+        m_imgui_instance->pending.save_nanovdb = false;
+        save_editor_nanovdb();
+    }
+    if (m_imgui_instance->pending.print_slice)
+    {
+        m_imgui_instance->pending.print_slice = false;
+#if TEST_IO
+        FILE* input_file = fopen("./data/smoke.nvdb", "rb");
+        FILE* output_file = fopen("./data/slice_output.bmp", "wb");
+        test_pnanovdb_io_print_slice(input_file, output_file);
+        fclose(input_file);
+        fclose(output_file);
+#endif
+    }
+}
+
 void EditorScene::sync_selected_view_with_current()
 {
     handle_pending_view_changes();
@@ -313,7 +420,7 @@ void EditorScene::sync_selected_view_with_current()
         return;
     }
 
-    save_current_view_state();
+    sync_current_view_state(SyncDirection::EditorToUI);
 
     ViewType new_view_type = ViewType::None;
     if (is_selection_valid(SceneSelection{ ViewType::NanoVDBs, view_current }))
@@ -348,6 +455,59 @@ void EditorScene::sync_selected_view_with_current()
     else if (new_view_type == ViewType::GaussianScenes)
     {
         m_imgui_instance->viewport_option = imgui_instance_user::ViewportOption::Raster2D;
+    }
+}
+
+void EditorScene::sync_shader_params_from_editor()
+{
+    if (m_editor->impl->editor_worker)
+    {
+        EditorWorker* worker = static_cast<EditorWorker*>(m_editor->impl->editor_worker);
+        if (worker->set_params.load() > 0)
+        {
+            // Push editor params to UI
+            sync_current_view_state(SyncDirection::EditorToUI);
+            worker->set_params.fetch_sub(1);
+        }
+
+        if (worker->get_params.load() > 0)
+        {
+            // Copy UI params back to editor
+            sync_current_view_state(SyncDirection::UIToEditor);
+            worker->get_params.fetch_sub(1);
+        }
+    }
+    else
+    {
+        sync_current_view_state(SyncDirection::UiToView);
+
+        // Clear editor params pointer to mark UI as source of truth
+        m_editor->impl->shader_params = nullptr;
+        m_editor->impl->shader_params_data_type = nullptr;
+    }
+}
+
+void EditorScene::get_shader_params_for_current_view(void* shader_params_data)
+{
+    if (!shader_params_data)
+    {
+        return;
+    }
+
+    auto view_ctx = get_current_view_context();
+    if (!view_ctx.is_valid())
+    {
+        return;
+    }
+
+    void* view_params = nullptr;
+    size_t copy_size =
+        (view_ctx.get_view_type() == ViewType::GaussianScenes) ? m_raster2d_params.size : m_nanovdb_params.size;
+    copy_shader_params(view_ctx, SyncDirection::UiToView, &view_params);
+
+    if (view_params && copy_size > 0)
+    {
+        std::memcpy(shader_params_data, view_params, copy_size);
     }
 }
 
@@ -411,27 +571,6 @@ void EditorScene::handle_gaussian_data_load(pnanovdb_raster_context_t* raster_ct
 
     // Setting current view will trigger sync_selected_view_with_current to load it
     m_views->set_current_view(view_name);
-}
-
-void EditorScene::get_editor_params_for_current_view(void* shader_params_mapped)
-{
-    if (!shader_params_mapped || m_view_selection.type != ViewType::NanoVDBs || m_view_selection.name.empty())
-    {
-        return;
-    }
-
-    auto view_it = m_views->get_nanovdbs().find(m_view_selection.name);
-    if (view_it != m_views->get_nanovdbs().end())
-    {
-        if (!view_it->second.shader_params)
-        {
-            view_it->second.shader_params = m_nanovdb_params.default_array->data;
-        }
-
-        copy_shader_params_from_ui_to_view(&m_nanovdb_params, view_it->second.shader_params);
-        std::memcpy(shader_params_mapped, view_it->second.shader_params, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
-        const char* data = static_cast<const char*>(view_it->second.shader_params);
-    }
 }
 
 void EditorScene::add_nanovdb_to_scene_data(pnanovdb_compute_array_t* nanovdb_array,

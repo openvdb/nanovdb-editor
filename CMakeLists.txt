@@ -270,11 +270,6 @@ if(NANOVDB_EDITOR_USE_GLFW)
     target_compile_definitions(pnanovdbeditor PRIVATE PNANOVDB_USE_GLFW)
 endif()
 
-# Enable internal test hooks when building tests, so gtests can call guarded helpers
-if(NANOVDB_EDITOR_BUILD_TESTS)
-    target_compile_definitions(pnanovdbeditor PUBLIC NANOVDB_EDITOR_ENABLE_TEST_HOOKS)
-endif()
-
 if(APPLE)
     target_link_libraries(pnanovdbeditor PRIVATE
         "-framework CoreFoundation"

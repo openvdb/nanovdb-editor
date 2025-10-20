@@ -125,8 +125,6 @@ struct EditorSceneConfig
     imgui_instance_user::Instance* imgui_instance;
     pnanovdb_editor_t* editor;
     pnanovdb_imgui_settings_render_t* imgui_settings;
-    pnanovdb_imgui_window_interface_t* window_iface;
-    pnanovdb_imgui_window_t* window;
     pnanovdb_compute_queue_t* device_queue;
     pnanovdb_compiler_instance_t* compiler_inst;
     const char* default_shader_name;
@@ -167,12 +165,19 @@ struct ShaderParams
     pnanovdb_compute_array_t* current_array = nullptr;
 };
 
+enum class SyncDirection
+{
+    UIToEditor,
+    EditorToUI,
+    UiToView,
+};
+
 class EditorScene
 {
 private:
     void copy_editor_shader_params_to_ui(ShaderParams* params);
     void copy_shader_params_from_ui_to_view(ShaderParams* params, void* view_params);
-    void copy_shader_params_from_ui_to_editor(ShaderParams* params);
+    void copy_ui_shader_params_from_to_editor(ShaderParams* params);
 
 public:
     explicit EditorScene(const EditorSceneConfig& config);
@@ -181,8 +186,14 @@ public:
     UnifiedViewContext get_view_context(const std::string& view_name, ViewType view_type) const;
     UnifiedViewContext get_current_view_context() const;
 
-    // Scene selection handling
+    // Editor per update sync
+    void process_pending_editor_changes();
+    void process_pending_ui_changes();
     void sync_selected_view_with_current();
+    void sync_shader_params_from_editor();
+
+    // Copy current editor shader params from UI
+    void get_shader_params_for_current_view(void* shader_params_data);
 
     // Scene selection management
     void update_selection(ViewType type, const std::string& name);
@@ -207,10 +218,6 @@ public:
     int get_camera_frustum_index(const std::string& camera_name) const;
     void set_camera_frustum_index(const std::string& camera_name, int index);
 
-    // NanoVDB file operations
-    void load_nanovdb_to_editor();
-    void save_editor_nanovdb();
-
     // Update shader if needed
     void update_viewport_shader(const char* new_shader);
 
@@ -224,9 +231,6 @@ public:
                                    const std::string& filename,
                                    pnanovdb_raster_t* raster,
                                    std::shared_ptr<pnanovdb_raster_gaussian_data_t>& old_gaussian_data_ptr);
-
-    // Copy current editor shader params from UI
-    void get_editor_params_for_current_view(void* shader_params_mapped);
 
     // Add NanoVDB to loaded arrays
     void add_nanovdb_to_scene_data(pnanovdb_compute_array_t* nanovdb_array,
@@ -244,35 +248,10 @@ public:
     // Sync default camera view with current viewport camera
     void sync_default_camera_view();
 
-    // Raster2D shader helpers
-    const pnanovdb_raster_shader_params_t* get_raster2d_shader_params() const
-    {
-        const pnanovdb_raster_shader_params_t* raster_shader_params =
-            (pnanovdb_raster_shader_params_t*)m_raster2d_params.current_array->data;
-        return raster_shader_params;
-    }
     const pnanovdb_reflect_data_type_t* get_raster_shader_params_data_type() const
     {
         return m_raster_shader_params_data_type;
     }
-    void copy_editor_raster_params_to_ui(const void* editor_params)
-    {
-        copy_editor_shader_params_to_ui(&m_raster2d_params);
-    }
-    void copy_raster_params_from_ui()
-    {
-        copy_shader_params_from_ui_to_view(&m_raster2d_params, m_raster2d_params.current_array->data);
-    }
-    void copy_raster_params_to_editor()
-    {
-        copy_shader_params_from_ui_to_editor(&m_raster2d_params);
-    }
-
-    // Test helpers (compiled only when NANOVDB_EDITOR_BUILD_TESTS=ON)
-#if defined(NANOVDB_EDITOR_ENABLE_TEST_HOOKS)
-    void test_init_raster_params_array_for_regression();
-    void test_copy_raster_params_current_to_self();
-#endif
 
     const EditorSceneData& get_editor_data() const
     {
@@ -316,12 +295,18 @@ public:
     }
 
 private:
-    void copy_shader_params_for_view(const UnifiedViewContext& view_ctx, ShaderParams* params, bool to_ui);
-    void save_current_view_state();
+    void copy_shader_params(const UnifiedViewContext& view_ctx,
+                            SyncDirection sync_direction,
+                            void** view_params_out = nullptr);
+    void sync_current_view_state(SyncDirection sync_direction);
     void clear_editor_view_state();
     void load_view_into_editor_and_ui(const UnifiedViewContext& view_ctx);
     void handle_pending_view_changes();
     void initialize_view_registry();
+
+    // NanoVDB file operations
+    void load_nanovdb_to_editor();
+    void save_editor_nanovdb();
 
     std::map<ViewType, ViewMapVariant> m_view_registry;
 
@@ -330,8 +315,6 @@ private:
     EditorView* m_views;
     const pnanovdb_compute_t* m_compute;
     pnanovdb_imgui_settings_render_t* m_imgui_settings;
-    pnanovdb_imgui_window_interface_t* m_window_iface;
-    pnanovdb_imgui_window_t* m_window;
     pnanovdb_compute_queue_t* m_device_queue;
 
     SceneSelection m_view_selection;
