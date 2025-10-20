@@ -30,3 +30,9 @@ def test_editor_start_stop():
         sleep(0.5)
     finally:
         editor.stop()
+        # Prevent destructor from calling into native lib during shutdown
+        editor = None
+        compute = None
+        compiler._instance = None
+        compiler._compiler = None
+        compiler = None
