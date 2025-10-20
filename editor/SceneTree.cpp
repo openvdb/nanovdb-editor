@@ -123,11 +123,6 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
         bool isRootSelected = (ptr->editor_scene->get_properties_selection().name == SCENE_ROOT_NODE);
         if (renderTreeNodeHeader(SCENE_ROOT_NODE, nullptr, isRootSelected))
         {
-            if (ImGui::IsItemClicked())
-            {
-                ptr->editor_scene->set_properties_selection(ViewType::Root, SCENE_ROOT_NODE);
-            }
-
             // Show viewport camera as child of Viewer
             if (ptr->editor_scene)
             {

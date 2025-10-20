@@ -375,34 +375,6 @@ void Properties::render(imgui_instance_user::Instance* ptr)
         }
         if (selection.type == pnanovdb_editor::ViewType::Root)
         {
-            auto settings = ptr->render_settings;
-
-            ImGui::DragFloat("Camera Speed Multiplier", &settings->camera_speed_multiplier, 0.f, 1.f, 10000.f, "%.1f",
-                             ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
-            IMGUI_CHECKBOX_SYNC("Upside Down", settings->is_upside_down);
-            {
-                int up_axis = settings->is_y_up ? 0 : 1;
-                const char* up_axis_items[] = { "Y", "Z" };
-                if (ImGui::Combo("Up Axis", &up_axis, up_axis_items, IM_ARRAYSIZE(up_axis_items)))
-                {
-                    settings->is_y_up = (up_axis == 0);
-                }
-            }
-            if (ImGui::BeginCombo("Resolution", "Select..."))
-            {
-                const char* labels[4] = { "1440x720", "1920x1080", "2560x1440", "3840x2160" };
-                const int widths[4] = { 1440, 1920, 2560, 3840 };
-                const int heights[4] = { 720, 1080, 1440, 2160 };
-                for (int i = 0; i < 4; i++)
-                {
-                    if (ImGui::Selectable(labels[i]))
-                    {
-                        settings->encode_width = widths[i];
-                        settings->encode_height = heights[i];
-                    }
-                }
-                ImGui::EndCombo();
-            }
         }
         else if (selection.type == pnanovdb_editor::ViewType::GaussianScenes)
         {

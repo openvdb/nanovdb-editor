@@ -17,6 +17,7 @@
 
 #include <string>
 #include <map>
+#include <atomic>
 
 namespace pnanovdb_editor
 {
@@ -61,10 +62,15 @@ public:
     void set_current_view(const std::string& view_name)
     {
         m_current_view = view_name;
+        m_current_view_epoch.fetch_add(1, std::memory_order_relaxed);
     }
     const std::string& get_current_view() const
     {
         return m_current_view;
+    }
+    uint64_t get_current_view_epoch() const
+    {
+        return m_current_view_epoch.load(std::memory_order_relaxed);
     }
 
     // Gaussians
@@ -110,6 +116,7 @@ private:
     std::map<std::string, NanoVDBContext> m_nanovdbs;
     int m_unnamed_counter = 0;
     std::string m_current_view; // Name of the currently selected view
+    std::atomic<uint64_t> m_current_view_epoch{ 0 };
 };
 
 } // namespace pnanovdb_editor

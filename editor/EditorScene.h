@@ -186,6 +186,10 @@ public:
     UnifiedViewContext get_view_context(const std::string& view_name, ViewType view_type) const;
     UnifiedViewContext get_current_view_context() const;
     UnifiedViewContext get_render_view_context() const;
+    uint64_t get_current_view_epoch() const
+    {
+        return m_views ? m_views->get_current_view_epoch() : 0;
+    }
 
     // Editor per update sync
     void process_pending_editor_changes();
@@ -306,7 +310,7 @@ private:
     void sync_current_view_state(SyncDirection sync_direction);
     void clear_editor_view_state();
     void load_view_into_editor_and_ui(const UnifiedViewContext& view_ctx);
-    void handle_pending_view_changes();
+    bool handle_pending_view_changes();
     void initialize_view_registry();
 
     // NanoVDB file operations

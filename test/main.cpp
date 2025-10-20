@@ -344,7 +344,7 @@ int main(int argc, char* argv[])
 
     editor.add_nanovdb(&editor, data_nanovdb);
 
-    pnanovdb_compute_array_t* data_nanovdb2 = compute.load_nanovdb("./data/octree.nvdb");
+    pnanovdb_compute_array_t* data_nanovdb2 = compute.load_nanovdb("./data/splats.nvdb");
     if (data_nanovdb2)
     {
         editor.add_nanovdb(&editor, data_nanovdb2);
