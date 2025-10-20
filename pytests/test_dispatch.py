@@ -23,17 +23,9 @@ class TestDispatch(unittest.TestCase):
         self.constants_data = np.array([4], dtype=self.array_dtype)
         self.output_data = np.zeros_like(self.input_data)
 
-        self.compiler = Compiler()
-        self.compiler.create_instance()
-
-        self.compute = Compute(self.compiler)
-        self.compute.device_interface().create_device_manager()
-        self.compute.device_interface().create_device()
-
     def tearDown(self):
         """Clean up resources between tests"""
-        self.compute = None
-        self.compiler = None
+        # Force garbage collection
         gc.collect()
 
     def assert_addition_result(self, result):
@@ -41,29 +33,49 @@ class TestDispatch(unittest.TestCase):
             self.assertEqual(result[i], val + self.constants_data[0])
 
     def test_vulkan_dispatch(self):
-        self.compiler.compile_shader(TEST_SHADER, entry_point_name="computeMain")
+        # Create fresh compiler and compute for this test
+        compiler = Compiler()
+        compiler.create_instance()
 
-        input_array = self.compute.create_array(self.input_data)
-        constants_array = self.compute.create_array(self.constants_data)
-        output_array = self.compute.create_array(self.output_data)
+        compute = Compute(compiler)
+        compute.device_interface().create_device_manager()
+        compute.device_interface().create_device()
 
-        success = self.compute.dispatch_shader_on_array(
+        compiler.compile_shader(TEST_SHADER, entry_point_name="computeMain")
+
+        input_array = compute.create_array(self.input_data)
+        constants_array = compute.create_array(self.constants_data)
+        output_array = compute.create_array(self.output_data)
+
+        success = compute.dispatch_shader_on_array(
             TEST_SHADER, (1, 1, 1), input_array, constants_array, output_array
         )
         self.assertTrue(success)
 
-        result = self.compute.map_array(output_array, self.array_dtype)
+        result = compute.map_array(output_array, self.array_dtype)
         self.assertIsNotNone(result)
         self.assert_addition_result(result)
 
-        self.compute.unmap_array(output_array)
+        compute.unmap_array(output_array)
 
-        self.compute.destroy_array(input_array)
-        self.compute.destroy_array(constants_array)
-        self.compute.destroy_array(output_array)
+        compute.destroy_array(input_array)
+        compute.destroy_array(constants_array)
+        compute.destroy_array(output_array)
+
+        # Clean up
+        compute = None
+        compiler = None
+        gc.collect()
 
     def test_cpu_dispatch(self):
-        self.compiler.compile_shader(TEST_SHADER, entry_point_name="computeMain", compile_target=CompileTarget.CPU)
+        # Create fresh compiler and compute for this test
+        compiler = Compiler()
+        compiler.create_instance()
+
+        # CPU tests don't need device, but create compute for consistency
+        compute = Compute(compiler)
+
+        compiler.compile_shader(TEST_SHADER, entry_point_name="computeMain", compile_target=CompileTarget.CPU)
 
         class Constants(Structure):
             """Definition equivalent to constants_t in the shader."""
@@ -87,15 +99,16 @@ class TestDispatch(unittest.TestCase):
         uniform_state.constants = c_void_p(addressof(constants))
         uniform_state.data_out = MemoryBuffer(self.output_data)
 
-        success = self.compiler.execute_cpu(TEST_SHADER, (1, 1, 1), None, c_void_p(addressof(uniform_state)))
+        success = compiler.execute_cpu(TEST_SHADER, (1, 1, 1), None, c_void_p(addressof(uniform_state)))
         self.assertTrue(success)
 
         data_out = uniform_state.data_out.to_ndarray(self.array_dtype)
         self.assert_addition_result(data_out)
 
-        # Prevent destructor from calling into native lib during shutdown
-        self.compiler._instance = None
-        self.compiler._compiler = None
+        # Clean up
+        compute = None
+        compiler = None
+        gc.collect()
 
 
 if __name__ == "__main__":
