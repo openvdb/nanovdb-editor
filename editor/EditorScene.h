@@ -185,6 +185,7 @@ public:
 
     UnifiedViewContext get_view_context(const std::string& view_name, ViewType view_type) const;
     UnifiedViewContext get_current_view_context() const;
+    UnifiedViewContext get_render_view_context() const;
 
     // Editor per update sync
     void process_pending_editor_changes();
@@ -196,10 +197,14 @@ public:
     void get_shader_params_for_current_view(void* shader_params_data);
 
     // Scene selection management
-    void update_selection(ViewType type, const std::string& name);
-    SceneSelection get_selection() const;
     bool has_valid_selection() const;
     void clear_selection();
+
+    void set_properties_selection(ViewType type, const std::string& name);
+    SceneSelection get_properties_selection() const;
+
+    void set_render_view(ViewType type, const std::string& name);
+    SceneSelection get_render_view_selection() const;
 
     // Camera state management
     void save_camera_state(const std::string& name, const pnanovdb_camera_state_t& state);
@@ -317,7 +322,8 @@ private:
     pnanovdb_imgui_settings_render_t* m_imgui_settings;
     pnanovdb_compute_queue_t* m_device_queue;
 
-    SceneSelection m_view_selection;
+    SceneSelection m_view_selection; // what UI shows
+    SceneSelection m_render_view_selection; // what renderer uses
 
     std::map<std::string, pnanovdb_camera_state_t> m_saved_camera_states;
     std::map<std::string, pnanovdb_camera_state_t> m_views_camera_state;

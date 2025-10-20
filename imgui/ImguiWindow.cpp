@@ -378,9 +378,9 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
 #else
         if (!ptr->server)
         {
-            ptr->server =
-                pnanovdb_get_server()->create_instance(user_settings->server_address, user_settings->server_port,
-                                                       user_settings->server_create_max_attempts, &ptr->resolved_port, log_print);
+            ptr->server = pnanovdb_get_server()->create_instance(
+                user_settings->server_address, user_settings->server_port, user_settings->server_create_max_attempts,
+                &ptr->resolved_port, log_print);
             // make resolved port available ASAP
             if (out_resolved_port)
             {

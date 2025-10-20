@@ -117,7 +117,7 @@ void createMenu(imgui_instance_user::Instance* ptr)
         // Center-aligned application label
         {
             std::string centerText;
-            auto selection = ptr->editor_scene->get_selection();
+            auto selection = ptr->editor_scene->get_properties_selection();
             if (!selection.name.empty())
             {
                 centerText += selection.name + " - ";
@@ -892,7 +892,7 @@ void showFileHeaderWindow(imgui_instance_user::Instance* ptr)
     if (ImGui::Begin(FILE_HEADER, &ptr->window.show_file_header))
     {
         pnanovdb_compute_array_t* current_array = nullptr;
-        auto selection = ptr->editor_scene->get_selection();
+        auto selection = ptr->editor_scene->get_properties_selection();
         ptr->editor_scene->for_each_view(ViewType::NanoVDBs,
                                          [&](const std::string& name, const auto& ctx)
                                          {

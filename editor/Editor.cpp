@@ -690,7 +690,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             editor->impl->compute, device_queue,
             background_image ? compute_interface->register_texture_as_transient(compute_context, background_image) :
                                nullptr,
-            &image_width, &image_height, &editor->impl->resolved_port, imgui_window, imgui_user_settings, editor_get_external_active_count, editor);
+            &image_width, &image_height, &editor->impl->resolved_port, imgui_window, imgui_user_settings,
+            editor_get_external_active_count, editor);
 
         if (background_image)
         {

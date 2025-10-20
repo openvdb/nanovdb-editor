@@ -120,12 +120,12 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
         // ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 4.0f));
 
         // Viewer tree node - root parent of all scene items
-        bool isRootSelected = (ptr->editor_scene->get_selection().name == SCENE_ROOT_NODE);
+        bool isRootSelected = (ptr->editor_scene->get_properties_selection().name == SCENE_ROOT_NODE);
         if (renderTreeNodeHeader(SCENE_ROOT_NODE, nullptr, isRootSelected))
         {
             if (ImGui::IsItemClicked())
             {
-                ptr->editor_scene->update_selection(ViewType::Root, SCENE_ROOT_NODE);
+                ptr->editor_scene->set_properties_selection(ViewType::Root, SCENE_ROOT_NODE);
             }
 
             // Show viewport camera as child of Viewer
@@ -146,11 +146,11 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                                 ImGui::Indent(indentSpacing);
 
                                 const std::string& cameraName = VIEWPORT_CAMERA;
-                                bool isSelected = (ptr->editor_scene->get_selection().name == cameraName);
+                                bool isSelected = (ptr->editor_scene->get_properties_selection().name == cameraName);
 
                                 if (renderSceneItem(cameraName.c_str(), isSelected, indentSpacing, false))
                                 {
-                                    ptr->editor_scene->update_selection(ViewType::Cameras, cameraName);
+                                    ptr->editor_scene->set_properties_selection(ViewType::Cameras, cameraName);
                                 }
 
                                 ImGui::Unindent(indentSpacing);
@@ -219,11 +219,11 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                                     return;
                                 }
 
-                                bool isSelected = (ptr->editor_scene->get_selection().name == cameraName);
+                                bool isSelected = (ptr->editor_scene->get_properties_selection().name == cameraName);
                                 if (renderSceneItem(
                                         cameraName.c_str(), isSelected, indentSpacing, false, &camera->is_visible))
                                 {
-                                    ptr->editor_scene->update_selection(ViewType::Cameras, cameraName);
+                                    ptr->editor_scene->set_properties_selection(ViewType::Cameras, cameraName);
                                 }
                             }
                         });
@@ -241,7 +241,7 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                         viewType,
                         [&](const std::string& name, const auto& /*view_data*/)
                         {
-                            bool isSelected = (ptr->editor_scene->get_selection().name == name);
+                            bool isSelected = (ptr->editor_scene->get_properties_selection().name == name);
                             if (renderSceneItem(name.c_str(), isSelected, indentSpacing, false))
                             {
                                 pendingField = name;

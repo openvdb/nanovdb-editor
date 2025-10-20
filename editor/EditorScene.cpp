@@ -28,7 +28,7 @@ const char* s_raster2d_shader_name = "raster/gaussian_rasterize_2d.slang";
 EditorScene::EditorScene(const EditorSceneConfig& config)
     : m_imgui_instance(config.imgui_instance),
       m_editor(config.editor),
-      m_views(static_cast<EditorView*>(config.editor->impl->views)),
+      m_views(config.editor->impl->views),
       m_compute(config.editor->impl->compute),
       m_imgui_settings(config.imgui_settings),
       m_device_queue(config.device_queue)
@@ -150,17 +150,37 @@ UnifiedViewContext EditorScene::get_current_view_context() const
     return get_view_context(m_view_selection.name, m_view_selection.type);
 }
 
-void EditorScene::sync_current_view_state(SyncDirection sync_direction)
+UnifiedViewContext EditorScene::get_render_view_context() const
 {
-    std::string current_scene_item = m_view_selection.name;
-    ViewType current_view_type = m_view_selection.type;
-
-    if (current_scene_item.empty())
+    // Prefer explicit render selection if valid
+    if (m_render_view_selection.is_valid())
     {
-        return;
+        auto ctx = get_view_context(m_render_view_selection.name, m_render_view_selection.type);
+        if (ctx.is_valid())
+        {
+            return ctx;
+        }
     }
 
-    auto view_ctx = get_view_context(current_scene_item, current_view_type);
+    // Fallback to current content view name from EditorView (back-compat)
+    const std::string& current = m_views->get_current_view();
+    if (!current.empty())
+    {
+        if (is_selection_valid(SceneSelection{ ViewType::NanoVDBs, current }))
+        {
+            return get_view_context(current, ViewType::NanoVDBs);
+        }
+        if (is_selection_valid(SceneSelection{ ViewType::GaussianScenes, current }))
+        {
+            return get_view_context(current, ViewType::GaussianScenes);
+        }
+    }
+    return UnifiedViewContext();
+}
+
+void EditorScene::sync_current_view_state(SyncDirection sync_direction)
+{
+    auto view_ctx = get_render_view_context();
     if (!view_ctx.is_valid())
     {
         return;
@@ -412,14 +432,26 @@ void EditorScene::process_pending_ui_changes()
 
 void EditorScene::sync_selected_view_with_current()
 {
+    // Track whether the current content view changed this frame
+    const std::string prev_view = m_views->get_current_view();
+
     handle_pending_view_changes();
 
     const std::string& view_current = m_views->get_current_view();
+
+    // If a camera is selected and no new content view was requested, keep selection
+    // so Properties can show camera settings without switching the renderer.
+    if (m_view_selection.type == ViewType::Cameras && view_current == prev_view)
+    {
+        return;
+    }
+
     if (view_current.empty() || m_view_selection.name == view_current)
     {
         return;
     }
 
+    // Sync parameters for the render view (not properties selection)
     sync_current_view_state(SyncDirection::EditorToUI);
 
     ViewType new_view_type = ViewType::None;
@@ -438,7 +470,8 @@ void EditorScene::sync_selected_view_with_current()
         return;
     }
 
-    update_selection(new_view_type, view_current);
+    // Update properties selection; render view may be linked if enabled
+    set_properties_selection(new_view_type, view_current);
 
     auto view_ctx = get_view_context(view_current, new_view_type);
     if (!view_ctx.is_valid())
@@ -493,7 +526,7 @@ void EditorScene::get_shader_params_for_current_view(void* shader_params_data)
         return;
     }
 
-    auto view_ctx = get_current_view_context();
+    auto view_ctx = get_render_view_context();
     if (!view_ctx.is_valid())
     {
         return;
@@ -696,7 +729,19 @@ bool EditorScene::is_selection_valid(const SceneSelection& selection) const
 // Scene Selection Management
 // ============================================================================
 
-void EditorScene::update_selection(ViewType type, const std::string& name)
+// update_selection() removed; logic migrated into set_properties_selection()
+
+bool EditorScene::has_valid_selection() const
+{
+    return is_selection_valid(m_view_selection);
+}
+
+void EditorScene::clear_selection()
+{
+    m_view_selection = SceneSelection();
+}
+
+void EditorScene::set_properties_selection(ViewType type, const std::string& name)
 {
     bool valid = false;
     switch (type)
@@ -713,10 +758,16 @@ void EditorScene::update_selection(ViewType type, const std::string& name)
     default:
         valid = false;
     }
+
     if (valid)
     {
         m_view_selection.type = type;
         m_view_selection.name = name;
+
+        if (type == ViewType::NanoVDBs || type == ViewType::GaussianScenes)
+        {
+            m_render_view_selection = m_view_selection;
+        }
     }
     else
     {
@@ -725,19 +776,43 @@ void EditorScene::update_selection(ViewType type, const std::string& name)
     }
 }
 
-SceneSelection EditorScene::get_selection() const
+SceneSelection EditorScene::get_properties_selection() const
 {
     return m_view_selection;
 }
 
-bool EditorScene::has_valid_selection() const
+void EditorScene::set_render_view(ViewType type, const std::string& name)
 {
-    return is_selection_valid(m_view_selection);
+    if (!is_selection_valid(SceneSelection{ type, name }))
+    {
+        return;
+    }
+    if (type != ViewType::NanoVDBs && type != ViewType::GaussianScenes)
+    {
+        return;
+    }
+
+    m_render_view_selection = { type, name };
+
+    // Load into editor and UI so renderer switches to the requested view
+    auto view_ctx = get_view_context(name, type);
+    if (view_ctx.is_valid())
+    {
+        load_view_into_editor_and_ui(view_ctx);
+        if (type == ViewType::NanoVDBs)
+        {
+            m_imgui_instance->viewport_option = imgui_instance_user::ViewportOption::NanoVDB;
+        }
+        else if (type == ViewType::GaussianScenes)
+        {
+            m_imgui_instance->viewport_option = imgui_instance_user::ViewportOption::Raster2D;
+        }
+    }
 }
 
-void EditorScene::clear_selection()
+SceneSelection EditorScene::get_render_view_selection() const
 {
-    m_view_selection = SceneSelection();
+    return m_render_view_selection;
 }
 
 // ============================================================================
@@ -763,7 +838,7 @@ void EditorScene::update_view_camera_state(const std::string& view_name, const p
 int EditorScene::get_camera_frustum_index(const std::string& camera_name) const
 {
     auto it = m_camera_frustum_index.find(camera_name);
-    return (it != m_camera_frustum_index.end()) ? it->second : -1;
+    return (it != m_camera_frustum_index.end()) ? it->second : 0;
 }
 
 void EditorScene::set_camera_frustum_index(const std::string& camera_name, int index)
