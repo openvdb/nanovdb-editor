@@ -36,8 +36,7 @@ function(ConfigureTest CMAKE_TEST_NAME)
     GTest::gtest_main
   )
 
-  # Force AddressSanitizer for tests to catch UAF deterministically (GNU/Clang)
-  if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  if (NANOVDB_EDITOR_ENABLE_SANITIZERS AND CMAKE_BUILD_TYPE STREQUAL "Debug" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(${CMAKE_TEST_NAME} PRIVATE -fsanitize=address -fno-omit-frame-pointer)
     target_link_options(${CMAKE_TEST_NAME} PRIVATE -fsanitize=address)
   endif()
