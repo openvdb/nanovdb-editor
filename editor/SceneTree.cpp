@@ -12,10 +12,44 @@
 #include "SceneTree.h"
 #include "ImguiInstance.h"
 #include "EditorScene.h"
+#include "EditorToken.h"
 
 namespace pnanovdb_editor
 {
 using namespace imgui_instance_user;
+
+// Helper function to check if an item is selected in the current scene
+static bool isSelectedInCurrentScene(const std::string& name, imgui_instance_user::Instance* ptr, ViewType expected_type)
+{
+    if (!ptr || !ptr->editor_scene)
+        return false;
+
+    SceneSelection sel = ptr->editor_scene->get_properties_selection();
+
+    // Check if name matches
+    const char* selected_name = (sel.name_token && sel.name_token->str) ? sel.name_token->str : "";
+
+    // Name and type must match
+    if (name != selected_name || sel.type != expected_type)
+        return false;
+
+    // Get current scene
+    pnanovdb_editor_token_t* current_scene = ptr->editor_scene->get_current_scene_token();
+
+    // If selection has no scene token, check if we're in default scene
+    if (!sel.scene_token)
+    {
+        // Selection without scene token is valid in default scene or when no scene is set
+        return !current_scene || strcmp(current_scene->str, "default_scene") == 0;
+    }
+
+    // If no current scene, selection can't be valid
+    if (!current_scene)
+        return false;
+
+    // Scene IDs must match
+    return sel.scene_token->id == current_scene->id;
+}
 
 bool SceneTree::renderSceneItem(
     const char* name, bool isSelected, float indentSpacing, bool useIndent, pnanovdb_bool_t* visibilityCheckbox)
@@ -67,11 +101,11 @@ bool SceneTree::renderSceneItem(
     return clicked;
 }
 
-bool SceneTree::renderTreeNodeHeader(const char* label, bool* visibilityCheckbox, bool isSelected)
+bool SceneTree::renderTreeNodeHeader(const char* label, bool* visibilityCheckbox, bool isSelected, bool isRootNode)
 {
     ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen;
 
-    if (strcmp(label, SCENE_ROOT_NODE) == 0)
+    if (isRootNode)
     {
         if (isSelected)
         {
@@ -99,7 +133,7 @@ bool SceneTree::renderTreeNodeHeader(const char* label, bool* visibilityCheckbox
         ImGui::PopStyleVar();
     }
 
-    if (strcmp(label, SCENE_ROOT_NODE) == 0)
+    if (isRootNode)
     {
         ImGui::PopStyleVar();
     }
@@ -115,15 +149,54 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
 {
     if (ImGui::Begin(SCENE, &ptr->window.show_scene))
     {
+        // Scene Selector Combo Box
+        if (ptr->editor_scene)
+        {
+            // Get all available scenes
+            auto scene_tokens = ptr->editor_scene->get_all_scene_tokens();
+            pnanovdb_editor_token_t* current_scene = ptr->editor_scene->get_current_scene_token();
+
+            // Get current scene name for display
+            const char* current_scene_name = current_scene ? current_scene->str : "default";
+
+            ImGui::PushItemWidth(-1.0f); // Full width
+            if (ImGui::BeginCombo("##SceneSelector", current_scene_name))
+            {
+                for (auto* scene_token : scene_tokens)
+                {
+                    bool is_selected = (current_scene && current_scene->id == scene_token->id);
+                    if (ImGui::Selectable(scene_token->str, is_selected))
+                    {
+                        // Switch to selected scene
+                        ptr->editor_scene->set_current_scene(scene_token);
+                    }
+
+                    if (is_selected)
+                    {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::PopItemWidth();
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+        }
+
         const float indentSpacing = ImGui::GetTreeNodeToLabelSpacing() * 0.35f;
         // ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 16.0f);
         // ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 4.0f));
 
-        // Viewer tree node - root parent of all scene items
-        bool isRootSelected = (ptr->editor_scene->get_properties_selection().name == SCENE_ROOT_NODE);
-        if (renderTreeNodeHeader(SCENE_ROOT_NODE, nullptr, isRootSelected))
+        // Scene root node - use scene name instead of "Viewer"
+        pnanovdb_editor_token_t* current_scene = ptr->editor_scene->get_current_scene_token();
+        const char* scene_name = (current_scene && current_scene->str) ? current_scene->str : "default_scene";
+
+        bool isRootSelected = isSelectedInCurrentScene(SCENE_ROOT_NODE, ptr, ViewType::Root);
+        if (renderTreeNodeHeader(scene_name, nullptr, isRootSelected, true))
         {
-            // Show viewport camera as child of Viewer
+            // Show viewport camera as child of scene root
             if (ptr->editor_scene)
             {
                 bool hasViewportCamera = false;
@@ -141,11 +214,13 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                                 ImGui::Indent(indentSpacing);
 
                                 const std::string& cameraName = VIEWPORT_CAMERA;
-                                bool isSelected = (ptr->editor_scene->get_properties_selection().name == cameraName);
+                                bool isSelected = isSelectedInCurrentScene(cameraName, ptr, ViewType::Cameras);
 
                                 if (renderSceneItem(cameraName.c_str(), isSelected, indentSpacing, false))
                                 {
-                                    ptr->editor_scene->set_properties_selection(ViewType::Cameras, cameraName);
+                                    pnanovdb_editor_token_t* camera_token =
+                                        EditorToken::getInstance().getToken(cameraName.c_str());
+                                    ptr->editor_scene->set_properties_selection(ViewType::Cameras, camera_token);
                                 }
 
                                 ImGui::Unindent(indentSpacing);
@@ -214,11 +289,13 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                                     return;
                                 }
 
-                                bool isSelected = (ptr->editor_scene->get_properties_selection().name == cameraName);
+                                bool isSelected = isSelectedInCurrentScene(cameraName, ptr, ViewType::Cameras);
                                 if (renderSceneItem(
                                         cameraName.c_str(), isSelected, indentSpacing, false, &camera->is_visible))
                                 {
-                                    ptr->editor_scene->set_properties_selection(ViewType::Cameras, cameraName);
+                                    pnanovdb_editor_token_t* camera_token =
+                                        EditorToken::getInstance().getToken(cameraName.c_str());
+                                    ptr->editor_scene->set_properties_selection(ViewType::Cameras, camera_token);
                                 }
                             }
                         });
@@ -236,7 +313,7 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                         viewType,
                         [&](const std::string& name, const auto& /*view_data*/)
                         {
-                            bool isSelected = (ptr->editor_scene->get_properties_selection().name == name);
+                            bool isSelected = isSelectedInCurrentScene(name, ptr, viewType);
                             if (renderSceneItem(name.c_str(), isSelected, indentSpacing, false))
                             {
                                 pendingField = name;
@@ -263,7 +340,7 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                 }
             }
 
-            ImGui::TreePop(); // Close Viewer tree node
+            ImGui::TreePop(); // Close scene root tree node
         }
 
         // ImGui::PopStyleVar(); // Pop ItemSpacing

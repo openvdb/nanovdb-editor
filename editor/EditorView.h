@@ -18,6 +18,7 @@
 #include <string>
 #include <map>
 #include <atomic>
+#include <vector>
 
 namespace pnanovdb_editor
 {
@@ -37,73 +38,78 @@ struct GaussianDataContext
     pnanovdb_raster_shader_params_t* shader_params = nullptr;
 };
 
-// Views representing a loaded scene via editor's API, does not own the data
+// Scene view data for a specific scene ID - holds all views in that scene
+struct SceneViewData
+{
+    std::map<std::string, pnanovdb_camera_view_t*> cameras;
+    std::map<std::string, GaussianDataContext> gaussians;
+    std::map<std::string, NanoVDBContext> nanovdbs;
+    std::string current_view; // Current view selected in this scene
+    std::atomic<uint64_t> current_view_epoch{ 0 };
+    int unnamed_counter = 0;
+};
+
+// Views representing loaded scenes via editor's API, does not own the data
+// Manages multiple scene view data (one per scene token)
 class EditorView
 {
 public:
     EditorView() = default;
 
-    // Cameras
-    void add_camera(const std::string& name, pnanovdb_camera_view_t* camera)
+    // Scene management
+    SceneViewData* get_or_create_scene(pnanovdb_editor_token_t* scene_token);
+    SceneViewData* get_scene(pnanovdb_editor_token_t* scene_token);
+    const SceneViewData* get_scene(pnanovdb_editor_token_t* scene_token) const;
+
+    // Get current scene (defaults to default scene if none set)
+    SceneViewData* get_current_scene();
+    const SceneViewData* get_current_scene() const;
+
+    // Set which scene is current
+    void set_current_scene(pnanovdb_editor_token_t* scene_token);
+    pnanovdb_editor_token_t* get_current_scene_token() const
     {
-        m_cameras[name] = camera;
+        return m_current_scene_token;
     }
+
+    // Get all scene tokens
+    std::vector<pnanovdb_editor_token_t*> get_all_scene_tokens() const;
+
+    // Cameras (in current scene)
+    void add_camera(const std::string& name, pnanovdb_camera_view_t* camera);
+    void add_camera(pnanovdb_editor_token_t* scene_token, const std::string& name, pnanovdb_camera_view_t* camera);
     pnanovdb_camera_view_t* get_camera(const std::string& name) const;
-    std::map<std::string, pnanovdb_camera_view_t*>& get_cameras()
-    {
-        return m_cameras;
-    }
-    const std::map<std::string, pnanovdb_camera_view_t*>& get_cameras() const
-    {
-        return m_cameras;
-    }
+    pnanovdb_camera_view_t* get_camera(pnanovdb_editor_token_t* scene_token, const std::string& name) const;
+    std::map<std::string, pnanovdb_camera_view_t*>& get_cameras();
+    const std::map<std::string, pnanovdb_camera_view_t*>& get_cameras() const;
 
-    // Current view selection
-    void set_current_view(const std::string& view_name)
-    {
-        m_current_view = view_name;
-        m_current_view_epoch.fetch_add(1, std::memory_order_relaxed);
-    }
-    const std::string& get_current_view() const
-    {
-        return m_current_view;
-    }
-    uint64_t get_current_view_epoch() const
-    {
-        return m_current_view_epoch.load(std::memory_order_relaxed);
-    }
+    // Current view selection (in current scene)
+    void set_current_view(const std::string& view_name);
+    void set_current_view(pnanovdb_editor_token_t* scene_token, const std::string& view_name);
+    const std::string& get_current_view() const;
+    const std::string& get_current_view(pnanovdb_editor_token_t* scene_token) const;
+    uint64_t get_current_view_epoch() const;
+    uint64_t get_current_view_epoch(pnanovdb_editor_token_t* scene_token) const;
 
-    // Gaussians
-    void add_gaussian(const std::string& name, const GaussianDataContext& ctx)
-    {
-        m_gaussians[name] = ctx;
-    }
+    // Gaussians (in current scene)
+    void add_gaussian(const std::string& name, const GaussianDataContext& ctx);
+    void add_gaussian(pnanovdb_editor_token_t* scene_token, const std::string& name, const GaussianDataContext& ctx);
     GaussianDataContext* get_gaussian(const std::string& name);
+    GaussianDataContext* get_gaussian(pnanovdb_editor_token_t* scene_token, const std::string& name);
     const GaussianDataContext* get_gaussian(const std::string& name) const;
-    std::map<std::string, GaussianDataContext>& get_gaussians()
-    {
-        return m_gaussians;
-    }
-    const std::map<std::string, GaussianDataContext>& get_gaussians() const
-    {
-        return m_gaussians;
-    }
+    const GaussianDataContext* get_gaussian(pnanovdb_editor_token_t* scene_token, const std::string& name) const;
+    std::map<std::string, GaussianDataContext>& get_gaussians();
+    const std::map<std::string, GaussianDataContext>& get_gaussians() const;
 
-    // NanoVDBs
-    void add_nanovdb(const std::string& name, const NanoVDBContext& ctx)
-    {
-        m_nanovdbs[name] = ctx;
-    }
+    // NanoVDBs (in current scene)
+    void add_nanovdb(const std::string& name, const NanoVDBContext& ctx);
+    void add_nanovdb(pnanovdb_editor_token_t* scene_token, const std::string& name, const NanoVDBContext& ctx);
     NanoVDBContext* get_nanovdb(const std::string& name);
+    NanoVDBContext* get_nanovdb(pnanovdb_editor_token_t* scene_token, const std::string& name);
     const NanoVDBContext* get_nanovdb(const std::string& name) const;
-    std::map<std::string, NanoVDBContext>& get_nanovdbs()
-    {
-        return m_nanovdbs;
-    }
-    const std::map<std::string, NanoVDBContext>& get_nanovdbs() const
-    {
-        return m_nanovdbs;
-    }
+    const NanoVDBContext* get_nanovdb(pnanovdb_editor_token_t* scene_token, const std::string& name) const;
+    std::map<std::string, NanoVDBContext>& get_nanovdbs();
+    const std::map<std::string, NanoVDBContext>& get_nanovdbs() const;
 
     std::string add_nanovdb_view(pnanovdb_compute_array_t* nanovdb_array, void* shader_params);
     std::string add_gaussian_view(pnanovdb_raster_context_t* raster_ctx,
@@ -111,12 +117,10 @@ public:
                                   pnanovdb_raster_shader_params_t* shader_params);
 
 private:
-    std::map<std::string, pnanovdb_camera_view_t*> m_cameras;
-    std::map<std::string, GaussianDataContext> m_gaussians;
-    std::map<std::string, NanoVDBContext> m_nanovdbs;
-    int m_unnamed_counter = 0;
-    std::string m_current_view; // Name of the currently selected view
-    std::atomic<uint64_t> m_current_view_epoch{ 0 };
+    // Map of scene ID -> SceneViewData
+    std::map<uint64_t, SceneViewData> m_scene_view_data;
+    pnanovdb_editor_token_t* m_current_scene_token = nullptr; // Currently active scene
+    pnanovdb_editor_token_t* m_default_scene_token = nullptr; // Default scene for backward compatibility
 };
 
 } // namespace pnanovdb_editor

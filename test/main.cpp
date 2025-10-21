@@ -38,6 +38,9 @@
 #define TEST_CAMERA
 // #define TEST_H264
 
+// Use old API - it will automatically use default scene internally
+#define USE_OLD_API
+
 struct constants_t
 {
     int magic_number;
@@ -344,11 +347,13 @@ int main(int argc, char* argv[])
     pnanovdb_editor_load(&editor, &compute, &compiler);
 
     editor.add_nanovdb(&editor, data_nanovdb);
+    printf("Added dragon volume using add_nanovdb()\n");
 
     pnanovdb_compute_array_t* data_nanovdb2 = compute.load_nanovdb("./data/splats.nvdb");
     if (data_nanovdb2)
     {
         editor.add_nanovdb(&editor, data_nanovdb2);
+        printf("Added splats volume using add_nanovdb()\n");
     }
 
 #    ifdef TEST_CAMERA
@@ -380,7 +385,7 @@ int main(int argc, char* argv[])
 
     pnanovdb_camera_view_t test_camera;
     pnanovdb_camera_view_default(&test_camera);
-    test_camera.name = "test";
+    test_camera.name = editor.get_token("test");
     test_camera.num_cameras = 1;
     test_camera.states = new pnanovdb_camera_state_t[test_camera.num_cameras];
     test_camera.states[0] = test_state;
@@ -391,7 +396,7 @@ int main(int argc, char* argv[])
 
     pnanovdb_camera_view_t debug_camera;
     pnanovdb_camera_view_default(&debug_camera);
-    debug_camera.name = "test_10";
+    debug_camera.name = editor.get_token("test_10");
     debug_camera.num_cameras = 10;
     debug_camera.states = new pnanovdb_camera_state_t[debug_camera.num_cameras];
     debug_camera.configs = new pnanovdb_camera_config_t[debug_camera.num_cameras];
@@ -409,7 +414,7 @@ int main(int argc, char* argv[])
 
     pnanovdb_camera_view_t default_camera;
     pnanovdb_camera_view_default(&default_camera);
-    default_camera.name = "test_default";
+    default_camera.name = editor.get_token("test_default");
     default_camera.num_cameras = 1;
     default_camera.states = new pnanovdb_camera_state_t[default_camera.num_cameras];
     default_camera.states[0] = default_state;
@@ -434,12 +439,6 @@ int main(int argc, char* argv[])
     pnanovdb_camera_t camera;
     pnanovdb_camera_init(&camera);
 
-    // camera.state.position = { 0.358805, 0.725740, -0.693701 };
-    // camera.state.eye_direction = { -0.012344, 0.959868, -0.280182 };
-    // camera.state.eye_up = { 0.000000, 1.000000, 0.000000 };
-    // camera.state.eye_distance_from_position = -2.111028;
-    // editor.update_camera(&editor, &camera);
-
     const char* raster_file = "./data/ficus.ply";
     const char* raster_file_garden = "./data/garden.ply";
     pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
@@ -460,38 +459,19 @@ int main(int argc, char* argv[])
     pnanovdb_raster_gaussian_data_t* gaussian_data_garden = nullptr;
     pnanovdb_raster_context_t* raster_ctx = nullptr;
 
-#        ifdef TEST_RASTER_SHADER_PARAMS
-    pnanovdb_compute_array_t* params_array =
-        compute.create_array(raster_params.data_type->element_size, 1, (void*)&raster_params);
-    pnanovdb_compute_array_t** shader_params_arrays = new pnanovdb_compute_array_t*[pnanovdb_raster::shader_param_count];
-    for (pnanovdb_uint32_t idx = 0; idx < pnanovdb_raster::shader_param_count; idx++)
-    {
-        shader_params_arrays[idx] = nullptr;
-    }
-
-    shader_params_arrays[pnanovdb_raster::shader_param_count] = params_array;
-
-    raster.raster_file(&raster, &compute, queue, raster_file, 0.f, nullptr, &editor.gaussian_data, &editor.raster_ctx,
-                       shader_params_arrays, nullptr, nullptr, nullptr);
-
-#        else
     raster_params.name = "ficus";
     raster.raster_file(&raster, &compute, queue, raster_file, 0.f, nullptr, &gaussian_data, &raster_ctx, nullptr,
                        &raster_params, nullptr, nullptr);
     editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data);
+    printf("Added ficus gaussian data\n");
 
     raster_params_garden.name = "garden";
     raster.raster_file(&raster, &compute, queue, raster_file_garden, 0.f, nullptr, &gaussian_data_garden, &raster_ctx,
                        nullptr, &raster_params_garden, nullptr, nullptr);
     editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data_garden);
-#        endif
+    printf("Added garden gaussian data\n");
 
     raster_params.eps2d = 0.5f;
-
-#        ifdef TEST_RASTER_SHADER_PARAMS
-    compute.destroy_array(params_array);
-    delete[] shader_params_arrays;
-#        endif
 #    endif
 
 #    ifdef TEST_RASTER

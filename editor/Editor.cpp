@@ -10,6 +10,8 @@
 */
 
 #include "Editor.h"
+#include "EditorToken.h"
+#include "EditorSceneManager.h"
 
 #include "ShaderMonitor.h"
 #include "Console.h"
@@ -80,6 +82,10 @@ static pnanovdb_bool_t init_impl(pnanovdb_editor_t* editor,
     editor->impl->shader_params_data_type = NULL;
     editor->impl->views = NULL;
     editor->impl->resolved_port = PNANOVDB_EDITOR_RESOLVED_PORT_PENDING;
+    editor->impl->scene_manager = new EditorSceneManager();
+    editor->impl->device = NULL;
+    editor->impl->device_queue = NULL;
+    editor->impl->compute_queue = NULL;
 
     return PNANOVDB_TRUE;
 }
@@ -98,6 +104,10 @@ void shutdown(pnanovdb_editor_t* editor)
     if (editor->impl->views)
     {
         delete editor->impl->views;
+    }
+    if (editor->impl->scene_manager)
+    {
+        delete editor->impl->scene_manager;
     }
     if (editor->impl)
     {
@@ -208,9 +218,9 @@ void add_camera_view(pnanovdb_editor_t* editor, pnanovdb_camera_view_t* camera)
         return;
     }
     // replace existing view if name matches
-    if (camera->name)
+    if (camera->name && camera->name->str)
     {
-        views->add_camera(camera->name, camera);
+        views->add_camera(camera->name->str, camera);
     }
 }
 
@@ -354,6 +364,10 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         editor->impl->compute->device_interface.get_compute_interface(device_queue);
     pnanovdb_compute_context_t* compute_context =
         editor->impl->compute->device_interface.get_compute_context(device_queue);
+
+    editor->impl->device = device;
+    editor->impl->device_queue = device_queue;
+    editor->impl->compute_queue = compute_queue;
 
     pnanovdb_camera_mat_t view = {};
     pnanovdb_camera_mat_t projection = {};
@@ -575,14 +589,14 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             {
                 if (imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::NanoVDB)
                 {
-                    editor_scene.handle_nanovdb_data_load(pending_nanovdb_array, pending_raster_filepath);
+                    editor_scene.handle_nanovdb_data_load(pending_nanovdb_array, pending_raster_filepath.c_str());
                     editor_scene.update_viewport_shader(s_default_shader);
                 }
                 else if (imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::Raster2D)
                 {
                     editor_scene.handle_gaussian_data_load(pending_raster_ctx, pending_gaussian_data,
-                                                           pending_raster_params, pending_raster_filepath, &raster,
-                                                           old_gaussian_data_ptr);
+                                                           pending_raster_params, pending_raster_filepath.c_str(),
+                                                           &raster, old_gaussian_data_ptr);
                 }
                 pnanovdb_editor::Console::getInstance().addLog(
                     "Rasterization of '%s' was successful", pending_raster_filepath.c_str());
@@ -769,6 +783,324 @@ void stop(pnanovdb_editor_t* editor)
 }
 
 
+pnanovdb_editor_token_t* get_token(const char* name)
+{
+    return EditorToken::getInstance().getToken(name);
+}
+
+// Helper function to check if two tokens are equal
+static inline bool tokens_equal(pnanovdb_editor_token_t* a, pnanovdb_editor_token_t* b)
+{
+    if (a == b)
+        return true;
+    if (!a || !b)
+        return false;
+    return a->id == b->id;
+}
+
+// Helper function to get string from token (safe)
+static inline const char* token_to_string(pnanovdb_editor_token_t* token)
+{
+    return token ? token->str : "<null>";
+}
+
+void add_nanovdb_2(pnanovdb_editor_t* editor,
+                   pnanovdb_editor_token_t* scene,
+                   pnanovdb_editor_token_t* name,
+                   pnanovdb_compute_array_t* array)
+{
+    if (!editor || !editor->impl || !scene || !name || !array)
+    {
+        return;
+    }
+
+    // Log token information for debugging
+    Console::getInstance().addLog("[Token API] add_nanovdb_2: scene='%s' (id=%llu), name='%s' (id=%llu)",
+                                  token_to_string(scene), (unsigned long long)scene->id, token_to_string(name),
+                                  (unsigned long long)name->id);
+
+    // Add to scene manager for multi-scene tracking
+    if (editor->impl->scene_manager)
+    {
+        editor->impl->scene_manager->add_nanovdb(scene, name, array);
+    }
+
+    // Add to EditorView for the specified scene
+    EditorView* views = editor->impl->views;
+    if (views)
+    {
+        // Save current scene, switch to target scene, add view, restore scene
+        pnanovdb_editor_token_t* prev_scene = views->get_current_scene_token();
+        views->set_current_scene(scene);
+
+        // Create NanoVDB context and add to view
+        NanoVDBContext context;
+        context.nanovdb_array = array;
+        context.shader_params = editor->impl->shader_params;
+
+        // Add with the specified name
+        views->add_nanovdb(name->str, context);
+        views->set_current_view(name->str);
+
+        // Restore previous scene if it was different
+        if (prev_scene && prev_scene->id != scene->id)
+        {
+            views->set_current_scene(prev_scene);
+        }
+
+        Console::getInstance().addLog("[Token API] Added NanoVDB '%s' to scene '%s'", name->str, scene->str);
+    }
+
+    // Update editor worker if present
+    if (editor->impl->editor_worker)
+    {
+        EditorWorker* worker = editor->impl->editor_worker;
+        worker->pending_nanovdb.set_pending(array);
+    }
+    else
+    {
+        editor->impl->nanovdb_array = array;
+    }
+}
+
+void add_gaussian_data_2(pnanovdb_editor_t* editor,
+                         pnanovdb_editor_token_t* scene,
+                         pnanovdb_editor_token_t* name,
+                         const pnanovdb_editor_gaussian_data_desc_t* desc)
+{
+    if (!editor || !editor->impl || !scene || !name || !desc)
+    {
+        return;
+    }
+
+    // Log token information for debugging
+    Console::getInstance().addLog("[Token API] add_gaussian_data_2: scene='%s' (id=%llu), name='%s' (id=%llu)",
+                                  token_to_string(scene), (unsigned long long)scene->id, token_to_string(name),
+                                  (unsigned long long)name->id);
+
+    // Log which channels are provided
+    Console::getInstance().addLog(
+        "[Token API]   channels: means=%p, opacities=%p, quaternions=%p, scales=%p, sh_0=%p, sh_n=%p", (void*)desc->means,
+        (void*)desc->opacities, (void*)desc->quaternions, (void*)desc->scales, (void*)desc->sh_0, (void*)desc->sh_n);
+
+    // Check that editor is running and has necessary resources
+    if (!editor->impl->compute)
+    {
+        Console::getInstance().addLog("[Token API] Error: No compute interface available");
+        return;
+    }
+
+    // Use stored device and queue from editor impl (set during show/start)
+    pnanovdb_compute_device_t* device = editor->impl->device;
+    pnanovdb_compute_queue_t* device_queue = editor->impl->device_queue;
+
+    if (!device || !device_queue)
+    {
+        Console::getInstance().addLog(
+            "[Token API] Error: Editor not running. Call editor.start() or editor.show() first.");
+        Console::getInstance().addLog("[Token API] Device and queue are initialized when the editor starts.");
+        return;
+    }
+
+    // Get or create raster context
+    pnanovdb_raster_context_t* raster_ctx = editor->impl->raster_ctx;
+    pnanovdb_raster_t raster = {};
+    bool created_raster = false;
+
+    // Load raster interface
+    pnanovdb_raster_load(&raster, editor->impl->compute);
+
+    if (!raster_ctx)
+    {
+        // Create raster context if it doesn't exist
+        raster_ctx = raster.create_context(editor->impl->compute, device_queue);
+        if (!raster_ctx)
+        {
+            Console::getInstance().addLog("[Token API] Error: Could not create raster context");
+            pnanovdb_raster_free(&raster);
+            return;
+        }
+        editor->impl->raster_ctx = raster_ctx;
+        created_raster = true;
+    }
+
+    // Create gaussian data using raster API with descriptor
+    pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr;
+    pnanovdb_raster_shader_params_t raster_params = {};
+    pnanovdb_raster_context_t* out_raster_context = nullptr;
+
+    pnanovdb_bool_t success =
+        raster.create_gaussian_data_from_desc(&raster, editor->impl->compute, device_queue, desc, name->str,
+                                              &gaussian_data, &raster_params, &out_raster_context);
+
+    if (success == PNANOVDB_FALSE || !gaussian_data)
+    {
+        Console::getInstance().addLog("[Token API] Error: Failed to create gaussian data from descriptor");
+        if (created_raster)
+        {
+            pnanovdb_raster_free(&raster);
+        }
+        return;
+    }
+
+    // Update raster context if it was returned
+    if (out_raster_context)
+    {
+        editor->impl->raster_ctx = out_raster_context;
+    }
+
+    auto ptr = pnanovdb_raster::cast(gaussian_data);
+    if (!ptr->shader_params->data)
+    {
+        Console::getInstance().addLog("[Token API] Error: Gaussian data has no shader params");
+        if (created_raster)
+        {
+            pnanovdb_raster_free(&raster);
+        }
+        return;
+    }
+
+    pnanovdb_raster_shader_params_t* final_raster_params = (pnanovdb_raster_shader_params_t*)ptr->shader_params->data;
+
+    // Add to scene manager for multi-scene tracking
+    if (editor->impl->scene_manager)
+    {
+        editor->impl->scene_manager->add_gaussian_data(
+            scene, name, gaussian_data, editor->impl->raster_ctx, final_raster_params, ptr->shader_params_data_type);
+    }
+
+    // Add to EditorView for the specified scene
+    EditorView* views = editor->impl->views;
+    if (views)
+    {
+        // Save current scene, switch to target scene, add view, restore scene
+        pnanovdb_editor_token_t* prev_scene = views->get_current_scene_token();
+        views->set_current_scene(scene);
+
+        // Create Gaussian context and add to view
+        GaussianDataContext context;
+        context.raster_ctx = editor->impl->raster_ctx;
+        context.gaussian_data = gaussian_data;
+        context.shader_params = final_raster_params;
+
+        // Add with the specified name
+        views->add_gaussian(name->str, context);
+        views->set_current_view(name->str);
+
+        // Restore previous scene if it was different
+        if (prev_scene && prev_scene->id != scene->id)
+        {
+            views->set_current_scene(prev_scene);
+        }
+
+        Console::getInstance().addLog("[Token API] Added Gaussian data '%s' to scene '%s'", name->str, scene->str);
+    }
+
+    // Update editor worker if present
+    if (editor->impl->editor_worker)
+    {
+        EditorWorker* worker = editor->impl->editor_worker;
+        worker->pending_gaussian_data.set_pending(gaussian_data);
+        worker->pending_raster_ctx.set_pending(editor->impl->raster_ctx);
+        worker->pending_shader_params.set_pending(final_raster_params);
+        worker->pending_shader_params_data_type.set_pending(ptr->shader_params_data_type);
+    }
+    else
+    {
+        editor->impl->gaussian_data = gaussian_data;
+        editor->impl->shader_params = final_raster_params;
+        editor->impl->shader_params_data_type = ptr->shader_params_data_type;
+    }
+
+    // Don't free raster here as the context is now stored in editor->impl
+    if (!created_raster)
+    {
+        pnanovdb_raster_free(&raster);
+    }
+}
+
+void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
+{
+    if (!editor || !editor->impl || !scene || !name)
+    {
+        return;
+    }
+
+    // Log token information for debugging
+    Console::getInstance().addLog("[Token API] remove: scene='%s' (id=%llu), name='%s' (id=%llu)", token_to_string(scene),
+                                  (unsigned long long)scene->id, token_to_string(name), (unsigned long long)name->id);
+
+    // Remove from scene manager
+    if (editor->impl->scene_manager)
+    {
+        bool removed = editor->impl->scene_manager->remove(scene, name);
+        if (removed)
+        {
+            Console::getInstance().addLog("[Token API] Successfully removed object");
+        }
+        else
+        {
+            Console::getInstance().addLog("[Token API] Warning: Object not found in scene");
+        }
+    }
+}
+
+void* map_params(pnanovdb_editor_t* editor,
+                 pnanovdb_editor_token_t* scene,
+                 pnanovdb_editor_token_t* name,
+                 const pnanovdb_reflect_data_type_t* data_type)
+{
+    if (!editor || !editor->impl || !data_type || !scene || !name)
+    {
+        return nullptr;
+    }
+
+    const char* type_name = data_type->struct_typename ? data_type->struct_typename : "<unknown>";
+    Console::getInstance().addLog("[Token API] map_params: scene='%s' (id=%llu), name='%s' (id=%llu), type='%s'",
+                                  token_to_string(scene), (unsigned long long)scene->id, token_to_string(name),
+                                  (unsigned long long)name->id, type_name);
+
+    // First, try to find in scene manager
+    if (editor->impl->scene_manager)
+    {
+        SceneObject* obj = editor->impl->scene_manager->get(scene, name);
+        if (obj && obj->shader_params && obj->shader_params_data_type == data_type)
+        {
+            Console::getInstance().addLog("[Token API] map_params: Found params in scene manager");
+            return obj->shader_params;
+        }
+    }
+
+    // Fall back to legacy single-object behavior
+    if (editor->impl->shader_params && editor->impl->shader_params_data_type == data_type)
+    {
+        Console::getInstance().addLog("[Token API] map_params: Using legacy shader_params");
+        return editor->impl->shader_params;
+    }
+
+    Console::getInstance().addLog("[Token API] map_params: No matching params found");
+    return nullptr;
+}
+
+void unmap_params(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
+{
+    if (!editor || !editor->impl)
+    {
+        return;
+    }
+
+    // Log token information for debugging
+    if (scene && name)
+    {
+        Console::getInstance().addLog("[Token API] unmap_params: scene='%s' (id=%llu), name='%s' (id=%llu)",
+                                      token_to_string(scene), (unsigned long long)scene->id, token_to_string(name),
+                                      (unsigned long long)name->id);
+    }
+
+    // Sync shader params (set_data = true to flush writes)
+    sync_shader_params(editor, editor->impl->shader_params, PNANOVDB_TRUE);
+}
+
 PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
 {
     static pnanovdb_editor_t editor = { PNANOVDB_REFLECT_INTERFACE_INIT(pnanovdb_editor_t) };
@@ -787,6 +1119,12 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
     editor.update_camera = update_camera;
     editor.add_camera_view = add_camera_view;
     editor.get_resolved_port = get_resolved_port;
+    editor.get_token = get_token;
+    editor.add_nanovdb_2 = add_nanovdb_2;
+    editor.add_gaussian_data_2 = add_gaussian_data_2;
+    editor.remove = remove;
+    editor.map_params = map_params;
+    editor.unmap_params = unmap_params;
 
     return &editor;
 }

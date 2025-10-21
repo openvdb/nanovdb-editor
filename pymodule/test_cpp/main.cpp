@@ -126,9 +126,21 @@ int main(int argc, char* argv[])
     pnanovdb_editor_t editor = {};
     pnanovdb_editor_load(&editor, &compute, &compiler);
 
+    // ===== New Token-Based Multi-Scene API =====
+    printf("\n=== Creating Multiple Scenes with Token API ===\n");
+
+    // Create scene tokens
+    pnanovdb_editor_token_t* scene_main = editor.get_token("main_scene");
+    pnanovdb_editor_token_t* scene_test = editor.get_token("test_scene");
+    printf("Created scenes: '%s' (id=%llu), '%s' (id=%llu)\n", scene_main->str, (unsigned long long)scene_main->id,
+           scene_test->str, (unsigned long long)scene_test->id);
+
+    // Add initial data to main scene if available
     if (data_nanovdb)
     {
-        editor.add_nanovdb(&editor, data_nanovdb);
+        pnanovdb_editor_token_t* splats_token = editor.get_token("splats");
+        editor.add_nanovdb_2(&editor, scene_main, splats_token, data_nanovdb);
+        printf("Added splats to main_scene\n");
     }
 
     pnanovdb_editor_config_t config = {};
@@ -164,7 +176,7 @@ int main(int argc, char* argv[])
 
     pnanovdb_camera_view_t debug_camera;
     pnanovdb_camera_view_default(&debug_camera);
-    debug_camera.name = "test_10";
+    debug_camera.name = editor.get_token("test_10");
     debug_camera.num_cameras = 10;
     debug_camera.is_visible = PNANOVDB_FALSE;
     debug_camera.states = new pnanovdb_camera_state_t[debug_camera.num_cameras];
@@ -190,7 +202,7 @@ int main(int argc, char* argv[])
 
     pnanovdb_camera_view_t default_camera;
     pnanovdb_camera_view_default(&default_camera);
-    default_camera.name = "default";
+    default_camera.name = editor.get_token("default");
     default_camera.num_cameras = 1;
     default_camera.states = new pnanovdb_camera_state_t[default_camera.num_cameras];
     default_camera.states[0] = default_state;
@@ -200,20 +212,37 @@ int main(int argc, char* argv[])
 #    endif
 
 #    ifdef TEST_NVDB
+    printf("\n=== Adding NanoVDB Volumes to Multiple Scenes ===\n");
+
+    // Load and add dragon to both scenes
     data_nanovdb = compute.load_nanovdb("../../data/dragon.nvdb");
     if (data_nanovdb)
     {
-        editor.add_nanovdb(&editor, data_nanovdb);
+        pnanovdb_editor_token_t* dragon_token = editor.get_token("dragon");
+        editor.add_nanovdb_2(&editor, scene_main, dragon_token, data_nanovdb);
+        printf("Added dragon to main_scene\n");
+
+        editor.add_nanovdb_2(&editor, scene_test, dragon_token, data_nanovdb);
+        printf("Added dragon to test_scene (shared volume)\n");
     }
 
+    // Load and add splats to test scene only
     pnanovdb_compute_array_t* data_nanovdb2 = compute.load_nanovdb("../../data/splats.nvdb");
     if (data_nanovdb2)
     {
-        editor.add_nanovdb(&editor, data_nanovdb2);
+        pnanovdb_editor_token_t* splats_token = editor.get_token("splats_volume");
+        editor.add_nanovdb_2(&editor, scene_test, splats_token, data_nanovdb2);
+        printf("Added splats to test_scene only\n");
     }
+
+    printf("Scene Summary:\n");
+    printf("  main_scene: dragon\n");
+    printf("  test_scene: dragon + splats_volume\n");
 #    endif
 
 #    ifdef TEST_RASTER_2D
+    printf("\n=== Adding Gaussian Data to Multiple Scenes ===\n");
+
     pnanovdb_camera_t camera;
     pnanovdb_camera_init(&camera);
 
@@ -225,6 +254,10 @@ int main(int argc, char* argv[])
 
     const char* raster_file = "../../data/ficus.ply";
     const char* raster_file_garden = "../../data/garden.ply";
+
+    // Get tokens for gaussian objects
+    pnanovdb_editor_token_t* ficus_token = editor.get_token("ficus");
+    pnanovdb_editor_token_t* garden_token = editor.get_token("garden");
 
     const pnanovdb_reflect_data_type_t* data_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t);
     const pnanovdb_raster_shader_params_t* defaults = (const pnanovdb_raster_shader_params_t*)data_type->default_value;
@@ -259,7 +292,11 @@ int main(int argc, char* argv[])
         pnanovdb_raster_gaussian_data_t* gaussian_data_old = gaussian_data;
         raster.raster_file(&raster, &compute, queue, raster_file, 0.f, nullptr, &gaussian_data, &raster_ctx, nullptr,
                            &raster_params, nullptr, nullptr);
+
+        // Using old API - will be added to default scene
+        // For multi-scene: could use add_gaussian_data_2 with descriptor API when fully implemented
         editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data);
+        printf("Added ficus gaussian data (iteration %d)\n", i + 1);
         raster.destroy_gaussian_data(raster.compute, queue, gaussian_data_old);
 
         runEditorLoop(5);
@@ -267,11 +304,17 @@ int main(int argc, char* argv[])
         gaussian_data_old = gaussian_data_garden;
         raster.raster_file(&raster, &compute, queue, raster_file_garden, 0.f, nullptr, &gaussian_data_garden,
                            &raster_ctx, nullptr, &raster_params_garden, nullptr, nullptr);
+
         editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data_garden);
+        printf("Added garden gaussian data (iteration %d)\n", i + 1);
         raster.destroy_gaussian_data(raster.compute, queue, gaussian_data_old);
 
         runEditorLoop(5);
     }
+
+    printf("\n=== Gaussian Data Summary ===\n");
+    printf("Note: Gaussian data uses old API (add_gaussian_data) which tracks in default scene\n");
+    printf("For explicit multi-scene gaussian support, use add_gaussian_data_2 with descriptor API\n");
 
     raster_params.eps2d = 0.5f;
     printf("Updating shader param eps2d to %f\n", raster_params.eps2d);
@@ -295,6 +338,13 @@ int main(int argc, char* argv[])
     printf("Updated shader params:\n");
     printf("sh_degree: %d\n", raster_params_garden.sh_degree_override);
 #    endif
+
+    printf("\n=== Multi-Scene Test Complete ===\n");
+    printf("Scenes created:\n");
+    printf("  1. main_scene (id=%llu)\n", (unsigned long long)scene_main->id);
+    printf("  2. test_scene (id=%llu)\n", (unsigned long long)scene_test->id);
+    printf("\nUse the Scene dropdown in the streaming UI to switch between scenes!\n");
+    printf("Running editor loop for 1000 iterations...\n\n");
 
     runEditorLoop(1000);
 

@@ -13,6 +13,7 @@
 
 #include "ImguiInstance.h"
 #include "EditorScene.h"
+#include "EditorToken.h"
 #include "CodeEditor.h"
 #include "Console.h"
 #include "Profiler.h"
@@ -132,9 +133,14 @@ void createMenu(imgui_instance_user::Instance* ptr)
         {
             std::string centerText;
             auto selection = ptr->editor_scene->get_properties_selection();
-            if (!selection.name.empty())
+            if (selection.name_token && selection.name_token->str)
             {
-                centerText += selection.name + " - ";
+                // Add scene name if available
+                if (selection.scene_token && selection.scene_token->str)
+                {
+                    centerText += std::string(selection.scene_token->str) + " - ";
+                }
+                centerText += std::string(selection.name_token->str) + " - ";
             }
             centerText += "NanoVDB Editor";
             if (isViewerProfile)
@@ -310,8 +316,9 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
                     // Load camera state
                     if (ptr->editor_scene)
                     {
-                        const pnanovdb_camera_state_t* state =
-                            ptr->editor_scene->get_saved_camera_state(ptr->render_settings_name);
+                        pnanovdb_editor_token_t* name_token =
+                            pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
+                        const pnanovdb_camera_state_t* state = ptr->editor_scene->get_saved_camera_state(name_token);
                         if (state)
                         {
                             ptr->render_settings->camera_state = *state;
@@ -330,8 +337,9 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
                     // Load camera state
                     if (ptr->editor_scene)
                     {
-                        const pnanovdb_camera_state_t* state =
-                            ptr->editor_scene->get_saved_camera_state(ptr->render_settings_name);
+                        pnanovdb_editor_token_t* name_token =
+                            pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
+                        const pnanovdb_camera_state_t* state = ptr->editor_scene->get_saved_camera_state(name_token);
                         if (state)
                         {
                             ptr->render_settings->camera_state = *state;
@@ -357,8 +365,9 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
 
                         if (ptr->editor_scene)
                         {
-                            const pnanovdb_camera_state_t* state =
-                                ptr->editor_scene->get_saved_camera_state(ptr->render_settings_name);
+                            pnanovdb_editor_token_t* name_token =
+                                pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
+                            const pnanovdb_camera_state_t* state = ptr->editor_scene->get_saved_camera_state(name_token);
                             if (state)
                             {
                                 ptr->render_settings->camera_state = *state;
@@ -387,8 +396,9 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
                     {
                         if (ptr->editor_scene)
                         {
-                            ptr->editor_scene->save_camera_state(
-                                ptr->render_settings_name, ptr->render_settings->camera_state);
+                            pnanovdb_editor_token_t* name_token =
+                                pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
+                            ptr->editor_scene->save_camera_state(name_token, ptr->render_settings->camera_state);
                         }
 
                         imgui_instance_user::copyPersistentFields(
@@ -982,13 +992,16 @@ void showFileHeaderWindow(imgui_instance_user::Instance* ptr)
     {
         pnanovdb_compute_array_t* current_array = nullptr;
         auto selection = ptr->editor_scene->get_properties_selection();
+        const char* selected_name =
+            (selection.name_token && selection.name_token->str) ? selection.name_token->str : nullptr;
+
         ptr->editor_scene->for_each_view(ViewType::NanoVDBs,
                                          [&](const std::string& name, const auto& ctx)
                                          {
                                              using CtxT = std::decay_t<decltype(ctx)>;
                                              if constexpr (std::is_same_v<CtxT, NanoVDBContext>)
                                              {
-                                                 if (name == selection.name)
+                                                 if (selected_name && name == selected_name)
                                                  {
                                                      current_array = ctx.nanovdb_array;
                                                  }

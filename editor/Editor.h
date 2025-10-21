@@ -20,6 +20,7 @@ namespace pnanovdb_editor
 {
 struct EditorWorker;
 class EditorView;
+class EditorSceneManager;
 }
 
 struct pnanovdb_editor_impl_t
@@ -36,6 +37,9 @@ struct pnanovdb_editor_impl_t
     const pnanovdb_reflect_data_type_t* shader_params_data_type;
     pnanovdb_editor::EditorView* views;
     pnanovdb_int32_t resolved_port;
+    pnanovdb_editor::EditorSceneManager* scene_manager;
+    pnanovdb_compute_queue_t* device_queue;
+    pnanovdb_compute_queue_t* compute_queue;
 };
 
 namespace pnanovdb_editor

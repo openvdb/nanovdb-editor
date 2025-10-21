@@ -50,6 +50,9 @@ private:
                          bool useIndent = false,
                          pnanovdb_bool_t* visibilityCheckbox = nullptr);
 
-    bool renderTreeNodeHeader(const char* label, bool* visibilityCheckbox = nullptr, bool isSelected = false);
+    bool renderTreeNodeHeader(const char* label,
+                              bool* visibilityCheckbox = nullptr,
+                              bool isSelected = false,
+                              bool isRootNode = false);
 };
 }

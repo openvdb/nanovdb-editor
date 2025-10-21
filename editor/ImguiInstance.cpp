@@ -10,6 +10,7 @@
 */
 
 #include "ImguiInstance.h"
+#include "EditorToken.h"
 
 #include "imgui.h"
 #include "imgui/ImguiRenderer.h"
@@ -371,8 +372,9 @@ void update(pnanovdb_imgui_instance_t* instance)
             // Apply loaded camera state from INI
             if (ptr->editor_scene)
             {
-                const pnanovdb_camera_state_t* state =
-                    ptr->editor_scene->get_saved_camera_state(ptr->render_settings_name);
+                pnanovdb_editor_token_t* name_token =
+                    pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
+                const pnanovdb_camera_state_t* state = ptr->editor_scene->get_saved_camera_state(name_token);
                 if (state)
                 {
                     ptr->render_settings->camera_state = *state;
