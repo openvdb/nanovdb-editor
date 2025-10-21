@@ -23,6 +23,9 @@
 namespace pnanovdb_editor
 {
 
+// Default scene name used when no scene is specified
+static constexpr const char* DEFAULT_SCENE_NAME = "default";
+
 // Context data for a NanoVDB view
 struct NanoVDBContext
 {
@@ -116,7 +119,21 @@ public:
                                   pnanovdb_raster_gaussian_data_t* gaussian_data,
                                   pnanovdb_raster_shader_params_t* shader_params);
 
+    // Remove views
+    bool remove_camera(const std::string& name);
+    bool remove_camera(pnanovdb_editor_token_t* scene_token, const std::string& name);
+    bool remove_nanovdb(const std::string& name);
+    bool remove_nanovdb(pnanovdb_editor_token_t* scene_token, const std::string& name);
+    bool remove_gaussian(const std::string& name);
+    bool remove_gaussian(pnanovdb_editor_token_t* scene_token, const std::string& name);
+
 private:
+    template <typename MapType>
+    bool remove_from_map(MapType SceneViewData::*map_member, const std::string& name);
+
+    template <typename MapType>
+    bool remove_from_map(MapType SceneViewData::*map_member, pnanovdb_editor_token_t* scene_token, const std::string& name);
+
     // Map of scene ID -> SceneViewData
     std::map<uint64_t, SceneViewData> m_scene_view_data;
     pnanovdb_editor_token_t* m_current_scene_token = nullptr; // Currently active scene

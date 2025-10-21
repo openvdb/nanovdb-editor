@@ -13,6 +13,9 @@
 #include "ImguiInstance.h"
 #include "EditorScene.h"
 #include "EditorToken.h"
+#include "Console.h"
+
+#include <vector>
 
 namespace pnanovdb_editor
 {
@@ -51,8 +54,12 @@ static bool isSelectedInCurrentScene(const std::string& name, imgui_instance_use
     return sel.scene_token->id == current_scene->id;
 }
 
-bool SceneTree::renderSceneItem(
-    const char* name, bool isSelected, float indentSpacing, bool useIndent, pnanovdb_bool_t* visibilityCheckbox)
+bool SceneTree::renderSceneItem(const char* name,
+                                bool isSelected,
+                                float indentSpacing,
+                                bool useIndent,
+                                pnanovdb_bool_t* visibilityCheckbox,
+                                bool* deleteRequested)
 {
     bool clicked = false;
     if (useIndent)
@@ -68,12 +75,27 @@ bool SceneTree::renderSceneItem(
     ImGui::Dummy(ImVec2(bulletWidth, 0));
     ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x + 8.f);
 
-    // Calculate selectable width to stop before checkbox column for visual consistency
-    float selectableWidth =
-        ImGui::GetContentRegionAvail().x - (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x);
+    // Calculate selectable width to account for buttons on the right
+    float rightPadding = ImGui::GetStyle().ItemSpacing.x;
+    if (visibilityCheckbox)
+    {
+        rightPadding += ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
+    }
+
+    float selectableWidth = ImGui::GetContentRegionAvail().x - rightPadding;
     if (ImGui::Selectable(name, isSelected, ImGuiSelectableFlags_AllowItemOverlap, ImVec2(selectableWidth, 0)))
     {
         clicked = true;
+    }
+
+    // Right-click context menu (only if deletion is allowed)
+    if (deleteRequested && ImGui::BeginPopupContextItem())
+    {
+        if (ImGui::MenuItem("Remove"))
+        {
+            *deleteRequested = true;
+        }
+        ImGui::EndPopup();
     }
 
     // Draw bullet on top of selectable background
@@ -82,6 +104,7 @@ bool SceneTree::renderSceneItem(
     ImGui::GetWindowDrawList()->AddCircleFilled(
         ImVec2(bulletPosScreen.x + 4.0f, bulletY), 2.0f, ImGui::GetColorU32(ImGuiCol_Text));
 
+    // Add visibility checkbox
     if (visibilityCheckbox)
     {
         ImGui::SameLine();
@@ -276,6 +299,9 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
 
                 if (treeNodeOpen)
                 {
+                    // Collect cameras to delete (can't delete while iterating)
+                    std::vector<std::string> camerasToDelete;
+
                     ptr->editor_scene->for_each_view(
                         ViewType::Cameras,
                         [&](const std::string& cameraName, const auto& view_data)
@@ -290,15 +316,54 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                                 }
 
                                 bool isSelected = isSelectedInCurrentScene(cameraName, ptr, ViewType::Cameras);
-                                if (renderSceneItem(
-                                        cameraName.c_str(), isSelected, indentSpacing, false, &camera->is_visible))
+                                bool deleteRequested = false;
+
+                                if (renderSceneItem(cameraName.c_str(), isSelected, indentSpacing, false,
+                                                    &camera->is_visible, &deleteRequested))
                                 {
                                     pnanovdb_editor_token_t* camera_token =
                                         EditorToken::getInstance().getToken(cameraName.c_str());
                                     ptr->editor_scene->set_properties_selection(ViewType::Cameras, camera_token);
                                 }
+
+                                if (deleteRequested)
+                                {
+                                    camerasToDelete.push_back(cameraName);
+                                }
                             }
                         });
+
+                    // Process camera deletions after iteration
+                    if (!camerasToDelete.empty() && ptr->editor_scene)
+                    {
+                        pnanovdb_editor_t* editor = ptr->editor_scene->get_editor();
+                        pnanovdb_editor_token_t* current_scene = ptr->editor_scene->get_current_scene_token();
+
+                        // If no scene token, use default scene
+                        if (!current_scene && editor)
+                        {
+                            current_scene = editor->get_token(DEFAULT_SCENE_NAME);
+                            Console::getInstance().addLog("[SceneTree] No current scene, using default for deletion");
+                        }
+
+                        for (const auto& cameraName : camerasToDelete)
+                        {
+                            pnanovdb_editor_token_t* name_token = EditorToken::getInstance().getToken(cameraName.c_str());
+                            if (editor && current_scene && name_token)
+                            {
+                                editor->remove(editor, current_scene, name_token);
+                                Console::getInstance().addLog(
+                                    "[UI] Deleted camera '%s' from scene '%s'", cameraName.c_str(), current_scene->str);
+                            }
+                            else
+                            {
+                                Console::getInstance().addLog(
+                                    "[SceneTree] Failed to delete camera '%s': editor=%p, scene=%p, token=%p",
+                                    cameraName.c_str(), (void*)editor, (void*)current_scene, (void*)name_token);
+                            }
+                        }
+                    }
+
                     ImGui::TreePop();
                 }
             }
@@ -309,16 +374,58 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
             {
                 if (renderTreeNodeHeader(treeLabel))
                 {
-                    ptr->editor_scene->for_each_view(
-                        viewType,
-                        [&](const std::string& name, const auto& /*view_data*/)
+                    // Collect items to delete (can't delete while iterating)
+                    std::vector<std::string> itemsToDelete;
+
+                    ptr->editor_scene->for_each_view(viewType,
+                                                     [&](const std::string& name, const auto& /*view_data*/)
+                                                     {
+                                                         bool isSelected = isSelectedInCurrentScene(name, ptr, viewType);
+                                                         bool deleteRequested = false;
+
+                                                         if (renderSceneItem(name.c_str(), isSelected, indentSpacing,
+                                                                             false, nullptr, &deleteRequested))
+                                                         {
+                                                             pendingField = name;
+                                                         }
+
+                                                         if (deleteRequested)
+                                                         {
+                                                             itemsToDelete.push_back(name);
+                                                         }
+                                                     });
+
+                    // Process deletions after iteration
+                    if (!itemsToDelete.empty() && ptr->editor_scene)
+                    {
+                        pnanovdb_editor_t* editor = ptr->editor_scene->get_editor();
+                        pnanovdb_editor_token_t* current_scene = ptr->editor_scene->get_current_scene_token();
+
+                        // If no scene token, use default scene
+                        if (!current_scene && editor)
                         {
-                            bool isSelected = isSelectedInCurrentScene(name, ptr, viewType);
-                            if (renderSceneItem(name.c_str(), isSelected, indentSpacing, false))
+                            current_scene = editor->get_token(DEFAULT_SCENE_NAME);
+                            Console::getInstance().addLog("[SceneTree] No current scene, using default for deletion");
+                        }
+
+                        for (const auto& itemName : itemsToDelete)
+                        {
+                            pnanovdb_editor_token_t* name_token = EditorToken::getInstance().getToken(itemName.c_str());
+                            if (editor && current_scene && name_token)
                             {
-                                pendingField = name;
+                                editor->remove(editor, current_scene, name_token);
+                                Console::getInstance().addLog(
+                                    "[UI] Deleted '%s' from scene '%s'", itemName.c_str(), current_scene->str);
                             }
-                        });
+                            else
+                            {
+                                Console::getInstance().addLog(
+                                    "[SceneTree] Failed to delete '%s': editor=%p, scene=%p, token=%p",
+                                    itemName.c_str(), (void*)editor, (void*)current_scene, (void*)name_token);
+                            }
+                        }
+                    }
+
                     ImGui::TreePop();
                 }
             };

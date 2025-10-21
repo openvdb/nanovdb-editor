@@ -276,6 +276,9 @@ public:
                                     pnanovdb_raster_t* raster,
                                     std::shared_ptr<pnanovdb_raster_gaussian_data_t>& old_gaussian_data_ptr);
 
+    // Remove object from scene (UI, loaded data, renderer state, selection)
+    bool remove_object(pnanovdb_editor_token_t* scene_token, const char* name);
+
     // Sync default camera view with current viewport camera
     void sync_default_camera_view();
 
@@ -287,6 +290,11 @@ public:
     const EditorSceneData& get_editor_data() const
     {
         return m_scene_data;
+    }
+
+    pnanovdb_editor_t* get_editor() const
+    {
+        return m_editor;
     }
 
     const std::map<std::string, pnanovdb_camera_view_t*>& get_camera_views() const;
@@ -363,7 +371,6 @@ private:
     pnanovdb_camera_config_t m_default_camera_view_config;
     pnanovdb_camera_state_t m_default_camera_view_state;
 
-    // Loaded scene data from files
     EditorSceneData m_scene_data;
 };
 

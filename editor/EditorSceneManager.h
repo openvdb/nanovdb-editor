@@ -16,6 +16,7 @@
 #include "nanovdb_editor/putil/Compute.h"
 #include "nanovdb_editor/putil/Raster.h"
 #include "nanovdb_editor/putil/Reflect.h"
+#include "nanovdb_editor/putil/Camera.h"
 
 #include <map>
 #include <mutex>
@@ -31,7 +32,8 @@ enum class SceneObjectType
 {
     NanoVDB, ///< Volume data
     GaussianData, ///< Gaussian splatting data
-    Array ///< Generic array data
+    Array, ///< Generic array data
+    Camera ///< Camera view
 };
 
 /*!
@@ -51,6 +53,7 @@ struct SceneObject
     pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr; ///< Gaussian splat data
     pnanovdb_raster_context_t* raster_ctx = nullptr; ///< Raster context for gaussian data
     pnanovdb_compute_array_t* data_array = nullptr; ///< Generic array data
+    pnanovdb_camera_view_t* camera_view = nullptr; ///< Camera view data
 
     // Parameters
     void* shader_params = nullptr; ///< Associated shader parameters
@@ -135,6 +138,19 @@ public:
                            pnanovdb_raster_context_t* raster_ctx,
                            void* shader_params,
                            const pnanovdb_reflect_data_type_t* shader_params_data_type);
+
+    /*!
+        \brief Add or update a camera view
+
+        If an object with the same (scene, name) already exists, it will be replaced.
+
+        \param scene Scene token
+        \param name Object name token
+        \param camera_view Camera view data
+
+        \note Thread-safe
+    */
+    void add_camera(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name, pnanovdb_camera_view_t* camera_view);
 
     /*!
         \brief Remove an object by tokens

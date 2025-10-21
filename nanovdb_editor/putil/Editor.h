@@ -98,6 +98,9 @@ typedef struct pnanovdb_editor_t
                                             pnanovdb_editor_token_t* scene,
                                             pnanovdb_editor_token_t* name,
                                             const pnanovdb_editor_gaussian_data_desc_t* desc);
+    void(PNANOVDB_ABI* add_camera_view_2)(pnanovdb_editor_t* editor,
+                                          pnanovdb_editor_token_t* scene,
+                                          pnanovdb_camera_view_t* camera);
 
     // Leverage the tokens to have a universal remove
     void(PNANOVDB_ABI* remove)(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
@@ -130,6 +133,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(add_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_gaussian_data, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(update_camera, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_camera_view, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(add_camera_view_2, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_shader_params, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(sync_shader_params, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_resolved_port, 0, 0)

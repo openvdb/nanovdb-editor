@@ -1019,6 +1019,33 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
     }
 }
 
+void add_camera_view_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_camera_view_t* camera)
+{
+    if (!editor || !editor->impl || !scene || !camera)
+    {
+        return;
+    }
+
+    EditorView* views = editor->impl->views;
+    if (!views || !camera->name || !camera->name->str)
+    {
+        return;
+    }
+
+    Console::getInstance().addLog("[Token API] add_camera_view_2: scene='%s' (id=%llu), camera='%s' (id=%llu)",
+                                  scene->str, (unsigned long long)scene->id, camera->name->str,
+                                  (unsigned long long)camera->name->id);
+
+    // Add camera to the specified scene in EditorView
+    views->add_camera(scene, camera->name->str, camera);
+
+    // Add camera to EditorSceneManager
+    if (editor->impl->scene_manager)
+    {
+        editor->impl->scene_manager->add_camera(scene, camera->name, camera);
+    }
+}
+
 void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
 {
     if (!editor || !editor->impl || !scene || !name)
@@ -1030,18 +1057,145 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
     Console::getInstance().addLog("[Token API] remove: scene='%s' (id=%llu), name='%s' (id=%llu)", token_to_string(scene),
                                   (unsigned long long)scene->id, token_to_string(name), (unsigned long long)name->id);
 
-    // Remove from scene manager
+    bool removed_from_manager = false;
+    bool removed_from_ui = false;
+    std::string name_str(name->str);
+
+    // Get the object from scene manager BEFORE removing it, so we can clear rendering data
+    SceneObject* obj = nullptr;
     if (editor->impl->scene_manager)
     {
-        bool removed = editor->impl->scene_manager->remove(scene, name);
-        if (removed)
+        obj = editor->impl->scene_manager->get(scene, name);
+    }
+
+    // Clear rendering data in editor->impl if it matches the removed object
+    if (obj)
+    {
+        switch (obj->type)
         {
-            Console::getInstance().addLog("[Token API] Successfully removed object");
+        case SceneObjectType::NanoVDB:
+            if (editor->impl->nanovdb_array == obj->nanovdb_array)
+            {
+                editor->impl->nanovdb_array = nullptr;
+                Console::getInstance().addLog("[Token API] Cleared nanovdb_array from renderer");
+            }
+            // Clear pending data in worker thread
+            if (editor->impl->editor_worker)
+            {
+                editor->impl->editor_worker->pending_nanovdb.set_pending(nullptr);
+                Console::getInstance().addLog("[Token API] Cleared pending nanovdb data");
+            }
+            break;
+
+        case SceneObjectType::GaussianData:
+            if (editor->impl->gaussian_data == obj->gaussian_data)
+            {
+                editor->impl->gaussian_data = nullptr;
+                Console::getInstance().addLog("[Token API] Cleared gaussian_data from renderer");
+            }
+            if (editor->impl->raster_ctx == obj->raster_ctx)
+            {
+                editor->impl->raster_ctx = nullptr;
+                Console::getInstance().addLog("[Token API] Cleared raster_ctx from renderer");
+            }
+            // Clear pending data in worker thread
+            if (editor->impl->editor_worker)
+            {
+                editor->impl->editor_worker->pending_gaussian_data.set_pending(nullptr);
+                editor->impl->editor_worker->pending_raster_ctx.set_pending(nullptr);
+                Console::getInstance().addLog("[Token API] Cleared pending gaussian data");
+            }
+            break;
+
+        case SceneObjectType::Camera:
+            // Cameras are views, typically handled by EditorView
+            Console::getInstance().addLog("[Token API] Removed camera view");
+            break;
+
+        default:
+            break;
         }
-        else
+    }
+
+    // Remove from scene manager (data ownership)
+    if (editor->impl->scene_manager)
+    {
+        removed_from_manager = editor->impl->scene_manager->remove(scene, name);
+        if (removed_from_manager)
         {
-            Console::getInstance().addLog("[Token API] Warning: Object not found in scene");
+            Console::getInstance().addLog("[Token API] Removed from scene manager");
         }
+    }
+
+    // Remove from UI (EditorView)
+    if (editor->impl->views)
+    {
+        EditorView* views = editor->impl->views;
+
+        // Try removing from each type
+        if (views->remove_camera(scene, name_str))
+        {
+            Console::getInstance().addLog("[Token API] Removed camera from UI");
+            removed_from_ui = true;
+        }
+        else if (views->remove_nanovdb(scene, name_str))
+        {
+            Console::getInstance().addLog("[Token API] Removed NanoVDB from UI");
+            removed_from_ui = true;
+        }
+        else if (views->remove_gaussian(scene, name_str))
+        {
+            Console::getInstance().addLog("[Token API] Removed Gaussian data from UI");
+            removed_from_ui = true;
+        }
+
+        // If current view was removed, switch to another view
+        if (removed_from_ui)
+        {
+            const std::string& current_view = views->get_current_view(scene);
+            if (current_view == name_str)
+            {
+                // Save current scene, switch to target scene to modify its views
+                pnanovdb_editor_token_t* prev_scene = views->get_current_scene_token();
+                views->set_current_scene(scene);
+
+                // Try to find another view to switch to
+                const auto& nanovdbs = views->get_nanovdbs();
+                const auto& gaussians = views->get_gaussians();
+
+                if (!nanovdbs.empty())
+                {
+                    views->set_current_view(nanovdbs.begin()->first);
+                    Console::getInstance().addLog("[Token API] Switched view to '%s'", nanovdbs.begin()->first.c_str());
+                }
+                else if (!gaussians.empty())
+                {
+                    views->set_current_view(gaussians.begin()->first);
+                    Console::getInstance().addLog("[Token API] Switched view to '%s'", gaussians.begin()->first.c_str());
+                }
+                else
+                {
+                    views->set_current_view("");
+                    Console::getInstance().addLog("[Token API] No views remaining in scene");
+                }
+
+                // Restore previous scene
+                if (prev_scene)
+                {
+                    views->set_current_scene(prev_scene);
+                }
+            }
+        }
+    }
+
+    if (removed_from_manager || removed_from_ui)
+    {
+        Console::getInstance().addLog(
+            "[Token API] Successfully removed object '%s' from scene '%s'", name->str, scene->str);
+    }
+    else
+    {
+        Console::getInstance().addLog("[Token API] Warning: Object '%s' not found in scene '%s'", name->str, scene->str);
     }
 }
 
@@ -1118,6 +1272,7 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
     editor.add_gaussian_data = add_gaussian_data;
     editor.update_camera = update_camera;
     editor.add_camera_view = add_camera_view;
+    editor.add_camera_view_2 = add_camera_view_2;
     editor.get_resolved_port = get_resolved_port;
     editor.get_token = get_token;
     editor.add_nanovdb_2 = add_nanovdb_2;

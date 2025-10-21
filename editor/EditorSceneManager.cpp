@@ -56,6 +56,20 @@ void EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,
     obj.shader_params_data_type = shader_params_data_type;
 }
 
+void EditorSceneManager::add_camera(pnanovdb_editor_token_t* scene,
+                                    pnanovdb_editor_token_t* name,
+                                    pnanovdb_camera_view_t* camera_view)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    uint64_t key = make_key(scene, name);
+
+    auto& obj = m_objects[key];
+    obj.type = SceneObjectType::Camera;
+    obj.scene_token = scene;
+    obj.name_token = name;
+    obj.camera_view = camera_view;
+}
+
 bool EditorSceneManager::remove(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
 {
     std::lock_guard<std::mutex> lock(m_mutex);

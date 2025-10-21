@@ -32,7 +32,7 @@ SceneViewData* EditorView::get_or_create_scene(pnanovdb_editor_token_t* scene_to
         // Use default scene if no token provided
         if (!m_default_scene_token)
         {
-            m_default_scene_token = EditorToken::getInstance().getToken("default");
+            m_default_scene_token = EditorToken::getInstance().getToken(DEFAULT_SCENE_NAME);
         }
         scene_token = m_default_scene_token;
     }
@@ -394,6 +394,57 @@ std::string EditorView::add_gaussian_view(pnanovdb_raster_context_t* raster_ctx,
     set_current_view(view_name);
 
     return view_name;
+}
+
+template <typename MapType>
+bool EditorView::remove_from_map(MapType SceneViewData::*map_member, const std::string& name)
+{
+    SceneViewData* scene = get_current_scene();
+    if (!scene)
+        return false;
+    return (scene->*map_member).erase(name) > 0;
+}
+
+template <typename MapType>
+bool EditorView::remove_from_map(MapType SceneViewData::*map_member,
+                                 pnanovdb_editor_token_t* scene_token,
+                                 const std::string& name)
+{
+    SceneViewData* scene = get_or_create_scene(scene_token);
+    if (!scene)
+        return false;
+    return (scene->*map_member).erase(name) > 0;
+}
+
+// Remove views (current scene)
+bool EditorView::remove_camera(const std::string& name)
+{
+    return remove_from_map(&SceneViewData::cameras, name);
+}
+
+bool EditorView::remove_camera(pnanovdb_editor_token_t* scene_token, const std::string& name)
+{
+    return remove_from_map(&SceneViewData::cameras, scene_token, name);
+}
+
+bool EditorView::remove_nanovdb(const std::string& name)
+{
+    return remove_from_map(&SceneViewData::nanovdbs, name);
+}
+
+bool EditorView::remove_nanovdb(pnanovdb_editor_token_t* scene_token, const std::string& name)
+{
+    return remove_from_map(&SceneViewData::nanovdbs, scene_token, name);
+}
+
+bool EditorView::remove_gaussian(const std::string& name)
+{
+    return remove_from_map(&SceneViewData::gaussians, name);
+}
+
+bool EditorView::remove_gaussian(pnanovdb_editor_token_t* scene_token, const std::string& name)
+{
+    return remove_from_map(&SceneViewData::gaussians, scene_token, name);
 }
 
 } // namespace pnanovdb_editor

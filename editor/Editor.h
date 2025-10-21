@@ -38,6 +38,7 @@ struct pnanovdb_editor_impl_t
     pnanovdb_editor::EditorView* views;
     pnanovdb_int32_t resolved_port;
     pnanovdb_editor::EditorSceneManager* scene_manager;
+    pnanovdb_compute_device_t* device;
     pnanovdb_compute_queue_t* device_queue;
     pnanovdb_compute_queue_t* compute_queue;
 };

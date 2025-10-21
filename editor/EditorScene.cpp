@@ -665,6 +665,119 @@ void EditorScene::add_gaussian_to_scene_data(pnanovdb_raster_context_t* raster_c
     loaded_view.shader_params = raster_params;
 }
 
+bool EditorScene::remove_object(pnanovdb_editor_token_t* scene_token, const char* name)
+{
+    if (!name || !m_views)
+    {
+        return false;
+    }
+
+    bool removed = false;
+    std::string name_str(name);
+
+    // Try to remove from EditorView (this handles UI scene tree)
+    if (m_views->remove_camera(scene_token, name_str))
+    {
+        Console::getInstance().addLog("Removed camera '%s' from scene", name);
+        removed = true;
+    }
+    else if (m_views->remove_nanovdb(scene_token, name_str))
+    {
+        Console::getInstance().addLog("Removed NanoVDB '%s' from scene", name);
+        removed = true;
+
+        // Remove from loaded scene data
+        for (auto it = m_scene_data.nanovdb_arrays.begin(); it != m_scene_data.nanovdb_arrays.end(); ++it)
+        {
+            if (it->name == name_str)
+            {
+                if (it->shader_params_array)
+                {
+                    m_compute->destroy_array(it->shader_params_array);
+                }
+                m_scene_data.nanovdb_arrays.erase(it);
+                break;
+            }
+        }
+    }
+    else if (m_views->remove_gaussian(scene_token, name_str))
+    {
+        Console::getInstance().addLog("Removed Gaussian data '%s' from scene", name);
+        removed = true;
+
+        // Remove from loaded scene data
+        for (auto it = m_scene_data.gaussian_views.begin(); it != m_scene_data.gaussian_views.end(); ++it)
+        {
+            if (it->name == name_str)
+            {
+                m_scene_data.gaussian_views.erase(it);
+                break;
+            }
+        }
+    }
+
+    if (removed)
+    {
+        // Clear selection if the removed object is currently selected
+        if (m_view_selection.name_token && m_view_selection.name_token->str &&
+            strcmp(m_view_selection.name_token->str, name) == 0)
+        {
+            // Check if selection belongs to the same scene
+            if (!m_view_selection.scene_token || !scene_token || m_view_selection.scene_token->id == scene_token->id)
+            {
+                m_view_selection.type = ViewType::None;
+                m_view_selection.name_token = nullptr;
+                m_view_selection.scene_token = nullptr;
+                Console::getInstance().addLog("Cleared selection (removed object was selected)");
+            }
+        }
+
+        // Clear render view if the removed object is currently rendered
+        if (m_render_view_selection.name_token && m_render_view_selection.name_token->str &&
+            strcmp(m_render_view_selection.name_token->str, name) == 0)
+        {
+            if (!m_render_view_selection.scene_token || !scene_token ||
+                m_render_view_selection.scene_token->id == scene_token->id)
+            {
+                m_render_view_selection.type = ViewType::None;
+                m_render_view_selection.name_token = nullptr;
+                m_render_view_selection.scene_token = nullptr;
+
+                // Note: Renderer state will be cleared automatically on next frame
+                // when sync_selected_view_with_current() runs
+                Console::getInstance().addLog("Cleared render view selection (renderer will update next frame)");
+            }
+        }
+
+        // If current view was removed, try to switch to another view
+        const std::string& current_view = m_views->get_current_view(scene_token);
+        if (current_view == name_str)
+        {
+            // Try to find another view to switch to
+            const auto& nanovdbs = m_views->get_nanovdbs();
+            const auto& gaussians = m_views->get_gaussians();
+
+            if (!nanovdbs.empty())
+            {
+                m_views->set_current_view(scene_token, nanovdbs.begin()->first);
+                Console::getInstance().addLog("Switched view to '%s'", nanovdbs.begin()->first.c_str());
+            }
+            else if (!gaussians.empty())
+            {
+                m_views->set_current_view(scene_token, gaussians.begin()->first);
+                Console::getInstance().addLog("Switched view to '%s'", gaussians.begin()->first.c_str());
+            }
+            else
+            {
+                m_views->set_current_view(scene_token, "");
+                Console::getInstance().addLog("No views remaining in scene");
+            }
+        }
+    }
+
+    return removed;
+}
+
 void EditorScene::sync_default_camera_view()
 {
     // Update default camera view to sync with viewport camera to preserve changes when switching views

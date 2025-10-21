@@ -48,7 +48,8 @@ private:
                          bool isSelected,
                          float indentSpacing = 0.0f,
                          bool useIndent = false,
-                         pnanovdb_bool_t* visibilityCheckbox = nullptr);
+                         pnanovdb_bool_t* visibilityCheckbox = nullptr,
+                         bool* deleteRequested = nullptr);
 
     bool renderTreeNodeHeader(const char* label,
                               bool* visibilityCheckbox = nullptr,
