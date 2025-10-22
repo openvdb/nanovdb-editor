@@ -490,7 +490,7 @@ void EditorScene::reload_shader_params_for_current_view()
         m_compute->destroy_array(m_nanovdb_params.default_array);
     }
 
-    m_imgui_instance->shader_params.load(m_nanovdb_params.shader_name, true);
+    m_imgui_instance->shader_params.load(m_imgui_instance->shader_name, true);
     m_nanovdb_params.default_array = m_imgui_instance->shader_params.get_compute_array_for_shader(
         m_imgui_instance->shader_name.c_str(), m_compute);
 }
