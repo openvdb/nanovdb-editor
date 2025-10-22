@@ -483,6 +483,18 @@ void EditorScene::sync_shader_params_from_editor()
     }
 }
 
+void EditorScene::reload_shader_params_for_current_view()
+{
+    if (m_nanovdb_params.default_array)
+    {
+        m_compute->destroy_array(m_nanovdb_params.default_array);
+    }
+
+    m_imgui_instance->shader_params.load(m_nanovdb_params.shader_name, true);
+    m_nanovdb_params.default_array = m_imgui_instance->shader_params.get_compute_array_for_shader(
+        m_imgui_instance->shader_name.c_str(), m_compute);
+}
+
 void EditorScene::get_shader_params_for_current_view(void* shader_params_data)
 {
     if (!shader_params_data)
