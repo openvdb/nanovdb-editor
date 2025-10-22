@@ -15,6 +15,9 @@
 #include <thread>
 #include <atomic>
 #include <string>
+#include <unordered_map>
+#include <vector>
+#include <mutex>
 
 namespace pnanovdb_editor
 {
@@ -40,7 +43,17 @@ struct pnanovdb_editor_impl_t
     // Resources for _2 API methods
     pnanovdb_raster_t* raster;
     pnanovdb_compute_device_t* device;
-    pnanovdb_compute_queue_t* queue;
+    pnanovdb_compute_queue_t* device_queue;
+    pnanovdb_compute_queue_t* compute_queue;
+
+    // Temp: Storage for multiple objects indexed by name (_2 API)
+    pnanovdb_camera_t scene_camera;
+    std::unordered_map<std::string, pnanovdb_raster_gaussian_data_t*> gaussian_data_map;
+    std::unordered_map<std::string, pnanovdb_camera_view_t*> camera_view_map;
+
+    // Track pending removals (to be processed at end of frame)
+    std::vector<std::string> pending_removals;
+    std::mutex pending_removals_mutex;
 };
 
 namespace pnanovdb_editor
@@ -114,4 +127,36 @@ struct EditorWorker
     std::string config_ip_address;
     std::string config_ui_profile_name;
 };
+
+// ------------------------------------------------ Token Utilities
+// Compare two tokens for equality (fast comparison using IDs)
+static inline pnanovdb_bool_t pnanovdb_editor_token_equal(const pnanovdb_editor_token_t* a,
+                                                          const pnanovdb_editor_token_t* b)
+{
+    if (a == b)
+        return PNANOVDB_TRUE;
+    if (!a || !b)
+        return PNANOVDB_FALSE;
+    return (a->id == b->id) ? PNANOVDB_TRUE : PNANOVDB_FALSE;
 }
+
+// Get the string representation of a token (safe - returns NULL if token is NULL)
+static inline const char* pnanovdb_editor_token_get_string(const pnanovdb_editor_token_t* token)
+{
+    return token ? token->str : NULL;
+}
+
+// Get the unique ID of a token
+static inline pnanovdb_uint64_t pnanovdb_editor_token_get_id(const pnanovdb_editor_token_t* token)
+{
+    return token ? token->id : 0;
+}
+
+// Check if a token is valid (not NULL)
+static inline pnanovdb_bool_t pnanovdb_editor_token_is_valid(const pnanovdb_editor_token_t* token)
+{
+    return token ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+}
+// -----------------------------------------------------------
+
+} // namespace pnanovdb_editor

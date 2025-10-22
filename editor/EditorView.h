@@ -73,6 +73,15 @@ public:
         return m_current_view_epoch.load(std::memory_order_relaxed);
     }
 
+    void set_current_scene(const std::string& scene_name)
+    {
+        m_current_scene = scene_name;
+    }
+    const std::string& get_current_scene() const
+    {
+        return m_current_scene;
+    }
+
     // Gaussians
     void add_gaussian(const std::string& name, const GaussianDataContext& ctx)
     {
@@ -119,6 +128,7 @@ private:
     std::map<std::string, NanoVDBContext> m_nanovdbs;
     int m_unnamed_counter = 0;
     std::string m_current_view; // Name of the currently selected view
+    std::string m_current_scene = "Viewer"; // Name of the currently selected scene
     std::atomic<uint64_t> m_current_view_epoch{ 0 };
 };
 

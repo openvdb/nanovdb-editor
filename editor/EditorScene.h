@@ -210,6 +210,11 @@ public:
     void set_render_view(ViewType type, const std::string& name);
     SceneSelection get_render_view_selection() const;
 
+    std::string get_name() const
+    {
+        return m_views->get_current_scene();
+    }
+
     // Camera state management
     void save_camera_state(const std::string& name, const pnanovdb_camera_state_t& state);
     const pnanovdb_camera_state_t* get_saved_camera_state(const std::string& name) const;

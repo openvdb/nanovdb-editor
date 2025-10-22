@@ -159,6 +159,7 @@ bool EditorView::remove_view(const std::string& name)
         m_current_view_epoch.fetch_add(1, std::memory_order_relaxed);
     }
 
+
     return removed;
 }
 

@@ -86,6 +86,7 @@ typedef struct pnanovdb_editor_t
     pnanovdb_int32_t(PNANOVDB_ABI* get_resolved_port)(pnanovdb_editor_t* editor, pnanovdb_bool_t should_wait);
 
     // Token-based API for scene object management
+    pnanovdb_camera_t*(PNANOVDB_ABI* get_camera)(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene);
     pnanovdb_editor_token_t*(PNANOVDB_ABI* get_token)(const char* name);
     void(PNANOVDB_ABI* add_nanovdb_2)(pnanovdb_editor_t* editor,
                                       pnanovdb_editor_token_t* scene,
@@ -136,6 +137,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(add_camera_view, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_shader_params, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(sync_shader_params, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_resolved_port, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(get_camera, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_token, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_nanovdb_2, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_gaussian_data_2, 0, 0)
@@ -200,38 +202,6 @@ static inline void pnanovdb_editor_free(pnanovdb_editor_t* editor)
     editor->shutdown(editor);
 
     pnanovdb_free_library(editor->module);
-}
-
-// ------------------------------------------------ Token Utilities
-// -----------------------------------------------------------
-
-// Compare two tokens for equality (fast comparison using IDs)
-static inline pnanovdb_bool_t pnanovdb_editor_token_equal(const pnanovdb_editor_token_t* a,
-                                                          const pnanovdb_editor_token_t* b)
-{
-    if (a == b)
-        return PNANOVDB_TRUE;
-    if (!a || !b)
-        return PNANOVDB_FALSE;
-    return (a->id == b->id) ? PNANOVDB_TRUE : PNANOVDB_FALSE;
-}
-
-// Get the string representation of a token (safe - returns NULL if token is NULL)
-static inline const char* pnanovdb_editor_token_get_string(const pnanovdb_editor_token_t* token)
-{
-    return token ? token->str : NULL;
-}
-
-// Get the unique ID of a token
-static inline pnanovdb_uint64_t pnanovdb_editor_token_get_id(const pnanovdb_editor_token_t* token)
-{
-    return token ? token->id : 0;
-}
-
-// Check if a token is valid (not NULL)
-static inline pnanovdb_bool_t pnanovdb_editor_token_is_valid(const pnanovdb_editor_token_t* token)
-{
-    return token ? PNANOVDB_TRUE : PNANOVDB_FALSE;
 }
 
 #endif

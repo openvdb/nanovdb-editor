@@ -261,7 +261,7 @@ int main(int argc, char* argv[])
 #        ifdef TEST_TRAINIG
     int N = 100;
 #        else
-    int N = 1;
+    int N = 2;
 #        endif
     for (int i = 0; i < N; i++)
     {
@@ -371,6 +371,22 @@ int main(int argc, char* argv[])
         }
     }
 #    endif
+
+    pnanovdb_camera_t* cameraPtr = editor.get_camera(&editor, scene_main);
+    printf("Camera position: (%f, %f, %f)\n", cameraPtr->state.position.x, cameraPtr->state.position.y,
+           cameraPtr->state.position.z);
+
+    runEditorLoop(5);
+
+    pnanovdb_camera_t camera_default;
+    pnanovdb_camera_init(&camera_default);
+    editor.update_camera(&editor, &camera_default);
+
+    runEditorLoop(1);
+
+    cameraPtr = editor.get_camera(&editor, scene_main);
+    printf("Camera position: (%f, %f, %f)\n", cameraPtr->state.position.x, cameraPtr->state.position.y,
+           cameraPtr->state.position.z);
 
     runEditorLoop(1000);
 

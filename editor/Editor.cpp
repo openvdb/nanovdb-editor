@@ -81,27 +81,23 @@ static pnanovdb_bool_t init_impl(pnanovdb_editor_t* editor,
     editor->impl->raster_ctx = NULL;
     editor->impl->shader_params = NULL;
     editor->impl->shader_params_data_type = NULL;
-    editor->impl->views = NULL;
+    editor->impl->views = new EditorView();
     editor->impl->resolved_port = PNANOVDB_EDITOR_RESOLVED_PORT_PENDING;
 
-    // Initialize resources for _2 API
-    editor->impl->raster = NULL;
+    // Temp: Initialize resources for _2 API but with a single scene
     editor->impl->device = NULL;
-    editor->impl->queue = NULL;
+    editor->impl->compute_queue = NULL;
+    editor->impl->device_queue = NULL;
+    editor->impl->raster = new pnanovdb_raster_t();
+    pnanovdb_raster_load(editor->impl->raster, editor->impl->compute);
+    pnanovdb_camera_init(&editor->impl->scene_camera);
+    editor->impl->camera = &editor->impl->scene_camera;
 
     return PNANOVDB_TRUE;
 }
 
 void init(pnanovdb_editor_t* editor)
 {
-    editor->impl->views = new EditorView();
-
-    // Initialize raster for _2 API
-    if (editor->impl->compute)
-    {
-        editor->impl->raster = new pnanovdb_raster_t();
-        pnanovdb_raster_load(editor->impl->raster, editor->impl->compute);
-    }
 }
 
 void shutdown(pnanovdb_editor_t* editor)
@@ -114,6 +110,30 @@ void shutdown(pnanovdb_editor_t* editor)
     {
         delete editor->impl->views;
     }
+    // Temp: Clean up all gaussian data in the map
+    if (editor->impl->raster && editor->impl->device_queue)
+    {
+        for (auto& entry : editor->impl->gaussian_data_map)
+        {
+            if (entry.second)
+            {
+                editor->impl->raster->destroy_gaussian_data(
+                    editor->impl->raster->compute, editor->impl->device_queue, entry.second);
+            }
+        }
+    }
+    editor->impl->gaussian_data_map.clear();
+    // Temp: Clean up all camera views in the map
+    for (auto& entry : editor->impl->camera_view_map)
+    {
+        if (entry.second)
+        {
+            delete[] entry.second->configs;
+            delete[] entry.second->states;
+            delete entry.second;
+        }
+    }
+    editor->impl->camera_view_map.clear();
     if (editor->impl->raster)
     {
         pnanovdb_raster_free(editor->impl->raster);
@@ -381,7 +401,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
     // Store device and queue for _2 API methods
     editor->impl->device = device;
-    editor->impl->queue = device_queue;
+    editor->impl->device_queue = device_queue;
+    editor->impl->compute_queue = compute_queue;
 
     pnanovdb_camera_mat_t view = {};
     pnanovdb_camera_mat_t projection = {};
@@ -727,13 +748,59 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         {
             compute_interface->destroy_texture(compute_context, background_image);
         }
+
+        // Process pending removals - cleanup resources that were marked for removal
+        std::vector<std::string> removals_to_process;
+        {
+            std::lock_guard<std::mutex> lock(editor->impl->pending_removals_mutex);
+            removals_to_process.swap(editor->impl->pending_removals);
+        }
+
+        for (const auto& name_str : removals_to_process)
+        {
+            // Remove gaussian data from map if it exists
+            auto gaussian_it = editor->impl->gaussian_data_map.find(name_str);
+            if (gaussian_it != editor->impl->gaussian_data_map.end())
+            {
+                pnanovdb_raster_gaussian_data_t* gaussian_data = gaussian_it->second;
+
+                // If this is the current gaussian data, clear it
+                if (editor->impl->gaussian_data == gaussian_data)
+                {
+                    editor->impl->gaussian_data = nullptr;
+                }
+
+                // Destroy the gaussian data
+                if (editor->impl->raster && editor->impl->device_queue && gaussian_data)
+                {
+                    editor->impl->raster->destroy_gaussian_data(
+                        editor->impl->raster->compute, editor->impl->device_queue, gaussian_data);
+                }
+
+                // Remove from map
+                editor->impl->gaussian_data_map.erase(gaussian_it);
+            }
+
+            // Remove camera view from map if it exists
+            auto camera_it = editor->impl->camera_view_map.find(name_str);
+            if (camera_it != editor->impl->camera_view_map.end())
+            {
+                pnanovdb_camera_view_t* camera_view = camera_it->second;
+
+                // Clean up the camera view
+                if (camera_view)
+                {
+                    delete[] camera_view->configs;
+                    delete[] camera_view->states;
+                }
+
+                // Remove from map
+                editor->impl->camera_view_map.erase(camera_it);
+            }
+        }
     }
     editor->impl->compute->device_interface.wait_idle(device_queue);
-
-    pnanovdb_raster_free(&raster);
-
     editor->impl->compute->device_interface.disable_profiler(compute_context);
-
     editor->impl->compute->destroy_shader(
         compute_interface, &editor->impl->compute->shader_interface, compute_context, shader_context);
     editor->impl->compiler->destroy_instance(compiler_inst);
@@ -742,6 +809,12 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     pnanovdb_compute_upload_buffer_destroy(compute_context, &shader_params_upload_buffer);
 
     imgui_window_iface->destroy(editor->impl->compute, device_queue, imgui_window, imgui_user_settings);
+
+    raster.destroy_context(editor->impl->compute, device_queue, editor->impl->raster_ctx);
+    editor->impl->device_queue = nullptr;
+    editor->impl->compute_queue = nullptr;
+    editor->impl->device = nullptr;
+    editor->impl->raster = nullptr;
 }
 
 pnanovdb_int32_t get_resolved_port(pnanovdb_editor_t* editor, pnanovdb_bool_t should_wait)
@@ -796,7 +869,23 @@ void stop(pnanovdb_editor_t* editor)
     editor->impl->editor_worker = nullptr;
 }
 
-// Token management
+pnanovdb_camera_t* get_camera(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene)
+{
+    if (!editor || !scene)
+    {
+        return nullptr;
+    }
+
+    const char* name_str = pnanovdb_editor_token_get_string(scene);
+    if (name_str)
+    {
+        editor->impl->views->set_current_scene(name_str);
+    }
+
+    return editor->impl->camera;
+}
+
+// Temp: Token management
 static std::unordered_map<std::string, pnanovdb_editor_token_t*> s_token_registry;
 static std::mutex s_token_mutex;
 
@@ -854,7 +943,7 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
     }
 
     // Check if we have the required resources
-    if (!editor->impl->raster || !editor->impl->queue)
+    if (!editor->impl->raster || !editor->impl->device_queue || !editor->impl->compute_queue)
     {
         // Resources not yet available (show/start not called yet)
         return;
@@ -862,11 +951,10 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
 
     // Create or get raster context
     pnanovdb_raster_context_t* raster_ctx = editor->impl->raster_ctx;
-
     if (!raster_ctx)
     {
         // Create a new raster context
-        raster_ctx = editor->impl->raster->create_context(editor->impl->compute, editor->impl->queue);
+        raster_ctx = editor->impl->raster->create_context(editor->impl->compute, editor->impl->compute_queue);
         if (!raster_ctx)
         {
             return;
@@ -895,25 +983,48 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
     // Create gaussian data
     pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr;
     editor->impl->raster->create_gaussian_data_from_arrays(editor->impl->raster, editor->impl->compute,
-                                                           editor->impl->queue, arrays, 6u, &gaussian_data,
+                                                           editor->impl->device_queue, arrays, 6u, &gaussian_data,
                                                            &raster_params, &raster_ctx);
 
     if (gaussian_data)
     {
-        add_gaussian_data(editor, raster_ctx, editor->impl->queue, gaussian_data);
+        // Store in map indexed by name, take ownership of the gaussian data
+        editor->impl->gaussian_data_map[name->str] = gaussian_data;
+
+        add_gaussian_data(editor, raster_ctx, editor->impl->device_queue, gaussian_data);
     }
 }
 
 void add_camera_view_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_camera_view_t* camera)
 {
-    // Ignore scene token for now, just call old API
+    if (!editor || !editor->impl || !camera)
+    {
+        return;
+    }
+
+    const char* name_str = pnanovdb_editor_token_get_string(camera->name);
+    if (!name_str)
+    {
+        return;
+    }
+
+    // Store pointer in map, take ownership of the camera view
+    editor->impl->camera_view_map[name_str] = camera;
+
     add_camera_view(editor, camera);
 }
 
 void update_camera_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_camera_t* camera)
 {
-    // Ignore scene token for now, just call old API
-    update_camera(editor, camera);
+    if (!editor || !editor->impl || !camera)
+    {
+        return;
+    }
+
+
+    editor->impl->scene_camera = *camera;
+
+    update_camera(editor, &editor->impl->scene_camera);
 }
 
 void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
@@ -929,7 +1040,14 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
         return;
     }
 
+    // Remove from views
     editor->impl->views->remove_view(std::string(name_str));
+
+    // Add to pending removals list for cleanup at end of frame
+    {
+        std::lock_guard<std::mutex> lock(editor->impl->pending_removals_mutex);
+        editor->impl->pending_removals.push_back(std::string(name_str));
+    }
 }
 
 void* map_params(pnanovdb_editor_t* editor,
@@ -981,6 +1099,7 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
     editor.get_resolved_port = get_resolved_port;
 
     // New token-based API
+    editor.get_camera = get_camera;
     editor.get_token = get_token;
     editor.add_nanovdb_2 = add_nanovdb_2;
     editor.add_gaussian_data_2 = add_gaussian_data_2;
