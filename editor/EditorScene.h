@@ -197,6 +197,9 @@ public:
     void sync_selected_view_with_current();
     void sync_shader_params_from_editor();
 
+    // To refresh shader params after shader compile
+    void reload_shader_params_for_current_view();
+
     // Copy current editor shader params from UI
     void get_shader_params_for_current_view(void* shader_params_data);
 

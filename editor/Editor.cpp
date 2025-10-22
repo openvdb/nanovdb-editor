@@ -667,6 +667,9 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 }
                 else
                 {
+                    // now that shader definitely exists, reload shader params
+                    editor_scene.reload_shader_params_for_current_view();
+
                     dispatch_shader = true;
                 }
             }
