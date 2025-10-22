@@ -12,12 +12,14 @@
 #include "nanovdb_editor/putil/Reflect.h"
 #include "nanovdb_editor/putil/Editor.h"
 
+
 #include <thread>
 #include <atomic>
 #include <string>
 #include <unordered_map>
 #include <vector>
 #include <mutex>
+#include <memory>
 
 namespace pnanovdb_editor
 {
@@ -48,12 +50,9 @@ struct pnanovdb_editor_impl_t
 
     // Temp: Storage for multiple objects indexed by name (_2 API)
     pnanovdb_camera_t scene_camera;
-    std::unordered_map<std::string, pnanovdb_raster_gaussian_data_t*> gaussian_data_map;
-    std::unordered_map<std::string, pnanovdb_camera_view_t*> camera_view_map;
-
-    // Track pending removals (to be processed at end of frame)
-    std::vector<std::string> pending_removals;
-    std::mutex pending_removals_mutex;
+    std::shared_ptr<pnanovdb_raster_gaussian_data_t> gaussian_data_old;
+    std::unordered_map<std::string, std::shared_ptr<pnanovdb_raster_gaussian_data_t>> gaussian_data_map;
+    std::unordered_map<std::string, std::shared_ptr<pnanovdb_camera_view_t>> camera_view_map;
 };
 
 namespace pnanovdb_editor

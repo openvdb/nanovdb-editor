@@ -31,6 +31,7 @@
 #include <unordered_map>
 #include <mutex>
 #include <cstring>
+#include <memory>
 
 
 static const pnanovdb_uint32_t s_default_width = 1440u;
@@ -59,6 +60,33 @@ struct EditorParams
     uint32_t height;
     uint32_t pad1;
     uint32_t pad2;
+};
+
+// Custom deleters for shared_ptr
+struct GaussianDataDeleter
+{
+    pnanovdb_editor_t* editor = nullptr;
+
+    void operator()(pnanovdb_raster_gaussian_data_t* data) const
+    {
+        if (editor && editor->impl && editor->impl->raster && editor->impl->device_queue && data)
+        {
+            editor->impl->raster->destroy_gaussian_data(editor->impl->raster->compute, editor->impl->device_queue, data);
+        }
+    }
+};
+
+struct CameraViewDeleter
+{
+    void operator()(pnanovdb_camera_view_t* camera) const
+    {
+        if (camera)
+        {
+            delete[] camera->configs;
+            delete[] camera->states;
+            delete camera;
+        }
+    }
 };
 
 static pnanovdb_bool_t init_impl(pnanovdb_editor_t* editor,
@@ -111,28 +139,10 @@ void shutdown(pnanovdb_editor_t* editor)
         delete editor->impl->views;
     }
     // Temp: Clean up all gaussian data in the map
-    if (editor->impl->raster && editor->impl->device_queue)
-    {
-        for (auto& entry : editor->impl->gaussian_data_map)
-        {
-            if (entry.second)
-            {
-                editor->impl->raster->destroy_gaussian_data(
-                    editor->impl->raster->compute, editor->impl->device_queue, entry.second);
-            }
-        }
-    }
+    // The shared_ptr destructors will handle the actual cleanup
     editor->impl->gaussian_data_map.clear();
     // Temp: Clean up all camera views in the map
-    for (auto& entry : editor->impl->camera_view_map)
-    {
-        if (entry.second)
-        {
-            delete[] entry.second->configs;
-            delete[] entry.second->states;
-            delete entry.second;
-        }
-    }
+    // The shared_ptr destructors will handle the actual cleanup
     editor->impl->camera_view_map.clear();
     if (editor->impl->raster)
     {
@@ -729,6 +739,12 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             cleanup_background();
         }
 
+        if (editor->impl->gaussian_data_old)
+        {
+            // delay deletion to avoid issues with GPU still using the data
+            editor->impl->gaussian_data_old = nullptr;
+        }
+
         if (editor->impl->camera && imgui_user_settings->sync_camera == PNANOVDB_FALSE)
         {
             imgui_window_iface->get_camera(imgui_window, &editor->impl->camera->state, &editor->impl->camera->config);
@@ -750,56 +766,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         if (background_image)
         {
             compute_interface->destroy_texture(compute_context, background_image);
-        }
-
-        // Process pending removals - cleanup resources that were marked for removal
-        std::vector<std::string> removals_to_process;
-        {
-            std::lock_guard<std::mutex> lock(editor->impl->pending_removals_mutex);
-            removals_to_process.swap(editor->impl->pending_removals);
-        }
-
-        for (const auto& name_str : removals_to_process)
-        {
-            // Remove gaussian data from map if it exists
-            auto gaussian_it = editor->impl->gaussian_data_map.find(name_str);
-            if (gaussian_it != editor->impl->gaussian_data_map.end())
-            {
-                pnanovdb_raster_gaussian_data_t* gaussian_data = gaussian_it->second;
-
-                // If this is the current gaussian data, clear it
-                if (editor->impl->gaussian_data == gaussian_data)
-                {
-                    editor->impl->gaussian_data = nullptr;
-                }
-
-                // Destroy the gaussian data
-                if (editor->impl->raster && editor->impl->device_queue && gaussian_data)
-                {
-                    editor->impl->raster->destroy_gaussian_data(
-                        editor->impl->raster->compute, editor->impl->device_queue, gaussian_data);
-                }
-
-                // Remove from map
-                editor->impl->gaussian_data_map.erase(gaussian_it);
-            }
-
-            // Remove camera view from map if it exists
-            auto camera_it = editor->impl->camera_view_map.find(name_str);
-            if (camera_it != editor->impl->camera_view_map.end())
-            {
-                pnanovdb_camera_view_t* camera_view = camera_it->second;
-
-                // Clean up the camera view
-                if (camera_view)
-                {
-                    delete[] camera_view->configs;
-                    delete[] camera_view->states;
-                }
-
-                // Remove from map
-                editor->impl->camera_view_map.erase(camera_it);
-            }
         }
     }
     editor->impl->compute->device_interface.wait_idle(device_queue);
@@ -877,12 +843,6 @@ pnanovdb_camera_t* get_camera(pnanovdb_editor_t* editor, pnanovdb_editor_token_t
     if (!editor || !scene)
     {
         return nullptr;
-    }
-
-    const char* name_str = pnanovdb_editor_token_get_string(scene);
-    if (name_str)
-    {
-        editor->impl->views->set_current_scene(name_str);
     }
 
     return editor->impl->camera;
@@ -991,9 +951,23 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
 
     if (gaussian_data)
     {
-        // Store in map indexed by name, take ownership of the gaussian data
-        editor->impl->gaussian_data_map[name->str] = gaussian_data;
+        // Remove if already exists in map to avoid duplicates
+        // Erasing the key will call the destructor on the old shared_ptr after the end of the next frame
+        std::string name_str = name && name->str ? name->str : std::string();
+        auto it = editor->impl->gaussian_data_map.find(name_str);
+        if (it != editor->impl->gaussian_data_map.end())
+        {
+            editor->impl->gaussian_data_old = it->second;
+        }
+        editor->impl->gaussian_data_map.erase(name->str);
 
+        // Create shared_ptr with custom deleter and store in map
+        GaussianDataDeleter deleter;
+        deleter.editor = editor;
+        editor->impl->gaussian_data_map[name_str] =
+            std::shared_ptr<pnanovdb_raster_gaussian_data_t>(gaussian_data, deleter);
+
+        // Store in map indexed by name, take ownership of the gaussian data
         add_gaussian_data(editor, raster_ctx, editor->impl->device_queue, gaussian_data);
     }
 }
@@ -1011,8 +985,11 @@ void add_camera_view_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene
         return;
     }
 
-    // Store pointer in map, take ownership of the camera view
-    editor->impl->camera_view_map[name_str] = camera;
+    // Remove if already exists in map to avoid duplicates
+    editor->impl->camera_view_map.erase(name_str);
+
+    // Store in map indexed by name, take ownership of the camera view (if not already in map)
+    editor->impl->camera_view_map[name_str] = std::shared_ptr<pnanovdb_camera_view_t>(camera, CameraViewDeleter());
 
     add_camera_view(editor, camera);
 }
@@ -1024,6 +1001,11 @@ void update_camera_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, 
         return;
     }
 
+    const char* name_str = pnanovdb_editor_token_get_string(scene);
+    if (name_str)
+    {
+        editor->impl->views->set_current_scene(name_str);
+    }
 
     editor->impl->scene_camera = *camera;
 
@@ -1045,12 +1027,6 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
 
     // Remove from views
     editor->impl->views->remove_view(std::string(name_str));
-
-    // Add to pending removals list for cleanup at end of frame
-    {
-        std::lock_guard<std::mutex> lock(editor->impl->pending_removals_mutex);
-        editor->impl->pending_removals.push_back(std::string(name_str));
-    }
 }
 
 void* map_params(pnanovdb_editor_t* editor,
