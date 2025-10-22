@@ -124,4 +124,42 @@ std::string EditorView::add_gaussian_view(pnanovdb_raster_context_t* raster_ctx,
     return view_name;
 }
 
+bool EditorView::remove_view(const std::string& name)
+{
+    bool removed = false;
+
+    // Try to remove from cameras
+    auto camera_it = m_cameras.find(name);
+    if (camera_it != m_cameras.end())
+    {
+        m_cameras.erase(camera_it);
+        removed = true;
+    }
+
+    // Try to remove from gaussians
+    auto gaussian_it = m_gaussians.find(name);
+    if (gaussian_it != m_gaussians.end())
+    {
+        m_gaussians.erase(gaussian_it);
+        removed = true;
+    }
+
+    // Try to remove from nanovdbs
+    auto nanovdb_it = m_nanovdbs.find(name);
+    if (nanovdb_it != m_nanovdbs.end())
+    {
+        m_nanovdbs.erase(nanovdb_it);
+        removed = true;
+    }
+
+    // If the removed view was the current view, clear it
+    if (removed && m_current_view == name)
+    {
+        m_current_view.clear();
+        m_current_view_epoch.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    return removed;
+}
+
 } // namespace pnanovdb_editor

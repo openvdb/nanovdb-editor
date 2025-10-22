@@ -110,6 +110,9 @@ public:
                                   pnanovdb_raster_gaussian_data_t* gaussian_data,
                                   pnanovdb_raster_shader_params_t* shader_params);
 
+    // Remove a view by name (searches cameras, gaussians, and nanovdbs)
+    bool remove_view(const std::string& name);
+
 private:
     std::map<std::string, pnanovdb_camera_view_t*> m_cameras;
     std::map<std::string, GaussianDataContext> m_gaussians;

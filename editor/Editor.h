@@ -36,6 +36,11 @@ struct pnanovdb_editor_impl_t
     const pnanovdb_reflect_data_type_t* shader_params_data_type;
     pnanovdb_editor::EditorView* views;
     pnanovdb_int32_t resolved_port;
+
+    // Resources for _2 API methods
+    pnanovdb_raster_t* raster;
+    pnanovdb_compute_device_t* device;
+    pnanovdb_compute_queue_t* queue;
 };
 
 namespace pnanovdb_editor

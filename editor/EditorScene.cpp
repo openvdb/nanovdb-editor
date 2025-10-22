@@ -78,7 +78,7 @@ EditorScene::EditorScene(const EditorSceneConfig& config)
     }
 
     pnanovdb_camera_view_default(&m_imgui_instance->default_camera_view);
-    m_imgui_instance->default_camera_view.name = imgui_instance_user::VIEWPORT_CAMERA;
+    m_imgui_instance->default_camera_view.name = m_editor->get_token(imgui_instance_user::VIEWPORT_CAMERA);
     m_imgui_instance->default_camera_view.configs = &m_default_camera_view_config;
     m_imgui_instance->default_camera_view.states = &m_default_camera_view_state;
     m_imgui_instance->default_camera_view.num_cameras = 1;

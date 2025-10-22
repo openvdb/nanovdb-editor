@@ -32,7 +32,7 @@
 #define TEST_EDITOR
 // #define TEST_EDITOR_START_STOP
 // #define TEST_RASTER
-// #define TEST_RASTER_2D
+#define TEST_RASTER_2D
 // #define TEST_SVRASTER
 // #define TEST_E57
 #define TEST_CAMERA
@@ -380,7 +380,7 @@ int main(int argc, char* argv[])
 
     pnanovdb_camera_view_t test_camera;
     pnanovdb_camera_view_default(&test_camera);
-    test_camera.name = "test";
+    test_camera.name = editor.get_token("test");
     test_camera.num_cameras = 1;
     test_camera.states = new pnanovdb_camera_state_t[test_camera.num_cameras];
     test_camera.states[0] = test_state;
@@ -391,7 +391,7 @@ int main(int argc, char* argv[])
 
     pnanovdb_camera_view_t debug_camera;
     pnanovdb_camera_view_default(&debug_camera);
-    debug_camera.name = "test_10";
+    debug_camera.name = editor.get_token("test_10");
     debug_camera.num_cameras = 10;
     debug_camera.states = new pnanovdb_camera_state_t[debug_camera.num_cameras];
     debug_camera.configs = new pnanovdb_camera_config_t[debug_camera.num_cameras];
@@ -409,7 +409,7 @@ int main(int argc, char* argv[])
 
     pnanovdb_camera_view_t default_camera;
     pnanovdb_camera_view_default(&default_camera);
-    default_camera.name = "test_default";
+    default_camera.name = editor.get_token("test_default");
     default_camera.num_cameras = 1;
     default_camera.states = new pnanovdb_camera_state_t[default_camera.num_cameras];
     default_camera.states[0] = default_state;
