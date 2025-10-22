@@ -12,6 +12,8 @@
 #ifndef NANOVDB_EDITOR_SCENE_MANAGER_H_HAS_BEEN_INCLUDED
 #define NANOVDB_EDITOR_SCENE_MANAGER_H_HAS_BEEN_INCLUDED
 
+#include "EditorToken.h"
+#include "ShaderParams.h"
 #include "nanovdb_editor/putil/Editor.h"
 #include "nanovdb_editor/putil/Compute.h"
 #include "nanovdb_editor/putil/Raster.h"
@@ -21,6 +23,7 @@
 #include <map>
 #include <mutex>
 #include <vector>
+#include <memory>
 
 namespace pnanovdb_editor
 {
@@ -51,13 +54,21 @@ struct SceneObject
     // Object data (only one will be non-null based on type)
     pnanovdb_compute_array_t* nanovdb_array = nullptr; ///< NanoVDB volume data
     pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr; ///< Gaussian splat data
-    pnanovdb_raster_context_t* raster_ctx = nullptr; ///< Raster context for gaussian data
-    pnanovdb_compute_array_t* data_array = nullptr; ///< Generic array data
     pnanovdb_camera_view_t* camera_view = nullptr; ///< Camera view data
+
+    // Optional per-object shader params storage (e.g. NanoVDB)
+    pnanovdb_compute_array_t* shader_params_array = nullptr; ///< Backing array for shader params when needed
+
+    // Ownership handles to ensure proper destruction
+    std::shared_ptr<pnanovdb_compute_array_t> nanovdb_array_owner; ///< Destroys compute array on removal
+    std::shared_ptr<pnanovdb_raster_gaussian_data_t> gaussian_data_owner; ///< Destroys gaussian data on removal
+    std::shared_ptr<pnanovdb_compute_array_t> shader_params_array_owner; ///< Destroys params array on removal
+    std::shared_ptr<void> shader_params_owner; ///< For non-compute param storage (e.g., raster params)
 
     // Parameters
     void* shader_params = nullptr; ///< Associated shader parameters
     const pnanovdb_reflect_data_type_t* shader_params_data_type = nullptr; ///< Parameter type info
+    std::string shader_name; ///< Shader name for this object (e.g., for NanoVDB rendering)
 };
 
 /*!
@@ -93,6 +104,22 @@ public:
     EditorSceneManager() = default;
     ~EditorSceneManager() = default;
 
+    // Shader parameters for all scenes
+    ShaderParams shader_params;
+
+    // Unified helper to create a compute-backed params array
+    static pnanovdb_compute_array_t* create_params_array(const pnanovdb_compute_t* compute,
+                                                         const pnanovdb_reflect_data_type_t* data_type,
+                                                         size_t fallback_size);
+
+    // Unified helper to create shader params initialized from JSON defaults
+    pnanovdb_compute_array_t* create_initialized_shader_params(
+        const pnanovdb_compute_t* compute,
+        const char* shader_name,
+        const char* shader_group,
+        size_t fallback_size,
+        const pnanovdb_reflect_data_type_t* fallback_data_type = nullptr);
+
     /*!
         \brief Create a unique key from scene and name tokens
 
@@ -116,7 +143,12 @@ public:
 
         \note Thread-safe
     */
-    void add_nanovdb(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name, pnanovdb_compute_array_t* array);
+    void add_nanovdb(pnanovdb_editor_token_t* scene,
+                     pnanovdb_editor_token_t* name,
+                     pnanovdb_compute_array_t* array,
+                     pnanovdb_compute_array_t* params_array,
+                     const pnanovdb_compute_t* compute,
+                     const char* shader_name = nullptr);
 
     /*!
         \brief Add or update Gaussian data
@@ -135,9 +167,9 @@ public:
     void add_gaussian_data(pnanovdb_editor_token_t* scene,
                            pnanovdb_editor_token_t* name,
                            pnanovdb_raster_gaussian_data_t* gaussian_data,
-                           pnanovdb_raster_context_t* raster_ctx,
-                           void* shader_params,
-                           const pnanovdb_reflect_data_type_t* shader_params_data_type);
+                           pnanovdb_compute_array_t* params_array,
+                           const pnanovdb_reflect_data_type_t* shader_params_data_type,
+                           const pnanovdb_compute_t* compute);
 
     /*!
         \brief Add or update a camera view

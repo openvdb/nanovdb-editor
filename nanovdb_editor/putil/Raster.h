@@ -78,8 +78,7 @@ typedef struct pnanovdb_raster_t
                                                                          pnanovdb_compute_array_t* sh_0,
                                                                          pnanovdb_compute_array_t* sh_n,
                                                                          pnanovdb_compute_array_t* opacities,
-                                                                         pnanovdb_compute_array_t** shader_params_arrays,
-                                                                         pnanovdb_raster_shader_params_t* raster_params);
+                                                                         pnanovdb_compute_array_t** shader_params_arrays);
 
     void(PNANOVDB_ABI* upload_gaussian_data)(const pnanovdb_compute_t* compute,
                                              pnanovdb_compute_queue_t* queue,

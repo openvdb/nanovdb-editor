@@ -249,6 +249,9 @@ int main(int argc, char* argv[])
     pnanovdb_compute_device_manager_t* device_manager = compute.device_interface.create_device_manager(PNANOVDB_FALSE);
     pnanovdb_compute_device_t* device = compute.device_interface.create_device(device_manager, &device_desc);
 
+    pnanovdb_fileformat_t fileformat = {};
+    pnanovdb_fileformat_load(&fileformat, &compute);
+
 #if defined(TEST_EDITOR) || defined(TEST_EDITOR_START_STOP)
     pnanovdb_compute_array_t* data_nanovdb = compute.load_nanovdb(nvdb_filepath);
     if (!data_nanovdb)
@@ -301,9 +304,6 @@ int main(int argc, char* argv[])
     const char* e57_file = "./data/kantonalschule/20042020-kantonalschule-_Setip_001.e57";
     const char* array_names[] = { "positions", "colors", "normals" };
 
-    pnanovdb_fileformat_t fileformat = {};
-    pnanovdb_fileformat_load(&fileformat, &compute);
-
     for (int i = 0; i < runs; ++i)
     {
         auto start = std::chrono::high_resolution_clock::now();
@@ -336,8 +336,6 @@ int main(int argc, char* argv[])
         // printf("Load time: %zu ms (%zu points)\n", (size_t)duration.count(), array_size / 3);
     }
     printf("E57 average load: %zu ms (%zu points)\n", totalTime / runs, array_size / 3);
-
-    pnanovdb_fileformat_free(&fileformat);
     return 0;
 #endif
 
@@ -346,13 +344,17 @@ int main(int argc, char* argv[])
     pnanovdb_editor_t editor = {};
     pnanovdb_editor_load(&editor, &compute, &compiler);
 
-    editor.add_nanovdb(&editor, data_nanovdb);
+    pnanovdb_editor_token_t* scene_main = editor.get_token("main");
+
+    pnanovdb_editor_token_t* volume_token = editor.get_token("dragon");
+    editor.add_nanovdb_2(&editor, scene_main, volume_token, data_nanovdb);
     printf("Added dragon volume using add_nanovdb()\n");
 
     pnanovdb_compute_array_t* data_nanovdb2 = compute.load_nanovdb("./data/splats.nvdb");
     if (data_nanovdb2)
     {
-        editor.add_nanovdb(&editor, data_nanovdb2);
+        pnanovdb_editor_token_t* volume_token2 = editor.get_token("splats_volume");
+        editor.add_nanovdb_2(&editor, scene_main, volume_token2, data_nanovdb2);
         printf("Added splats volume using add_nanovdb()\n");
     }
 
@@ -392,7 +394,7 @@ int main(int argc, char* argv[])
     test_camera.configs = new pnanovdb_camera_config_t[test_camera.num_cameras];
     test_camera.configs[0] = test_config;
     test_camera.is_visible = PNANOVDB_FALSE;
-    editor.add_camera_view(&editor, &test_camera);
+    editor.add_camera_view_2(&editor, scene_main, &test_camera);
 
     pnanovdb_camera_view_t debug_camera;
     pnanovdb_camera_view_default(&debug_camera);
@@ -410,7 +412,7 @@ int main(int argc, char* argv[])
         debug_camera.states[i] = debug_state_i;
         debug_camera.configs[i] = debug_config;
     }
-    editor.add_camera_view(&editor, &debug_camera);
+    editor.add_camera_view_2(&editor, scene_main, &debug_camera);
 
     pnanovdb_camera_view_t default_camera;
     pnanovdb_camera_view_default(&default_camera);
@@ -421,7 +423,7 @@ int main(int argc, char* argv[])
     default_camera.configs = new pnanovdb_camera_config_t[default_camera.num_cameras];
     default_camera.configs[0] = default_config;
     default_camera.is_visible = PNANOVDB_FALSE;
-    editor.add_camera_view(&editor, &default_camera);
+    editor.add_camera_view_2(&editor, scene_main, &default_camera);
 #    endif
 
 #    ifdef TEST_RASTER
@@ -441,41 +443,63 @@ int main(int argc, char* argv[])
 
     const char* raster_file = "./data/ficus.ply";
     const char* raster_file_garden = "./data/garden.ply";
-    pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
 
-    pnanovdb_raster_t raster = {};
-    pnanovdb_raster_load(&raster, &compute);
+    // Load Gaussian arrays from file and add via token-based descriptor API
+    const char* array_names_gaussian[] = { "means", "opacities", "quaternions", "scales", "sh_0", "sh_n" };
+    pnanovdb_compute_array_t* arrays[6] = {};
 
-    const pnanovdb_reflect_data_type_t* data_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t);
-    const pnanovdb_raster_shader_params_t* defaults = (const pnanovdb_raster_shader_params_t*)data_type->default_value;
-    pnanovdb_raster_shader_params_t raster_params = *defaults;
-    raster_params.data_type = data_type;
-    raster_params.name = "ficus";
-    pnanovdb_raster_shader_params_t raster_params_garden = *defaults;
-    raster_params_garden.data_type = data_type;
-    raster_params_garden.name = "garden";
+    // Ficus
+    {
+        pnanovdb_bool_t loaded = fileformat.load_file(raster_file, 6, array_names_gaussian, arrays);
+        if (loaded == PNANOVDB_TRUE)
+        {
+            pnanovdb_editor_gaussian_data_desc_t desc = {};
+            desc.means = arrays[0];
+            desc.opacities = arrays[1];
+            desc.quaternions = arrays[2];
+            desc.scales = arrays[3];
+            desc.sh_0 = arrays[4];
+            desc.sh_n = arrays[5];
 
-    pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr;
-    pnanovdb_raster_gaussian_data_t* gaussian_data_garden = nullptr;
-    pnanovdb_raster_context_t* raster_ctx = nullptr;
+            pnanovdb_editor_token_t* ficus_token = editor.get_token("ficus");
+            editor.add_gaussian_data_2(&editor, scene_main, ficus_token, &desc);
 
-    raster_params.name = "ficus";
-    raster.raster_file(&raster, &compute, queue, raster_file, 0.f, nullptr, &gaussian_data, &raster_ctx, nullptr,
-                       &raster_params, nullptr, nullptr);
-    editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data);
-    printf("Added ficus gaussian data\n");
+            for (int ai = 0; ai < 6; ++ai)
+            {
+                if (arrays[ai])
+                {
+                    compute.destroy_array(arrays[ai]);
+                }
+            }
+        }
+    }
 
-    raster_params_garden.name = "garden";
-    raster.raster_file(&raster, &compute, queue, raster_file_garden, 0.f, nullptr, &gaussian_data_garden, &raster_ctx,
-                       nullptr, &raster_params_garden, nullptr, nullptr);
-    editor.add_gaussian_data(&editor, raster_ctx, queue, gaussian_data_garden);
-    printf("Added garden gaussian data\n");
+    // Garden
+    {
+        pnanovdb_bool_t loaded = fileformat.load_file(raster_file_garden, 6, array_names_gaussian, arrays);
+        if (loaded == PNANOVDB_TRUE)
+        {
+            pnanovdb_editor_gaussian_data_desc_t desc = {};
+            desc.means = arrays[0];
+            desc.opacities = arrays[1];
+            desc.quaternions = arrays[2];
+            desc.scales = arrays[3];
+            desc.sh_0 = arrays[4];
+            desc.sh_n = arrays[5];
 
-    raster_params.eps2d = 0.5f;
-#    endif
+            pnanovdb_editor_token_t* garden_token = editor.get_token("garden");
+            editor.add_gaussian_data_2(&editor, scene_main, garden_token, &desc);
 
-#    ifdef TEST_RASTER
-    editor.add_nanovdb(&editor, data_nanovdb);
+            for (int ai = 0; ai < 6; ++ai)
+            {
+                if (arrays[ai])
+                {
+                    compute.destroy_array(arrays[ai]);
+                }
+            }
+        }
+    }
+
 #    endif
 
     pnanovdb_editor_config_t config = {};
@@ -494,17 +518,6 @@ int main(int argc, char* argv[])
 
     compute.destroy_array(data_nanovdb);
     compute.destroy_array(data_nanovdb2);
-
-#    ifdef TEST_RASTER_2D
-    raster.destroy_gaussian_data(raster.compute, queue, gaussian_data);
-    gaussian_data = nullptr;
-    raster.destroy_gaussian_data(raster.compute, queue, gaussian_data_garden);
-    gaussian_data_garden = nullptr;
-    raster.destroy_context(raster.compute, queue, raster_ctx);
-    raster_ctx = nullptr;
-
-    pnanovdb_raster_free(&raster);
-#    endif
 
     pnanovdb_editor_free(&editor);
 #endif
@@ -554,6 +567,7 @@ int main(int argc, char* argv[])
     compute.device_interface.destroy_device(device_manager, device);
     compute.device_interface.destroy_device_manager(device_manager);
 
+    pnanovdb_fileformat_free(&fileformat);
     pnanovdb_compute_free(&compute);
     pnanovdb_compiler_free(&compiler);
 

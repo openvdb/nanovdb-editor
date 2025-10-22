@@ -429,13 +429,6 @@ ImDrawData* get_draw_data(pnanovdb_imgui_instance_t* instance)
     return ImGui::GetDrawData();
 }
 
-void Instance::set_default_shader(const std::string& shaderName)
-{
-    shader_name = shaderName;
-    pending.viewport_shader_name = shaderName;
-    pnanovdb_editor::CodeEditor::getInstance().setSelectedShader(shaderName);
-}
-
 void Instance::update_ini_filename_for_profile(const char* profile_name)
 {
     ImGuiIO& io = ImGui::GetIO();

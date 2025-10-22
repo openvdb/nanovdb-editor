@@ -273,7 +273,7 @@ static pnanovdb_bool_t process_arrays_to_create_gaussian_data(pnanovdb_raster_t*
     }
     pnanovdb_raster_gaussian_data_t* raster_data =
         raster->create_gaussian_data(raster->compute, queue, raster_ctx, means_arr, quat_arr, scale_arr, color_arr,
-                                     sh_0_arr, sh_n_arr, opacity_arr, shader_params_arrays, raster_params);
+                                     sh_0_arr, sh_n_arr, opacity_arr, shader_params_arrays);
 
     compute->destroy_array(color_arr);
     *gaussian_data = raster_data;

@@ -13,6 +13,7 @@
 
 #include "ImguiInstance.h"
 #include "EditorScene.h"
+#include "EditorSceneManager.h"
 #include "EditorToken.h"
 #include "CodeEditor.h"
 #include "Console.h"
@@ -277,32 +278,6 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
 
     if (ImGui::Begin(VIEWPORT_SETTINGS, &ptr->window.show_viewport_settings))
     {
-        ImGui::Text("Viewport Shader");
-        {
-            ImGui::BeginGroup();
-            if (ImGui::BeginCombo("##viewport_shader", "Select..."))
-            {
-                for (const auto& shader : ptr->viewport_shaders)
-                {
-                    if (ImGui::Selectable(shader.c_str()))
-                    {
-                        ptr->pending.viewport_shader_name = shader;
-                    }
-                }
-                ImGui::EndCombo();
-            }
-            ImGui::InputText("##viewport_shader_name", &ptr->pending.viewport_shader_name);
-            ImGui::SameLine();
-            if (ImGui::Button("Update"))
-            {
-                pnanovdb_editor::CodeEditor::getInstance().setSelectedShader(ptr->pending.viewport_shader_name);
-                ptr->shader_name = ptr->pending.viewport_shader_name;
-                ptr->pending.update_shader = true;
-            }
-            ImGui::EndGroup();
-        }
-        ImGui::Separator();
-
         // viewport options
         {
             ImGui::BeginGroup();
@@ -834,6 +809,13 @@ void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
         return;
     }
 
+    auto* scene_manager = ptr->editor_scene ? ptr->editor_scene->get_scene_manager() : nullptr;
+    if (!scene_manager)
+    {
+        return;
+    }
+    auto& shader_params = scene_manager->shader_params;
+
     if (ImGui::Begin(SHADER_PARAMS, &ptr->window.show_shader_params))
     {
         std::string shader_name;
@@ -876,13 +858,13 @@ void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
         const std::string& target_name = is_group_mode ? ptr->shader_group : shader_name;
         if (!target_name.empty())
         {
-            if (ptr->shader_params.isJsonLoaded(target_name, is_group_mode))
+            if (shader_params.isJsonLoaded(target_name, is_group_mode))
             {
                 if (ImGui::Button("Reload JSON"))
                 {
                     if (is_group_mode)
                     {
-                        if (ptr->shader_params.loadGroup(target_name, true))
+                        if (shader_params.loadGroup(target_name, true))
                         {
                             pnanovdb_editor::Console::getInstance().addLog(
                                 "Group params '%s' updated", target_name.c_str());
@@ -896,7 +878,7 @@ void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
                     else
                     {
                         pnanovdb_editor::CodeEditor::getInstance().saveShaderParams();
-                        if (ptr->shader_params.load(target_name, true))
+                        if (shader_params.load(target_name, true))
                         {
                             pnanovdb_editor::Console::getInstance().addLog(
                                 "Shader params for '%s' updated", target_name.c_str());
@@ -915,11 +897,11 @@ void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
                 {
                     if (ptr->pending.shader_selection_mode == ShaderSelectionMode::UseShaderGroup)
                     {
-                        ptr->shader_params.createGroup(target_name);
+                        shader_params.createGroup(target_name);
                     }
                     else
                     {
-                        ptr->shader_params.create(target_name);
+                        shader_params.create(target_name);
                         pnanovdb_editor::CodeEditor::getInstance().updateViewer();
                     }
                 }
@@ -932,13 +914,13 @@ void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
         {
             if (ptr->pending.shader_selection_mode == ShaderSelectionMode::UseShaderGroup)
             {
-                ptr->shader_params.renderGroup(target_name);
+                shader_params.renderGroup(target_name);
             }
             else
             {
-                if (ptr->shader_params.isJsonLoaded(target_name))
+                if (shader_params.isJsonLoaded(target_name))
                 {
-                    ptr->shader_params.render(target_name);
+                    shader_params.render(target_name);
                 }
                 else
                 {

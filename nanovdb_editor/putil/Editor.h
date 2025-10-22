@@ -85,15 +85,12 @@ typedef struct pnanovdb_editor_t
     void(PNANOVDB_ABI* sync_shader_params)(pnanovdb_editor_t* editor, void* shader_params, pnanovdb_bool_t set_data);
     pnanovdb_int32_t(PNANOVDB_ABI* get_resolved_port)(pnanovdb_editor_t* editor, pnanovdb_bool_t should_wait);
 
-    // This just allows us to avoid constantly resolving strings, turn into uint64 values instead
+    // Token-based API for scene object management
     pnanovdb_editor_token_t*(PNANOVDB_ABI* get_token)(const char* name);
-
-    // Associate scene and name with nanovdb
     void(PNANOVDB_ABI* add_nanovdb_2)(pnanovdb_editor_t* editor,
                                       pnanovdb_editor_token_t* scene,
                                       pnanovdb_editor_token_t* name,
                                       pnanovdb_compute_array_t* array);
-    // Use desc struct to more clearly show channel names
     void(PNANOVDB_ABI* add_gaussian_data_2)(pnanovdb_editor_t* editor,
                                             pnanovdb_editor_token_t* scene,
                                             pnanovdb_editor_token_t* name,
@@ -101,8 +98,10 @@ typedef struct pnanovdb_editor_t
     void(PNANOVDB_ABI* add_camera_view_2)(pnanovdb_editor_t* editor,
                                           pnanovdb_editor_token_t* scene,
                                           pnanovdb_camera_view_t* camera);
+    void(PNANOVDB_ABI* update_camera_2)(pnanovdb_editor_t* editor,
+                                        pnanovdb_editor_token_t* scene,
+                                        pnanovdb_camera_t* camera);
 
-    // Leverage the tokens to have a universal remove
     void(PNANOVDB_ABI* remove)(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
 
     // For any scene object, client can attempt to map parameters of a given type for read/write
@@ -111,6 +110,7 @@ typedef struct pnanovdb_editor_t
                                     pnanovdb_editor_token_t* scene,
                                     pnanovdb_editor_token_t* name,
                                     const pnanovdb_reflect_data_type_t* data_type);
+
     // unmap allows us to flush any writes from the client to the server
     // in theory this removes the need for sync_shader_params
     void(PNANOVDB_ABI* unmap_params)(pnanovdb_editor_t* editor,
@@ -133,13 +133,14 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(add_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_gaussian_data, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(update_camera, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_camera_view, 0, 0)
-PNANOVDB_REFLECT_FUNCTION_POINTER(add_camera_view_2, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_shader_params, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(sync_shader_params, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_resolved_port, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_token, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_nanovdb_2, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_gaussian_data_2, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(add_camera_view_2, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(update_camera_2, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(remove, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(map_params, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(unmap_params, 0, 0)

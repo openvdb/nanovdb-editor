@@ -12,6 +12,7 @@
 #include "Properties.h"
 #include "ImguiInstance.h"
 #include "EditorScene.h"
+#include "EditorSceneManager.h"
 #include "EditorToken.h"
 
 #include <cmath>
@@ -385,11 +386,25 @@ void Properties::render(imgui_instance_user::Instance* ptr)
         }
         else if (selection.type == pnanovdb_editor::ViewType::GaussianScenes)
         {
-            ptr->shader_params.renderGroup(imgui_instance_user::s_raster2d_shader_group);
+            auto* scene_manager = ptr->editor_scene->get_scene_manager();
+            if (scene_manager)
+            {
+                scene_manager->shader_params.renderGroup(imgui_instance_user::s_raster2d_shader_group);
+            }
         }
         else if (selection.type == pnanovdb_editor::ViewType::NanoVDBs)
         {
-            ptr->shader_params.render(ptr->shader_name);
+            auto* scene_obj = ptr->editor_scene->get_scene_object(selection.name_token, selection.type);
+            if (scene_obj && !scene_obj->shader_name.empty())
+            {
+                ptr->shader_name = scene_obj->shader_name;
+            }
+            ImGui::SeparatorText(ptr->shader_name.c_str());
+            auto* scene_manager = ptr->editor_scene->get_scene_manager();
+            if (scene_manager)
+            {
+                scene_manager->shader_params.render(ptr->shader_name.c_str());
+            }
         }
         else if (selection.type == pnanovdb_editor::ViewType::Cameras)
         {

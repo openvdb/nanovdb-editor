@@ -47,9 +47,7 @@ class TestDispatch(unittest.TestCase):
         constants_array = compute.create_array(self.constants_data)
         output_array = compute.create_array(self.output_data)
 
-        success = compute.dispatch_shader_on_array(
-            TEST_SHADER, (1, 1, 1), input_array, constants_array, output_array
-        )
+        success = compute.dispatch_shader_on_array(TEST_SHADER, (1, 1, 1), input_array, constants_array, output_array)
         self.assertTrue(success)
 
         result = compute.map_array(output_array, self.array_dtype)

@@ -100,8 +100,7 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
                                                       pnanovdb_compute_array_t* sh_0,
                                                       pnanovdb_compute_array_t* sh_n,
                                                       pnanovdb_compute_array_t* opacities,
-                                                      pnanovdb_compute_array_t** shader_params_arrays,
-                                                      pnanovdb_raster_shader_params_t* raster_params)
+                                                      pnanovdb_compute_array_t** shader_params_arrays)
 {
     auto ptr = new gaussian_data_t();
 
@@ -109,15 +108,6 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
     ptr->sh_stride = !sh_n ? 0u : (pnanovdb_uint32_t)(sh_n->element_count / means->element_count);
 
     ptr->has_uploaded = PNANOVDB_FALSE;
-
-    if (raster_params)
-    {
-        // don't copy the data, just the pointer
-        ptr->shader_params = new pnanovdb_compute_array_t();
-        ptr->shader_params->element_count = 1u;
-        ptr->shader_params->element_size = raster_params->data_type->element_size;
-        ptr->shader_params->data = (void*)raster_params;
-    }
 
     ptr->means_cpu_array = compute->create_array(means->element_size, means->element_count, means->data);
     ptr->quaternions_cpu_array =
@@ -279,7 +269,6 @@ void destroy_gaussian_data(const pnanovdb_compute_t* compute,
 
     delete[] ptr->shader_params_gpu_arrays;
     delete[] ptr->shader_params_cpu_arrays;
-    delete ptr->shader_params;
     delete ptr;
 
     // Flush->wait->flush to ensure deferred cleanup and pool cleanup run while minLifetime=0

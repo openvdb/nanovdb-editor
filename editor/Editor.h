@@ -19,7 +19,7 @@
 namespace pnanovdb_editor
 {
 struct EditorWorker;
-class EditorView;
+class SceneView;
 class EditorSceneManager;
 }
 
@@ -32,10 +32,12 @@ struct pnanovdb_editor_impl_t
     pnanovdb_compute_array_t* data_array;
     pnanovdb_raster_gaussian_data_t* gaussian_data;
     pnanovdb_camera_t* camera;
+    pnanovdb_raster_t* raster;
     pnanovdb_raster_context_t* raster_ctx;
+    std::string shader_name = "editor/editor.slang";
     void* shader_params;
     const pnanovdb_reflect_data_type_t* shader_params_data_type;
-    pnanovdb_editor::EditorView* views;
+    pnanovdb_editor::SceneView* views;
     pnanovdb_int32_t resolved_port;
     pnanovdb_editor::EditorSceneManager* scene_manager;
     pnanovdb_compute_device_t* device;

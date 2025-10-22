@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /*!
-    \file   nanovdb_editor/editor/EditorView.h
+    \file   nanovdb_editor/editor/SceneView.h
 
     \author Petra Hapalova
 
@@ -36,7 +36,6 @@ struct NanoVDBContext
 // Context data for a Gaussian splatting view
 struct GaussianDataContext
 {
-    pnanovdb_raster_context_t* raster_ctx = nullptr;
     pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr;
     pnanovdb_raster_shader_params_t* shader_params = nullptr;
 };
@@ -54,10 +53,10 @@ struct SceneViewData
 
 // Views representing loaded scenes via editor's API, does not own the data
 // Manages multiple scene view data (one per scene token)
-class EditorView
+class SceneView
 {
 public:
-    EditorView() = default;
+    SceneView() = default;
 
     // Scene management
     SceneViewData* get_or_create_scene(pnanovdb_editor_token_t* scene_token);
@@ -77,6 +76,12 @@ public:
 
     // Get all scene tokens
     std::vector<pnanovdb_editor_token_t*> get_all_scene_tokens() const;
+
+    // Check if any scenes exist
+    bool has_scenes() const
+    {
+        return !m_scene_view_data.empty();
+    }
 
     // Cameras (in current scene)
     void add_camera(const std::string& name, pnanovdb_camera_view_t* camera);
@@ -115,9 +120,18 @@ public:
     const std::map<std::string, NanoVDBContext>& get_nanovdbs() const;
 
     std::string add_nanovdb_view(pnanovdb_compute_array_t* nanovdb_array, void* shader_params);
-    std::string add_gaussian_view(pnanovdb_raster_context_t* raster_ctx,
-                                  pnanovdb_raster_gaussian_data_t* gaussian_data,
+    std::string add_gaussian_view(pnanovdb_raster_gaussian_data_t* gaussian_data,
                                   pnanovdb_raster_shader_params_t* shader_params);
+
+    // Scene-scoped helpers to add views and set current view for that scene
+    void add_nanovdb_to_scene(pnanovdb_editor_token_t* scene_token,
+                              const std::string& name,
+                              pnanovdb_compute_array_t* nanovdb_array,
+                              void* shader_params);
+    void add_gaussian_to_scene(pnanovdb_editor_token_t* scene_token,
+                               const std::string& name,
+                               pnanovdb_raster_gaussian_data_t* gaussian_data,
+                               pnanovdb_raster_shader_params_t* shader_params);
 
     // Remove views
     bool remove_camera(const std::string& name);

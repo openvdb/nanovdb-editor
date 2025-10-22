@@ -583,9 +583,8 @@ pnanovdb_compute_array_t* raster_to_nanovdb(const pnanovdb_compute_t* compute,
     compute->device_interface.enable_profiler(context, (void*)("raster"), profiler_report);
 
     // note: colors duplicate for now, since no SH in interface
-    pnanovdb_raster_gaussian_data_t* data =
-        create_gaussian_data(compute, queue, cast(ctx), means, quaternions, scales, colors, sh_0, sh_n, opacities,
-                             shader_params_arrays, nullptr);
+    pnanovdb_raster_gaussian_data_t* data = create_gaussian_data(
+        compute, queue, cast(ctx), means, quaternions, scales, colors, sh_0, sh_n, opacities, shader_params_arrays);
 
     upload_gaussian_data(compute, queue, cast(ctx), data);
 
