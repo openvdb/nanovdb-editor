@@ -52,6 +52,9 @@ struct pnanovdb_editor_impl_t
     pnanovdb_camera_t scene_camera;
     std::shared_ptr<pnanovdb_raster_gaussian_data_t> gaussian_data_old;
     std::unordered_map<std::string, std::shared_ptr<pnanovdb_raster_gaussian_data_t>> gaussian_data_map;
+
+    std::vector<std::shared_ptr<pnanovdb_raster_gaussian_data_t>> gaussian_data_destruction_queue_pending;
+    std::vector<std::shared_ptr<pnanovdb_raster_gaussian_data_t>> gaussian_data_destruction_queue_ready;
     std::unordered_map<std::string, std::shared_ptr<pnanovdb_camera_view_t>> camera_view_map;
 };
 
@@ -112,11 +115,10 @@ struct EditorWorker
 {
     std::thread* thread;
     std::atomic<bool> should_stop{ false };
-    std::atomic<int> set_params{ 0 };
-    std::atomic<int> get_params{ 0 };
+    std::atomic<bool> params_dirty{ false };
+    std::mutex shader_params_mutex;
     PendingData<pnanovdb_compute_array_t> pending_nanovdb;
     PendingData<pnanovdb_compute_array_t> pending_data_array;
-    PendingData<pnanovdb_raster_context_t> pending_raster_ctx;
     PendingData<pnanovdb_raster_gaussian_data_t> pending_gaussian_data;
     PendingData<pnanovdb_camera_t> pending_camera;
     PendingData<void> pending_shader_params;

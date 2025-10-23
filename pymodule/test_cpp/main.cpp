@@ -232,7 +232,7 @@ int main(int argc, char* argv[])
     camera.state.eye_direction = { -0.012344, 0.959868, -0.280182 };
     camera.state.eye_up = { 0.000000, 1.000000, 0.000000 };
     camera.state.eye_distance_from_position = -2.111028;
-    editor.update_camera(&editor, &camera);
+    editor.update_camera_2(&editor, scene_main, &camera);
 
     const char* raster_file = "../../data/ficus.ply";
     const char* raster_file_garden = "../../data/garden.ply";
@@ -261,7 +261,7 @@ int main(int argc, char* argv[])
 #        ifdef TEST_TRAINIG
     int N = 100;
 #        else
-    int N = 2;
+    int N = 1;
 #        endif
     for (int i = 0; i < N; i++)
     {
@@ -294,6 +294,27 @@ int main(int argc, char* argv[])
             }
         }
 
+        pnanovdb_raster_shader_params_t* ficus_params =
+            (pnanovdb_raster_shader_params_t*)editor.map_params(&editor, scene_main, ficus_token, data_type);
+        if (ficus_params)
+        {
+            ficus_params->eps2d = 0.5f;
+            printf("Updating shader param eps2d to %f\n", ficus_params->eps2d);
+            editor.unmap_params(&editor, scene_main, ficus_token);
+        }
+
+        // Verify the parameter was updated
+        ficus_params = (pnanovdb_raster_shader_params_t*)editor.map_params(&editor, scene_main, ficus_token, data_type);
+        if (ficus_params)
+        {
+            printf("Verifying ficus eps2d parameter: %f (expected 0.5)\n", ficus_params->eps2d);
+            if (ficus_params->eps2d != 0.5f)
+            {
+                printf("ERROR: Parameter verification failed! eps2d = %f, expected 0.5\n", ficus_params->eps2d);
+            }
+            editor.unmap_params(&editor, scene_main, ficus_token);
+        }
+
         runEditorLoop(5);
 
         // Garden
@@ -322,6 +343,28 @@ int main(int argc, char* argv[])
             }
         }
 
+        pnanovdb_raster_shader_params_t* garden_params =
+            (pnanovdb_raster_shader_params_t*)editor.map_params(&editor, scene_main, garden_token, data_type);
+        if (garden_params)
+        {
+            garden_params->sh_degree_override = 3;
+            printf("Updating shader param sh_degree to %d\n", garden_params->sh_degree_override);
+            editor.unmap_params(&editor, scene_main, garden_token);
+        }
+
+        // Verify the parameter was updated
+        garden_params = (pnanovdb_raster_shader_params_t*)editor.map_params(&editor, scene_main, garden_token, data_type);
+        if (garden_params)
+        {
+            printf("Verifying garden sh_degree_override parameter: %d (expected 3)\n", garden_params->sh_degree_override);
+            if (garden_params->sh_degree_override != 3)
+            {
+                printf("ERROR: Parameter verification failed! sh_degree_override = %d, expected 3\n",
+                       garden_params->sh_degree_override);
+            }
+            editor.unmap_params(&editor, scene_main, garden_token);
+        }
+
         runEditorLoop(5);
     }
 
@@ -336,6 +379,18 @@ int main(int argc, char* argv[])
             editor.unmap_params(&editor, scene_main, ficus_token);
         }
 
+        // Verify the parameter was updated
+        ficus_params = (pnanovdb_raster_shader_params_t*)editor.map_params(&editor, scene_main, ficus_token, data_type);
+        if (ficus_params)
+        {
+            printf("Verifying ficus eps2d parameter: %f (expected 0.5)\n", ficus_params->eps2d);
+            if (ficus_params->eps2d != 0.5f)
+            {
+                printf("ERROR: Parameter verification failed! eps2d = %f, expected 0.5\n", ficus_params->eps2d);
+            }
+            editor.unmap_params(&editor, scene_main, ficus_token);
+        }
+
         pnanovdb_raster_shader_params_t* garden_params =
             (pnanovdb_raster_shader_params_t*)editor.map_params(&editor, scene_main, garden_token, data_type);
         if (garden_params)
@@ -344,20 +399,41 @@ int main(int argc, char* argv[])
             printf("Updating shader param sh_degree to %d\n", garden_params->sh_degree_override);
             editor.unmap_params(&editor, scene_main, garden_token);
         }
+
+        // Verify the parameter was updated
+        garden_params = (pnanovdb_raster_shader_params_t*)editor.map_params(&editor, scene_main, garden_token, data_type);
+        if (garden_params)
+        {
+            printf("Verifying garden sh_degree_override parameter: %d (expected 3)\n", garden_params->sh_degree_override);
+            if (garden_params->sh_degree_override != 3)
+            {
+                printf("ERROR: Parameter verification failed! sh_degree_override = %d, expected 3\n",
+                       garden_params->sh_degree_override);
+            }
+            editor.unmap_params(&editor, scene_main, garden_token);
+        }
     }
 
     default_camera.is_visible = PNANOVDB_FALSE;
 
     runEditorLoop(5);
 
-    // Read back and print current params via map/unmap (demonstrates round-trip)
+    // Read back and print current params via map/unmap (demonstrates round-trip and state persistence)
     {
         pnanovdb_raster_shader_params_t* ficus_params =
             (pnanovdb_raster_shader_params_t*)editor.map_params(&editor, scene_main, ficus_token, data_type);
         if (ficus_params)
         {
-            printf("Updated shader params:\n");
-            printf("eps2d: %f\n", ficus_params->eps2d);
+            printf("Ficus current shader params:\n");
+            printf("  eps2d: %f (expected 0.5)\n", ficus_params->eps2d);
+            if (ficus_params->eps2d != 0.5f)
+            {
+                printf("ERROR: Parameter state not persisted! eps2d = %f, expected 0.5\n", ficus_params->eps2d);
+            }
+            else
+            {
+                printf("  State verification: PASSED\n");
+            }
             editor.unmap_params(&editor, scene_main, ficus_token);
         }
 
@@ -365,8 +441,17 @@ int main(int argc, char* argv[])
             (pnanovdb_raster_shader_params_t*)editor.map_params(&editor, scene_main, garden_token, data_type);
         if (garden_params)
         {
-            printf("Updated shader params:\n");
-            printf("sh_degree: %d\n", garden_params->sh_degree_override);
+            printf("Garden current shader params:\n");
+            printf("  sh_degree_override: %d (expected 3)\n", garden_params->sh_degree_override);
+            if (garden_params->sh_degree_override != 3)
+            {
+                printf("ERROR: Parameter state not persisted! sh_degree_override = %d, expected 3\n",
+                       garden_params->sh_degree_override);
+            }
+            else
+            {
+                printf("  State verification: PASSED\n");
+            }
             editor.unmap_params(&editor, scene_main, garden_token);
         }
     }
@@ -380,7 +465,7 @@ int main(int argc, char* argv[])
 
     pnanovdb_camera_t camera_default;
     pnanovdb_camera_init(&camera_default);
-    editor.update_camera(&editor, &camera_default);
+    editor.update_camera_2(&editor, scene_main, &camera_default);
 
     runEditorLoop(1);
 

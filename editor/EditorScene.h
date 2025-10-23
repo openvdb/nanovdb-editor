@@ -99,7 +99,6 @@ private:
 struct GaussianDataLoadedContext
 {
     std::string name;
-    pnanovdb_raster_context_t* raster_ctx = nullptr;
     std::shared_ptr<pnanovdb_raster_gaussian_data_t> gaussian_data;
     pnanovdb_raster_shader_params_t* shader_params = nullptr;
 };
@@ -194,6 +193,7 @@ public:
     // Editor per update sync
     void process_pending_editor_changes();
     void process_pending_ui_changes();
+
     void sync_selected_view_with_current();
     void sync_shader_params_from_editor();
 
@@ -255,8 +255,7 @@ public:
                                    const std::string& view_name);
 
     // Add Gaussian data to loaded arrays
-    void add_gaussian_to_scene_data(pnanovdb_raster_context_t* raster_ctx,
-                                    pnanovdb_raster_gaussian_data_t* gaussian_data,
+    void add_gaussian_to_scene_data(pnanovdb_raster_gaussian_data_t* gaussian_data,
                                     pnanovdb_raster_shader_params_t* raster_params,
                                     const std::string& view_name,
                                     pnanovdb_raster_t* raster,

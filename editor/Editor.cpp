@@ -138,11 +138,9 @@ void shutdown(pnanovdb_editor_t* editor)
     {
         delete editor->impl->views;
     }
-    // Temp: Clean up all gaussian data in the map
+    // Temp: Clean up all data in the maps
     // The shared_ptr destructors will handle the actual cleanup
     editor->impl->gaussian_data_map.clear();
-    // Temp: Clean up all camera views in the map
-    // The shared_ptr destructors will handle the actual cleanup
     editor->impl->camera_view_map.clear();
     if (editor->impl->raster)
     {
@@ -167,16 +165,20 @@ void add_nanovdb(pnanovdb_editor_t* editor, pnanovdb_compute_array_t* nanovdb_ar
     {
         EditorWorker* worker = editor->impl->editor_worker;
         worker->pending_nanovdb.set_pending(nanovdb_array);
+
+        // Don't update views from viewer thread - will be handled by editor thread
+        // in process_pending_editor_changes
     }
     else
     {
         editor->impl->nanovdb_array = nanovdb_array;
-    }
 
-    EditorView* views = editor->impl->views;
-    if (views)
-    {
-        views->add_nanovdb_view(nanovdb_array, editor->impl->shader_params);
+        // In non-worker mode, safe to update views directly
+        EditorView* views = editor->impl->views;
+        if (views)
+        {
+            views->add_nanovdb_view(nanovdb_array, editor->impl->shader_params);
+        }
     }
 }
 
@@ -196,12 +198,14 @@ void add_array(pnanovdb_editor_t* editor, pnanovdb_compute_array_t* data_array)
         editor->impl->data_array = data_array;
     }
 }
+
 void add_gaussian_data(pnanovdb_editor_t* editor,
                        pnanovdb_raster_context_t* raster_ctx,
                        pnanovdb_compute_queue_t* queue,
                        pnanovdb_raster_gaussian_data_t* gaussian_data)
 {
-    if (!gaussian_data || !raster_ctx)
+    // ignore raster_ctx and queue, they are managed internally
+    if (!gaussian_data)
     {
         return;
     }
@@ -218,22 +222,24 @@ void add_gaussian_data(pnanovdb_editor_t* editor,
     {
         EditorWorker* worker = editor->impl->editor_worker;
         worker->pending_gaussian_data.set_pending(gaussian_data);
-        worker->pending_raster_ctx.set_pending(raster_ctx);
         worker->pending_shader_params.set_pending(raster_params);
         worker->pending_shader_params_data_type.set_pending(ptr->shader_params_data_type);
+
+        // Don't update views from viewer thread - will be handled by editor thread
+        // in process_pending_editor_changes
     }
     else
     {
         editor->impl->gaussian_data = gaussian_data;
-        editor->impl->raster_ctx = raster_ctx;
         editor->impl->shader_params = raster_params;
         editor->impl->shader_params_data_type = ptr->shader_params_data_type;
-    }
 
-    EditorView* views = editor->impl->views;
-    if (views)
-    {
-        views->add_gaussian_view(raster_ctx, gaussian_data, raster_params);
+        // In non-worker mode, safe to update views directly
+        EditorView* views = editor->impl->views;
+        if (views)
+        {
+            views->add_gaussian_view(gaussian_data, raster_params);
+        }
     }
 }
 
@@ -289,33 +295,7 @@ void add_shader_params(pnanovdb_editor_t* editor, void* params, const pnanovdb_r
 
 void sync_shader_params(pnanovdb_editor_t* editor, void* shader_params, pnanovdb_bool_t set_data)
 {
-    if (!editor->impl->editor_worker)
-    {
-        return;
-    }
-    if (!shader_params || shader_params != editor->impl->shader_params)
-    {
-        // only sync current shader params
-        return;
-    }
-
-    EditorWorker* worker = editor->impl->editor_worker;
-    if (set_data)
-    {
-        worker->set_params.fetch_add(1);
-        while (worker->set_params.load() > 0)
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-    }
-    else
-    {
-        worker->get_params.fetch_add(1);
-        while (worker->get_params.load() > 0)
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-    }
+    // Done via map/unmap
 }
 
 pnanovdb_int32_t editor_get_external_active_count(void* external_active_count)
@@ -328,7 +308,7 @@ pnanovdb_int32_t editor_get_external_active_count(void* external_active_count)
 
     auto worker = editor->impl->editor_worker;
     pnanovdb_int32_t count = 0;
-    if (worker->set_params.load() > 0 || worker->get_params.load() > 0 || worker->should_stop.load())
+    if (worker->should_stop.load())
     {
         count = 1;
     }
@@ -409,10 +389,25 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     pnanovdb_compute_context_t* compute_context =
         editor->impl->compute->device_interface.get_compute_context(device_queue);
 
-    // Store device and queue for _2 API methods
-    editor->impl->device = device;
-    editor->impl->device_queue = device_queue;
-    editor->impl->compute_queue = compute_queue;
+    // Initialize device, queues, and raster context for _2 API methods
+    // These are set once on first call (either headless worker thread or direct show() call)
+    if (!editor->impl->device)
+    {
+        editor->impl->device = device;
+    }
+    if (!editor->impl->device_queue)
+    {
+        editor->impl->device_queue = device_queue;
+    }
+    if (!editor->impl->compute_queue)
+    {
+        editor->impl->compute_queue = compute_queue;
+    }
+
+    if (!editor->impl->raster_ctx && editor->impl->raster)
+    {
+        editor->impl->raster_ctx = editor->impl->raster->create_context(editor->impl->compute, compute_queue);
+    }
 
     pnanovdb_camera_mat_t view = {};
     pnanovdb_camera_mat_t projection = {};
@@ -522,7 +517,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         {
             imgui_user_instance->viewport_option = imgui_instance_user::ViewportOption::NanoVDB;
             editor->impl->gaussian_data = nullptr;
-            editor->impl->raster_ctx = nullptr;
         }
     }
 
@@ -739,10 +733,25 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             cleanup_background();
         }
 
+        // 3-frame destruction pipeline:
+        // 1. Destroy items in ready queue (have been pending for 3 frames)
+        if (!editor->impl->gaussian_data_destruction_queue_ready.empty())
+        {
+            editor->impl->gaussian_data_destruction_queue_ready.clear();
+        }
+
+        // 2. Move pending queue to ready queue (advance pipeline)
+        if (!editor->impl->gaussian_data_destruction_queue_pending.empty())
+        {
+            editor->impl->gaussian_data_destruction_queue_ready =
+                std::move(editor->impl->gaussian_data_destruction_queue_pending);
+            editor->impl->gaussian_data_destruction_queue_pending.clear();
+        }
+
+        // 3. Move gaussian_data_old to pending queue (start of pipeline)
         if (editor->impl->gaussian_data_old)
         {
-            // delay deletion to avoid issues with GPU still using the data
-            editor->impl->gaussian_data_old = nullptr;
+            editor->impl->gaussian_data_destruction_queue_pending.push_back(std::move(editor->impl->gaussian_data_old));
         }
 
         if (editor->impl->camera && imgui_user_settings->sync_camera == PNANOVDB_FALSE)
@@ -780,6 +789,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     imgui_window_iface->destroy(editor->impl->compute, device_queue, imgui_window, imgui_user_settings);
 
     raster.destroy_context(editor->impl->compute, device_queue, editor->impl->raster_ctx);
+    editor->impl->raster_ctx = nullptr;
     editor->impl->device_queue = nullptr;
     editor->impl->compute_queue = nullptr;
     editor->impl->device = nullptr;
@@ -804,6 +814,7 @@ void start(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovd
         {
             return;
         }
+
         auto* editor_worker = new EditorWorker();
 
         // to be safe, we must make a deep copy of config
@@ -845,6 +856,9 @@ pnanovdb_camera_t* get_camera(pnanovdb_editor_t* editor, pnanovdb_editor_token_t
         return nullptr;
     }
 
+    // Note: In worker mode, this returns the camera pointer that may be updated
+    // by the editor thread via pending_camera. The caller should not hold onto
+    // this pointer long-term as it may become stale.
     return editor->impl->camera;
 }
 
@@ -912,17 +926,11 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
         return;
     }
 
-    // Create or get raster context
-    pnanovdb_raster_context_t* raster_ctx = editor->impl->raster_ctx;
-    if (!raster_ctx)
+    // Get raster context - assumes it's already created by the render thread
+    // In worker mode, raster_ctx is initialized in show() before any viewer calls
+    if (!editor->impl->raster_ctx)
     {
-        // Create a new raster context
-        raster_ctx = editor->impl->raster->create_context(editor->impl->compute, editor->impl->compute_queue);
-        if (!raster_ctx)
-        {
-            return;
-        }
-        editor->impl->raster_ctx = raster_ctx;
+        return;
     }
 
     // Create default shader params
@@ -947,16 +955,26 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
     pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr;
     editor->impl->raster->create_gaussian_data_from_arrays(editor->impl->raster, editor->impl->compute,
                                                            editor->impl->device_queue, arrays, 6u, &gaussian_data,
-                                                           &raster_params, &raster_ctx);
+                                                           &raster_params, &editor->impl->raster_ctx);
 
     if (gaussian_data)
     {
         // Remove if already exists in map to avoid duplicates
-        // Erasing the key will call the destructor on the old shared_ptr after the end of the next frame
+        // Store old data in gaussian_data_old to defer destruction until end of frame
+        // This prevents GPU from accessing freed memory
         std::string name_str = name && name->str ? name->str : std::string();
         auto it = editor->impl->gaussian_data_map.find(name_str);
         if (it != editor->impl->gaussian_data_map.end())
         {
+            // Chain old data: if gaussian_data_old already has data, add it to pending queue first
+            if (editor->impl->gaussian_data_old)
+            {
+                editor->impl->gaussian_data_destruction_queue_pending.push_back(
+                    std::move(editor->impl->gaussian_data_old));
+            }
+
+            // Keep new old data alive by storing in gaussian_data_old
+            // It will be moved to the queue at end of current frame in show() render loop
             editor->impl->gaussian_data_old = it->second;
         }
         editor->impl->gaussian_data_map.erase(name->str);
@@ -968,7 +986,7 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
             std::shared_ptr<pnanovdb_raster_gaussian_data_t>(gaussian_data, deleter);
 
         // Store in map indexed by name, take ownership of the gaussian data
-        add_gaussian_data(editor, raster_ctx, editor->impl->device_queue, gaussian_data);
+        add_gaussian_data(editor, editor->impl->raster_ctx, editor->impl->device_queue, gaussian_data);
     }
 }
 
@@ -1040,6 +1058,25 @@ void* map_params(pnanovdb_editor_t* editor,
         return nullptr;
     }
 
+    // map_params is only supported in headless mode with editor_worker
+    if (!editor->impl->editor_worker)
+    {
+        return nullptr;
+    }
+
+    // TODO: check current view and scene
+
+    // Lock the mutex to protect access to shader_params
+    editor->impl->editor_worker->shader_params_mutex.lock();
+
+    // Check if shader_params is actually set
+    if (!editor->impl->shader_params)
+    {
+        // Unlock and return nullptr - params not yet initialized
+        editor->impl->editor_worker->shader_params_mutex.unlock();
+        return nullptr;
+    }
+
     // In a full implementation, this would look up the object by scene/name
     // and return a pointer to its parameters
     return editor->impl->shader_params;
@@ -1053,8 +1090,19 @@ void unmap_params(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pna
         return;
     }
 
-    // In a full implementation, this would sync changes back to the server
-    sync_shader_params(editor, editor->impl->shader_params, PNANOVDB_TRUE);
+    if (!editor->impl->editor_worker)
+    {
+        return;
+    }
+
+    // Capture pointer while holding lock, then unlock before signaling
+    // This ensures we validate the pointer before releasing the lock
+    void* shader_params_ptr = editor->impl->shader_params;
+    editor->impl->editor_worker->shader_params_mutex.unlock();
+
+    // Signal editor thread that params were modified
+    // Editor will sync to UI on next frame when it checks params_dirty flag
+    editor->impl->editor_worker->params_dirty.store(true);
 }
 
 

@@ -32,7 +32,6 @@ struct NanoVDBContext
 // Context data for a Gaussian splatting view
 struct GaussianDataContext
 {
-    pnanovdb_raster_context_t* raster_ctx = nullptr;
     pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr;
     pnanovdb_raster_shader_params_t* shader_params = nullptr;
 };
@@ -115,8 +114,7 @@ public:
     }
 
     std::string add_nanovdb_view(pnanovdb_compute_array_t* nanovdb_array, void* shader_params);
-    std::string add_gaussian_view(pnanovdb_raster_context_t* raster_ctx,
-                                  pnanovdb_raster_gaussian_data_t* gaussian_data,
+    std::string add_gaussian_view(pnanovdb_raster_gaussian_data_t* gaussian_data,
                                   pnanovdb_raster_shader_params_t* shader_params);
 
     // Remove a view by name (searches cameras, gaussians, and nanovdbs)

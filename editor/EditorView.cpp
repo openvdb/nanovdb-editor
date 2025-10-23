@@ -100,11 +100,10 @@ std::string EditorView::add_nanovdb_view(pnanovdb_compute_array_t* nanovdb_array
     return view_name;
 }
 
-std::string EditorView::add_gaussian_view(pnanovdb_raster_context_t* raster_ctx,
-                                          pnanovdb_raster_gaussian_data_t* gaussian_data,
+std::string EditorView::add_gaussian_view(pnanovdb_raster_gaussian_data_t* gaussian_data,
                                           pnanovdb_raster_shader_params_t* shader_params)
 {
-    if (!gaussian_data || !raster_ctx || !shader_params)
+    if (!gaussian_data || !shader_params)
     {
         return "";
     }
@@ -116,7 +115,7 @@ std::string EditorView::add_gaussian_view(pnanovdb_raster_context_t* raster_ctx,
     }
 
     view_name = add_view(
-        m_gaussians, "gaussian_", view_name, GaussianDataContext{ raster_ctx, gaussian_data, shader_params },
+        m_gaussians, "gaussian_", view_name, GaussianDataContext{ gaussian_data, shader_params },
         [this](const std::string& name, GaussianDataContext&& ctx) { add_gaussian(name, ctx); }, m_unnamed_counter);
 
     set_current_view(view_name);

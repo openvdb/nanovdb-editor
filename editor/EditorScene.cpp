@@ -16,6 +16,8 @@
 #include "ShaderCompileUtils.h"
 #include "Console.h"
 
+#include "raster/Raster.h"
+
 #include <nanovdb/io/IO.h>
 
 #include <cstddef>
@@ -180,7 +182,6 @@ void EditorScene::clear_editor_view_state()
     // Clear all view-related pointers before switching to a new view
     m_editor->impl->nanovdb_array = nullptr;
     m_editor->impl->gaussian_data = nullptr;
-    m_editor->impl->raster_ctx = nullptr;
 }
 
 void EditorScene::copy_editor_shader_params_to_ui(ShaderParams* params)
@@ -301,13 +302,14 @@ void EditorScene::load_view_into_editor_and_ui(const UnifiedViewContext& view_ct
     clear_editor_view_state();
 
     // Load selected view's pointers into the editor state so rendering uses the active selection
+    // NOTE: Caller must hold editor_worker->shader_params_mutex when calling this!
+    // We don't lock here to avoid recursive lock when called from sync path
     if (view_ctx.get_view_type() == ViewType::GaussianScenes)
     {
         auto* gaussian_ctx = view_ctx.get_gaussian_context();
         if (gaussian_ctx)
         {
             m_editor->impl->gaussian_data = gaussian_ctx->gaussian_data;
-            m_editor->impl->raster_ctx = gaussian_ctx->raster_ctx;
             m_editor->impl->shader_params = gaussian_ctx->shader_params;
             m_editor->impl->shader_params_data_type = m_raster_shader_params_data_type;
         }
@@ -363,16 +365,14 @@ void EditorScene::process_pending_editor_changes()
     bool updated = false;
 
     pnanovdb_compute_array_t* old_nanovdb_array = nullptr;
-    updated = worker->pending_nanovdb.process_pending(m_editor->impl->nanovdb_array, old_nanovdb_array);
+    bool nanovdb_updated = worker->pending_nanovdb.process_pending(m_editor->impl->nanovdb_array, old_nanovdb_array);
 
     pnanovdb_compute_array_t* old_array = nullptr;
     worker->pending_data_array.process_pending(m_editor->impl->data_array, old_array);
 
-    pnanovdb_raster_context_t* old_raster_ctx = nullptr;
-    worker->pending_raster_ctx.process_pending(m_editor->impl->raster_ctx, old_raster_ctx);
-
     pnanovdb_raster_gaussian_data_t* old_gaussian_data = nullptr;
-    worker->pending_gaussian_data.process_pending(m_editor->impl->gaussian_data, old_gaussian_data);
+    bool gaussian_data_updated =
+        worker->pending_gaussian_data.process_pending(m_editor->impl->gaussian_data, old_gaussian_data);
 
     pnanovdb_camera_t* old_camera = nullptr;
     updated = worker->pending_camera.process_pending(m_editor->impl->camera, old_camera);
@@ -383,12 +383,41 @@ void EditorScene::process_pending_editor_changes()
         m_imgui_settings->sync_camera = PNANOVDB_TRUE;
     }
 
-    void* old_shader_params = nullptr;
-    worker->pending_shader_params.process_pending(m_editor->impl->shader_params, old_shader_params);
+    // Lock mutex when updating shader_params pointer to protect from concurrent viewer access
+    {
+        std::lock_guard<std::mutex> lock(m_editor->impl->editor_worker->shader_params_mutex);
 
-    const pnanovdb_reflect_data_type_t* old_shader_params_data_type = nullptr;
-    worker->pending_shader_params_data_type.process_pending(
-        m_editor->impl->shader_params_data_type, old_shader_params_data_type);
+        void* old_shader_params = nullptr;
+        worker->pending_shader_params.process_pending(m_editor->impl->shader_params, old_shader_params);
+
+        const pnanovdb_reflect_data_type_t* old_shader_params_data_type = nullptr;
+        worker->pending_shader_params_data_type.process_pending(
+            m_editor->impl->shader_params_data_type, old_shader_params_data_type);
+
+        // If nanovdb was updated, also update the views (deferred from viewer thread)
+        // Must be done while holding the lock to safely access shader_params
+        if (nanovdb_updated && m_editor->impl->nanovdb_array && m_views)
+        {
+            m_views->add_nanovdb_view(m_editor->impl->nanovdb_array, m_editor->impl->shader_params);
+        }
+
+        // If gaussian data was updated, also update the views (deferred from viewer thread)
+        // Shader params are embedded in gaussian_data, not in editor->impl->shader_params
+        if (gaussian_data_updated && m_editor->impl->gaussian_data && m_editor->impl->raster_ctx)
+        {
+            // Extract shader params from gaussian_data structure
+            auto ptr = pnanovdb_raster::cast(m_editor->impl->gaussian_data);
+            if (ptr && ptr->shader_params && ptr->shader_params->data)
+            {
+                pnanovdb_raster_shader_params_t* raster_params =
+                    (pnanovdb_raster_shader_params_t*)ptr->shader_params->data;
+                if (m_views)
+                {
+                    m_views->add_gaussian_view(m_editor->impl->gaussian_data, raster_params);
+                }
+            }
+        }
+    }
 }
 
 void EditorScene::process_pending_ui_changes()
@@ -452,25 +481,35 @@ void EditorScene::sync_selected_view_with_current()
     }
 
     set_properties_selection(new_view_type, view_current);
-    set_render_view(new_view_type, view_current);
+
+    // Lock when changing views to protect shader_params pointer in worker mode
+    // In non-worker mode, no concurrent access is possible
+    if (m_editor->impl->editor_worker)
+    {
+        std::lock_guard<std::mutex> lock(m_editor->impl->editor_worker->shader_params_mutex);
+        set_render_view(new_view_type, view_current);
+    }
+    else
+    {
+        set_render_view(new_view_type, view_current);
+    }
 }
 
 void EditorScene::sync_shader_params_from_editor()
 {
     if (m_editor->impl->editor_worker)
     {
-        if (m_editor->impl->editor_worker->set_params.load() > 0)
+        // Only lock if params are dirty
+        if (m_editor->impl->editor_worker->params_dirty.load())
         {
-            // Push editor params to UI
-            sync_current_view_state(SyncDirection::EditorToUI);
-            m_editor->impl->editor_worker->set_params.fetch_sub(1);
-        }
+            std::lock_guard<std::mutex> lock(m_editor->impl->editor_worker->shader_params_mutex);
 
-        if (m_editor->impl->editor_worker->get_params.load() > 0)
-        {
-            // Copy UI params back to editor
-            sync_current_view_state(SyncDirection::UIToEditor);
-            m_editor->impl->editor_worker->get_params.fetch_sub(1);
+            // Check again after acquiring lock (double-check pattern)
+            if (m_editor->impl->editor_worker->params_dirty.exchange(false))
+            {
+                // Sync editor params to UI
+                sync_current_view_state(SyncDirection::EditorToUI);
+            }
         }
     }
     else
@@ -492,8 +531,8 @@ void EditorScene::reload_shader_params_for_current_view()
 
     m_nanovdb_params.shader_name = m_imgui_instance->shader_name;
     m_imgui_instance->shader_params.load(m_imgui_instance->shader_name, true);
-    m_nanovdb_params.default_array = m_imgui_instance->shader_params.get_compute_array_for_shader(
-        m_imgui_instance->shader_name.c_str(), m_compute);
+    m_nanovdb_params.default_array =
+        m_imgui_instance->shader_params.get_compute_array_for_shader(m_imgui_instance->shader_name.c_str(), m_compute);
 }
 
 void EditorScene::get_shader_params_for_current_view(void* shader_params_data)
@@ -573,10 +612,10 @@ void EditorScene::handle_gaussian_data_load(pnanovdb_raster_context_t* raster_ct
     std::string view_name = fsPath.stem().string();
 
     // Add to scene data for ownership management
-    add_gaussian_to_scene_data(raster_ctx, gaussian_data, raster_params, view_name, raster, old_gaussian_data_ptr);
+    add_gaussian_to_scene_data(gaussian_data, raster_params, view_name, raster, old_gaussian_data_ptr);
 
     // Register in EditorView (so it appears in scene tree)
-    m_views->add_gaussian_view(raster_ctx, gaussian_data, raster_params);
+    m_views->add_gaussian_view(gaussian_data, raster_params);
 
     // Setting current view will trigger sync_selected_view_with_current to load it
     m_views->set_current_view(view_name);
@@ -607,8 +646,7 @@ void EditorScene::add_nanovdb_to_scene_data(pnanovdb_compute_array_t* nanovdb_ar
     loaded_ctx.shader_params_array = m_imgui_instance->shader_params.get_compute_array_for_shader(shader_name, m_compute);
 }
 
-void EditorScene::add_gaussian_to_scene_data(pnanovdb_raster_context_t* raster_ctx,
-                                             pnanovdb_raster_gaussian_data_t* gaussian_data,
+void EditorScene::add_gaussian_to_scene_data(pnanovdb_raster_gaussian_data_t* gaussian_data,
                                              pnanovdb_raster_shader_params_t* raster_params,
                                              const std::string& view_name,
                                              pnanovdb_raster_t* raster,
@@ -627,7 +665,6 @@ void EditorScene::add_gaussian_to_scene_data(pnanovdb_raster_context_t* raster_c
 
     auto& loaded_view = m_scene_data.gaussian_views.emplace_back();
     loaded_view.name = view_name;
-    loaded_view.raster_ctx = raster_ctx;
     loaded_view.gaussian_data = std::shared_ptr<pnanovdb_raster_gaussian_data_t>(
         gaussian_data, [destroy_fn = raster->destroy_gaussian_data, compute = raster->compute, queue = m_device_queue](
                            pnanovdb_raster_gaussian_data_t* ptr) { destroy_fn(compute, queue, ptr); });
@@ -767,10 +804,12 @@ void EditorScene::set_render_view(ViewType type, const std::string& name)
     m_render_view_selection = { type, name };
 
     // Load into editor and UI so renderer switches to the requested view
+    // NOTE: Caller must hold editor_worker->shader_params_mutex when called in worker thread mode!
     auto view_ctx = get_view_context(name, type);
     if (view_ctx.is_valid())
     {
         load_view_into_editor_and_ui(view_ctx);
+
         if (type == ViewType::NanoVDBs)
         {
             m_imgui_instance->viewport_option = imgui_instance_user::ViewportOption::NanoVDB;
