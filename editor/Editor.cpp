@@ -173,6 +173,7 @@ void shutdown(pnanovdb_editor_t* editor)
     if (editor->impl->views)
     {
         delete editor->impl->views;
+        editor->impl->views = nullptr;
     }
     // Temp: Clean up all data in the maps
     // The shared_ptr destructors will handle the actual cleanup
@@ -181,6 +182,7 @@ void shutdown(pnanovdb_editor_t* editor)
     {
         pnanovdb_raster_free(editor->impl->raster);
         delete editor->impl->raster;
+        editor->impl->raster = nullptr;
     }
     if (editor->impl)
     {
@@ -844,6 +846,17 @@ pnanovdb_int32_t get_resolved_port(pnanovdb_editor_t* editor, pnanovdb_bool_t sh
 
 void start(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb_editor_config_t* config)
 {
+    // cache config
+    if (editor->impl)
+    {
+        editor->impl->config = *config;
+        editor->impl->config_ip_address = config->ip_address ? std::string(config->ip_address) : std::string();
+        editor->impl->config_ui_profile_name =
+            config->ui_profile_name ? std::string(config->ui_profile_name) : std::string();
+        editor->impl->config.ip_address = editor->impl->config_ip_address.c_str();
+        editor->impl->config.ui_profile_name = editor->impl->config_ui_profile_name.c_str();
+    }
+
     if (config->headless)
     {
         if (editor->impl->editor_worker)
@@ -883,6 +896,25 @@ void stop(pnanovdb_editor_t* editor)
     delete editor_worker->thread;
     delete editor_worker;
     editor->impl->editor_worker = nullptr;
+}
+
+void reset(pnanovdb_editor_t* editor)
+{
+    auto device = editor->impl->device;
+    auto compute = editor->impl->compute;
+    auto compiler = editor->impl->compiler;
+
+    pnanovdb_editor_config_t config = editor->impl->config;
+    std::string config_ip_address = editor->impl->config_ip_address;
+    std::string config_ui_profile_name = editor->impl->config_ui_profile_name;
+    config.ip_address = config_ip_address.c_str();
+    config.ui_profile_name = config_ui_profile_name.c_str();
+
+    shutdown(editor);
+
+    init_impl(editor, compute, compiler);
+
+    start(editor, device, &config);
 }
 
 pnanovdb_camera_t* get_camera(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene)
@@ -1147,6 +1179,7 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
     editor.show = show;
     editor.start = start;
     editor.stop = stop;
+    editor.reset = reset;
     editor.add_nanovdb = add_nanovdb;
     editor.add_array = add_array;
     editor.add_shader_params = add_shader_params;
