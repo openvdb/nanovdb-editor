@@ -121,7 +121,8 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
 
         // Viewer tree node - root parent of all scene items
         bool isRootSelected = (ptr->editor_scene->get_properties_selection().name == SCENE_ROOT_NODE);
-        if (renderTreeNodeHeader(SCENE_ROOT_NODE, nullptr, isRootSelected))
+        const std::string scene_name = ptr->editor_scene->get_name();
+        if (renderTreeNodeHeader(scene_name.c_str(), nullptr, isRootSelected))
         {
             // Show viewport camera as child of Viewer
             if (ptr->editor_scene)

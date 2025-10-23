@@ -14,6 +14,9 @@
 
 #include <nanovdb/PNanoVDB.h>
 
+// Forward declaration for token type (defined in Editor.h)
+struct pnanovdb_editor_token_t;
+
 #if defined(PNANOVDB_C)
 #    include <math.h>
 #    define pnanovdb_camera_sqrt sqrtf
@@ -153,7 +156,7 @@ PNANOVDB_FORCE_INLINE void pnanovdb_camera_init(PNANOVDB_INOUT(pnanovdb_camera_t
 
 struct pnanovdb_camera_view_t
 {
-    const char* name;
+    pnanovdb_editor_token_t* name;
     pnanovdb_camera_config_t* configs;
     pnanovdb_camera_state_t* states;
     pnanovdb_uint32_t num_cameras;

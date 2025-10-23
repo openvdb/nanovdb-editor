@@ -33,6 +33,23 @@ typedef struct pnanovdb_editor_config_t
 #define PNANOVDB_EDITOR_RESOLVED_PORT_UNRESOLVED -1
 #define PNANOVDB_EDITOR_RESOLVED_PORT_PENDING -2
 
+struct pnanovdb_editor_token_t
+{
+    pnanovdb_uint64_t id;
+    const char* str;
+};
+typedef struct pnanovdb_editor_token_t pnanovdb_editor_token_t;
+
+typedef struct pnanovdb_editor_gaussian_data_desc_t
+{
+    pnanovdb_compute_array_t* means;
+    pnanovdb_compute_array_t* opacities;
+    pnanovdb_compute_array_t* quaternions;
+    pnanovdb_compute_array_t* scales;
+    pnanovdb_compute_array_t* sh_0;
+    pnanovdb_compute_array_t* sh_n;
+} pnanovdb_editor_gaussian_data_desc_t;
+
 struct pnanovdb_editor_impl_t;
 typedef struct pnanovdb_editor_impl_t pnanovdb_editor_impl_t;
 typedef struct pnanovdb_editor_t
@@ -67,6 +84,38 @@ typedef struct pnanovdb_editor_t
                                           const pnanovdb_reflect_data_type_t* data_type);
     void(PNANOVDB_ABI* sync_shader_params)(pnanovdb_editor_t* editor, void* shader_params, pnanovdb_bool_t set_data);
     pnanovdb_int32_t(PNANOVDB_ABI* get_resolved_port)(pnanovdb_editor_t* editor, pnanovdb_bool_t should_wait);
+
+    // Token-based API for scene object management
+    pnanovdb_camera_t*(PNANOVDB_ABI* get_camera)(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene);
+    pnanovdb_editor_token_t*(PNANOVDB_ABI* get_token)(const char* name);
+    void(PNANOVDB_ABI* add_nanovdb_2)(pnanovdb_editor_t* editor,
+                                      pnanovdb_editor_token_t* scene,
+                                      pnanovdb_editor_token_t* name,
+                                      pnanovdb_compute_array_t* array);
+    void(PNANOVDB_ABI* add_gaussian_data_2)(pnanovdb_editor_t* editor,
+                                            pnanovdb_editor_token_t* scene,
+                                            pnanovdb_editor_token_t* name,
+                                            const pnanovdb_editor_gaussian_data_desc_t* desc);
+    void(PNANOVDB_ABI* add_camera_view_2)(pnanovdb_editor_t* editor,
+                                          pnanovdb_editor_token_t* scene,
+                                          pnanovdb_camera_view_t* camera);
+    void(PNANOVDB_ABI* update_camera_2)(pnanovdb_editor_t* editor,
+                                        pnanovdb_editor_token_t* scene,
+                                        pnanovdb_camera_t* camera);
+
+    void(PNANOVDB_ABI* remove)(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
+
+    // For any scene object, client can attempt to map parameters of a given type for read/write
+    // It is the server's job to deal with binary layout compatbility, converting to client layout as needed
+    void*(PNANOVDB_ABI* map_params)(pnanovdb_editor_t* editor,
+                                    pnanovdb_editor_token_t* scene,
+                                    pnanovdb_editor_token_t* name,
+                                    const pnanovdb_reflect_data_type_t* data_type);
+
+    // unmap allows us to flush any writes from the client to the server
+    void(PNANOVDB_ABI* unmap_params)(pnanovdb_editor_t* editor,
+                                     pnanovdb_editor_token_t* scene,
+                                     pnanovdb_editor_token_t* name);
 } pnanovdb_editor_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_editor_t
@@ -87,6 +136,15 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(add_camera_view, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_shader_params, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(sync_shader_params, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_resolved_port, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(get_camera, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(get_token, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(add_nanovdb_2, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(add_gaussian_data_2, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(add_camera_view_2, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(update_camera_2, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(remove, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(map_params, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(unmap_params, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE

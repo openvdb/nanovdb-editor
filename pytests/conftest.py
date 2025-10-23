@@ -17,13 +17,13 @@ def cleanup_modules():
         # Remove computed/native lib wrapper modules from sys.modules
         # This prevents ctypes library destructor issues during interpreter shutdown
         modules_to_remove = [
-            'nanovdb_editor',
-            'nanovdb_editor.compiler',
-            'nanovdb_editor.compute',
-            'nanovdb_editor.device',
-            'nanovdb_editor.editor',
-            'nanovdb_editor.raster',
-            'nanovdb_editor.utils',
+            "nanovdb_editor",
+            "nanovdb_editor.compiler",
+            "nanovdb_editor.compute",
+            "nanovdb_editor.device",
+            "nanovdb_editor.editor",
+            "nanovdb_editor.raster",
+            "nanovdb_editor.utils",
         ]
 
         for module_name in modules_to_remove:

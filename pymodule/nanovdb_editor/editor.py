@@ -10,6 +10,7 @@ from ctypes import (
     c_int,
     c_int32,
     c_uint32,
+    c_uint64,
     c_float,
     byref,
     pointer,
@@ -28,6 +29,15 @@ EDITOR_LIB = "pnanovdbeditor"
 pnanovdb_bool_t = c_int32
 
 
+class EditorToken(Structure):
+    """Definition equivalent to pnanovdb_editor_token_t."""
+
+    _fields_ = [
+        ("id", c_uint64),
+        ("str", c_char_p),
+    ]
+
+
 class EditorConfig(Structure):
     """Definition equivalent to pnanovdb_editor_config_t."""
 
@@ -42,7 +52,7 @@ class EditorConfig(Structure):
     ]
 
 
-class pnanovdb_Vec3(Structure):
+class Vec3(Structure):
     """Definition equivalent to pnanovdb_vec3_t."""
 
     _fields_ = [
@@ -52,7 +62,7 @@ class pnanovdb_Vec3(Structure):
     ]
 
 
-class pnanovdb_CameraConfig(Structure):
+class CameraConfig(Structure):
     """Definition equivalent to pnanovdb_camera_config_t."""
 
     _fields_ = [
@@ -68,27 +78,28 @@ class pnanovdb_CameraConfig(Structure):
         ("tilt_rate", c_float),
         ("zoom_rate", c_float),
         ("key_translation_rate", c_float),
+        ("scroll_zoom_rate", c_float),
     ]
 
 
-class pnanovdb_CameraState(Structure):
+class CameraState(Structure):
     """Definition equivalent to pnanovdb_camera_state_t."""
 
     _fields_ = [
-        ("position", pnanovdb_Vec3),
-        ("eye_direction", pnanovdb_Vec3),
-        ("eye_up", pnanovdb_Vec3),
+        ("position", Vec3),
+        ("eye_direction", Vec3),
+        ("eye_up", Vec3),
         ("eye_distance_from_position", c_float),
         ("orthographic_scale", c_float),
     ]
 
 
-class pnanovdb_Camera(Structure):
+class Camera(Structure):
     """Definition equivalent to pnanovdb_camera_t."""
 
     _fields_ = [
-        ("config", pnanovdb_CameraConfig),
-        ("state", pnanovdb_CameraState),
+        ("config", CameraConfig),
+        ("state", CameraState),
         ("mouse_x_prev", c_int),
         ("mouse_y_prev", c_int),
         ("rotation_active", pnanovdb_bool_t),
@@ -98,20 +109,33 @@ class pnanovdb_Camera(Structure):
     ]
 
 
-class pnanovdb_CameraView(Structure):
+class CameraView(Structure):
     """Definition equivalent to pnanovdb_camera_view_t."""
 
     _fields_ = [
-        ("name", c_char_p),
-        ("configs", POINTER(pnanovdb_CameraConfig)),
-        ("states", POINTER(pnanovdb_CameraState)),
+        ("name", POINTER(EditorToken)),
+        ("configs", POINTER(CameraConfig)),
+        ("states", POINTER(CameraState)),
         ("num_cameras", c_uint32),
         ("axis_length", c_float),
         ("axis_thickness", c_float),
         ("frustum_line_width", c_float),
         ("frustum_scale", c_float),
-        ("frustum_color", pnanovdb_Vec3),
+        ("frustum_color", Vec3),
         ("is_visible", pnanovdb_bool_t),
+    ]
+
+
+class EditorGaussianDataDesc(Structure):
+    """Definition equivalent to pnanovdb_editor_gaussian_data_desc_t."""
+
+    _fields_ = [
+        ("means", POINTER(pnanovdb_ComputeArray)),
+        ("opacities", POINTER(pnanovdb_ComputeArray)),
+        ("quaternions", POINTER(pnanovdb_ComputeArray)),
+        ("scales", POINTER(pnanovdb_ComputeArray)),
+        ("sh_0", POINTER(pnanovdb_ComputeArray)),
+        ("sh_n", POINTER(pnanovdb_ComputeArray)),
     ]
 
 
@@ -164,10 +188,10 @@ class pnanovdb_Editor(Structure):
             "add_gaussian_data",
             CFUNCTYPE(None, c_void_p, c_void_p, c_void_p, c_void_p),
         ),  # raster, queue, gaussian
-        ("update_camera", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Camera))),
+        ("update_camera", CFUNCTYPE(None, c_void_p, POINTER(Camera))),
         (
             "add_camera_view",
-            CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_CameraView)),
+            CFUNCTYPE(None, c_void_p, POINTER(CameraView)),
         ),
         ("add_shader_params", CFUNCTYPE(None, c_void_p, c_void_p, c_void_p)),
         # params, data_type
@@ -178,6 +202,89 @@ class pnanovdb_Editor(Structure):
                 c_void_p,
                 c_void_p,
                 c_int32,
+            ),
+        ),
+        (
+            "get_resolved_port",
+            CFUNCTYPE(c_int32, c_void_p, c_int32),
+        ),
+        # Token-based API functions
+        (
+            "get_camera",
+            CFUNCTYPE(
+                POINTER(Camera),
+                c_void_p,
+                POINTER(EditorToken),
+            ),
+        ),
+        (
+            "get_token",
+            CFUNCTYPE(POINTER(EditorToken), c_char_p),
+        ),
+        (
+            "add_nanovdb_2",
+            CFUNCTYPE(
+                None,
+                c_void_p,  # pnanovdb_editor_t*
+                POINTER(EditorToken),  # scene
+                POINTER(EditorToken),  # name
+                POINTER(pnanovdb_ComputeArray),  # array
+            ),
+        ),
+        (
+            "add_gaussian_data_2",
+            CFUNCTYPE(
+                None,
+                c_void_p,  # pnanovdb_editor_t*
+                POINTER(EditorToken),  # scene
+                POINTER(EditorToken),  # name
+                POINTER(EditorGaussianDataDesc),  # desc
+            ),
+        ),
+        (
+            "add_camera_view_2",
+            CFUNCTYPE(
+                None,
+                c_void_p,  # pnanovdb_editor_t*
+                POINTER(EditorToken),  # scene
+                POINTER(CameraView),  # camera
+            ),
+        ),
+        (
+            "update_camera_2",
+            CFUNCTYPE(
+                None,
+                c_void_p,  # pnanovdb_editor_t*
+                POINTER(EditorToken),  # scene
+                POINTER(Camera),  # camera
+            ),
+        ),
+        (
+            "remove",
+            CFUNCTYPE(
+                None,
+                c_void_p,  # pnanovdb_editor_t*
+                POINTER(EditorToken),  # scene
+                POINTER(EditorToken),  # name
+            ),
+        ),
+        (
+            "map_params",
+            CFUNCTYPE(
+                c_void_p,  # returns void*
+                c_void_p,  # pnanovdb_editor_t*
+                POINTER(EditorToken),  # scene
+                POINTER(EditorToken),  # name
+                c_void_p,  # const pnanovdb_reflect_data_type_t*
+            ),
+        ),
+        (
+            "unmap_params",
+            CFUNCTYPE(
+                None,
+                c_void_p,  # pnanovdb_editor_t*
+                POINTER(EditorToken),  # scene
+                POINTER(EditorToken),  # name
             ),
         ),
     ]
@@ -196,7 +303,7 @@ class pnanovdb_EditorImpl(Structure):
         ("nanovdb_array", POINTER(pnanovdb_ComputeArray)),
         ("data_array", POINTER(pnanovdb_ComputeArray)),
         ("gaussian_data", c_void_p),
-        ("camera", POINTER(pnanovdb_Camera)),
+        ("camera", POINTER(Camera)),
         ("raster_ctx", c_void_p),
         ("shader_params", c_void_p),
         ("shader_params_data_type", c_void_p),
@@ -234,7 +341,9 @@ class Editor:
         if result != 0:
             self._editor.contents.init(self._editor)
 
-    def _get_or_default_config(self, config: EditorConfig | None) -> EditorConfig:
+    def _get_or_default_config(
+        self, config: EditorConfig | None
+    ) -> EditorConfig:
         if config is not None:
             return config
         cfg = EditorConfig()
@@ -243,7 +352,6 @@ class Editor:
         cfg.headless = 0
         cfg.streaming = 0
         cfg.stream_to_file = 0
-        cfg.device_index = 0
         return cfg
 
     def _ensure_device(self, config: EditorConfig) -> None:
@@ -257,13 +365,7 @@ class Editor:
         if not has_device:
             di.create_device_manager(False)
             di.create_device(
-                device_index=int(
-                    getattr(
-                        config,
-                        "device_index",
-                        0,
-                    )
-                ),
+                device_index=0,
                 enable_external_usage=False,
             )
 
@@ -271,7 +373,7 @@ class Editor:
         shutdown_func = self._editor.contents.shutdown
         shutdown_func(self._editor)
 
-    def update_camera(self, camera: pnanovdb_Camera) -> None:
+    def update_camera(self, camera: Camera) -> None:
         udpate_camera_func = self._editor.contents.update_camera
         udpate_camera_func(self._editor, pointer(camera))
 
@@ -357,6 +459,56 @@ class Editor:
     def add_callable(self, name: str, func) -> None:
         """Compatibility stub for older API; no-op in current interface."""
         _ = (name, func)
+
+    def get_token(self, name: str):
+        """Get a token for a given name."""
+        get_token_func = self._editor.contents.get_token
+        return get_token_func(name.encode("utf-8"))
+
+    def get_camera(self, scene):
+        """Get camera for a given scene."""
+        get_camera_func = self._editor.contents.get_camera
+        return get_camera_func(self._editor, scene)
+
+    def add_nanovdb_2(self, scene, name, array):
+        """Add NanoVDB data to scene with token-based API."""
+        add_nanovdb_2_func = self._editor.contents.add_nanovdb_2
+        add_nanovdb_2_func(self._editor, scene, name, pointer(array))
+
+    def add_gaussian_data_2(self, scene, name, desc):
+        """Add Gaussian data to scene with token-based API."""
+        add_gaussian_data_2_func = self._editor.contents.add_gaussian_data_2
+        add_gaussian_data_2_func(self._editor, scene, name, pointer(desc))
+
+    def update_camera_2(self, scene, camera):
+        """Update camera for a scene with token-based API."""
+        update_camera_2_func = self._editor.contents.update_camera_2
+        update_camera_2_func(self._editor, scene, pointer(camera))
+
+    def add_camera_view_2(self, scene, camera_view):
+        """Add camera view to scene with token-based API."""
+        add_camera_view_2_func = self._editor.contents.add_camera_view_2
+        add_camera_view_2_func(self._editor, scene, pointer(camera_view))
+
+    def remove(self, scene, name):
+        """Remove an object from the scene."""
+        remove_func = self._editor.contents.remove
+        remove_func(self._editor, scene, name)
+
+    def map_params(self, scene, name, data_type):
+        """Map parameters for read/write access."""
+        map_params_func = self._editor.contents.map_params
+        return map_params_func(self._editor, scene, name, data_type)
+
+    def unmap_params(self, scene, name):
+        """Unmap parameters, flushing any writes."""
+        unmap_params_func = self._editor.contents.unmap_params
+        unmap_params_func(self._editor, scene, name)
+
+    def get_resolved_port(self, should_wait: bool = False) -> int:
+        """Get the resolved port for streaming."""
+        get_resolved_port_func = self._editor.contents.get_resolved_port
+        return get_resolved_port_func(self._editor, 1 if should_wait else 0)
 
     def __del__(self):
         self._editor = None

@@ -14,10 +14,25 @@ class pnanovdb_Raster(Structure):
     """Definition equivalent to pnanovdb_raster_t."""
 
     _fields_ = [
-        ("interface_pnanovdb_reflect_data_type", c_void_p),  # PNANOVDB_REFLECT_INTERFACE()
+        ("interface_pnanovdb_reflect_data_type", c_void_p),
         ("compute", POINTER(pnanovdb_Compute)),
-        ("create_context", CFUNCTYPE(c_void_p, POINTER(pnanovdb_Compute), POINTER(pnanovdb_ComputeQueue))),
-        ("destroy_context", CFUNCTYPE(None, POINTER(pnanovdb_Compute), POINTER(pnanovdb_ComputeQueue), c_void_p)),
+        (
+            "create_context",
+            CFUNCTYPE(
+                c_void_p,
+                POINTER(pnanovdb_Compute),
+                POINTER(pnanovdb_ComputeQueue),
+            ),
+        ),
+        (
+            "destroy_context",
+            CFUNCTYPE(
+                None,
+                POINTER(pnanovdb_Compute),
+                POINTER(pnanovdb_ComputeQueue),
+                c_void_p,
+            ),
+        ),
         (
             "create_gaussian_data",
             CFUNCTYPE(
@@ -33,17 +48,28 @@ class pnanovdb_Raster(Structure):
                 POINTER(pnanovdb_ComputeArray),  # sh_n
                 POINTER(pnanovdb_ComputeArray),  # opacities
                 POINTER(POINTER(pnanovdb_ComputeArray)),  # shader_params_arrays
-                c_void_p,  # raster_params (pnanovdb_raster_shader_params_t*)
+                c_void_p,  # raster_params
             ),
-        ),  # shader_params_arrays
+        ),
         (
             "upload_gaussian_data",
-            CFUNCTYPE(None, POINTER(pnanovdb_Compute), POINTER(pnanovdb_ComputeQueue), c_void_p, c_void_p),  # context
-        ),  # data
+            CFUNCTYPE(
+                None,
+                POINTER(pnanovdb_Compute),
+                POINTER(pnanovdb_ComputeQueue),
+                c_void_p,  # context
+                c_void_p,  # data
+            ),
+        ),
         (
             "destroy_gaussian_data",
-            CFUNCTYPE(None, POINTER(pnanovdb_Compute), POINTER(pnanovdb_ComputeQueue), c_void_p),
-        ),  # data
+            CFUNCTYPE(
+                None,
+                POINTER(pnanovdb_Compute),
+                POINTER(pnanovdb_ComputeQueue),
+                c_void_p,  # data
+            ),
+        ),
         (
             "raster_gaussian_2d",
             CFUNCTYPE(
@@ -57,9 +83,9 @@ class pnanovdb_Raster(Structure):
                 c_uint32,  # image_height
                 c_void_p,  # view matrix
                 c_void_p,  # projection matrix
-                c_void_p,
+                c_void_p,  # shader_params
             ),
-        ),  # shader_params_array
+        ),
         (
             "raster_gaussian_3d",
             CFUNCTYPE(
@@ -71,9 +97,9 @@ class pnanovdb_Raster(Structure):
                 c_void_p,  # data
                 c_void_p,  # nanovdb_out buffer
                 c_uint64,  # nanovdb_word_count
-                c_void_p,
+                c_void_p,  # userdata
             ),
-        ),  # userdata
+        ),
         (
             "raster_to_nanovdb",
             CFUNCTYPE(
@@ -90,16 +116,63 @@ class pnanovdb_Raster(Structure):
                 POINTER(pnanovdb_ComputeArray),  # opacities
                 POINTER(POINTER(pnanovdb_ComputeArray)),  # shader_params_arrays
                 c_void_p,  # profiler_report
-                c_void_p,
+                c_void_p,  # userdata
             ),
-        ),  # userdata
+        ),
+        (
+            "raster_file",
+            CFUNCTYPE(
+                c_int32,  # pnanovdb_bool_t
+                c_void_p,  # pnanovdb_raster_t*
+                POINTER(pnanovdb_Compute),
+                POINTER(pnanovdb_ComputeQueue),
+                c_char_p,  # filename
+                c_float,  # voxel_size
+                POINTER(POINTER(pnanovdb_ComputeArray)),  # nanovdb_arr
+                POINTER(c_void_p),  # gaussian_data
+                POINTER(c_void_p),  # raster_context
+                POINTER(POINTER(pnanovdb_ComputeArray)),  # shader_params_arrays
+                c_void_p,  # raster_params
+                c_void_p,  # profiler_report
+                c_void_p,  # userdata
+            ),
+        ),
+        (
+            "raster_to_nanovdb_from_arrays",
+            CFUNCTYPE(
+                c_int32,  # pnanovdb_bool_t
+                c_void_p,  # pnanovdb_raster_t*
+                POINTER(pnanovdb_Compute),
+                POINTER(pnanovdb_ComputeQueue),
+                c_float,  # voxel_size
+                POINTER(POINTER(pnanovdb_ComputeArray)),  # arrays_gaussian
+                c_uint32,  # array_count
+                POINTER(POINTER(pnanovdb_ComputeArray)),  # out_nanovdb_arr
+            ),
+        ),
+        (
+            "create_gaussian_data_from_arrays",
+            CFUNCTYPE(
+                c_int32,  # pnanovdb_bool_t
+                c_void_p,  # pnanovdb_raster_t*
+                POINTER(pnanovdb_Compute),
+                POINTER(pnanovdb_ComputeQueue),
+                POINTER(POINTER(pnanovdb_ComputeArray)),  # arrays_gaussian
+                c_uint32,  # array_count
+                POINTER(c_void_p),  # gaussian_data
+                c_void_p,  # raster_params
+                POINTER(c_void_p),  # raster_context
+            ),
+        ),
     ]
 
 
 class Raster:
     """Python wrapper for pnanovdb_raster_t."""
 
-    def __init__(self, compute: pnanovdb_Compute, device: pnanovdb_Device = None):
+    def __init__(
+        self, compute: pnanovdb_Compute, device: pnanovdb_Device = None
+    ):
         lib = load_library(COMPUTE_LIB)
 
         get_raster_func = lib.pnanovdb_get_raster
@@ -112,7 +185,9 @@ class Raster:
 
         self._compute = compute
         self._device = device if device else compute.device_interface().get_device()
-        self._compute_queue = compute.device_interface().get_compute_queue(self._device)
+        self._compute_queue = compute.device_interface().get_compute_queue(
+            self._device
+        )
         self._raster.contents.compute = compute.get_compute()
 
     def raster_to_nanovdb(

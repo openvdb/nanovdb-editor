@@ -7,7 +7,17 @@ import sys
 from .compiler import Compiler, CompileTarget, MemoryBuffer
 from .compute import Compute
 from .device import DeviceInterface
-from .editor import Editor, EditorConfig
+from .editor import (
+    Editor,
+    EditorConfig,
+    EditorToken,
+    EditorGaussianDataDesc,
+    Camera,
+    CameraView,
+    CameraConfig,
+    CameraState,
+    Vec3,
+)
 from .raster import Raster
 
 if sys.platform == "win32":
@@ -27,4 +37,11 @@ __all__ = [
     "CompileTarget",
     "MemoryBuffer",
     "EditorConfig",
+    "EditorToken",
+    "EditorGaussianDataDesc",
+    "Camera",
+    "CameraView",
+    "CameraConfig",
+    "CameraState",
+    "Vec3",
 ]
