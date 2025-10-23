@@ -71,6 +71,7 @@ typedef struct pnanovdb_editor_t
                               pnanovdb_compute_device_t* device,
                               pnanovdb_editor_config_t* config);
     void(PNANOVDB_ABI* stop)(pnanovdb_editor_t* editor);
+    void(PNANOVDB_ABI* reset)(pnanovdb_editor_t* editor);
     void(PNANOVDB_ABI* add_nanovdb)(pnanovdb_editor_t* editor, pnanovdb_compute_array_t* array);
     void(PNANOVDB_ABI* add_array)(pnanovdb_editor_t* editor, pnanovdb_compute_array_t* array);
     void(PNANOVDB_ABI* add_gaussian_data)(pnanovdb_editor_t* editor,
@@ -128,6 +129,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(shutdown, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(show, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(start, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(stop, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(reset, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_nanovdb, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_gaussian_data, 0, 0)
