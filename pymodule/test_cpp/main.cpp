@@ -282,7 +282,6 @@ int main(int argc, char* argv[])
                 desc.sh_n = arrays[5];
 
                 editor.add_gaussian_data_2(&editor, scene_main, ficus_token, &desc);
-                printf("Added ficus gaussian data (iteration %d)\n", i + 1);
 
                 for (int ai = 0; ai < 6; ++ai)
                 {

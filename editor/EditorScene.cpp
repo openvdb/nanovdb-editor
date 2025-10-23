@@ -612,7 +612,8 @@ void EditorScene::handle_gaussian_data_load(pnanovdb_raster_context_t* raster_ct
     std::string view_name = fsPath.stem().string();
 
     // Add to scene data for ownership management
-    add_gaussian_to_scene_data(gaussian_data, raster_params, view_name, raster, old_gaussian_data_ptr);
+    const char* name = add_gaussian_to_scene_data(gaussian_data, raster_params, view_name, raster, old_gaussian_data_ptr);
+    raster_params->name = name;
 
     // Register in EditorView (so it appears in scene tree)
     m_views->add_gaussian_view(gaussian_data, raster_params);
@@ -646,11 +647,11 @@ void EditorScene::add_nanovdb_to_scene_data(pnanovdb_compute_array_t* nanovdb_ar
     loaded_ctx.shader_params_array = m_imgui_instance->shader_params.get_compute_array_for_shader(shader_name, m_compute);
 }
 
-void EditorScene::add_gaussian_to_scene_data(pnanovdb_raster_gaussian_data_t* gaussian_data,
-                                             pnanovdb_raster_shader_params_t* raster_params,
-                                             const std::string& view_name,
-                                             pnanovdb_raster_t* raster,
-                                             std::shared_ptr<pnanovdb_raster_gaussian_data_t>& old_gaussian_data_ptr)
+const char* EditorScene::add_gaussian_to_scene_data(pnanovdb_raster_gaussian_data_t* gaussian_data,
+                                                    pnanovdb_raster_shader_params_t* raster_params,
+                                                    const std::string& view_name,
+                                                    pnanovdb_raster_t* raster,
+                                                    std::shared_ptr<pnanovdb_raster_gaussian_data_t>& old_gaussian_data_ptr)
 {
     // Find and remove existing view with same name
     for (auto itPrev = m_scene_data.gaussian_views.begin(); itPrev != m_scene_data.gaussian_views.end(); ++itPrev)
@@ -669,6 +670,9 @@ void EditorScene::add_gaussian_to_scene_data(pnanovdb_raster_gaussian_data_t* ga
         gaussian_data, [destroy_fn = raster->destroy_gaussian_data, compute = raster->compute, queue = m_device_queue](
                            pnanovdb_raster_gaussian_data_t* ptr) { destroy_fn(compute, queue, ptr); });
     loaded_view.shader_params = raster_params;
+
+    // TODO: temp before full token implementation
+    return loaded_view.name.c_str();
 }
 
 void EditorScene::sync_default_camera_view()

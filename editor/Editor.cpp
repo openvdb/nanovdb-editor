@@ -89,6 +89,41 @@ struct CameraViewDeleter
     }
 };
 
+// TODO: this will handle the scene
+static pnanovdb_camera_view_t* clone_camera_view(const pnanovdb_camera_view_t* source)
+{
+    if (!source)
+    {
+        return nullptr;
+    }
+
+    pnanovdb_camera_view_t* copy = new pnanovdb_camera_view_t(*source);
+
+    // Deep copy the arrays
+    if (source->num_cameras > 0)
+    {
+        if (source->states)
+        {
+            copy->states = new pnanovdb_camera_state_t[source->num_cameras];
+            for (int i = 0; i < source->num_cameras; ++i)
+            {
+                copy->states[i] = source->states[i];
+            }
+        }
+
+        if (source->configs)
+        {
+            copy->configs = new pnanovdb_camera_config_t[source->num_cameras];
+            for (int i = 0; i < source->num_cameras; ++i)
+            {
+                copy->configs[i] = source->configs[i];
+            }
+        }
+    }
+
+    return copy;
+}
+
 static pnanovdb_bool_t init_impl(pnanovdb_editor_t* editor,
                                  const pnanovdb_compute_t* compute,
                                  const pnanovdb_compiler_t* compiler)
@@ -1004,12 +1039,21 @@ void add_camera_view_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene
     }
 
     // Remove if already exists in map to avoid duplicates
+    // This will properly delete the old camera view and its arrays
     editor->impl->camera_view_map.erase(name_str);
 
-    // Store in map indexed by name, take ownership of the camera view (if not already in map)
-    editor->impl->camera_view_map[name_str] = std::shared_ptr<pnanovdb_camera_view_t>(camera, CameraViewDeleter());
+    // Create a deep copy that the editor owns.
+    pnanovdb_camera_view_t* camera_copy = clone_camera_view(camera);
+    if (!camera_copy)
+    {
+        return;
+    }
 
-    add_camera_view(editor, camera);
+    // Store in map indexed by name, taking full ownership via shared_ptr
+    editor->impl->camera_view_map[name_str] = std::shared_ptr<pnanovdb_camera_view_t>(camera_copy, CameraViewDeleter());
+
+    // Add to the views registry (stores non-owning pointer for lookups)
+    add_camera_view(editor, camera_copy);
 }
 
 void update_camera_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_camera_t* camera)

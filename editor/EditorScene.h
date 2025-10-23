@@ -255,11 +255,11 @@ public:
                                    const std::string& view_name);
 
     // Add Gaussian data to loaded arrays
-    void add_gaussian_to_scene_data(pnanovdb_raster_gaussian_data_t* gaussian_data,
-                                    pnanovdb_raster_shader_params_t* raster_params,
-                                    const std::string& view_name,
-                                    pnanovdb_raster_t* raster,
-                                    std::shared_ptr<pnanovdb_raster_gaussian_data_t>& old_gaussian_data_ptr);
+    const char* add_gaussian_to_scene_data(pnanovdb_raster_gaussian_data_t* gaussian_data,
+                                           pnanovdb_raster_shader_params_t* raster_params,
+                                           const std::string& view_name,
+                                           pnanovdb_raster_t* raster,
+                                           std::shared_ptr<pnanovdb_raster_gaussian_data_t>& old_gaussian_data_ptr);
 
     // Sync default camera view with current viewport camera
     void sync_default_camera_view();
