@@ -24,7 +24,8 @@
 namespace pnanovdb_editor
 {
 struct EditorWorker;
-class EditorView;
+class SceneView;
+class EditorSceneManager;
 }
 
 struct pnanovdb_editor_impl_t
@@ -36,25 +37,21 @@ struct pnanovdb_editor_impl_t
     pnanovdb_compute_array_t* data_array;
     pnanovdb_raster_gaussian_data_t* gaussian_data;
     pnanovdb_camera_t* camera;
+    pnanovdb_raster_t* raster;
     pnanovdb_raster_context_t* raster_ctx;
+    std::string shader_name = "editor/editor.slang"; // TODO: need this?
     void* shader_params;
     const pnanovdb_reflect_data_type_t* shader_params_data_type;
-    pnanovdb_editor::EditorView* views;
+    pnanovdb_editor::SceneView* views;
     pnanovdb_int32_t resolved_port;
-
-    // Resources for _2 API methods
-    pnanovdb_raster_t* raster;
+    pnanovdb_editor::EditorSceneManager* scene_manager;
     pnanovdb_compute_device_t* device;
     pnanovdb_compute_queue_t* device_queue;
     pnanovdb_compute_queue_t* compute_queue;
 
-    // Temp: Storage for multiple objects indexed by name (_2 API)
-    pnanovdb_camera_t scene_camera;
-    std::shared_ptr<pnanovdb_raster_gaussian_data_t> gaussian_data_old;
-    std::unordered_map<std::string, std::shared_ptr<pnanovdb_raster_gaussian_data_t>> gaussian_data_map;
 
-    std::vector<std::shared_ptr<pnanovdb_raster_gaussian_data_t>> gaussian_data_destruction_queue_pending;
-    std::vector<std::shared_ptr<pnanovdb_raster_gaussian_data_t>> gaussian_data_destruction_queue_ready;
+    // std::vector<std::shared_ptr<pnanovdb_raster_gaussian_data_t>> gaussian_data_destruction_queue_pending;
+    // std::vector<std::shared_ptr<pnanovdb_raster_gaussian_data_t>> gaussian_data_destruction_queue_ready;
 };
 
 namespace pnanovdb_editor

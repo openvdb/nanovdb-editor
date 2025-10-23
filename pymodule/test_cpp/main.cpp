@@ -205,6 +205,9 @@ int main(int argc, char* argv[])
 #    endif
 
 #    ifdef TEST_NVDB
+    printf("\n=== Adding NanoVDB Volumes to Multiple Scenes ===\n");
+
+    // Load and add dragon to both scenes
     data_nanovdb = compute.load_nanovdb("../../data/dragon.nvdb");
     if (data_nanovdb)
     {
@@ -216,15 +219,22 @@ int main(int argc, char* argv[])
         printf("Added dragon to test_scene (shared volume)\n");
     }
 
+    // Load and add splats to test scene only
     pnanovdb_compute_array_t* data_nanovdb2 = compute.load_nanovdb("../../data/splats.nvdb");
     if (data_nanovdb2)
     {
         pnanovdb_editor_token_t* splats_token = editor.get_token("splats_volume");
         editor.add_nanovdb_2(&editor, scene_main, splats_token, data_nanovdb2);
     }
+
+    printf("Scene Summary:\n");
+    printf("  main_scene: dragon\n");
+    printf("  test_scene: dragon + splats_volume\n");
 #    endif
 
 #    ifdef TEST_RASTER_2D
+    printf("\n=== Adding Gaussian Data to Multiple Scenes ===\n");
+
     pnanovdb_camera_t camera;
     pnanovdb_camera_init(&camera);
 

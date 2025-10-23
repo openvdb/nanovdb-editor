@@ -12,7 +12,7 @@
 #pragma once
 
 #include "ImguiInstance.h"
-#include "EditorView.h"
+#include "SceneView.h"
 #include "nanovdb_editor/putil/Editor.h"
 
 #include <string>
@@ -20,6 +20,13 @@
 #include <filesystem>
 #include <variant>
 #include <memory>
+
+// Forward declarations
+namespace pnanovdb_editor
+{
+class EditorSceneManager;
+struct SceneObject;
+}
 
 namespace pnanovdb_editor
 {
@@ -32,91 +39,6 @@ enum class ViewType
     None
 };
 
-// Loaded context for Viewer data
-class UnifiedViewContext
-{
-public:
-    using ContextVariant = std::variant<std::monostate, GaussianDataContext*, NanoVDBContext*>;
-
-    UnifiedViewContext() : m_view_type(ViewType::None), m_view_name(""), m_context(std::monostate{})
-    {
-    }
-
-    UnifiedViewContext(const std::string& name, GaussianDataContext* ctx)
-        : m_view_type(ViewType::GaussianScenes), m_view_name(name), m_context(ctx)
-    {
-    }
-
-    UnifiedViewContext(const std::string& name, NanoVDBContext* ctx)
-        : m_view_type(ViewType::NanoVDBs), m_view_name(name), m_context(ctx)
-    {
-    }
-
-    bool is_valid() const
-    {
-        if (m_view_type == ViewType::None || m_view_name.empty())
-        {
-            return false;
-        }
-
-        return !std::holds_alternative<std::monostate>(m_context);
-    }
-
-    ViewType get_view_type() const
-    {
-        return m_view_type;
-    }
-    const std::string& get_view_name() const
-    {
-        return m_view_name;
-    }
-
-    GaussianDataContext* get_gaussian_context() const
-    {
-        if (auto* ctx = std::get_if<GaussianDataContext*>(&m_context))
-        {
-            return *ctx;
-        }
-        return nullptr;
-    }
-
-    NanoVDBContext* get_nanovdb_context() const
-    {
-        if (auto* ctx = std::get_if<NanoVDBContext*>(&m_context))
-        {
-            return *ctx;
-        }
-        return nullptr;
-    }
-
-private:
-    ViewType m_view_type;
-    std::string m_view_name;
-    ContextVariant m_context;
-};
-
-// Loaded context for Gaussian data (with ownership via shared_ptr)
-struct GaussianDataLoadedContext
-{
-    std::string name;
-    std::shared_ptr<pnanovdb_raster_gaussian_data_t> gaussian_data;
-    pnanovdb_raster_shader_params_t* shader_params = nullptr;
-};
-
-// Loaded context for NanoVDB data (with ownership via shared_ptr)
-struct NanoVDBLoadedContext
-{
-    std::string name;
-    std::shared_ptr<pnanovdb_compute_array_t> nanovdb_array;
-    pnanovdb_compute_array_t* shader_params_array = nullptr;
-};
-
-// Loaded scene data managed by EditorScene
-struct EditorSceneData
-{
-    std::vector<NanoVDBLoadedContext> nanovdb_arrays;
-    std::vector<GaussianDataLoadedContext> gaussian_views;
-};
 
 // Configuration structure for EditorScene
 struct EditorSceneConfig
@@ -133,22 +55,30 @@ struct EditorSceneConfig
 struct SceneSelection
 {
     ViewType type;
-    std::string name;
+    pnanovdb_editor_token_t* name_token; // Object name as token (replaces string)
+    pnanovdb_editor_token_t* scene_token; // Which scene this selection is in
 
-    SceneSelection() : type(ViewType::None), name("")
+    SceneSelection() : type(ViewType::None), name_token(nullptr), scene_token(nullptr)
     {
     }
-    SceneSelection(ViewType t, const std::string& n) : type(t), name(n)
+    SceneSelection(ViewType t, pnanovdb_editor_token_t* name, pnanovdb_editor_token_t* scene = nullptr)
+        : type(t), name_token(name), scene_token(scene)
     {
     }
 
     bool is_valid() const
     {
-        return type != ViewType::None && !name.empty();
+        return type != ViewType::None && name_token != nullptr;
     }
     bool operator==(const SceneSelection& other) const
     {
-        return type == other.type && name == other.name;
+        // Compare token IDs for efficiency
+        uint64_t this_name_id = name_token ? name_token->id : 0;
+        uint64_t other_name_id = other.name_token ? other.name_token->id : 0;
+        uint64_t this_scene_id = scene_token ? scene_token->id : 0;
+        uint64_t other_scene_id = other.scene_token ? other.scene_token->id : 0;
+
+        return type == other.type && this_name_id == other_name_id && this_scene_id == other_scene_id;
     }
     bool operator!=(const SceneSelection& other) const
     {
@@ -156,7 +86,7 @@ struct SceneSelection
     }
 };
 
-struct ShaderParams
+struct SceneShaderParams
 {
     std::string shader_name;
     size_t size = 0u;
@@ -174,17 +104,17 @@ enum class SyncDirection
 class EditorScene
 {
 private:
-    void copy_editor_shader_params_to_ui(ShaderParams* params);
-    void copy_shader_params_from_ui_to_view(ShaderParams* params, void* view_params);
-    void copy_ui_shader_params_from_to_editor(ShaderParams* params);
+    void copy_editor_shader_params_to_ui(SceneShaderParams* params);
+    void copy_shader_params_from_ui_to_view(SceneShaderParams* params, void* view_params);
+    void copy_ui_shader_params_from_to_editor(SceneShaderParams* params);
 
 public:
     explicit EditorScene(const EditorSceneConfig& config);
     ~EditorScene();
 
-    UnifiedViewContext get_view_context(const std::string& view_name, ViewType view_type) const;
-    UnifiedViewContext get_current_view_context() const;
-    UnifiedViewContext get_render_view_context() const;
+    SceneObject* get_scene_object(pnanovdb_editor_token_t* view_name_token, ViewType view_type) const;
+    SceneObject* get_current_scene_object() const;
+    SceneObject* get_render_scene_object() const;
     uint64_t get_current_view_epoch() const
     {
         return m_views ? m_views->get_current_view_epoch() : 0;
@@ -203,63 +133,54 @@ public:
     // Copy current editor shader params from UI
     void get_shader_params_for_current_view(void* shader_params_data);
 
+    // Scene management
+    EditorSceneManager* get_scene_manager() const;
+    void set_current_scene(pnanovdb_editor_token_t* scene_token);
+    pnanovdb_editor_token_t* get_current_scene_token() const;
+    std::vector<pnanovdb_editor_token_t*> get_all_scene_tokens() const;
+
     // Scene selection management
     bool has_valid_selection() const;
     void clear_selection();
 
-    void set_properties_selection(ViewType type, const std::string& name);
+    void set_properties_selection(ViewType type,
+                                  pnanovdb_editor_token_t* name_token,
+                                  pnanovdb_editor_token_t* scene_token = nullptr);
     SceneSelection get_properties_selection() const;
 
-    void set_render_view(ViewType type, const std::string& name);
+    void set_render_view(ViewType type,
+                         pnanovdb_editor_token_t* name_token,
+                         pnanovdb_editor_token_t* scene_token = nullptr);
     SceneSelection get_render_view_selection() const;
 
-    std::string get_name() const
-    {
-        return m_views->get_current_scene();
-    }
-
     // Camera state management
-    void save_camera_state(const std::string& name, const pnanovdb_camera_state_t& state);
-    const pnanovdb_camera_state_t* get_saved_camera_state(const std::string& name) const;
-    void update_view_camera_state(const std::string& view_name, const pnanovdb_camera_state_t& state);
-    const std::map<std::string, pnanovdb_camera_state_t>& get_views_camera_states() const
+    void save_camera_state(pnanovdb_editor_token_t* name_token, const pnanovdb_camera_state_t& state);
+    const pnanovdb_camera_state_t* get_saved_camera_state(pnanovdb_editor_token_t* name_token) const;
+    void update_view_camera_state(pnanovdb_editor_token_t* view_name_token, const pnanovdb_camera_state_t& state);
+    const std::map<uint64_t, pnanovdb_camera_state_t>& get_views_camera_states() const
     {
         return m_views_camera_state;
     }
-    std::map<std::string, pnanovdb_camera_state_t>& get_views_camera_states_mutable()
+    std::map<uint64_t, pnanovdb_camera_state_t>& get_views_camera_states_mutable()
     {
         return m_views_camera_state;
     }
 
     // Camera frustum index management
-    int get_camera_frustum_index(const std::string& camera_name) const;
-    void set_camera_frustum_index(const std::string& camera_name, int index);
-
-    // Update shader if needed
-    void update_viewport_shader(const char* new_shader);
+    int get_camera_frustum_index(pnanovdb_editor_token_t* camera_name_token) const;
+    void set_camera_frustum_index(pnanovdb_editor_token_t* camera_name_token, int index);
 
     // Handle NanoVDB load completion
-    void handle_nanovdb_data_load(pnanovdb_compute_array_t* nanovdb_array, const std::string& filename);
+    void handle_nanovdb_data_load(pnanovdb_compute_array_t* nanovdb_array, const char* filename);
 
     // Handle Gaussian data load completion
-    void handle_gaussian_data_load(pnanovdb_raster_context_t* raster_ctx,
-                                   pnanovdb_raster_gaussian_data_t* gaussian_data,
+    void handle_gaussian_data_load(pnanovdb_raster_gaussian_data_t* gaussian_data,
                                    pnanovdb_raster_shader_params_t* raster_params,
-                                   const std::string& filename,
-                                   pnanovdb_raster_t* raster,
+                                   const char* filename,
                                    std::shared_ptr<pnanovdb_raster_gaussian_data_t>& old_gaussian_data_ptr);
 
-    // Add NanoVDB to loaded arrays
-    void add_nanovdb_to_scene_data(pnanovdb_compute_array_t* nanovdb_array,
-                                   const char* shader_name,
-                                   const std::string& view_name);
-
-    // Add Gaussian data to loaded arrays
-    const char* add_gaussian_to_scene_data(pnanovdb_raster_gaussian_data_t* gaussian_data,
-                                           pnanovdb_raster_shader_params_t* raster_params,
-                                           const std::string& view_name,
-                                           pnanovdb_raster_t* raster,
-                                           std::shared_ptr<pnanovdb_raster_gaussian_data_t>& old_gaussian_data_ptr);
+    // Remove object from scene (UI, loaded data, renderer state, selection)
+    bool remove_object(pnanovdb_editor_token_t* scene_token, const char* name);
 
     // Sync default camera view with current viewport camera
     void sync_default_camera_view();
@@ -269,9 +190,9 @@ public:
         return m_raster_shader_params_data_type;
     }
 
-    const EditorSceneData& get_editor_data() const
+    pnanovdb_editor_t* get_editor() const
     {
-        return m_scene_data;
+        return m_editor;
     }
 
     const std::map<std::string, pnanovdb_camera_view_t*>& get_camera_views() const;
@@ -311,12 +232,10 @@ public:
     }
 
 private:
-    void copy_shader_params(const UnifiedViewContext& view_ctx,
-                            SyncDirection sync_direction,
-                            void** view_params_out = nullptr);
+    void copy_shader_params(SceneObject* scene_obj, SyncDirection sync_direction, void** view_params_out = nullptr);
     void sync_current_view_state(SyncDirection sync_direction);
     void clear_editor_view_state();
-    void load_view_into_editor_and_ui(const UnifiedViewContext& view_ctx);
+    void load_view_into_editor_and_ui(SceneObject* scene_obj);
     bool handle_pending_view_changes();
     void initialize_view_registry();
 
@@ -328,7 +247,7 @@ private:
 
     imgui_instance_user::Instance* m_imgui_instance;
     pnanovdb_editor_t* m_editor;
-    EditorView* m_views;
+    SceneView* m_views;
     const pnanovdb_compute_t* m_compute;
     pnanovdb_imgui_settings_render_t* m_imgui_settings;
     pnanovdb_compute_queue_t* m_device_queue;
@@ -336,20 +255,17 @@ private:
     SceneSelection m_view_selection; // what UI shows
     SceneSelection m_render_view_selection; // what renderer uses
 
-    std::map<std::string, pnanovdb_camera_state_t> m_saved_camera_states;
-    std::map<std::string, pnanovdb_camera_state_t> m_views_camera_state;
-    std::map<std::string, int> m_camera_frustum_index;
+    std::map<uint64_t, pnanovdb_camera_state_t> m_saved_camera_states; // Indexed by token ID
+    std::map<uint64_t, pnanovdb_camera_state_t> m_views_camera_state; // Indexed by token ID
+    std::map<uint64_t, int> m_camera_frustum_index; // Indexed by token ID
 
     const pnanovdb_reflect_data_type_t* m_raster_shader_params_data_type;
 
-    ShaderParams m_nanovdb_params;
-    ShaderParams m_raster2d_params;
+    SceneShaderParams m_nanovdb_params;
+    SceneShaderParams m_raster2d_params;
 
     pnanovdb_camera_config_t m_default_camera_view_config;
     pnanovdb_camera_state_t m_default_camera_view_state;
-
-    // Loaded scene data from files
-    EditorSceneData m_scene_data;
 };
 
 } // namespace pnanovdb_editor

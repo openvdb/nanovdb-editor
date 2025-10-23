@@ -13,6 +13,8 @@
 
 #include "ImguiInstance.h"
 #include "EditorScene.h"
+#include "EditorSceneManager.h"
+#include "EditorToken.h"
 #include "CodeEditor.h"
 #include "Console.h"
 #include "Profiler.h"
@@ -132,9 +134,14 @@ void createMenu(imgui_instance_user::Instance* ptr)
         {
             std::string centerText;
             auto selection = ptr->editor_scene->get_properties_selection();
-            if (!selection.name.empty())
+            if (selection.name_token && selection.name_token->str)
             {
-                centerText += selection.name + " - ";
+                // Add scene name if available
+                if (selection.scene_token && selection.scene_token->str)
+                {
+                    centerText += std::string(selection.scene_token->str) + " - ";
+                }
+                centerText += std::string(selection.name_token->str) + " - ";
             }
             centerText += "NanoVDB Editor";
             if (isViewerProfile)
@@ -271,32 +278,6 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
 
     if (ImGui::Begin(VIEWPORT_SETTINGS, &ptr->window.show_viewport_settings))
     {
-        ImGui::Text("Viewport Shader");
-        {
-            ImGui::BeginGroup();
-            if (ImGui::BeginCombo("##viewport_shader", "Select..."))
-            {
-                for (const auto& shader : ptr->viewport_shaders)
-                {
-                    if (ImGui::Selectable(shader.c_str()))
-                    {
-                        ptr->pending.viewport_shader_name = shader;
-                    }
-                }
-                ImGui::EndCombo();
-            }
-            ImGui::InputText("##viewport_shader_name", &ptr->pending.viewport_shader_name);
-            ImGui::SameLine();
-            if (ImGui::Button("Update"))
-            {
-                pnanovdb_editor::CodeEditor::getInstance().setSelectedShader(ptr->pending.viewport_shader_name);
-                ptr->shader_name = ptr->pending.viewport_shader_name;
-                ptr->pending.update_shader = true;
-            }
-            ImGui::EndGroup();
-        }
-        ImGui::Separator();
-
         // viewport options
         {
             ImGui::BeginGroup();
@@ -310,8 +291,9 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
                     // Load camera state
                     if (ptr->editor_scene)
                     {
-                        const pnanovdb_camera_state_t* state =
-                            ptr->editor_scene->get_saved_camera_state(ptr->render_settings_name);
+                        pnanovdb_editor_token_t* name_token =
+                            pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
+                        const pnanovdb_camera_state_t* state = ptr->editor_scene->get_saved_camera_state(name_token);
                         if (state)
                         {
                             ptr->render_settings->camera_state = *state;
@@ -330,8 +312,9 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
                     // Load camera state
                     if (ptr->editor_scene)
                     {
-                        const pnanovdb_camera_state_t* state =
-                            ptr->editor_scene->get_saved_camera_state(ptr->render_settings_name);
+                        pnanovdb_editor_token_t* name_token =
+                            pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
+                        const pnanovdb_camera_state_t* state = ptr->editor_scene->get_saved_camera_state(name_token);
                         if (state)
                         {
                             ptr->render_settings->camera_state = *state;
@@ -357,8 +340,9 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
 
                         if (ptr->editor_scene)
                         {
-                            const pnanovdb_camera_state_t* state =
-                                ptr->editor_scene->get_saved_camera_state(ptr->render_settings_name);
+                            pnanovdb_editor_token_t* name_token =
+                                pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
+                            const pnanovdb_camera_state_t* state = ptr->editor_scene->get_saved_camera_state(name_token);
                             if (state)
                             {
                                 ptr->render_settings->camera_state = *state;
@@ -387,8 +371,9 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
                     {
                         if (ptr->editor_scene)
                         {
-                            ptr->editor_scene->save_camera_state(
-                                ptr->render_settings_name, ptr->render_settings->camera_state);
+                            pnanovdb_editor_token_t* name_token =
+                                pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
+                            ptr->editor_scene->save_camera_state(name_token, ptr->render_settings->camera_state);
                         }
 
                         imgui_instance_user::copyPersistentFields(
@@ -824,6 +809,13 @@ void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
         return;
     }
 
+    auto* scene_manager = ptr->editor_scene ? ptr->editor_scene->get_scene_manager() : nullptr;
+    if (!scene_manager)
+    {
+        return;
+    }
+    auto& shader_params = scene_manager->shader_params;
+
     if (ImGui::Begin(SHADER_PARAMS, &ptr->window.show_shader_params))
     {
         std::string shader_name;
@@ -866,13 +858,13 @@ void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
         const std::string& target_name = is_group_mode ? ptr->shader_group : shader_name;
         if (!target_name.empty())
         {
-            if (ptr->shader_params.isJsonLoaded(target_name, is_group_mode))
+            if (shader_params.isJsonLoaded(target_name, is_group_mode))
             {
                 if (ImGui::Button("Reload JSON"))
                 {
                     if (is_group_mode)
                     {
-                        if (ptr->shader_params.loadGroup(target_name, true))
+                        if (shader_params.loadGroup(target_name, true))
                         {
                             pnanovdb_editor::Console::getInstance().addLog(
                                 "Group params '%s' updated", target_name.c_str());
@@ -886,7 +878,7 @@ void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
                     else
                     {
                         pnanovdb_editor::CodeEditor::getInstance().saveShaderParams();
-                        if (ptr->shader_params.load(target_name, true))
+                        if (shader_params.load(target_name, true))
                         {
                             pnanovdb_editor::Console::getInstance().addLog(
                                 "Shader params for '%s' updated", target_name.c_str());
@@ -905,11 +897,11 @@ void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
                 {
                     if (ptr->pending.shader_selection_mode == ShaderSelectionMode::UseShaderGroup)
                     {
-                        ptr->shader_params.createGroup(target_name);
+                        shader_params.createGroup(target_name);
                     }
                     else
                     {
-                        ptr->shader_params.create(target_name);
+                        shader_params.create(target_name);
                         pnanovdb_editor::CodeEditor::getInstance().updateViewer();
                     }
                 }
@@ -922,13 +914,13 @@ void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
         {
             if (ptr->pending.shader_selection_mode == ShaderSelectionMode::UseShaderGroup)
             {
-                ptr->shader_params.renderGroup(target_name);
+                shader_params.renderGroup(target_name);
             }
             else
             {
-                if (ptr->shader_params.isJsonLoaded(target_name))
+                if (shader_params.isJsonLoaded(target_name))
                 {
-                    ptr->shader_params.render(target_name);
+                    shader_params.render(target_name);
                 }
                 else
                 {
@@ -982,13 +974,16 @@ void showFileHeaderWindow(imgui_instance_user::Instance* ptr)
     {
         pnanovdb_compute_array_t* current_array = nullptr;
         auto selection = ptr->editor_scene->get_properties_selection();
+        const char* selected_name =
+            (selection.name_token && selection.name_token->str) ? selection.name_token->str : nullptr;
+
         ptr->editor_scene->for_each_view(ViewType::NanoVDBs,
                                          [&](const std::string& name, const auto& ctx)
                                          {
                                              using CtxT = std::decay_t<decltype(ctx)>;
                                              if constexpr (std::is_same_v<CtxT, NanoVDBContext>)
                                              {
-                                                 if (name == selection.name)
+                                                 if (selected_name && name == selected_name)
                                                  {
                                                      current_array = ctx.nanovdb_array;
                                                  }

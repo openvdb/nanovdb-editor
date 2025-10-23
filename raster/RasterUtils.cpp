@@ -12,6 +12,7 @@
 #include <nanovdb_editor/putil/Raster.h>
 #include <nanovdb_editor/putil/WorkerThread.hpp>
 #include <nanovdb_editor/putil/FileFormat.h>
+#include <nanovdb_editor/putil/Editor.h>
 
 #define PNANOVDB_RASTER_TEST_CONVERT 1
 #if PNANOVDB_RASTER_TEST_CONVERT
@@ -272,7 +273,7 @@ static pnanovdb_bool_t process_arrays_to_create_gaussian_data(pnanovdb_raster_t*
     }
     pnanovdb_raster_gaussian_data_t* raster_data =
         raster->create_gaussian_data(raster->compute, queue, raster_ctx, means_arr, quat_arr, scale_arr, color_arr,
-                                     sh_0_arr, sh_n_arr, opacity_arr, shader_params_arrays, raster_params);
+                                     sh_0_arr, sh_n_arr, opacity_arr, shader_params_arrays);
 
     compute->destroy_array(color_arr);
     *gaussian_data = raster_data;
@@ -413,23 +414,64 @@ pnanovdb_bool_t raster_to_nanovdb_from_arrays(pnanovdb_raster_t* raster,
                                                nullptr, nullptr, nullptr, nullptr, nullptr);
 }
 
-// Convenience wrapper: create reusable Gaussian raster data from arrays.
-// - Delegates to process_arrays_to_create_gaussian_data with defaulted optional parameters
+// Convenience wrapper: create reusable Gaussian raster data from descriptor struct.
+// - Uses descriptor struct for clearer channel naming
+// - Delegates to process_arrays_to_create_gaussian_data
 // - Returns true on success
-pnanovdb_bool_t create_gaussian_data_from_arrays(pnanovdb_raster_t* raster,
-                                                 const pnanovdb_compute_t* compute,
-                                                 pnanovdb_compute_queue_t* queue,
-                                                 pnanovdb_compute_array_t** arrays_gaussian, // means, opacities, quats,
-                                                                                             // scales, sh
-                                                 pnanovdb_uint32_t array_count,
-                                                 pnanovdb_raster_gaussian_data_t** gaussian_data,
-                                                 pnanovdb_raster_shader_params_t* raster_params,
-                                                 pnanovdb_raster_context_t** raster_context)
+pnanovdb_bool_t create_gaussian_data_from_desc(pnanovdb_raster_t* raster,
+                                               const pnanovdb_compute_t* compute,
+                                               pnanovdb_compute_queue_t* queue,
+                                               const pnanovdb_editor_gaussian_data_desc_t* desc,
+                                               const char* name,
+                                               pnanovdb_raster_gaussian_data_t** gaussian_data,
+                                               pnanovdb_raster_shader_params_t* raster_params,
+                                               pnanovdb_raster_context_t** raster_context)
 {
+    if (!desc)
+    {
+        return PNANOVDB_FALSE;
+    }
+
+    // Build array list from descriptor struct
+    pnanovdb_compute_array_t* arrays_gaussian[6] = { nullptr };
+    pnanovdb_uint32_t array_count = 0;
+
+    if (desc->means)
+    {
+        arrays_gaussian[array_count++] = desc->means;
+    }
+    if (desc->opacities)
+    {
+        arrays_gaussian[array_count++] = desc->opacities;
+    }
+    if (desc->quaternions)
+    {
+        arrays_gaussian[array_count++] = desc->quaternions;
+    }
+    if (desc->scales)
+    {
+        arrays_gaussian[array_count++] = desc->scales;
+    }
+    if (desc->sh_0)
+    {
+        arrays_gaussian[array_count++] = desc->sh_0;
+    }
+    if (desc->sh_n)
+    {
+        arrays_gaussian[array_count++] = desc->sh_n;
+    }
+
     if (array_count < 5u)
     {
         return PNANOVDB_FALSE;
     }
+
+    // Set the name in raster params if provided
+    if (raster_params && name)
+    {
+        raster_params->name = name;
+    }
+
     return process_arrays_to_create_gaussian_data(raster, compute, queue, arrays_gaussian, gaussian_data,
                                                   raster_context, nullptr, raster_params, nullptr, nullptr, nullptr);
 }
