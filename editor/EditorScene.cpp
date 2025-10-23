@@ -830,6 +830,14 @@ SceneSelection EditorScene::get_render_view_selection() const
     return m_render_view_selection;
 }
 
+void EditorScene::remove_all()
+{
+    if (m_editor)
+    {
+        m_editor->remove_all(m_editor);
+    }
+}
+
 // ============================================================================
 // Camera State Management
 // ============================================================================

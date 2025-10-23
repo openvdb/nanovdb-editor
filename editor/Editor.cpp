@@ -1078,6 +1078,19 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
     editor->impl->views->remove_view(std::string(name_str));
 }
 
+void remove_all(pnanovdb_editor_t* editor)
+{
+    if (!editor || !editor->impl || !editor->impl->views)
+    {
+        return;
+    }
+
+    while (editor->impl->views->remove_any())
+    {
+        // no-op
+    }
+}
+
 void* map_params(pnanovdb_editor_t* editor,
                  pnanovdb_editor_token_t* scene,
                  pnanovdb_editor_token_t* name,
@@ -1164,6 +1177,7 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
     editor.add_camera_view_2 = add_camera_view_2;
     editor.update_camera_2 = update_camera_2;
     editor.remove = remove;
+    editor.remove_all = remove_all;
     editor.map_params = map_params;
     editor.unmap_params = unmap_params;
 

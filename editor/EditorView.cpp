@@ -162,4 +162,52 @@ bool EditorView::remove_view(const std::string& name)
     return removed;
 }
 
+bool EditorView::remove_any()
+{
+    bool removed = false;
+
+    std::string found_name;
+    // Try to remove from cameras
+    auto camera_it = m_cameras.begin();
+    if (camera_it != m_cameras.end())
+    {
+        found_name = camera_it->first;
+        m_cameras.erase(camera_it);
+        removed = true;
+    }
+
+    // Try to remove from gaussians
+    if (!removed)
+    {
+        auto gaussian_it = m_gaussians.begin();
+        if (gaussian_it != m_gaussians.end())
+        {
+            found_name = gaussian_it->first;
+            m_gaussians.erase(gaussian_it);
+            removed = true;
+        }
+    }
+
+    // Try to remove from nanovdbs
+    if (!removed)
+    {
+        auto nanovdb_it = m_nanovdbs.begin();
+        if (nanovdb_it != m_nanovdbs.end())
+        {
+            found_name = nanovdb_it->first;
+            m_nanovdbs.erase(nanovdb_it);
+            removed = true;
+        }
+    }
+
+    // If the removed view was the current view, clear it
+    if (removed && m_current_view == found_name)
+    {
+        m_current_view.clear();
+        m_current_view_epoch.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    return removed;
+}
+
 } // namespace pnanovdb_editor

@@ -120,6 +120,8 @@ public:
     // Remove a view by name (searches cameras, gaussians, and nanovdbs)
     bool remove_view(const std::string& name);
 
+    bool remove_any();
+
 private:
     std::map<std::string, pnanovdb_camera_view_t*> m_cameras;
     std::map<std::string, GaussianDataContext> m_gaussians;

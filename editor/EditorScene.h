@@ -310,6 +310,8 @@ public:
             map_variant);
     }
 
+    void remove_all();
+
 private:
     void copy_shader_params(const UnifiedViewContext& view_ctx,
                             SyncDirection sync_direction,

@@ -268,6 +268,11 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
         }
 
         // ImGui::PopStyleVar(); // Pop ItemSpacing
+
+        if (ImGui::Button("Clear"))
+        {
+            ptr->editor_scene->remove_all();
+        }
     }
     ImGui::End();
 }

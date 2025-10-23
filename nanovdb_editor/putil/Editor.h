@@ -105,6 +105,8 @@ typedef struct pnanovdb_editor_t
 
     void(PNANOVDB_ABI* remove)(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
 
+    void(PNANOVDB_ABI* remove_all)(pnanovdb_editor_t* editor);
+
     // For any scene object, client can attempt to map parameters of a given type for read/write
     // It is the server's job to deal with binary layout compatbility, converting to client layout as needed
     void*(PNANOVDB_ABI* map_params)(pnanovdb_editor_t* editor,
@@ -143,6 +145,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(add_gaussian_data_2, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_camera_view_2, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(update_camera_2, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(remove, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(remove_all, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(map_params, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(unmap_params, 0, 0)
 PNANOVDB_REFLECT_END(0)
