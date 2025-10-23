@@ -975,6 +975,8 @@ void destroy_encoder(pnanovdb_compute_encoder_t* encoder)
 
     loader->vkFreeCommandBuffers(device->vulkanDevice, ptr->commandPool, 1u, &ptr->commandBuffer);
     loader->vkDestroyCommandPool(device->vulkanDevice, ptr->commandPool, nullptr);
+
+    delete ptr;
 }
 
 pnanovdb_compute_texture_t* get_encoder_front_texture(pnanovdb_compute_encoder_t* encoder)

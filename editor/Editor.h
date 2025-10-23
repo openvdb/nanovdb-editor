@@ -55,6 +55,10 @@ struct pnanovdb_editor_impl_t
 
     std::vector<std::shared_ptr<pnanovdb_raster_gaussian_data_t>> gaussian_data_destruction_queue_pending;
     std::vector<std::shared_ptr<pnanovdb_raster_gaussian_data_t>> gaussian_data_destruction_queue_ready;
+
+    pnanovdb_editor_config_t config = {};
+    std::string config_ip_address;
+    std::string config_ui_profile_name;
 };
 
 namespace pnanovdb_editor
