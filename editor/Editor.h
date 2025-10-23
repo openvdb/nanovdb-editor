@@ -55,7 +55,6 @@ struct pnanovdb_editor_impl_t
 
     std::vector<std::shared_ptr<pnanovdb_raster_gaussian_data_t>> gaussian_data_destruction_queue_pending;
     std::vector<std::shared_ptr<pnanovdb_raster_gaussian_data_t>> gaussian_data_destruction_queue_ready;
-    std::unordered_map<std::string, std::shared_ptr<pnanovdb_camera_view_t>> camera_view_map;
 };
 
 namespace pnanovdb_editor

@@ -154,6 +154,7 @@ static pnanovdb_bool_t init_impl(pnanovdb_editor_t* editor,
     editor->impl->raster = new pnanovdb_raster_t();
     pnanovdb_raster_load(editor->impl->raster, editor->impl->compute);
     pnanovdb_camera_init(&editor->impl->scene_camera);
+    pnanovdb_camera_state_default(&editor->impl->scene_camera.state, PNANOVDB_TRUE);
     editor->impl->camera = &editor->impl->scene_camera;
 
     return PNANOVDB_TRUE;
@@ -176,7 +177,6 @@ void shutdown(pnanovdb_editor_t* editor)
     // Temp: Clean up all data in the maps
     // The shared_ptr destructors will handle the actual cleanup
     editor->impl->gaussian_data_map.clear();
-    editor->impl->camera_view_map.clear();
     if (editor->impl->raster)
     {
         pnanovdb_raster_free(editor->impl->raster);
@@ -298,6 +298,7 @@ void add_camera_view(pnanovdb_editor_t* editor, pnanovdb_camera_view_t* camera)
     {
         return;
     }
+
     // replace existing view if name matches
     if (camera->name)
     {
@@ -1038,22 +1039,8 @@ void add_camera_view_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene
         return;
     }
 
-    // Remove if already exists in map to avoid duplicates
-    // This will properly delete the old camera view and its arrays
-    editor->impl->camera_view_map.erase(name_str);
-
-    // Create a deep copy that the editor owns.
-    pnanovdb_camera_view_t* camera_copy = clone_camera_view(camera);
-    if (!camera_copy)
-    {
-        return;
-    }
-
-    // Store in map indexed by name, taking full ownership via shared_ptr
-    editor->impl->camera_view_map[name_str] = std::shared_ptr<pnanovdb_camera_view_t>(camera_copy, CameraViewDeleter());
-
     // Add to the views registry (stores non-owning pointer for lookups)
-    add_camera_view(editor, camera_copy);
+    add_camera_view(editor, camera);
 }
 
 void update_camera_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_camera_t* camera)
