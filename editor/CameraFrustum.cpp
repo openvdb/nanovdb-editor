@@ -369,8 +369,11 @@ void CameraFrustum::render(imgui_instance_user::Instance* ptr)
                     if (camera->is_visible)
                     {
                         auto selection = ptr->editor_scene->get_properties_selection();
-                        bool isViewSelected = (!selection.name.empty() && selection.name == name);
-                        int selected = isViewSelected ? ptr->editor_scene->get_camera_frustum_index(selection.name) : -1;
+                        const char* selected_name =
+                            (selection.name_token && selection.name_token->str) ? selection.name_token->str : "";
+                        bool isViewSelected = (selected_name[0] != '\0' && name == selected_name);
+                        int selected =
+                            isViewSelected ? ptr->editor_scene->get_camera_frustum_index(selection.name_token) : -1;
                         // first draw non-selected cameras with lower alpha
                         for (int i = 0; i < camera->num_cameras; i++)
                         {

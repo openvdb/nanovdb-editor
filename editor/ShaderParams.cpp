@@ -19,7 +19,7 @@
 #include <algorithm>
 #include <filesystem>
 
-namespace imgui_instance_user
+namespace pnanovdb_editor
 {
 static std::optional<nlohmann::ordered_json> loadAndParseJsonFile(const std::string& relFilePath,
                                                                   bool is_group_file = false)

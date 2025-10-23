@@ -13,6 +13,7 @@
 
 #include "ImguiInstance.h"
 #include "EditorScene.h"
+#include "EditorToken.h"
 
 #include "nanovdb_editor/putil/Camera.h"
 
@@ -45,18 +46,22 @@ static void* ReadOpen(ImGuiContext* ctx, ImGuiSettingsHandler* handler, const ch
     Instance* instance = (Instance*)handler->UserData;
 
     // name is the camera state profile name after [CameraState][name]
-    if (instance->editor_scene && !instance->editor_scene->get_saved_camera_state(name))
+    if (instance->editor_scene)
     {
-        // Get is_y_up from render settings for proper initialization
-        pnanovdb_bool_t is_y_up = PNANOVDB_FALSE;
-        auto it = instance->saved_render_settings.find(name);
-        if (it != instance->saved_render_settings.end())
+        pnanovdb_editor_token_t* name_token = pnanovdb_editor::EditorToken::getInstance().getToken(name);
+        if (!instance->editor_scene->get_saved_camera_state(name_token))
         {
-            is_y_up = it->second.is_y_up;
+            // Get is_y_up from render settings for proper initialization
+            pnanovdb_bool_t is_y_up = PNANOVDB_FALSE;
+            auto it = instance->saved_render_settings.find(name);
+            if (it != instance->saved_render_settings.end())
+            {
+                is_y_up = it->second.is_y_up;
+            }
+            pnanovdb_camera_state_t default_state;
+            pnanovdb_camera_state_default(&default_state, is_y_up);
+            instance->editor_scene->save_camera_state(name_token, default_state);
         }
-        pnanovdb_camera_state_t default_state;
-        pnanovdb_camera_state_default(&default_state, is_y_up);
-        instance->editor_scene->save_camera_state(name, default_state);
     }
 
     return (void*)name;
@@ -72,8 +77,10 @@ static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* ent
         return;
     }
 
+    pnanovdb_editor_token_t* name_token = pnanovdb_editor::EditorToken::getInstance().getToken(name);
+
     pnanovdb_camera_state_t state;
-    const pnanovdb_camera_state_t* existing = instance->editor_scene->get_saved_camera_state(name);
+    const pnanovdb_camera_state_t* existing = instance->editor_scene->get_saved_camera_state(name_token);
     if (existing)
     {
         state = *existing;
@@ -114,7 +121,7 @@ static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* ent
         state.orthographic_scale = x;
     }
 
-    instance->editor_scene->save_camera_state(name, state);
+    instance->editor_scene->save_camera_state(name_token, state);
 }
 
 static void WriteAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler, ImGuiTextBuffer* buf)
@@ -139,7 +146,12 @@ static void WriteAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler, ImGuiText
         const auto& saved_states = instance->editor_scene->get_views_camera_states();
         for (const auto& pair : saved_states)
         {
-            save_camera_state(pair.first, pair.second);
+            // pair.first is token ID, convert back to string for saving
+            pnanovdb_editor_token_t* token = pnanovdb_editor::EditorToken::getInstance().getTokenById(pair.first);
+            if (token && token->str)
+            {
+                save_camera_state(token->str, pair.second);
+            }
         }
     }
 }

@@ -25,7 +25,9 @@
 #include <cstring>
 #include <optional>
 
-namespace imgui_instance_user
+#pragma once
+
+namespace pnanovdb_editor
 {
 struct ShaderParam
 {

@@ -14,6 +14,7 @@
 #include "nanovdb_editor/putil/Raster.h"
 #include "nanovdb_editor/putil/GridBuild.h"
 #include "nanovdb_editor/putil/ParallelPrimitives.h"
+#include "nanovdb_editor/putil/Editor.h"
 
 namespace pnanovdb_raster
 {
@@ -68,10 +69,6 @@ struct gaussian_data_t
     compute_gpu_array_t* sh_n_gpu_array;
     compute_gpu_array_t* opacities_gpu_array;
     compute_gpu_array_t** shader_params_gpu_arrays;
-
-    pnanovdb_compute_array_t* shader_params = nullptr; // optional for shader params updated per frame
-    const pnanovdb_reflect_data_type_t* shader_params_data_type =
-        PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t);
 };
 
 PNANOVDB_CAST_PAIR(pnanovdb_raster_gaussian_data_t, gaussian_data_t)
@@ -92,8 +89,7 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
                                                       pnanovdb_compute_array_t* sh_0,
                                                       pnanovdb_compute_array_t* sh_n,
                                                       pnanovdb_compute_array_t* opacities,
-                                                      pnanovdb_compute_array_t** shader_params_arrays,
-                                                      pnanovdb_raster_shader_params_t* raster_params);
+                                                      pnanovdb_compute_array_t** shader_params_arrays);
 
 void upload_gaussian_data(const pnanovdb_compute_t* compute,
                           pnanovdb_compute_queue_t* queue,
@@ -145,13 +141,12 @@ pnanovdb_bool_t raster_to_nanovdb_from_arrays(pnanovdb_raster_t* raster,
                                               pnanovdb_uint32_t array_count,
                                               pnanovdb_compute_array_t** out_nanovdb_arr);
 
-pnanovdb_bool_t create_gaussian_data_from_arrays(pnanovdb_raster_t* raster,
-                                                 const pnanovdb_compute_t* compute,
-                                                 pnanovdb_compute_queue_t* queue,
-                                                 pnanovdb_compute_array_t** arrays_gaussian, // means, opacities, quats,
-                                                                                             // scales, sh
-                                                 pnanovdb_uint32_t array_count,
-                                                 pnanovdb_raster_gaussian_data_t** gaussian_data,
-                                                 pnanovdb_raster_shader_params_t* raster_params,
-                                                 pnanovdb_raster_context_t** raster_context);
+pnanovdb_bool_t create_gaussian_data_from_desc(pnanovdb_raster_t* raster,
+                                               const pnanovdb_compute_t* compute,
+                                               pnanovdb_compute_queue_t* queue,
+                                               const pnanovdb_editor_gaussian_data_desc_t* desc,
+                                               const char* name,
+                                               pnanovdb_raster_gaussian_data_t** gaussian_data,
+                                               pnanovdb_raster_shader_params_t* raster_params,
+                                               pnanovdb_raster_context_t** raster_context);
 }
