@@ -10,13 +10,13 @@ from .device import DeviceInterface
 from .editor import (
     Editor,
     EditorConfig,
-    pnanovdb_EditorToken as EditorToken,
-    pnanovdb_EditorGaussianDataDesc as EditorGaussianDataDesc,
-    pnanovdb_Camera as Camera,
-    pnanovdb_CameraView as CameraView,
-    pnanovdb_CameraConfig as CameraConfig,
-    pnanovdb_CameraState as CameraState,
-    pnanovdb_Vec3 as Vec3,
+    EditorToken,
+    EditorGaussianDataDesc,
+    Camera,
+    CameraView,
+    CameraConfig,
+    CameraState,
+    Vec3,
 )
 from .raster import Raster
 

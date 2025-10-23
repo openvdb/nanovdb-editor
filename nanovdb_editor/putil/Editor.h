@@ -113,7 +113,6 @@ typedef struct pnanovdb_editor_t
                                     const pnanovdb_reflect_data_type_t* data_type);
 
     // unmap allows us to flush any writes from the client to the server
-    // in theory this removes the need for sync_shader_params
     void(PNANOVDB_ABI* unmap_params)(pnanovdb_editor_t* editor,
                                      pnanovdb_editor_token_t* scene,
                                      pnanovdb_editor_token_t* name);

@@ -29,7 +29,7 @@ EDITOR_LIB = "pnanovdbeditor"
 pnanovdb_bool_t = c_int32
 
 
-class pnanovdb_EditorToken(Structure):
+class EditorToken(Structure):
     """Definition equivalent to pnanovdb_editor_token_t."""
 
     _fields_ = [
@@ -48,10 +48,11 @@ class EditorConfig(Structure):
         ("streaming", c_int32),  # pnanovdb_bool_t is int32_t in C
         ("stream_to_file", c_int32),  # pnanovdb_bool_t is int32_t in C
         ("ui_profile_name", c_char_p),
+        ("device_index", c_int32),
     ]
 
 
-class pnanovdb_Vec3(Structure):
+class Vec3(Structure):
     """Definition equivalent to pnanovdb_vec3_t."""
 
     _fields_ = [
@@ -61,7 +62,7 @@ class pnanovdb_Vec3(Structure):
     ]
 
 
-class pnanovdb_CameraConfig(Structure):
+class CameraConfig(Structure):
     """Definition equivalent to pnanovdb_camera_config_t."""
 
     _fields_ = [
@@ -81,24 +82,24 @@ class pnanovdb_CameraConfig(Structure):
     ]
 
 
-class pnanovdb_CameraState(Structure):
+class CameraState(Structure):
     """Definition equivalent to pnanovdb_camera_state_t."""
 
     _fields_ = [
-        ("position", pnanovdb_Vec3),
-        ("eye_direction", pnanovdb_Vec3),
-        ("eye_up", pnanovdb_Vec3),
+        ("position", Vec3),
+        ("eye_direction", Vec3),
+        ("eye_up", Vec3),
         ("eye_distance_from_position", c_float),
         ("orthographic_scale", c_float),
     ]
 
 
-class pnanovdb_Camera(Structure):
+class Camera(Structure):
     """Definition equivalent to pnanovdb_camera_t."""
 
     _fields_ = [
-        ("config", pnanovdb_CameraConfig),
-        ("state", pnanovdb_CameraState),
+        ("config", CameraConfig),
+        ("state", CameraState),
         ("mouse_x_prev", c_int),
         ("mouse_y_prev", c_int),
         ("rotation_active", pnanovdb_bool_t),
@@ -108,24 +109,24 @@ class pnanovdb_Camera(Structure):
     ]
 
 
-class pnanovdb_CameraView(Structure):
+class CameraView(Structure):
     """Definition equivalent to pnanovdb_camera_view_t."""
 
     _fields_ = [
-        ("name", POINTER(pnanovdb_EditorToken)),
-        ("configs", POINTER(pnanovdb_CameraConfig)),
-        ("states", POINTER(pnanovdb_CameraState)),
+        ("name", POINTER(EditorToken)),
+        ("configs", POINTER(CameraConfig)),
+        ("states", POINTER(CameraState)),
         ("num_cameras", c_uint32),
         ("axis_length", c_float),
         ("axis_thickness", c_float),
         ("frustum_line_width", c_float),
         ("frustum_scale", c_float),
-        ("frustum_color", pnanovdb_Vec3),
+        ("frustum_color", Vec3),
         ("is_visible", pnanovdb_bool_t),
     ]
 
 
-class pnanovdb_EditorGaussianDataDesc(Structure):
+class EditorGaussianDataDesc(Structure):
     """Definition equivalent to pnanovdb_editor_gaussian_data_desc_t."""
 
     _fields_ = [
@@ -187,10 +188,10 @@ class pnanovdb_Editor(Structure):
             "add_gaussian_data",
             CFUNCTYPE(None, c_void_p, c_void_p, c_void_p, c_void_p),
         ),  # raster, queue, gaussian
-        ("update_camera", CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_Camera))),
+        ("update_camera", CFUNCTYPE(None, c_void_p, POINTER(Camera))),
         (
             "add_camera_view",
-            CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_CameraView)),
+            CFUNCTYPE(None, c_void_p, POINTER(CameraView)),
         ),
         ("add_shader_params", CFUNCTYPE(None, c_void_p, c_void_p, c_void_p)),
         # params, data_type
@@ -211,22 +212,22 @@ class pnanovdb_Editor(Structure):
         (
             "get_camera",
             CFUNCTYPE(
-                POINTER(pnanovdb_Camera),
+                POINTER(Camera),
                 c_void_p,
-                POINTER(pnanovdb_EditorToken),
+                POINTER(EditorToken),
             ),
         ),
         (
             "get_token",
-            CFUNCTYPE(POINTER(pnanovdb_EditorToken), c_char_p),
+            CFUNCTYPE(POINTER(EditorToken), c_char_p),
         ),
         (
             "add_nanovdb_2",
             CFUNCTYPE(
                 None,
                 c_void_p,  # pnanovdb_editor_t*
-                POINTER(pnanovdb_EditorToken),  # scene
-                POINTER(pnanovdb_EditorToken),  # name
+                POINTER(EditorToken),  # scene
+                POINTER(EditorToken),  # name
                 POINTER(pnanovdb_ComputeArray),  # array
             ),
         ),
@@ -235,9 +236,9 @@ class pnanovdb_Editor(Structure):
             CFUNCTYPE(
                 None,
                 c_void_p,  # pnanovdb_editor_t*
-                POINTER(pnanovdb_EditorToken),  # scene
-                POINTER(pnanovdb_EditorToken),  # name
-                POINTER(pnanovdb_EditorGaussianDataDesc),  # desc
+                POINTER(EditorToken),  # scene
+                POINTER(EditorToken),  # name
+                POINTER(EditorGaussianDataDesc),  # desc
             ),
         ),
         (
@@ -245,8 +246,8 @@ class pnanovdb_Editor(Structure):
             CFUNCTYPE(
                 None,
                 c_void_p,  # pnanovdb_editor_t*
-                POINTER(pnanovdb_EditorToken),  # scene
-                POINTER(pnanovdb_CameraView),  # camera
+                POINTER(EditorToken),  # scene
+                POINTER(CameraView),  # camera
             ),
         ),
         (
@@ -254,8 +255,8 @@ class pnanovdb_Editor(Structure):
             CFUNCTYPE(
                 None,
                 c_void_p,  # pnanovdb_editor_t*
-                POINTER(pnanovdb_EditorToken),  # scene
-                POINTER(pnanovdb_Camera),  # camera
+                POINTER(EditorToken),  # scene
+                POINTER(Camera),  # camera
             ),
         ),
         (
@@ -263,8 +264,8 @@ class pnanovdb_Editor(Structure):
             CFUNCTYPE(
                 None,
                 c_void_p,  # pnanovdb_editor_t*
-                POINTER(pnanovdb_EditorToken),  # scene
-                POINTER(pnanovdb_EditorToken),  # name
+                POINTER(EditorToken),  # scene
+                POINTER(EditorToken),  # name
             ),
         ),
         (
@@ -272,8 +273,8 @@ class pnanovdb_Editor(Structure):
             CFUNCTYPE(
                 c_void_p,  # returns void*
                 c_void_p,  # pnanovdb_editor_t*
-                POINTER(pnanovdb_EditorToken),  # scene
-                POINTER(pnanovdb_EditorToken),  # name
+                POINTER(EditorToken),  # scene
+                POINTER(EditorToken),  # name
                 c_void_p,  # const pnanovdb_reflect_data_type_t*
             ),
         ),
@@ -282,8 +283,8 @@ class pnanovdb_Editor(Structure):
             CFUNCTYPE(
                 None,
                 c_void_p,  # pnanovdb_editor_t*
-                POINTER(pnanovdb_EditorToken),  # scene
-                POINTER(pnanovdb_EditorToken),  # name
+                POINTER(EditorToken),  # scene
+                POINTER(EditorToken),  # name
             ),
         ),
     ]
@@ -302,7 +303,7 @@ class pnanovdb_EditorImpl(Structure):
         ("nanovdb_array", POINTER(pnanovdb_ComputeArray)),
         ("data_array", POINTER(pnanovdb_ComputeArray)),
         ("gaussian_data", c_void_p),
-        ("camera", POINTER(pnanovdb_Camera)),
+        ("camera", POINTER(Camera)),
         ("raster_ctx", c_void_p),
         ("shader_params", c_void_p),
         ("shader_params_data_type", c_void_p),
@@ -372,7 +373,7 @@ class Editor:
         shutdown_func = self._editor.contents.shutdown
         shutdown_func(self._editor)
 
-    def update_camera(self, camera: pnanovdb_Camera) -> None:
+    def update_camera(self, camera: Camera) -> None:
         udpate_camera_func = self._editor.contents.update_camera
         udpate_camera_func(self._editor, pointer(camera))
 
