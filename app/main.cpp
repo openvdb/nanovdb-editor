@@ -171,6 +171,8 @@ int main(int argc, char* argv[])
             printf("Server instance(%zu) resolved_port(%d)\n", inst_idx, resolved_port);
         }
 
+// for testing reset()
+#if 0
         for (int runs = 0; runs < 10; runs++)
         {
             for (size_t inst_idx = 0u; inst_idx < instances.size(); inst_idx++)
@@ -184,6 +186,7 @@ int main(int argc, char* argv[])
                 inst.editor.add_nanovdb(&inst.editor, inst.nanovdb_array);
             }
         }
+#endif
 
         std::this_thread::sleep_for(std::chrono::seconds(3600));
 
