@@ -33,8 +33,9 @@ pnanovdb_compute_encoder_t* create_encoder(pnanovdb_compute_queue_t* queue, cons
 
     if (!device->enabledExtensions.VK_KHR_VIDEO_QUEUE || !device->enabledExtensions.VK_KHR_VIDEO_ENCODE_QUEUE)
     {
-        device->logPrint(PNANOVDB_COMPUTE_LOG_LEVEL_WARNING, "Vulkan Video Encode is not supported.");
-        return nullptr;
+        device->logPrint(PNANOVDB_COMPUTE_LOG_LEVEL_WARNING, "Vulkan Video Encode is not supported, falling back to OpenH264");
+
+        return create_encoder_cpu(queue, desc);
     }
 
     auto ptr = new Encoder();
@@ -697,6 +698,10 @@ pnanovdb_compute_encoder_t* create_encoder(pnanovdb_compute_queue_t* queue, cons
 int present_encoder(pnanovdb_compute_encoder_t* encoder, pnanovdb_uint64_t* flushedFrameID)
 {
     auto ptr = cast(encoder);
+    if (ptr->encoderCPU)
+    {
+        return present_encoder_cpu(encoder, flushedFrameID);
+    }
 
     Device* device = ptr->deviceQueue->device;
     Context* ctx = ptr->deviceQueue->context;
@@ -943,6 +948,11 @@ int present_encoder(pnanovdb_compute_encoder_t* encoder, pnanovdb_uint64_t* flus
 void destroy_encoder(pnanovdb_compute_encoder_t* encoder)
 {
     auto ptr = cast(encoder);
+    if (ptr->encoderCPU)
+    {
+        destroy_encoder_cpu(encoder);
+    }
+
     Device* device = ptr->deviceQueue->device;
     auto loader = &device->loader;
 
@@ -975,11 +985,17 @@ void destroy_encoder(pnanovdb_compute_encoder_t* encoder)
 
     loader->vkFreeCommandBuffers(device->vulkanDevice, ptr->commandPool, 1u, &ptr->commandBuffer);
     loader->vkDestroyCommandPool(device->vulkanDevice, ptr->commandPool, nullptr);
+
+    delete ptr;
 }
 
 pnanovdb_compute_texture_t* get_encoder_front_texture(pnanovdb_compute_encoder_t* encoder)
 {
     auto ptr = cast(encoder);
+    if (ptr->encoderCPU)
+    {
+        return get_encoder_front_texture_cpu(encoder);
+    }
 
     return ptr->srcTexture;
 }
@@ -987,6 +1003,11 @@ pnanovdb_compute_texture_t* get_encoder_front_texture(pnanovdb_compute_encoder_t
 void* map_encoder_data(pnanovdb_compute_encoder_t* encoder, pnanovdb_uint64_t* p_mapped_byte_count)
 {
     auto ptr = cast(encoder);
+    if (ptr->encoderCPU)
+    {
+        return map_encoder_data_cpu(encoder, p_mapped_byte_count);
+    }
+
     Device* device = ptr->deviceQueue->device;
     auto loader = &device->loader;
 
@@ -1029,6 +1050,12 @@ void* map_encoder_data(pnanovdb_compute_encoder_t* encoder, pnanovdb_uint64_t* p
 
 void unmap_encoder_data(pnanovdb_compute_encoder_t* encoder)
 {
+    auto ptr = cast(encoder);
+    if (ptr->encoderCPU)
+    {
+        unmap_encoder_data_cpu(encoder);
+    }
+
     // nop
 }
 
