@@ -338,7 +338,7 @@ void add_camera_view(pnanovdb_editor_t* editor, pnanovdb_camera_view_t* camera)
             memcpy(camera_dup->configs, camera->configs, sizeof(pnanovdb_camera_config_t) * camera->num_cameras);
             memcpy(camera_dup->states, camera->states, sizeof(pnanovdb_camera_state_t) * camera->num_cameras);
 
-            uint idx = worker->pending_camera_view_idx.fetch_add(1u);
+            size_t idx = worker->pending_camera_view_idx.fetch_add(1u);
             worker->pending_camera_view[idx & 31].set_pending(camera_dup);
         }
         else
