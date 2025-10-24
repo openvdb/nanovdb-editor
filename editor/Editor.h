@@ -119,6 +119,7 @@ struct EditorWorker
 {
     std::thread* thread;
     std::atomic<bool> should_stop{ false };
+    std::atomic<bool> is_starting{ true };
     std::atomic<bool> params_dirty{ false };
     std::mutex shader_params_mutex;
     PendingData<pnanovdb_compute_array_t> pending_nanovdb;
