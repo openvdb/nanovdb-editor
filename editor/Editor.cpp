@@ -304,7 +304,7 @@ void add_camera_view(pnanovdb_editor_t* editor, pnanovdb_camera_view_t* camera)
 
     // replace existing view if name matches
     if (camera->name)
-    {    
+    {
         if (editor->impl->editor_worker)
         {
             EditorWorker* worker = editor->impl->editor_worker;
