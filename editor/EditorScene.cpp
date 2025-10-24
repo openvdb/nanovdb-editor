@@ -352,15 +352,53 @@ void EditorScene::process_pending_editor_changes()
         m_imgui_settings->sync_camera = PNANOVDB_TRUE;
     }
 
-    void* old_shader_params = nullptr;
-    worker->pending_shader_params.process_pending(m_editor->impl->shader_params, old_shader_params);
+    for (uint32_t idx = 0u; idx < 32u; idx++)
+    {
+        pnanovdb_camera_view_t* old_camera_view = nullptr;
+        bool camera_view_updated =
+            worker->pending_camera_view[idx].process_pending(m_editor->impl->camera_view, old_camera_view);
+        if (camera_view_updated)
+        {
+            if (m_editor->impl->camera_view)
+            {
+                const char* name_str = pnanovdb_editor_token_get_string(m_editor->impl->camera_view->name);
+                if (name_str)
+                {
+                    std::string name_key(name_str);
+                    // Create or get existing shared_ptr for this camera view
+                    auto it = m_camera_views_owned.find(name_key);
+                    if (it == m_camera_views_owned.end())
+                    {
+                        // Create new shared_ptr for this camera view
+                        m_camera_views_owned[name_key] =
+                            std::shared_ptr<pnanovdb_camera_view_t>(m_editor->impl->camera_view,
+                                                                    [](pnanovdb_camera_view_t* ptr)
+                                                                    {
+                                                                        // Custom deleter - free the camera view
+                                                                        if (ptr)
+                                                                            delete ptr;
+                                                                    });
+                    }
+                    m_views->add_camera(name_str, m_editor->impl->camera_view);
+                }
+            }
+        }
+    }
 
     // Lock mutex when updating shader_params pointer to protect from concurrent viewer access
     {
         std::lock_guard<std::mutex> lock(m_editor->impl->editor_worker->shader_params_mutex);
-        const pnanovdb_reflect_data_type_t* old_shader_params_data_type = nullptr;
-        worker->pending_shader_params_data_type.process_pending(
-            m_editor->impl->shader_params_data_type, old_shader_params_data_type);
+
+        void* old_shader_params = nullptr;
+        worker->pending_shader_params.process_pending(m_editor->impl->shader_params, old_shader_params);
+
+        // Lock mutex when updating shader_params pointer to protect from concurrent viewer access
+        {
+            std::lock_guard<std::mutex> lock(m_editor->impl->editor_worker->shader_params_mutex);
+            const pnanovdb_reflect_data_type_t* old_shader_params_data_type = nullptr;
+            worker->pending_shader_params_data_type.process_pending(
+                m_editor->impl->shader_params_data_type, old_shader_params_data_type);
+        }
     }
 }
 
@@ -567,8 +605,9 @@ void EditorScene::handle_gaussian_data_load(pnanovdb_raster_gaussian_data_t* gau
         pnanovdb_compute_array_t* params_array = scene_manager->create_initialized_shader_params(
             m_compute, nullptr, imgui_instance_user::s_raster2d_shader_group, 0, m_raster_shader_params_data_type);
 
-        scene_manager->add_gaussian_data(
-            scene_token, name_token, gaussian_data, params_array, m_raster_shader_params_data_type, m_compute);
+        scene_manager->add_gaussian_data(scene_token, name_token, gaussian_data, params_array,
+                                         m_raster_shader_params_data_type, m_compute, m_editor->impl->raster,
+                                         m_device_queue);
 
         // Register in SceneView (for scene tree display) using the SceneObject's params pointer
         if (auto* obj = scene_manager->get(scene_token, name_token))

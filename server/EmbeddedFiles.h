@@ -103,7 +103,20 @@ top: 0; left: 0; bottom: 0; right: 0;
         const hostname = window.location.hostname;
         const port = window.location.port;
         var ws = new WebSocket("ws://" + hostname + ":" + port + "/ws");
+        if (ws.readyState == WebSocket.CLOSED)
+        {
+            console.log("Websocket closed. Will try again in 1 second.");
+            setTimeout(function() {
+                window.onload();
+            }, 1000);
+        }
         ws.binaryType = 'arraybuffer';
+        ws.addEventListener('close', function(event){
+            console.log("Websocket close event. Will try again in 1 second.");
+            setTimeout(function() {
+                window.onload();
+            }, 1000);
+        });
         ws.addEventListener('message',function(event){
             if (event.data instanceof ArrayBuffer)
             {
@@ -118,7 +131,10 @@ top: 0; left: 0; bottom: 0; right: 0;
             }
             else if(typeof event.data === 'string')
             {
-                ws.send(event.data);
+                if (ws.readyState == WebSocket.OPEN)
+                {
+                    ws.send(event.data);
+                }
                 try {
                     const jsObject = JSON.parse(event.data);
                     if (videoWidth != jsObject.width || videoHeight != jsObject.height)
@@ -154,7 +170,10 @@ top: 0; left: 0; bottom: 0; right: 0;
                                 x: x,
                                 y: y
                             };
-                            ws.send(JSON.stringify(msg));
+                            if (ws.readyState == WebSocket.OPEN)
+                            {
+                                ws.send(JSON.stringify(msg));
+                            }
                         });
                         video.addEventListener('mousedown', (event) => {
                             const msg = {
@@ -162,7 +181,10 @@ top: 0; left: 0; bottom: 0; right: 0;
                                 eventType: "mousedown",
                                 button: event.button
                             };
-                            ws.send(JSON.stringify(msg));
+                            if (ws.readyState == WebSocket.OPEN)
+                            {
+                                ws.send(JSON.stringify(msg));
+                            }
                         });
                         video.addEventListener('mouseup', (event) => {
                             const msg = {
@@ -170,7 +192,10 @@ top: 0; left: 0; bottom: 0; right: 0;
                                 eventType: "mouseup",
                                 button: event.button
                             };
-                            ws.send(JSON.stringify(msg));
+                            if (ws.readyState == WebSocket.OPEN)
+                            {
+                                ws.send(JSON.stringify(msg));
+                            }
                         });
                         video.addEventListener('wheel', (event) => {
                             const msg = {
@@ -179,7 +204,10 @@ top: 0; left: 0; bottom: 0; right: 0;
                                 deltaX: event.deltaX,
                                 deltaY: event.deltaY
                             };
-                            ws.send(JSON.stringify(msg));
+                            if (ws.readyState == WebSocket.OPEN)
+                            {
+                                ws.send(JSON.stringify(msg));
+                            }
                         });
 
                         video.addEventListener('touchmove', (event) => {
@@ -192,7 +220,10 @@ top: 0; left: 0; bottom: 0; right: 0;
                                 x: x,
                                 y: y
                             };
-                            ws.send(JSON.stringify(msg));
+                            if (ws.readyState == WebSocket.OPEN)
+                            {
+                                ws.send(JSON.stringify(msg));
+                            }
                         });
                         video.addEventListener('touchstart', (event) => {
                             const msg = {
@@ -200,7 +231,10 @@ top: 0; left: 0; bottom: 0; right: 0;
                                 eventType: "mousedown",
                                 button: 0
                             };
-                            ws.send(JSON.stringify(msg));
+                            if (ws.readyState == WebSocket.OPEN)
+                            {
+                                ws.send(JSON.stringify(msg));
+                            }
                         });
                         video.addEventListener('touchend', (event) => {
                             const msg = {
@@ -208,7 +242,10 @@ top: 0; left: 0; bottom: 0; right: 0;
                                 eventType: "mouseup",
                                 button: 0
                             };
-                            ws.send(JSON.stringify(msg));
+                            if (ws.readyState == WebSocket.OPEN)
+                            {
+                                ws.send(JSON.stringify(msg));
+                            }
                         });
                         video.addEventListener('touchcancel', (event) => {
                             const msg = {
@@ -216,7 +253,10 @@ top: 0; left: 0; bottom: 0; right: 0;
                                 eventType: "mouseup",
                                 button: 0
                             };
-                            ws.send(JSON.stringify(msg));
+                            if (ws.readyState == WebSocket.OPEN)
+                            {
+                                ws.send(JSON.stringify(msg));
+                            }
                         });
 
                         const userAgent = navigator.userAgent;
@@ -248,7 +288,10 @@ top: 0; left: 0; bottom: 0; right: 0;
                                 width: window.innerWidth,
                                 height: window.innerHeight
                             };
-                            ws.send(JSON.stringify(msg));
+                            if (ws.readyState == WebSocket.OPEN)
+                            {
+                                ws.send(JSON.stringify(msg));
+                            }
                         }
                     }
                 } catch (error) {
@@ -265,7 +308,10 @@ top: 0; left: 0; bottom: 0; right: 0;
                 width: window.innerWidth,
                 height: window.innerHeight
             };
-            ws.send(JSON.stringify(msg));
+            if (ws.readyState == WebSocket.OPEN)
+            {
+                ws.send(JSON.stringify(msg));
+            }
         });
 
         document.addEventListener('keydown', (event) => {
@@ -279,7 +325,10 @@ top: 0; left: 0; bottom: 0; right: 0;
                 shiftKey: event.shiftKey,
                 metaKey: event.metaKey
             };
-            ws.send(JSON.stringify(msg));
+            if (ws.readyState == WebSocket.OPEN)
+            {
+                ws.send(JSON.stringify(msg));
+            }
             // suppress tab
             if (event.keyCode == 9)
             {
@@ -297,7 +346,10 @@ top: 0; left: 0; bottom: 0; right: 0;
                 shiftKey: event.shiftKey,
                 metaKey: event.metaKey
             };
-            ws.send(JSON.stringify(msg));
+            if (ws.readyState == WebSocket.OPEN)
+            {
+                ws.send(JSON.stringify(msg));
+            }
             // suppress tab
             if (event.keyCode == 9)
             {

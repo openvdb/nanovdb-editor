@@ -37,6 +37,7 @@ struct pnanovdb_editor_impl_t
     pnanovdb_compute_array_t* data_array;
     pnanovdb_raster_gaussian_data_t* gaussian_data;
     pnanovdb_camera_t* camera;
+    pnanovdb_camera_view_t* camera_view;
     pnanovdb_raster_t* raster;
     pnanovdb_raster_context_t* raster_ctx;
     std::string shader_name = "editor/editor.slang"; // TODO: need this?
@@ -49,6 +50,9 @@ struct pnanovdb_editor_impl_t
     pnanovdb_compute_queue_t* device_queue;
     pnanovdb_compute_queue_t* compute_queue;
 
+    pnanovdb_editor_config_t config = {};
+    std::string config_ip_address;
+    std::string config_ui_profile_name;
 
     // std::vector<std::shared_ptr<pnanovdb_raster_gaussian_data_t>> gaussian_data_destruction_queue_pending;
     // std::vector<std::shared_ptr<pnanovdb_raster_gaussian_data_t>> gaussian_data_destruction_queue_ready;
@@ -117,6 +121,8 @@ struct EditorWorker
     PendingData<pnanovdb_compute_array_t> pending_data_array;
     PendingData<pnanovdb_raster_gaussian_data_t> pending_gaussian_data;
     PendingData<pnanovdb_camera_t> pending_camera;
+    PendingData<pnanovdb_camera_view_t> pending_camera_view[32];
+    std::atomic<uint32_t> pending_camera_view_idx;
     PendingData<void> pending_shader_params;
     ConstPendingData<pnanovdb_reflect_data_type_t> pending_shader_params_data_type;
 

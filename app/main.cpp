@@ -133,6 +133,7 @@ int main(int argc, char* argv[])
             pnanovdb_compute_device_manager_t* device_manager = nullptr;
             pnanovdb_compute_device_t* device = nullptr;
             pnanovdb_editor_t editor = {};
+            pnanovdb_compute_array_t* nanovdb_array = nullptr;
         };
         std::vector<editor_instance_t> instances(args.instance_count);
 
@@ -176,6 +177,23 @@ int main(int argc, char* argv[])
             pnanovdb_int32_t resolved_port = inst.editor.get_resolved_port(&inst.editor, PNANOVDB_TRUE);
             printf("Server instance(%zu) resolved_port(%d)\n", inst_idx, resolved_port);
         }
+
+// for testing reset()
+#if 0
+        for (int runs = 0; runs < 10; runs++)
+        {
+            for (size_t inst_idx = 0u; inst_idx < instances.size(); inst_idx++)
+            {
+                auto& inst = instances[inst_idx];
+
+                std::this_thread::sleep_for(std::chrono::seconds(10));
+
+                inst.editor.reset(&inst.editor);
+
+                inst.editor.add_nanovdb(&inst.editor, inst.nanovdb_array);
+            }
+        }
+#endif
 
         std::this_thread::sleep_for(std::chrono::seconds(3600));
 

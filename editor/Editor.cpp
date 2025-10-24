@@ -82,6 +82,7 @@ static pnanovdb_bool_t init_impl(pnanovdb_editor_t* editor,
     editor->impl->nanovdb_array = NULL;
     editor->impl->data_array = NULL;
     editor->impl->camera = NULL;
+    editor->impl->camera_view = NULL;
     editor->impl->raster_ctx = NULL;
     editor->impl->shader_params = NULL;
     editor->impl->shader_params_data_type = NULL;
@@ -113,6 +114,7 @@ void shutdown(pnanovdb_editor_t* editor)
     if (editor->impl->views)
     {
         delete editor->impl->views;
+        editor->impl->views = nullptr;
     }
     if (editor->impl->scene_manager)
     {
@@ -227,10 +229,37 @@ void add_camera_view(pnanovdb_editor_t* editor, pnanovdb_camera_view_t* camera)
     // replace existing view if name matches
     if (camera->name)
     {
-        const char* name_str = pnanovdb_editor_token_get_string(camera->name);
-        if (name_str)
+        if (editor->impl->editor_worker)
         {
-            views->add_camera(name_str, camera);
+            EditorWorker* worker = editor->impl->editor_worker;
+
+            // make deep copy, including arrays
+            size_t total_size = sizeof(pnanovdb_camera_view_t);
+            total_size += sizeof(pnanovdb_camera_config_t) * camera->num_cameras;
+            total_size += sizeof(pnanovdb_camera_state_t) * camera->num_cameras;
+            uint8_t* camera_raw = new unsigned char[total_size];
+            pnanovdb_camera_view_t* camera_dup = (pnanovdb_camera_view_t*)camera_raw;
+
+            *camera_dup = *camera;
+
+            camera_raw += sizeof(pnanovdb_camera_view_t);
+            camera_dup->configs = (pnanovdb_camera_config_t*)camera_raw;
+            camera_raw += sizeof(pnanovdb_camera_config_t) * camera->num_cameras;
+            camera_dup->states = (pnanovdb_camera_state_t*)camera_raw;
+
+            memcpy(camera_dup->configs, camera->configs, sizeof(pnanovdb_camera_config_t) * camera->num_cameras);
+            memcpy(camera_dup->states, camera->states, sizeof(pnanovdb_camera_state_t) * camera->num_cameras);
+
+            uint idx = worker->pending_camera_view_idx.fetch_add(1u);
+            worker->pending_camera_view[idx & 31].set_pending(camera_dup);
+        }
+        else
+        {
+            const char* name_str = pnanovdb_editor_token_get_string(camera->name);
+            if (name_str)
+            {
+                views->add_camera(name_str, camera);
+            }
         }
     }
 }
@@ -762,6 +791,17 @@ pnanovdb_int32_t get_resolved_port(pnanovdb_editor_t* editor, pnanovdb_bool_t sh
 
 void start(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb_editor_config_t* config)
 {
+    // cache config
+    if (editor->impl)
+    {
+        editor->impl->config = *config;
+        editor->impl->config_ip_address = config->ip_address ? std::string(config->ip_address) : std::string();
+        editor->impl->config_ui_profile_name =
+            config->ui_profile_name ? std::string(config->ui_profile_name) : std::string();
+        editor->impl->config.ip_address = editor->impl->config_ip_address.c_str();
+        editor->impl->config.ui_profile_name = editor->impl->config_ui_profile_name.c_str();
+    }
+
     if (config->headless)
     {
         if (editor->impl->editor_worker)
@@ -801,6 +841,25 @@ void stop(pnanovdb_editor_t* editor)
     delete editor_worker->thread;
     delete editor_worker;
     editor->impl->editor_worker = nullptr;
+}
+
+void reset(pnanovdb_editor_t* editor)
+{
+    auto device = editor->impl->device;
+    auto compute = editor->impl->compute;
+    auto compiler = editor->impl->compiler;
+
+    pnanovdb_editor_config_t config = editor->impl->config;
+    std::string config_ip_address = editor->impl->config_ip_address;
+    std::string config_ui_profile_name = editor->impl->config_ui_profile_name;
+    config.ip_address = config_ip_address.c_str();
+    config.ui_profile_name = config_ui_profile_name.c_str();
+
+    shutdown(editor);
+
+    init_impl(editor, compute, compiler);
+
+    start(editor, device, &config);
 }
 
 pnanovdb_camera_t* get_camera(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene)
@@ -1280,6 +1339,7 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
     editor.show = show;
     editor.start = start;
     editor.stop = stop;
+    editor.reset = reset;
     editor.add_nanovdb = add_nanovdb;
     editor.add_array = add_array;
     editor.add_shader_params = add_shader_params;
