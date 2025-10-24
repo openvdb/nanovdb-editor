@@ -61,6 +61,9 @@ jobs:
 
         # Test the wheels
         CIBW_TEST_COMMAND: python -c "import nanovdb_editor; print('Import successful')"
+
+        # Mark this as a PyPI build
+        CMAKE_ARGS: "-DNANOVDB_EDITOR_PYPI_BUILD=ON"
       with:
         package-dir: pymodule
 
