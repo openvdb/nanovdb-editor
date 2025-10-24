@@ -301,6 +301,8 @@ void add_camera_view(pnanovdb_editor_t* editor, pnanovdb_camera_view_t* camera)
         return;
     }
 
+    std::lock_guard<std::mutex> editor_lock(editor->impl->editor_mutex);
+
     // replace existing view if name matches
     if (camera->name)
     {
@@ -360,6 +362,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         return;
     }
 
+    editor->impl->editor_mutex.lock();
+
     pnanovdb_int32_t image_width = s_default_width;
     pnanovdb_int32_t image_height = s_default_height;
 
@@ -378,6 +382,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     pnanovdb_imgui_window_interface_t* imgui_window_iface = pnanovdb_imgui_get_window_interface();
     if (!imgui_window_iface)
     {
+        editor->impl->editor_mutex.unlock();
         return;
     }
     pnanovdb_imgui_settings_render_t* imgui_user_settings = nullptr;
@@ -390,6 +395,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
     if (!imgui_window || !imgui_user_settings)
     {
+        editor->impl->editor_mutex.unlock();
         return;
     }
 
@@ -412,6 +418,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
     if (!imgui_user_instance)
     {
+        editor->impl->editor_mutex.unlock();
         return;
     }
 
@@ -558,9 +565,13 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         }
     }
 
+    editor->impl->editor_mutex.unlock();
+
     bool should_run = true;
     while (should_run)
     {
+        std::lock_guard<std::mutex> editor_lock(editor->impl->editor_mutex);
+
         if (editor->impl->editor_worker && editor->impl->editor_worker->should_stop.load())
         {
             auto log_print = compute_interface->get_log_print(compute_context);

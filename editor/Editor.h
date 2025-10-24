@@ -59,6 +59,8 @@ struct pnanovdb_editor_impl_t
     pnanovdb_editor_config_t config = {};
     std::string config_ip_address;
     std::string config_ui_profile_name;
+
+    std::mutex editor_mutex;
 };
 
 namespace pnanovdb_editor
