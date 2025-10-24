@@ -195,4 +195,7 @@ static inline pnanovdb_bool_t pnanovdb_editor_token_is_valid(const pnanovdb_edit
 }
 // -----------------------------------------------------------
 
+// Forward declaration for execute_removal function
+void execute_removal(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
+
 } // namespace pnanovdb_editor

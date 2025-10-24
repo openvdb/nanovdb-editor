@@ -52,8 +52,12 @@ void Console::addLog(const char* fmt, ...)
     auto time = std::chrono::system_clock::to_time_t(now);
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
 
-    std::tm tm;
+    std::tm tm = {};
+#ifdef _WIN32
+    localtime_s(&tm, &time);
+#else
     localtime_r(&time, &tm);
+#endif
 
     std::ostringstream timestamp;
     timestamp << "[" << std::setfill('0') << std::setw(4) << (tm.tm_year + 1900) << "-" << std::setfill('0')

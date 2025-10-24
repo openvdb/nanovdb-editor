@@ -501,14 +501,8 @@ int main(int argc, char* argv[])
 
     runEditorLoop(1000);
 
-    // editor.show(&editor, device, &config);
-
     pnanovdb_editor_free(&editor);
 #else
-    if (data_nanovdb)
-    {
-        compute.destroy_array(data_nanovdb);
-    }
 #endif
 
 #if defined(TEST_RASTER) || defined(TEST_RASTER_2D)

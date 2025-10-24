@@ -396,7 +396,6 @@ void EditorScene::process_pending_editor_changes()
                 // Execute object removal on render thread (safe - no UAF)
                 Console::getInstance().addLog("[Removal] Processing object removal: scene='%s', name='%s'",
                                               removal.scene->str, removal.name->str);
-                extern void execute_removal(pnanovdb_editor_t*, pnanovdb_editor_token_t*, pnanovdb_editor_token_t*);
                 execute_removal(m_editor, removal.scene, removal.name);
             }
             else
