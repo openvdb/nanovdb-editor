@@ -67,3 +67,30 @@ jobs:
           set -e
           export LD_LIBRARY_PATH=$PWD/build/Release/lib:$PWD/build/Release/bin:$LD_LIBRARY_PATH
           ctest --test-dir build/Release/gtests -C Release --output-on-failure --verbose
+
+  nanovdb-editor-build-and-test-windows:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    name: NanoVDB Editor Build (Windows)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build NanoVDB Editor
+        run: |
+          ./build.bat -rfv
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanovdb-editor-build-windows
+          path: |
+            build/
+          retention-days: 2
+
+      - name: Run GTests
+        run: |
+          ctest --test-dir build/Release/gtests -C Release --output-on-failure --verbose
