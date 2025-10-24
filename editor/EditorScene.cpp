@@ -383,6 +383,20 @@ void EditorScene::process_pending_editor_changes()
         m_imgui_settings->sync_camera = PNANOVDB_TRUE;
     }
 
+    pnanovdb_camera_view_t* old_camera_view = nullptr;
+    bool camera_view_updated = worker->pending_camera_view.process_pending(m_editor->impl->camera_view, old_camera_view);
+    if (camera_view_updated)
+    {
+        if (m_editor->impl->camera_view)
+        {
+            const char* name_str = pnanovdb_editor_token_get_string(m_editor->impl->camera_view->name);
+            if (name_str)
+            {
+                m_views->add_camera(name_str, m_editor->impl->camera_view);
+            }
+        }
+    }
+
     // Lock mutex when updating shader_params pointer to protect from concurrent viewer access
     {
         std::lock_guard<std::mutex> lock(m_editor->impl->editor_worker->shader_params_mutex);

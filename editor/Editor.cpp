@@ -141,6 +141,7 @@ static pnanovdb_bool_t init_impl(pnanovdb_editor_t* editor,
     editor->impl->nanovdb_array = NULL;
     editor->impl->data_array = NULL;
     editor->impl->camera = NULL;
+    editor->impl->camera_view = NULL;
     editor->impl->raster_ctx = NULL;
     editor->impl->shader_params = NULL;
     editor->impl->shader_params_data_type = NULL;
@@ -303,11 +304,19 @@ void add_camera_view(pnanovdb_editor_t* editor, pnanovdb_camera_view_t* camera)
 
     // replace existing view if name matches
     if (camera->name)
-    {
-        const char* name_str = pnanovdb_editor_token_get_string(camera->name);
-        if (name_str)
+    {    
+        if (editor->impl->editor_worker)
         {
-            views->add_camera(name_str, camera);
+            EditorWorker* worker = editor->impl->editor_worker;
+            worker->pending_camera_view.set_pending(camera);
+        }
+        else
+        {
+            const char* name_str = pnanovdb_editor_token_get_string(camera->name);
+            if (name_str)
+            {
+                views->add_camera(name_str, camera);
+            }
         }
     }
 }
