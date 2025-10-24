@@ -257,13 +257,10 @@ private:
     void clear_editor_view_state();
     void load_view_into_editor_and_ui(SceneObject* scene_obj);
     bool handle_pending_view_changes();
-    void initialize_view_registry();
 
     // NanoVDB file operations
     void load_nanovdb_to_editor();
     void save_editor_nanovdb();
-
-    std::map<ViewType, ViewMapVariant> m_view_registry;
 
     imgui_instance_user::Instance* m_imgui_instance;
     pnanovdb_editor_t* m_editor;

@@ -40,9 +40,6 @@ EditorScene::EditorScene(const EditorSceneConfig& config)
     // Setup views UI - ImguiInstance accesses views through EditorScene
     m_imgui_instance->editor_scene = this;
 
-    // Initialize view registry (maps ViewsTypes to actual map pointers)
-    initialize_view_registry();
-
     // Initialize NanoVDB shader params arrays with defaults
     {
         m_nanovdb_params.shader_name = config.default_shader_name;
@@ -399,9 +396,9 @@ void EditorScene::process_pending_editor_changes()
                 // Execute object removal on render thread (safe - no UAF)
                 Console::getInstance().addLog("[Removal] Processing object removal: scene='%s', name='%s'",
                                               removal.scene->str, removal.name->str);
-            extern void execute_removal(pnanovdb_editor_t*, pnanovdb_editor_token_t*, pnanovdb_editor_token_t*);
-            execute_removal(m_editor, removal.scene, removal.name);
-        }
+                extern void execute_removal(pnanovdb_editor_t*, pnanovdb_editor_token_t*, pnanovdb_editor_token_t*);
+                execute_removal(m_editor, removal.scene, removal.name);
+            }
             else
             {
                 // name == nullptr signals full scene removal (after all objects were removed)
@@ -903,13 +900,6 @@ void EditorScene::sync_default_camera_view()
     m_imgui_instance->default_camera_view.configs = &m_default_camera_view_config;
 }
 
-void EditorScene::initialize_view_registry()
-{
-    m_view_registry[ViewType::Cameras] = &m_scene_view.get_cameras();
-    m_view_registry[ViewType::NanoVDBs] = &m_scene_view.get_nanovdbs();
-    m_view_registry[ViewType::GaussianScenes] = &m_scene_view.get_gaussians();
-}
-
 const std::map<uint64_t, pnanovdb_camera_view_t*>& EditorScene::get_camera_views() const
 {
     return m_scene_view.get_cameras();
@@ -927,12 +917,17 @@ const std::map<uint64_t, GaussianDataContext>& EditorScene::get_gaussian_views()
 
 EditorScene::ViewMapVariant EditorScene::get_views(ViewType type) const
 {
-    auto it = m_view_registry.find(type);
-    if (it != m_view_registry.end())
+    switch (type)
     {
-        return it->second;
+    case ViewType::Cameras:
+        return &m_scene_view.get_cameras();
+    case ViewType::NanoVDBs:
+        return &m_scene_view.get_nanovdbs();
+    case ViewType::GaussianScenes:
+        return &m_scene_view.get_gaussians();
+    default:
+        return std::monostate{};
     }
-    return std::monostate{};
 }
 
 bool EditorScene::is_selection_valid(const SceneSelection& selection) const

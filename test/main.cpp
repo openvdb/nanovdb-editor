@@ -517,8 +517,6 @@ int main(int argc, char* argv[])
     //     printf("Camera position: %f, %f, %f\n", position.x, position.y, position.z);
     // }
 
-    compute.destroy_array(data_nanovdb);
-    compute.destroy_array(data_nanovdb2);
 
     pnanovdb_editor_free(&editor);
 #endif

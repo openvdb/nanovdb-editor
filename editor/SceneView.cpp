@@ -600,10 +600,6 @@ bool SceneView::remove_scene(pnanovdb_editor_token_t* scene_token)
 
     SceneViewData& scene = it->second;
 
-    // Log what we're about to remove
-    Console::getInstance().addLog("[SceneView] Removing scene '%s': cameras=%zu, nanovdbs=%zu, gaussians=%zu",
-                                  scene_token->str, scene.cameras.size(), scene.nanovdbs.size(), scene.gaussians.size());
-
     // Note: We don't explicitly clear the maps here - let the destructor handle it
     // The maps contain raw pointers (not owned data), so clearing them manually
     // shouldn't be necessary and might interfere with proper destruction order
@@ -620,8 +616,6 @@ bool SceneView::remove_scene(pnanovdb_editor_token_t* scene_token)
                 if (pair.first != scene_token->id)
                 {
                     m_current_scene_token = EditorToken::getInstance().getTokenById(pair.first);
-                    Console::getInstance().addLog("[SceneView] Switched current scene to '%s'",
-                                                  m_current_scene_token ? m_current_scene_token->str : "null");
                     break;
                 }
             }
@@ -630,13 +624,11 @@ bool SceneView::remove_scene(pnanovdb_editor_token_t* scene_token)
         {
             // No other scenes, set to default
             m_current_scene_token = m_default_scene_token;
-            Console::getInstance().addLog("[SceneView] No other scenes, set to default");
         }
     }
 
     // Remove the scene from the map (this destroys the SceneViewData)
     m_scene_view_data.erase(it);
-    Console::getInstance().addLog("[SceneView] Scene '%s' erased from map", scene_token->str);
     return true;
 }
 
