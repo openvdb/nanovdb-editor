@@ -32,7 +32,7 @@
 #define TEST_EDITOR
 // #define TEST_EDITOR_START_STOP
 // #define TEST_RASTER
-#define TEST_RASTER_2D
+// #define TEST_RASTER_2D   // this does not work now, editor nees to be have queue and device first
 // #define TEST_SVRASTER
 // #define TEST_E57
 #define TEST_CAMERA
@@ -345,17 +345,18 @@ int main(int argc, char* argv[])
     pnanovdb_editor_load(&editor, &compute, &compiler);
 
     pnanovdb_editor_token_t* scene_main = editor.get_token("main");
+    pnanovdb_editor_token_t* scene_secondary = editor.get_token("secondary_scene");
 
     pnanovdb_editor_token_t* volume_token = editor.get_token("dragon");
     editor.add_nanovdb_2(&editor, scene_main, volume_token, data_nanovdb);
-    printf("Added dragon volume using add_nanovdb()\n");
+    printf("Added dragon volume to main scene using add_nanovdb()\n");
 
-    pnanovdb_compute_array_t* data_nanovdb2 = compute.load_nanovdb("./data/splats.nvdb");
+    pnanovdb_compute_array_t* data_nanovdb2 = compute.load_nanovdb("./data/hexagon_flow_test2.nvdb");
     if (data_nanovdb2)
     {
-        pnanovdb_editor_token_t* volume_token2 = editor.get_token("splats_volume");
-        editor.add_nanovdb_2(&editor, scene_main, volume_token2, data_nanovdb2);
-        printf("Added splats volume using add_nanovdb()\n");
+        pnanovdb_editor_token_t* flow_token = editor.get_token("flow_volume");
+        editor.add_nanovdb_2(&editor, scene_main, flow_token, data_nanovdb2);
+        printf("Added flow volume to main using add_nanovdb()\n");
     }
 
 #    ifdef TEST_CAMERA
@@ -488,7 +489,7 @@ int main(int argc, char* argv[])
             desc.sh_n = arrays[5];
 
             pnanovdb_editor_token_t* garden_token = editor.get_token("garden");
-            editor.add_gaussian_data_2(&editor, scene_main, garden_token, &desc);
+            editor.add_gaussian_data_2(&editor, scene_secondary, garden_token, &desc);
 
             for (int ai = 0; ai < 6; ++ai)
             {

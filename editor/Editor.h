@@ -24,15 +24,36 @@
 namespace pnanovdb_editor
 {
 struct EditorWorker;
-class SceneView;
 class EditorSceneManager;
+class SceneView;
+
+// Shader constants
+constexpr const char* s_default_editor_shader = "editor/editor.slang";
+constexpr const char* s_raster2d_shader_group = "raster/raster2d_group";
+constexpr const char* s_raster2d_gaussian_shader = "raster/gaussian_rasterize_2d.slang";
 }
+
+// Thread Synchronization Model
+// ----------------------------
+// Worker Thread              Render Thread
+// ━━━━━━━━━━━━━━            ━━━━━━━━━━━━━━
+// add_xyz()                  show() render loop
+//   └─ scene_manager (mutex)   ├─ views (no mutex, render thread only)
+//   └─ set views_need_sync ───►└─ sync_views_from_scene_manager()
+//                                    └─ for_each_object() (mutex held)
 
 struct pnanovdb_editor_impl_t
 {
+    pnanovdb_editor::EditorWorker* editor_worker;
+    pnanovdb_editor::EditorSceneManager* scene_manager;
+    pnanovdb_editor::SceneView* scene_view;
+
+    // Currently used by the render thread in show()
     const pnanovdb_compiler_t* compiler;
     const pnanovdb_compute_t* compute;
-    pnanovdb_editor::EditorWorker* editor_worker;
+    pnanovdb_compute_device_t* device;
+    pnanovdb_compute_queue_t* device_queue;
+    pnanovdb_compute_queue_t* compute_queue;
     pnanovdb_compute_array_t* nanovdb_array;
     pnanovdb_compute_array_t* data_array;
     pnanovdb_raster_gaussian_data_t* gaussian_data;
@@ -40,22 +61,20 @@ struct pnanovdb_editor_impl_t
     pnanovdb_camera_view_t* camera_view;
     pnanovdb_raster_t* raster;
     pnanovdb_raster_context_t* raster_ctx;
-    std::string shader_name = "editor/editor.slang"; // TODO: need this?
+    std::string shader_name = pnanovdb_editor::s_default_editor_shader;
     void* shader_params;
     const pnanovdb_reflect_data_type_t* shader_params_data_type;
-    pnanovdb_editor::SceneView* views;
-    pnanovdb_int32_t resolved_port;
-    pnanovdb_editor::EditorSceneManager* scene_manager;
-    pnanovdb_compute_device_t* device;
-    pnanovdb_compute_queue_t* device_queue;
-    pnanovdb_compute_queue_t* compute_queue;
+
+    // Deferred gaussian data destruction (to avoid GPU accessing freed memory)
+    std::shared_ptr<pnanovdb_raster_gaussian_data_t> gaussian_data_old;
+    std::vector<std::shared_ptr<pnanovdb_raster_gaussian_data_t>> gaussian_data_destruction_queue_pending;
+    std::vector<std::shared_ptr<pnanovdb_raster_gaussian_data_t>> gaussian_data_destruction_queue_ready;
 
     pnanovdb_editor_config_t config = {};
     std::string config_ip_address;
     std::string config_ui_profile_name;
 
-    // std::vector<std::shared_ptr<pnanovdb_raster_gaussian_data_t>> gaussian_data_destruction_queue_pending;
-    // std::vector<std::shared_ptr<pnanovdb_raster_gaussian_data_t>> gaussian_data_destruction_queue_ready;
+    pnanovdb_int32_t resolved_port;
 };
 
 namespace pnanovdb_editor
@@ -111,11 +130,21 @@ struct ConstPendingData
     }
 };
 
+// Pending removal request for deferred execution
+// If name is nullptr, this signals removal of the entire scene (after all objects are removed)
+struct PendingRemoval
+{
+    pnanovdb_editor_token_t* scene;
+    pnanovdb_editor_token_t* name;
+};
+
 struct EditorWorker
 {
     std::thread* thread;
     std::atomic<bool> should_stop{ false };
+    std::atomic<bool> has_started{ false };
     std::atomic<bool> params_dirty{ false };
+    std::atomic<bool> views_need_sync{ false }; // Signal that views need to sync from scene_manager
     std::mutex shader_params_mutex;
     PendingData<pnanovdb_compute_array_t> pending_nanovdb;
     PendingData<pnanovdb_compute_array_t> pending_data_array;
@@ -125,6 +154,10 @@ struct EditorWorker
     std::atomic<uint32_t> pending_camera_view_idx;
     PendingData<void> pending_shader_params;
     ConstPendingData<pnanovdb_reflect_data_type_t> pending_shader_params_data_type;
+
+    // Deferred removal queue (worker thread adds, render thread processes)
+    std::mutex pending_removals_mutex;
+    std::vector<PendingRemoval> pending_removals;
 
     pnanovdb_editor_config_t config = {};
     std::string config_ip_address;

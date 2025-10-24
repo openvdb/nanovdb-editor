@@ -10,6 +10,7 @@ WIP
 - CMake at least 3.25
 - Python 3.x
 - Vulkan library `vulkan-1` (should be installed with graphics driver)
+
 #### Streaming
 - NVIDIA Driver Version at least 550.0 (https://developer.nvidia.com/vulkan/video/get-started)
 - Vulkan video at least 1.3.275.0 (checked during editor startup, prints out a message if the upgrade is needed)
@@ -35,6 +36,7 @@ echo $VULKAN_SDK
 - vcpkg (optional - recommended for e57 dependency)
 
 ### Dependencies
+
 #### Python
 ```
 pip install scikit-build wheel build
@@ -51,6 +53,8 @@ sudo apt-get install make
 ```
 
 #### macOS
+Currently not actively used, might be stale.
+
 ```sh
 # install Vulkan SDK from https://vulkan.lunarg.com/sdk/home#mac
 # install homebrew from https://brew.sh
@@ -78,6 +82,50 @@ Shaders are generated into the `shaders/_generated` folder next to the libraries
 
 ### Build and Run
 Run the build script with `-h` for available build options.
+
+#### Build options
+
+The Linux/macOS build script supports the following flags (combine as needed):
+
+- **-x**: Perform a clean build (removes `build/`, also forces shader recompile)
+- **-r**: Build in Release configuration
+- **-d**: Build in Debug configuration
+- **-v**: Enable verbose CMake build output
+- **-s**: Compile Slang to ASM and clean shaders first
+- **-a**: Build Debug with sanitizers enabled
+- **-p**: Build and install the Python module (auto-installs `scikit-build-core` and `wheel`)
+- **-e**: Install the Python module in editable mode (use with `-p`)
+- **-t**: Run tests (ctest + pytest); honors `-r`/`-d` to pick configuration
+- **-f**: Disable GLFW for a headless build
+
+Notes:
+- If neither `-r` nor `-d` is provided (and not using `-p` or `-t`), the script defaults to a Release build.
+- For Python builds (`-p`), `-d` selects Debug wheels; otherwise Release is used.
+
+Examples:
+
+```sh
+# Clean Release build
+./build.sh -x -r
+
+# Debug build with sanitizers
+./build.sh -a
+
+# Headless Release build (GLFW disabled)
+./build.sh -f -r
+
+# Build and install Python package (Release)
+./build.sh -p
+
+# Build and install Python package in Debug, editable mode
+./build.sh -p -d -e
+
+# Run tests (defaults to Release tests)
+./build.sh -t
+
+# Generate Slang ASM during build
+./build.sh -s -r
+```
 
 #### Linux
 ```sh

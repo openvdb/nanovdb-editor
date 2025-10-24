@@ -355,7 +355,7 @@ void CameraFrustum::render(imgui_instance_user::Instance* ptr)
 
         ptr->editor_scene->for_each_view(
             ViewType::Cameras,
-            [&](const std::string& name, const auto& view_data)
+            [&](uint64_t name_id, const auto& view_data)
             {
                 using ViewT = std::decay_t<decltype(view_data)>;
                 if constexpr (std::is_same_v<ViewT, pnanovdb_camera_view_t*>)
@@ -369,9 +369,7 @@ void CameraFrustum::render(imgui_instance_user::Instance* ptr)
                     if (camera->is_visible)
                     {
                         auto selection = ptr->editor_scene->get_properties_selection();
-                        const char* selected_name =
-                            (selection.name_token && selection.name_token->str) ? selection.name_token->str : "";
-                        bool isViewSelected = (selected_name[0] != '\0' && name == selected_name);
+                        bool isViewSelected = (selection.name_token && selection.name_token->id == name_id);
                         int selected =
                             isViewSelected ? ptr->editor_scene->get_camera_frustum_index(selection.name_token) : -1;
                         // first draw non-selected cameras with lower alpha

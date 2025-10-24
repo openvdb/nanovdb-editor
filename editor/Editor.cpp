@@ -86,7 +86,7 @@ static pnanovdb_bool_t init_impl(pnanovdb_editor_t* editor,
     editor->impl->raster_ctx = NULL;
     editor->impl->shader_params = NULL;
     editor->impl->shader_params_data_type = NULL;
-    editor->impl->views = NULL;
+    editor->impl->scene_view = NULL;
     editor->impl->resolved_port = PNANOVDB_EDITOR_RESOLVED_PORT_PENDING;
     editor->impl->scene_manager = NULL;
     editor->impl->device = NULL;
@@ -98,8 +98,10 @@ static pnanovdb_bool_t init_impl(pnanovdb_editor_t* editor,
 
 void init(pnanovdb_editor_t* editor)
 {
-    editor->impl->views = new SceneView();
     editor->impl->scene_manager = new EditorSceneManager();
+
+    editor->impl->scene_view = new SceneView();
+    editor->impl->scene_view->get_or_create_scene(nullptr);
 
     editor->impl->raster = new pnanovdb_raster_t();
     pnanovdb_raster_load(editor->impl->raster, editor->impl->compute);
@@ -111,20 +113,26 @@ void shutdown(pnanovdb_editor_t* editor)
     {
         editor->stop(editor);
     }
-    if (editor->impl->views)
+    if (editor->impl->scene_view)
     {
-        delete editor->impl->views;
-        editor->impl->views = nullptr;
+        delete editor->impl->scene_view;
+        editor->impl->scene_view = nullptr;
     }
     if (editor->impl->scene_manager)
     {
         delete editor->impl->scene_manager;
+        editor->impl->scene_manager = nullptr;
     }
     if (editor->impl->raster)
     {
         pnanovdb_raster_free(editor->impl->raster);
         delete editor->impl->raster;
         editor->impl->raster = nullptr;
+    }
+    if (editor->impl->camera)
+    {
+        delete editor->impl->camera;
+        editor->impl->camera = nullptr;
     }
     if (editor->impl)
     {
@@ -135,75 +143,42 @@ void shutdown(pnanovdb_editor_t* editor)
 
 void add_nanovdb(pnanovdb_editor_t* editor, pnanovdb_compute_array_t* nanovdb_array)
 {
-    if (!nanovdb_array)
-    {
-        return;
-    }
+    Console::getInstance().addLog("[OBSOLETE API] add_nanovdb() is deprecated and no longer supported.");
+    Console::getInstance().addLog(
+        "[OBSOLETE API] Please use the new token-based API: add_nanovdb_2(editor, scene, name, array)");
+    Console::getInstance().addLog("[OBSOLETE API] This ensures proper ownership management and multi-scene support.");
 
-    if (editor->impl->editor_worker)
-    {
-        EditorWorker* worker = editor->impl->editor_worker;
-        worker->pending_nanovdb.set_pending(nanovdb_array);
-    }
-    else
-    {
-        editor->impl->nanovdb_array = nanovdb_array;
-
-        SceneView* views = editor->impl->views;
-        if (views)
-        {
-            views->add_nanovdb_view(nanovdb_array, editor->impl->shader_params);
-        }
-    }
+    // Do nothing - old API is no longer supported
+    (void)editor;
+    (void)nanovdb_array;
 }
 
 void add_array(pnanovdb_editor_t* editor, pnanovdb_compute_array_t* data_array)
 {
-    if (!data_array)
-    {
-        return;
-    }
-    if (editor->impl->editor_worker)
-    {
-        EditorWorker* worker = editor->impl->editor_worker;
-        worker->pending_data_array.set_pending(data_array);
-    }
-    else
-    {
-        editor->impl->data_array = data_array;
-    }
+    Console::getInstance().addLog("[OBSOLETE API] add_array() is deprecated and no longer supported.");
+    Console::getInstance().addLog(
+        "[OBSOLETE API] Please migrate to the new token-based API for proper resource management.");
+
+    // Do nothing - old API is no longer supported
+    (void)editor;
+    (void)data_array;
 }
 void add_gaussian_data(pnanovdb_editor_t* editor,
                        pnanovdb_raster_context_t* raster_ctx,
                        pnanovdb_compute_queue_t* queue,
                        pnanovdb_raster_gaussian_data_t* gaussian_data)
 {
-    if (!gaussian_data || !raster_ctx)
-    {
-        return;
-    }
+    Console::getInstance().addLog("[OBSOLETE API] add_gaussian_data() is deprecated and no longer supported.");
+    Console::getInstance().addLog(
+        "[OBSOLETE API] Please use the new token-based API: add_gaussian_data_2(editor, scene, name, desc)");
+    Console::getInstance().addLog(
+        "[OBSOLETE API] This ensures proper ownership management, deferred destruction, and multi-scene support.");
 
-    pnanovdb_raster_shader_params_t* raster_params = (pnanovdb_raster_shader_params_t*)editor->impl->shader_params;
-
-    if (editor->impl->editor_worker)
-    {
-        EditorWorker* worker = editor->impl->editor_worker;
-        worker->pending_gaussian_data.set_pending(gaussian_data);
-        worker->pending_shader_params.set_pending(raster_params);
-        // worker->pending_shader_params_data_type.set_pending(ptr->shader_params_data_type);
-    }
-    else
-    {
-        editor->impl->gaussian_data = gaussian_data;
-        editor->impl->shader_params = raster_params;
-        // editor->impl->shader_params_data_type = ptr->shader_params_data_type;
-
-        SceneView* views = editor->impl->views;
-        if (views)
-        {
-            views->add_gaussian_view(gaussian_data, raster_params);
-        }
-    }
+    // Do nothing - old API is no longer supported
+    (void)editor;
+    (void)raster_ctx;
+    (void)queue;
+    (void)gaussian_data;
 }
 
 void update_camera(pnanovdb_editor_t* editor, pnanovdb_camera_t* camera)
@@ -221,71 +196,37 @@ void update_camera(pnanovdb_editor_t* editor, pnanovdb_camera_t* camera)
 
 void add_camera_view(pnanovdb_editor_t* editor, pnanovdb_camera_view_t* camera)
 {
-    SceneView* views = editor->impl->views;
-    if (!views || !camera)
-    {
-        return;
-    }
-    // replace existing view if name matches
-    if (camera->name)
-    {
-        if (editor->impl->editor_worker)
-        {
-            EditorWorker* worker = editor->impl->editor_worker;
+    Console::getInstance().addLog("[OBSOLETE API] add_camera_view() is deprecated and no longer supported.");
+    Console::getInstance().addLog(
+        "[OBSOLETE API] Please use the new token-based API: add_camera_view_2(editor, scene, camera)");
+    Console::getInstance().addLog("[OBSOLETE API] This ensures proper ownership management and multi-scene support.");
 
-            // make deep copy, including arrays
-            size_t total_size = sizeof(pnanovdb_camera_view_t);
-            total_size += sizeof(pnanovdb_camera_config_t) * camera->num_cameras;
-            total_size += sizeof(pnanovdb_camera_state_t) * camera->num_cameras;
-            uint8_t* camera_raw = new unsigned char[total_size];
-            pnanovdb_camera_view_t* camera_dup = (pnanovdb_camera_view_t*)camera_raw;
-
-            *camera_dup = *camera;
-
-            camera_raw += sizeof(pnanovdb_camera_view_t);
-            camera_dup->configs = (pnanovdb_camera_config_t*)camera_raw;
-            camera_raw += sizeof(pnanovdb_camera_config_t) * camera->num_cameras;
-            camera_dup->states = (pnanovdb_camera_state_t*)camera_raw;
-
-            memcpy(camera_dup->configs, camera->configs, sizeof(pnanovdb_camera_config_t) * camera->num_cameras);
-            memcpy(camera_dup->states, camera->states, sizeof(pnanovdb_camera_state_t) * camera->num_cameras);
-
-            uint idx = worker->pending_camera_view_idx.fetch_add(1u);
-            worker->pending_camera_view[idx & 31].set_pending(camera_dup);
-        }
-        else
-        {
-            const char* name_str = pnanovdb_editor_token_get_string(camera->name);
-            if (name_str)
-            {
-                views->add_camera(name_str, camera);
-            }
-        }
-    }
+    // Do nothing - old API is no longer supported
+    (void)editor;
+    (void)camera;
 }
 
 void add_shader_params(pnanovdb_editor_t* editor, void* params, const pnanovdb_reflect_data_type_t* data_type)
 {
-    if (!params || !data_type)
-    {
-        return;
-    }
-    if (editor->impl->editor_worker)
-    {
-        EditorWorker* worker = editor->impl->editor_worker;
-        worker->pending_shader_params.set_pending(params);
-        worker->pending_shader_params_data_type.set_pending(data_type);
-    }
-    else
-    {
-        editor->impl->shader_params = params;
-        editor->impl->shader_params_data_type = data_type;
-    }
+    Console::getInstance().addLog("[OBSOLETE API] add_shader_params() is deprecated and no longer supported.");
+    Console::getInstance().addLog("[OBSOLETE API] Shader params are now managed automatically per scene object.");
+    Console::getInstance().addLog("[OBSOLETE API] Use map_params/unmap_params with token-based API to modify parameters.");
+
+    // Do nothing - old API is no longer supported
+    (void)editor;
+    (void)params;
+    (void)data_type;
 }
 
 void sync_shader_params(pnanovdb_editor_t* editor, void* shader_params, pnanovdb_bool_t set_data)
 {
-    // Done via map/unmap
+    Console::getInstance().addLog("[OBSOLETE API] sync_shader_params() is deprecated and no longer supported.");
+    Console::getInstance().addLog("[OBSOLETE API] Use map_params/unmap_params with token-based API to modify parameters.");
+
+    // Do nothing - old API is no longer supported
+    (void)editor;
+    (void)shader_params;
+    (void)set_data;
 }
 
 pnanovdb_int32_t editor_get_external_active_count(void* external_active_count)
@@ -383,13 +324,15 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     editor->impl->device_queue = device_queue;
     editor->impl->compute_queue = compute_queue;
 
-    // Create default scene only if no scenes were added by the user
-    SceneView* views = editor->impl->views;
-    if (views && !views->has_scenes())
+    // Create raster context once - never recreate or destroy it during runtime
+    if (!editor->impl->raster_ctx && editor->impl->raster)
     {
-        views->get_or_create_scene(nullptr);
+        editor->impl->raster_ctx = editor->impl->raster->create_context(editor->impl->raster->compute, device_queue);
     }
-    else if (views && views->has_scenes() && !views->get_current_scene_token())
+
+    // Set current scene to the first scene if no current scene is set
+    SceneView* views = editor->impl->scene_view;
+    if (views && views->has_scenes() && !views->get_current_scene_token())
     {
         auto scene_tokens = views->get_all_scene_tokens();
         if (!scene_tokens.empty())
@@ -505,6 +448,17 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     bool should_run = true;
     while (should_run)
     {
+        // Signal that the render loop has started and queues are ready
+        if (editor->impl->editor_worker && !editor->impl->editor_worker->has_started.load())
+        {
+            editor->impl->editor_worker->has_started.store(true);
+            auto log_print = compute_interface->get_log_print(compute_context);
+            if (log_print)
+            {
+                log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Started\n");
+            }
+        }
+
         if (editor->impl->editor_worker && editor->impl->editor_worker->should_stop.load())
         {
             auto log_print = compute_interface->get_log_print(compute_context);
@@ -535,11 +489,55 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         editor_scene.process_pending_editor_changes();
         editor_scene.process_pending_ui_changes();
 
+        // handle raster completion (check before enqueuing new tasks)
+        if (raster_worker.isTaskRunning(raster_task_id))
+        {
+            imgui_user_instance->progress.text = raster_worker.getTaskProgressText(raster_task_id);
+            imgui_user_instance->progress.value = raster_worker.getTaskProgress(raster_task_id);
+        }
+        else if (raster_worker.isTaskCompleted(raster_task_id))
+        {
+            if (raster_worker.isTaskSuccessful(raster_task_id))
+            {
+                if (imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::NanoVDB)
+                {
+                    editor_scene.handle_nanovdb_data_load(pending_nanovdb_array, pending_raster_filepath.c_str());
+                }
+                else if (imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::Raster2D)
+                {
+                    editor_scene.handle_gaussian_data_load(pending_gaussian_data, pending_raster_params,
+                                                           pending_raster_filepath.c_str(), old_gaussian_data_ptr);
+                }
+                pnanovdb_editor::Console::getInstance().addLog(
+                    "Rasterization of '%s' was successful", pending_raster_filepath.c_str());
+
+                // Re-sync to pick up the newly selected view for immediate rendering
+                editor_scene.sync_selected_view_with_current();
+            }
+            else
+            {
+                pnanovdb_editor::Console::getInstance().addLog(
+                    "Rasterization of '%s' failed", pending_raster_filepath.c_str());
+            }
+
+            // Clean up temporary worker thread raster context (if created during rasterization)
+            if (pending_raster_ctx)
+            {
+                editor->impl->raster->destroy_context(editor->impl->compute, device_queue, pending_raster_ctx);
+                pending_raster_ctx = nullptr;
+            }
+
+            pending_raster_filepath = "";
+            raster_worker.removeCompletedTask(raster_task_id);
+
+            imgui_user_instance->progress.reset();
+        }
+
         // update scene
         editor_scene.sync_selected_view_with_current();
         editor_scene.sync_shader_params_from_editor();
 
-        // update raster
+        // update raster (enqueue new rasterization tasks)
         if (imgui_user_instance->pending.update_raster)
         {
             imgui_user_instance->pending.update_raster = false;
@@ -599,39 +597,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 pnanovdb_editor::Console::getInstance().addLog(
                     "Running rasterization: '%s'...", pending_raster_filepath.c_str());
             }
-        }
-
-        if (raster_worker.isTaskRunning(raster_task_id))
-        {
-            imgui_user_instance->progress.text = raster_worker.getTaskProgressText(raster_task_id);
-            imgui_user_instance->progress.value = raster_worker.getTaskProgress(raster_task_id);
-        }
-        else if (raster_worker.isTaskCompleted(raster_task_id))
-        {
-            if (raster_worker.isTaskSuccessful(raster_task_id))
-            {
-                if (imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::NanoVDB)
-                {
-                    editor_scene.handle_nanovdb_data_load(pending_nanovdb_array, pending_raster_filepath.c_str());
-                }
-                else if (imgui_user_instance->viewport_option == imgui_instance_user::ViewportOption::Raster2D)
-                {
-                    editor_scene.handle_gaussian_data_load(pending_gaussian_data, pending_raster_params,
-                                                           pending_raster_filepath.c_str(), old_gaussian_data_ptr);
-                }
-                pnanovdb_editor::Console::getInstance().addLog(
-                    "Rasterization of '%s' was successful", pending_raster_filepath.c_str());
-            }
-            else
-            {
-                pnanovdb_editor::Console::getInstance().addLog(
-                    "Rasterization of '%s' failed", pending_raster_filepath.c_str());
-            }
-
-            pending_raster_filepath = "";
-            raster_worker.removeCompletedTask(raster_task_id);
-
-            imgui_user_instance->progress.reset();
         }
 
         // Rendering
@@ -715,28 +680,27 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         {
             cleanup_background();
         }
-        /*
-                // 3-frame destruction pipeline:
-                // 1. Destroy items in ready queue (have been pending for 3 frames)
-                if (!editor->impl->gaussian_data_destruction_queue_ready.empty())
-                {
-                    editor->impl->gaussian_data_destruction_queue_ready.clear();
-                }
+        // 3-frame destruction pipeline for gaussian data:
+        // This prevents GPU from accessing freed memory by deferring destruction for 3 frames
+        // 1. Destroy items in ready queue (have been pending for 3 frames)
+        if (!editor->impl->gaussian_data_destruction_queue_ready.empty())
+        {
+            editor->impl->gaussian_data_destruction_queue_ready.clear();
+        }
 
-                // 2. Move pending queue to ready queue (advance pipeline)
-                if (!editor->impl->gaussian_data_destruction_queue_pending.empty())
-                {
-                    editor->impl->gaussian_data_destruction_queue_ready =
-                        std::move(editor->impl->gaussian_data_destruction_queue_pending);
-                    editor->impl->gaussian_data_destruction_queue_pending.clear();
-                }
+        // 2. Move pending queue to ready queue (advance pipeline)
+        if (!editor->impl->gaussian_data_destruction_queue_pending.empty())
+        {
+            editor->impl->gaussian_data_destruction_queue_ready =
+                std::move(editor->impl->gaussian_data_destruction_queue_pending);
+            editor->impl->gaussian_data_destruction_queue_pending.clear();
+        }
 
-                // 3. Move gaussian_data_old to pending queue (start of pipeline)
-                if (editor->impl->gaussian_data_old)
-                {
-                    editor->impl->gaussian_data_destruction_queue_pending.push_back(std::move(editor->impl->gaussian_data_old));
-                }
-        */
+        // 3. Move gaussian_data_old to pending queue (start of pipeline)
+        if (editor->impl->gaussian_data_old)
+        {
+            editor->impl->gaussian_data_destruction_queue_pending.push_back(std::move(editor->impl->gaussian_data_old));
+        }
         if (editor->impl->camera && imgui_user_settings->sync_camera == PNANOVDB_FALSE)
         {
             imgui_window_iface->get_camera(imgui_window, &editor->impl->camera->state, &editor->impl->camera->config);
@@ -771,12 +735,27 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
     imgui_window_iface->destroy(editor->impl->compute, device_queue, imgui_window, imgui_user_settings);
 
-    editor->impl->raster->destroy_context(editor->impl->compute, device_queue, editor->impl->raster_ctx);
-    editor->impl->raster_ctx = nullptr;
-    editor->impl->device_queue = nullptr;
-    editor->impl->compute_queue = nullptr;
-    editor->impl->device = nullptr;
-    editor->impl->raster = nullptr;
+    if (editor->impl->raster_ctx)
+    {
+        editor->impl->raster->destroy_context(editor->impl->compute, device_queue, editor->impl->raster_ctx);
+        editor->impl->raster_ctx = nullptr;
+    }
+    if (editor->impl->raster)
+    {
+        editor->impl->raster = nullptr;
+    }
+    if (editor->impl->device_queue)
+    {
+        editor->impl->device_queue = nullptr;
+    }
+    if (editor->impl->compute_queue)
+    {
+        editor->impl->compute_queue = nullptr;
+    }
+    if (editor->impl->device)
+    {
+        editor->impl->device = nullptr;
+    }
 }
 
 pnanovdb_int32_t get_resolved_port(pnanovdb_editor_t* editor, pnanovdb_bool_t should_wait)
@@ -869,10 +848,36 @@ pnanovdb_camera_t* get_camera(pnanovdb_editor_t* editor, pnanovdb_editor_token_t
         return nullptr;
     }
 
-    // Note: In worker mode, this returns the camera pointer that may be updated
-    // by the editor thread via pending_camera. The caller should not hold onto
-    // this pointer long-term as it may become stale.
-    return editor->impl->camera;
+    // Note: This is a fallback for compatibility - ideally update_camera_2 should be called explicitly
+    // If no explicit camera has been set via update_camera_2, we return the viewport camera
+    // to ensure get_camera always returns a valid camera pointer for the scene
+
+    // If camera has been explicitly set via update_camera_2, return it
+    if (editor->impl->camera)
+    {
+        return editor->impl->camera;
+    }
+
+    // Otherwise, try to get the viewport camera from the scene
+    if (editor->impl->scene_view)
+    {
+        pnanovdb_editor_token_t* viewport_token = editor->impl->scene_view->get_viewport_camera_token();
+        pnanovdb_camera_view_t* viewport_view = editor->impl->scene_view->get_camera(scene, viewport_token);
+        if (viewport_view && viewport_view->configs && viewport_view->states && viewport_view->num_cameras > 0)
+        {
+            // Create a temporary camera object from the viewport camera
+            if (!editor->impl->camera)
+            {
+                editor->impl->camera = new pnanovdb_camera_t();
+                pnanovdb_camera_init(editor->impl->camera);
+            }
+            editor->impl->camera->config = viewport_view->configs[0];
+            editor->impl->camera->state = viewport_view->states[0];
+            return editor->impl->camera;
+        }
+    }
+
+    return nullptr;
 }
 
 // Temp: Token management
@@ -910,7 +915,7 @@ void add_nanovdb_2(pnanovdb_editor_t* editor,
         return;
     }
 
-    Console::getInstance().addLog("[Token API] add_nanovdb_2: scene='%s' (id=%llu), name='%s' (id=%llu)",
+    Console::getInstance().addLog("[API] add_nanovdb_2: scene='%s' (id=%llu), name='%s' (id=%llu)",
                                   token_to_string(scene), (unsigned long long)scene->id, token_to_string(name),
                                   (unsigned long long)name->id);
 
@@ -921,33 +926,42 @@ void add_nanovdb_2(pnanovdb_editor_t* editor,
     editor->impl->scene_manager->add_nanovdb(
         scene, name, array, params_array, editor->impl->compute, editor->impl->shader_name.c_str());
 
-    SceneView* views = editor->impl->views;
-    if (views)
-    {
-        void* shader_params_ptr = nullptr;
-        if (SceneObject* obj = editor->impl->scene_manager->get(scene, name))
-        {
-            shader_params_ptr = obj->shader_params;
-        }
-
-        views->add_nanovdb_to_scene(scene, name->str, array, shader_params_ptr);
-
-        Console::getInstance().addLog("[Token API] Added NanoVDB '%s' to scene '%s'", name->str, scene->str);
-    }
+    Console::getInstance().addLog("[API] Added NanoVDB '%s' to scene '%s'", name->str, scene->str);
 
     if (editor->impl->editor_worker)
     {
         EditorWorker* worker = editor->impl->editor_worker;
         worker->pending_nanovdb.set_pending(array);
+        worker->views_need_sync.store(true); // Signal render thread to sync views from scene_manager
     }
     else
     {
-        editor->impl->nanovdb_array = array;
-        if (SceneObject* obj = editor->impl->scene_manager->get(scene, name))
+        // Non-worker mode: safe to directly update views from this thread (render thread)
+        SceneView* views = editor->impl->scene_view;
+        if (views)
         {
-            editor->impl->shader_params = obj->shader_params;
-            editor->impl->shader_params_data_type = nullptr;
+            void* shader_params_ptr = nullptr;
+            editor->impl->scene_manager->with_object(scene, name,
+                                                     [&](SceneObject* obj)
+                                                     {
+                                                         if (obj)
+                                                         {
+                                                             shader_params_ptr = obj->shader_params;
+                                                         }
+                                                     });
+            views->add_nanovdb_to_scene(scene, name, array, shader_params_ptr);
         }
+
+        editor->impl->nanovdb_array = array;
+        editor->impl->scene_manager->with_object(scene, name,
+                                                 [&](SceneObject* obj)
+                                                 {
+                                                     if (obj)
+                                                     {
+                                                         editor->impl->shader_params = obj->shader_params;
+                                                         editor->impl->shader_params_data_type = nullptr;
+                                                     }
+                                                 });
     }
 }
 
@@ -961,13 +975,13 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
         return;
     }
 
-    Console::getInstance().addLog("[Token API] add_gaussian_data_2: scene='%s' (id=%llu), name='%s' (id=%llu)",
+    Console::getInstance().addLog("[API] add_gaussian_data_2: scene='%s' (id=%llu), name='%s' (id=%llu)",
                                   token_to_string(scene), (unsigned long long)scene->id, token_to_string(name),
                                   (unsigned long long)name->id);
 
     if (!editor->impl->compute)
     {
-        Console::getInstance().addLog("[Token API] Error: No compute interface available");
+        Console::getInstance().addLog("[API] Error: No compute interface available");
         return;
     }
 
@@ -976,10 +990,18 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
 
     if (!device || !device_queue)
     {
-        Console::getInstance().addLog(
-            "[Token API] Error: Editor not running. Call editor.start() or editor.show() first.");
-        Console::getInstance().addLog("[Token API] Device and queue are initialized when the editor starts.");
+        Console::getInstance().addLog("[API] Error: Editor not running. Call editor.start() or editor.show() first.");
+        Console::getInstance().addLog("[API] Device and queue are initialized when the editor starts.");
         return;
+    }
+
+    // If there's a worker thread, wait for it to start and initialize queues
+    if (editor->impl->editor_worker)
+    {
+        while (!editor->impl->editor_worker->has_started.load())
+        {
+            std::this_thread::yield();
+        }
     }
 
     pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr;
@@ -989,7 +1011,7 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
 
     if (success == PNANOVDB_FALSE || !gaussian_data)
     {
-        Console::getInstance().addLog("[Token API] Error: Failed to create gaussian data from descriptor");
+        Console::getInstance().addLog("[API] Error: Failed to create gaussian data from descriptor");
         return;
     }
 
@@ -997,25 +1019,27 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
     const pnanovdb_reflect_data_type_t* raster_params_dt = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t);
 
     pnanovdb_compute_array_t* raster_params_array = editor->impl->scene_manager->create_initialized_shader_params(
-        editor->impl->compute, "raster/gaussian_rasterize_2d.slang", imgui_instance_user::s_raster2d_shader_group,
+        editor->impl->compute, pnanovdb_editor::s_raster2d_gaussian_shader, pnanovdb_editor::s_raster2d_shader_group,
         sizeof(pnanovdb_raster_shader_params_t), raster_params_dt);
 
+    // Add with deferred destruction handling
+    std::shared_ptr<pnanovdb_raster_gaussian_data_t> old_owner;
     editor->impl->scene_manager->add_gaussian_data(
-        scene, name, gaussian_data, raster_params_array, raster_params_dt, editor->impl->compute);
+        scene, name, gaussian_data, raster_params_array, raster_params_dt, editor->impl->compute, editor->impl->raster,
+        editor->impl->device_queue, pnanovdb_editor::s_raster2d_gaussian_shader, &old_owner);
 
-    SceneView* views = editor->impl->views;
-    if (views)
+    // Chain old data through gaussian_data_old for deferred destruction
+    if (old_owner)
     {
-        pnanovdb_raster_shader_params_t* shader_params_ptr = nullptr;
-        if (SceneObject* obj = editor->impl->scene_manager->get(scene, name))
+        if (editor->impl->gaussian_data_old)
         {
-            shader_params_ptr = (pnanovdb_raster_shader_params_t*)obj->shader_params;
+            // If gaussian_data_old already has data, add it to pending queue first
+            editor->impl->gaussian_data_destruction_queue_pending.push_back(std::move(editor->impl->gaussian_data_old));
         }
-
-        views->add_gaussian_to_scene(scene, name->str, gaussian_data, shader_params_ptr);
-
-        Console::getInstance().addLog("[Token API] Added Gaussian data '%s' to scene '%s'", name->str, scene->str);
+        editor->impl->gaussian_data_old = std::move(old_owner);
     }
+
+    Console::getInstance().addLog("[API] Added Gaussian data '%s' to scene '%s'", name->str, scene->str);
 
     if (editor->impl->editor_worker)
     {
@@ -1023,15 +1047,37 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
         worker->pending_gaussian_data.set_pending(gaussian_data);
         worker->pending_shader_params.set_pending(raster_params_array ? raster_params_array->data : nullptr);
         worker->pending_shader_params_data_type.set_pending(raster_params_dt);
+        worker->views_need_sync.store(true); // Signal render thread to sync views from scene_manager
     }
     else
     {
-        editor->impl->gaussian_data = gaussian_data;
-        if (SceneObject* obj = editor->impl->scene_manager->get(scene, name))
+        // Non-worker mode: safe to directly update views from this thread (render thread)
+        SceneView* views = editor->impl->scene_view;
+        if (views)
         {
-            editor->impl->shader_params = obj->shader_params;
-            editor->impl->shader_params_data_type = raster_params_dt;
+            pnanovdb_raster_shader_params_t* shader_params_ptr = nullptr;
+            editor->impl->scene_manager->with_object(scene, name,
+                                                     [&](SceneObject* obj)
+                                                     {
+                                                         if (obj)
+                                                         {
+                                                             shader_params_ptr =
+                                                                 (pnanovdb_raster_shader_params_t*)obj->shader_params;
+                                                         }
+                                                     });
+            views->add_gaussian_to_scene(scene, name, gaussian_data, shader_params_ptr);
         }
+
+        editor->impl->gaussian_data = gaussian_data;
+        editor->impl->scene_manager->with_object(scene, name,
+                                                 [&](SceneObject* obj)
+                                                 {
+                                                     if (obj)
+                                                     {
+                                                         editor->impl->shader_params = obj->shader_params;
+                                                         editor->impl->shader_params_data_type = raster_params_dt;
+                                                     }
+                                                 });
     }
 }
 
@@ -1042,18 +1088,29 @@ void add_camera_view_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene
         return;
     }
 
-    SceneView* views = editor->impl->views;
-    if (!views || !camera->name || !camera->name->str)
+    if (!camera->name || !camera->name->str)
     {
         return;
     }
 
-    Console::getInstance().addLog("[Token API] add_camera_view_2: scene='%s' (id=%llu), camera='%s' (id=%llu)",
-                                  scene->str, (unsigned long long)scene->id, camera->name->str,
-                                  (unsigned long long)camera->name->id);
+    Console::getInstance().addLog("[API] add_camera_view_2: scene='%s' (id=%llu), camera='%s' (id=%llu)", scene->str,
+                                  (unsigned long long)scene->id, camera->name->str, (unsigned long long)camera->name->id);
 
-    views->add_camera(scene, camera->name->str, camera);
     editor->impl->scene_manager->add_camera(scene, camera->name, camera);
+
+    if (editor->impl->editor_worker)
+    {
+        editor->impl->editor_worker->views_need_sync.store(true); // Signal render thread to sync views
+    }
+    else
+    {
+        // Non-worker mode: safe to directly update views from this thread (render thread)
+        SceneView* views = editor->impl->scene_view;
+        if (views)
+        {
+            views->add_camera(scene, camera->name, camera);
+        }
+    }
 }
 
 void update_camera_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_camera_t* camera)
@@ -1064,10 +1121,11 @@ void update_camera_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, 
     }
 
     // 1) Update the scene's viewport camera view (name == VIEWPORT_CAMERA)
-    SceneView* views = editor->impl->views;
+    SceneView* views = editor->impl->scene_view;
     if (views)
     {
-        pnanovdb_camera_view_t* viewport_view = views->get_camera(scene, imgui_instance_user::VIEWPORT_CAMERA);
+        pnanovdb_editor_token_t* viewport_token = views->get_viewport_camera_token();
+        pnanovdb_camera_view_t* viewport_view = views->get_camera(scene, viewport_token);
         if (viewport_view && viewport_view->configs && viewport_view->states)
         {
             *viewport_view->configs = camera->config;
@@ -1097,54 +1155,77 @@ void update_camera_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, 
     }
 }
 
-void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
+// Helper function that executes the actual removal logic
+// Called either immediately (non-worker mode) or deferred (worker mode)
+void execute_removal(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
 {
     if (!editor || !editor->impl || !scene || !name)
     {
         return;
     }
 
-    // Log token information for debugging
-    Console::getInstance().addLog("[Token API] remove: scene='%s' (id=%llu), name='%s' (id=%llu)", token_to_string(scene),
-                                  (unsigned long long)scene->id, token_to_string(name), (unsigned long long)name->id);
-
     std::string name_str(name->str);
 
-    // Get the object from scene manager BEFORE removing it, so we can decide later whether to clear renderer data
-    SceneObject* obj = editor->impl->scene_manager->get(scene, name);
+    // Get the object from scene manager BEFORE removing it, so we can save its info
+    // IMPORTANT: Must save data before remove() since the object will be destroyed
+    // Use with_object() to safely access fields while holding mutex
+    bool obj_found = false;
+    SceneObjectType obj_type = SceneObjectType::NanoVDB; // default
+    pnanovdb_editor_token_t* obj_name_token = nullptr;
+    void* obj_nanovdb_array = nullptr;
+    void* obj_gaussian_data = nullptr;
+    void* obj_shader_params = nullptr;
+
+    editor->impl->scene_manager->with_object(scene, name,
+                                             [&](SceneObject* obj)
+                                             {
+                                                 if (obj)
+                                                 {
+                                                     obj_found = true;
+                                                     obj_type = obj->type;
+                                                     obj_name_token = obj->name_token;
+                                                     obj_nanovdb_array = obj->nanovdb_array;
+                                                     obj_gaussian_data = obj->gaussian_data;
+                                                     obj_shader_params = obj->shader_params;
+                                                 }
+                                             });
 
     // Remove from scene manager (data ownership) for this specific scene only
+    // After this call, 'obj' pointer is INVALID (object destroyed)
     bool removed_from_manager = editor->impl->scene_manager->remove(scene, name);
     if (removed_from_manager)
     {
-        Console::getInstance().addLog("[Token API] Removed from scene manager (scene-specific)");
+        Console::getInstance().addLog("[API] Removed from scene manager (scene-specific)");
     }
 
-    SceneView* views = editor->impl->views;
+    // Update views (this function is always called from render thread, so it's safe)
+    SceneView* views = editor->impl->scene_view;
     bool removed_from_ui = false;
 
-    // Try removing from each type
-    if (views->remove_camera(scene, name_str))
+    // Try removing from each type (convert name_str to token)
+    pnanovdb_editor_token_t* name_token = name ? name : EditorToken::getInstance().getToken(name_str.c_str());
+
+    if (views->remove_camera(scene, name_token))
     {
-        Console::getInstance().addLog("[Token API] Removed camera from UI");
+        Console::getInstance().addLog("[API] Removed camera from UI");
         removed_from_ui = true;
     }
-    else if (views->remove_nanovdb(scene, name_str))
+    else if (views->remove_nanovdb(scene, name_token))
     {
-        Console::getInstance().addLog("[Token API] Removed NanoVDB from UI");
+        Console::getInstance().addLog("[API] Removed NanoVDB from UI");
         removed_from_ui = true;
     }
-    else if (views->remove_gaussian(scene, name_str))
+    else if (views->remove_gaussian(scene, name_token))
     {
-        Console::getInstance().addLog("[Token API] Removed Gaussian data from UI");
+        Console::getInstance().addLog("[API] Removed Gaussian data from UI");
         removed_from_ui = true;
     }
 
     // If current view was removed, switch to another view
     if (removed_from_ui)
     {
-        const std::string& current_view = views->get_current_view(scene);
-        if (current_view == name_str)
+        pnanovdb_editor_token_t* current_view_token = views->get_current_view(scene);
+        if (current_view_token && current_view_token->id == name_token->id)
         {
             // Save current scene, switch to target scene to modify its views
             pnanovdb_editor_token_t* prev_scene = views->get_current_scene_token();
@@ -1156,18 +1237,24 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
 
             if (!nanovdbs.empty())
             {
-                views->set_current_view(nanovdbs.begin()->first);
-                Console::getInstance().addLog("[Token API] Switched view to '%s'", nanovdbs.begin()->first.c_str());
+                pnanovdb_editor_token_t* new_view_token =
+                    EditorToken::getInstance().getTokenById(nanovdbs.begin()->first);
+                views->set_current_view(new_view_token);
+                Console::getInstance().addLog(
+                    "[API] Switched view to '%s'", new_view_token ? new_view_token->str : "unknown");
             }
             else if (!gaussians.empty())
             {
-                views->set_current_view(gaussians.begin()->first);
-                Console::getInstance().addLog("[Token API] Switched view to '%s'", gaussians.begin()->first.c_str());
+                pnanovdb_editor_token_t* new_view_token =
+                    EditorToken::getInstance().getTokenById(gaussians.begin()->first);
+                views->set_current_view(new_view_token);
+                Console::getInstance().addLog(
+                    "[API] Switched view to '%s'", new_view_token ? new_view_token->str : "unknown");
             }
             else
             {
-                views->set_current_view("");
-                Console::getInstance().addLog("[Token API] No views remaining in scene");
+                views->set_current_view(nullptr);
+                Console::getInstance().addLog("[API] No views remaining in scene");
             }
 
             // Restore previous scene
@@ -1178,44 +1265,61 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
         }
     }
 
-
     // If we removed the object from the specified scene, only clear renderer data if it's not referenced in any scene
-    if (obj && (removed_from_manager || removed_from_ui) && editor->impl->scene_manager)
+    if (obj_found && removed_from_manager && editor->impl->scene_manager)
     {
-        // Snapshot remaining objects after the removal
-        auto remaining_objects = editor->impl->scene_manager->get_all_objects();
-
+        // Check remaining objects while holding the mutex (prevents race conditions)
         bool same_name_same_type_exists_elsewhere = false;
         bool any_gaussian_exists = false;
 
-        for (auto* o : remaining_objects)
-        {
-            if (!o)
-                continue;
-            if (o->type == SceneObjectType::GaussianData)
+        editor->impl->scene_manager->for_each_object(
+            [&](SceneObject* o)
             {
-                any_gaussian_exists = true;
-            }
-            if (obj->name_token && o->name_token && obj->type == o->type && obj->name_token->id == o->name_token->id)
-            {
-                same_name_same_type_exists_elsewhere = true;
-            }
-        }
+                if (!o)
+                    return true; // Continue
+                if (o->type == SceneObjectType::GaussianData)
+                {
+                    any_gaussian_exists = true;
+                }
+                if (obj_name_token && o->name_token && obj_type == o->type && obj_name_token->id == o->name_token->id)
+                {
+                    same_name_same_type_exists_elsewhere = true;
+                }
+                return true; // Continue iteration
+            });
 
-        switch (obj->type)
+        switch (obj_type)
         {
         case SceneObjectType::NanoVDB:
             if (!same_name_same_type_exists_elsewhere)
             {
-                if (editor->impl->nanovdb_array == obj->nanovdb_array)
+                if (editor->impl->nanovdb_array == obj_nanovdb_array)
                 {
                     editor->impl->nanovdb_array = nullptr;
-                    Console::getInstance().addLog("[Token API] Cleared nanovdb_array from renderer");
+                    Console::getInstance().addLog("[API] Cleared nanovdb_array from renderer");
+                }
+                // Clear shader_params if it points to the freed array's data
+                if (editor->impl->shader_params == obj_shader_params)
+                {
+                    editor->impl->shader_params = nullptr;
+                    editor->impl->shader_params_data_type = nullptr;
+                    Console::getInstance().addLog("[API] Cleared shader_params from renderer");
                 }
                 if (editor->impl->editor_worker)
                 {
                     editor->impl->editor_worker->pending_nanovdb.set_pending(nullptr);
-                    Console::getInstance().addLog("[Token API] Cleared pending nanovdb data");
+                    Console::getInstance().addLog("[API] Cleared pending nanovdb data");
+
+                    // Clear pending_shader_params if it points to this object's freed array data
+                    std::lock_guard<std::mutex> lock(editor->impl->editor_worker->shader_params_mutex);
+                    void* pending_params =
+                        editor->impl->editor_worker->pending_shader_params.pending_data.load(std::memory_order_acquire);
+                    if (pending_params == obj_shader_params)
+                    {
+                        editor->impl->editor_worker->pending_shader_params.set_pending(nullptr);
+                        editor->impl->editor_worker->pending_shader_params_data_type.set_pending(nullptr);
+                        Console::getInstance().addLog("[API] Cleared pending shader_params");
+                    }
                 }
             }
             break;
@@ -1223,15 +1327,33 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
         case SceneObjectType::GaussianData:
             if (!same_name_same_type_exists_elsewhere)
             {
-                if (editor->impl->gaussian_data == obj->gaussian_data)
+                if (editor->impl->gaussian_data == obj_gaussian_data)
                 {
                     editor->impl->gaussian_data = nullptr;
-                    Console::getInstance().addLog("[Token API] Cleared gaussian_data from renderer");
+                    Console::getInstance().addLog("[API] Cleared gaussian_data from renderer");
+                }
+                // Clear shader_params if it points to the freed array's data
+                if (editor->impl->shader_params == obj_shader_params)
+                {
+                    editor->impl->shader_params = nullptr;
+                    editor->impl->shader_params_data_type = nullptr;
+                    Console::getInstance().addLog("[API] Cleared shader_params from renderer");
                 }
                 if (editor->impl->editor_worker)
                 {
                     editor->impl->editor_worker->pending_gaussian_data.set_pending(nullptr);
-                    Console::getInstance().addLog("[Token API] Cleared pending gaussian data");
+                    Console::getInstance().addLog("[API] Cleared pending gaussian data");
+
+                    // Clear pending_shader_params if it points to this object's freed array data
+                    std::lock_guard<std::mutex> lock(editor->impl->editor_worker->shader_params_mutex);
+                    void* pending_params =
+                        editor->impl->editor_worker->pending_shader_params.pending_data.load(std::memory_order_acquire);
+                    if (pending_params == obj_shader_params)
+                    {
+                        editor->impl->editor_worker->pending_shader_params.set_pending(nullptr);
+                        editor->impl->editor_worker->pending_shader_params_data_type.set_pending(nullptr);
+                        Console::getInstance().addLog("[API] Cleared pending shader_params");
+                    }
                 }
             }
             break;
@@ -1245,17 +1367,135 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
         }
     }
 
-    if (removed_from_manager || removed_from_ui)
+    if (removed_from_manager)
     {
-        Console::getInstance().addLog(
-            "[Token API] Successfully removed object '%s' from scene '%s'", name->str, scene->str);
+        Console::getInstance().addLog("[API] Successfully removed object '%s' from scene '%s'", name->str, scene->str);
     }
     else
     {
-        Console::getInstance().addLog("[Token API] Warning: Object '%s' not found in scene '%s'", name->str, scene->str);
+        Console::getInstance().addLog("[API] Warning: Object '%s' not found in scene '%s'", name->str, scene->str);
     }
 }
 
+void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
+{
+    if (!editor || !editor->impl || !scene)
+    {
+        return;
+    }
+
+    // If name is nullptr, remove ALL objects from the scene AND the scene itself
+    if (!name)
+    {
+        Console::getInstance().addLog("[API] remove: Removing entire scene='%s' (id=%llu) and all its objects",
+                                      token_to_string(scene), (unsigned long long)scene->id);
+
+        // Collect all object names from the specified scene
+        std::vector<pnanovdb_editor_token_t*> objects_to_remove;
+        editor->impl->scene_manager->for_each_object(
+            [&](SceneObject* obj)
+            {
+                if (obj && obj->scene_token && obj->scene_token->id == scene->id)
+                {
+                    objects_to_remove.push_back(obj->name_token);
+                }
+                return true; // Continue iteration
+            });
+
+        Console::getInstance().addLog("[API] Found %zu objects to remove from scene", objects_to_remove.size());
+
+        if (editor->impl->editor_worker)
+        {
+            // Worker mode: queue all removals for render thread (including scene removal)
+            std::lock_guard<std::mutex> lock(editor->impl->editor_worker->pending_removals_mutex);
+
+            // Queue each object removal
+            for (auto* obj_name : objects_to_remove)
+            {
+                editor->impl->editor_worker->pending_removals.push_back({ scene, obj_name });
+            }
+
+            // Queue scene removal (nullptr name signals to remove the scene itself after objects)
+            editor->impl->editor_worker->pending_removals.push_back({ scene, nullptr });
+
+            Console::getInstance().addLog(
+                "[API] Queued %zu object removals + scene removal for next frame", objects_to_remove.size());
+        }
+        else
+        {
+            // Non-worker mode: execute removals immediately (same thread as render)
+            for (auto* obj_name : objects_to_remove)
+            {
+                execute_removal(editor, scene, obj_name);
+            }
+
+            // After removing all objects, remove the scene itself from SceneView
+            if (editor->impl->scene_view)
+            {
+                bool scene_removed = editor->impl->scene_view->remove_scene(scene);
+                if (scene_removed)
+                {
+                    Console::getInstance().addLog("[API] Successfully removed scene '%s' from SceneView", scene->str);
+                }
+                else
+                {
+                    Console::getInstance().addLog("[API] Scene '%s' was not found in SceneView", scene->str);
+                }
+            }
+
+            Console::getInstance().addLog("[API] Completed removal of scene '%s' and all its objects", scene->str);
+        }
+
+        return;
+    }
+
+    // Log token information for debugging
+    Console::getInstance().addLog("[API] remove: scene='%s' (id=%llu), name='%s' (id=%llu)", token_to_string(scene),
+                                  (unsigned long long)scene->id, token_to_string(name), (unsigned long long)name->id);
+
+    if (editor->impl->editor_worker)
+    {
+        // Worker mode: queue removal for next frame boundary (prevents UAF)
+        // The render thread will execute it when safe
+        Console::getInstance().addLog("[API] Queuing removal for next frame");
+
+        std::lock_guard<std::mutex> lock(editor->impl->editor_worker->pending_removals_mutex);
+        editor->impl->editor_worker->pending_removals.push_back({ scene, name });
+    }
+    else
+    {
+        // Non-worker mode: execute removal immediately (same thread as render)
+        execute_removal(editor, scene, name);
+    }
+}
+
+/*!
+    \brief Map shader parameters for read/write access
+
+    Returns a pointer to the shader parameters for the specified scene object.
+
+    IMPORTANT LIFETIME REQUIREMENTS:
+    - The returned pointer is valid ONLY between map_params() and unmap_params() calls
+    - The object (scene, name) MUST NOT be removed while params are mapped
+    - Removing the object while mapped results in USE-AFTER-FREE (undefined behavior)
+    - Always call unmap_params() when finished modifying parameters
+
+    In worker mode (editor.start()):
+    - Holds shader_params_mutex for the entire map/unmap window
+    - This protects against concurrent parameter updates from render thread
+    - Does NOT protect against object removal - caller's responsibility!
+
+    Thread Safety Contract:
+    - Client must ensure object lifetime spans the map/unmap window
+    - Do NOT call remove() for a mapped object
+    - Similar to STL iterator invalidation rules
+
+    \param editor Editor instance
+    \param scene Scene token
+    \param name Object name token
+    \param data_type Expected parameter type (for validation)
+    \return Pointer to shader params, or nullptr if not found or type mismatch
+*/
 void* map_params(pnanovdb_editor_t* editor,
                  pnanovdb_editor_token_t* scene,
                  pnanovdb_editor_token_t* name,
@@ -1266,44 +1506,79 @@ void* map_params(pnanovdb_editor_t* editor,
         return nullptr;
     }
 
-    // Lock the mutex to protect access to shader_params
-    editor->impl->editor_worker->shader_params_mutex.lock();
-
-    // Check if shader_params is actually set
-    if (!editor->impl->shader_params)
+    if (!editor->impl->editor_worker)
     {
-        // Unlock and return nullptr - params not yet initialized
-        editor->impl->editor_worker->shader_params_mutex.unlock();
-        return nullptr;
+        // Non-worker mode: just return params without locking
+        // WARNING: Caller must ensure object lifetime - removing the object while using
+        // this pointer results in use-after-free (similar to STL iterator invalidation)
+        void* result = nullptr;
+        if (editor->impl->scene_manager)
+        {
+            editor->impl->scene_manager->with_object(
+                scene, name,
+                [&](SceneObject* obj)
+                {
+                    if (obj && obj->shader_params && obj->shader_params_data_type == data_type)
+                    {
+                        result = obj->shader_params;
+                    }
+                });
+        }
+        return result;
     }
 
+    // Worker mode: Lock mutex to protect concurrent access during map/unmap window
+    // Note: The lock is held until unmap_params() is called
+    // WARNING: This mutex protects against concurrent parameter updates, but does NOT
+    // protect against object removal. Caller must ensure the object is not removed
+    // between map_params() and unmap_params() calls.
+    editor->impl->editor_worker->shader_params_mutex.lock();
+
     const char* type_name = data_type->struct_typename ? data_type->struct_typename : "<unknown>";
-    Console::getInstance().addLog("[Token API] map_params: scene='%s' (id=%llu), name='%s' (id=%llu), type='%s'",
+    Console::getInstance().addLog("[API] map_params: scene='%s' (id=%llu), name='%s' (id=%llu), type='%s'",
                                   token_to_string(scene), (unsigned long long)scene->id, token_to_string(name),
                                   (unsigned long long)name->id, type_name);
 
-    // First, try to find in scene manager
+    // Find params in scene manager
+    void* result = nullptr;
     if (editor->impl->scene_manager)
     {
-        SceneObject* obj = editor->impl->scene_manager->get(scene, name);
-        if (obj && obj->shader_params && obj->shader_params_data_type == data_type)
-        {
-            Console::getInstance().addLog("[Token API] map_params: Found params in scene manager");
-            return obj->shader_params;
-        }
+        editor->impl->scene_manager->with_object(
+            scene, name,
+            [&](SceneObject* obj)
+            {
+                if (obj && obj->shader_params && obj->shader_params_data_type == data_type)
+                {
+                    Console::getInstance().addLog("[API] map_params: Found params in scene manager");
+                    result = obj->shader_params;
+                }
+            });
     }
 
-    // Fall back to legacy single-object behavior
-    if (editor->impl->shader_params && editor->impl->shader_params_data_type == data_type)
+    // If not found, unlock and return nullptr
+    if (!result)
     {
-        Console::getInstance().addLog("[Token API] map_params: Using legacy shader_params");
-        return editor->impl->shader_params;
+        Console::getInstance().addLog("[API] map_params: No matching params found");
+        editor->impl->editor_worker->shader_params_mutex.unlock();
     }
 
-    Console::getInstance().addLog("[Token API] map_params: No matching params found");
-    return nullptr;
+    return result;
 }
 
+/*!
+    \brief Unmap shader parameters and signal changes
+
+    MUST be called after map_params() to release locks and signal render thread.
+
+    After calling unmap_params():
+    - The pointer from map_params() becomes invalid
+    - Render thread will sync changes on next frame
+    - Mutex is released (in worker mode)
+
+    \param editor Editor instance
+    \param scene Scene token
+    \param name Object name token
+*/
 void unmap_params(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
 {
     if (!editor || !editor->impl)
@@ -1314,19 +1589,20 @@ void unmap_params(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pna
     // Log token information for debugging
     if (scene && name)
     {
-        Console::getInstance().addLog("[Token API] unmap_params: scene='%s' (id=%llu), name='%s' (id=%llu)",
+        Console::getInstance().addLog("[API] unmap_params: scene='%s' (id=%llu), name='%s' (id=%llu)",
                                       token_to_string(scene), (unsigned long long)scene->id, token_to_string(name),
                                       (unsigned long long)name->id);
     }
 
-    // Capture pointer while holding lock, then unlock before signaling
-    // This ensures we validate the pointer before releasing the lock
-    void* shader_params_ptr = editor->impl->shader_params;
-    editor->impl->editor_worker->shader_params_mutex.unlock();
+    // Unlock mutex (was locked in map_params)
+    if (editor->impl->editor_worker)
+    {
+        editor->impl->editor_worker->shader_params_mutex.unlock();
 
-    // Signal editor thread that params were modified
-    // Editor will sync to UI on next frame when it checks params_dirty flag
-    editor->impl->editor_worker->params_dirty.store(true);
+        // Signal editor thread that params were modified
+        // Editor will sync to UI on next frame when it checks params_dirty flag
+        editor->impl->editor_worker->params_dirty.store(true);
+    }
 }
 
 PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()

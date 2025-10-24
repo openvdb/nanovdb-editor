@@ -133,16 +133,21 @@ void createMenu(imgui_instance_user::Instance* ptr)
         // Center-aligned application label
         {
             std::string centerText;
+
+            // Always show the current scene name
+            pnanovdb_editor_token_t* current_scene = ptr->editor_scene->get_current_scene_token();
+            if (current_scene && current_scene->str)
+            {
+                centerText += std::string(current_scene->str) + " - ";
+            }
+
+            // Then add selected object name if available
             auto selection = ptr->editor_scene->get_properties_selection();
             if (selection.name_token && selection.name_token->str)
             {
-                // Add scene name if available
-                if (selection.scene_token && selection.scene_token->str)
-                {
-                    centerText += std::string(selection.scene_token->str) + " - ";
-                }
                 centerText += std::string(selection.name_token->str) + " - ";
             }
+
             centerText += "NanoVDB Editor";
             if (isViewerProfile)
             {
@@ -349,8 +354,6 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
                             }
                             ptr->render_settings->sync_camera = PNANOVDB_TRUE;
 
-                            // TODO: clear selected debug camera when switching to saved camera
-
                             ImGui::MarkIniSettingsDirty();
                         }
                         if (is_selected)
@@ -450,7 +453,6 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
                 ImGui::SameLine();
                 if (ImGui::Button("Show##NanoVDB"))
                 {
-                    // TODO: does it need to be on a worker thread?
                     pnanovdb_editor::Console::getInstance().addLog("Opening file '%s'", ptr->nanovdb_filepath.c_str());
                     ptr->pending.load_nvdb = true;
                 }
@@ -977,18 +979,19 @@ void showFileHeaderWindow(imgui_instance_user::Instance* ptr)
         const char* selected_name =
             (selection.name_token && selection.name_token->str) ? selection.name_token->str : nullptr;
 
-        ptr->editor_scene->for_each_view(ViewType::NanoVDBs,
-                                         [&](const std::string& name, const auto& ctx)
-                                         {
-                                             using CtxT = std::decay_t<decltype(ctx)>;
-                                             if constexpr (std::is_same_v<CtxT, NanoVDBContext>)
-                                             {
-                                                 if (selected_name && name == selected_name)
-                                                 {
-                                                     current_array = ctx.nanovdb_array;
-                                                 }
-                                             }
-                                         });
+        ptr->editor_scene->for_each_view(
+            ViewType::NanoVDBs,
+            [&](uint64_t name_id, const auto& ctx)
+            {
+                using CtxT = std::decay_t<decltype(ctx)>;
+                if constexpr (std::is_same_v<CtxT, NanoVDBContext>)
+                {
+                    if (selected_name && selection.name_token && selection.name_token->id == name_id)
+                    {
+                        current_array = ctx.nanovdb_array;
+                    }
+                }
+            });
         pnanovdb_editor::FileHeaderInfo::getInstance().render(current_array);
     }
     ImGui::End();

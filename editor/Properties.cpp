@@ -38,12 +38,12 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
 
     pnanovdb_camera_view_t* camera = nullptr;
     ptr->editor_scene->for_each_view(ViewType::Cameras,
-                                     [&](const std::string& name, const auto& view_data)
+                                     [&](uint64_t name_id, const auto& view_data)
                                      {
                                          using ViewT = std::decay_t<decltype(view_data)>;
                                          if constexpr (std::is_same_v<ViewT, pnanovdb_camera_view_t*>)
                                          {
-                                             if (!camera && name == selected_name)
+                                             if (!camera && selection.name_token && selection.name_token->id == name_id)
                                              {
                                                  camera = view_data;
                                              }
@@ -386,23 +386,41 @@ void Properties::render(imgui_instance_user::Instance* ptr)
         }
         else if (selection.type == pnanovdb_editor::ViewType::GaussianScenes)
         {
+            // Use with_object() to safely access shader_name while holding mutex
             auto* scene_manager = ptr->editor_scene->get_scene_manager();
             if (scene_manager)
             {
-                scene_manager->shader_params.renderGroup(imgui_instance_user::s_raster2d_shader_group);
+                auto* scene_token = ptr->editor_scene->get_current_scene_token();
+                scene_manager->with_object(scene_token, selection.name_token,
+                                           [&](pnanovdb_editor::SceneObject* scene_obj)
+                                           {
+                                               if (scene_obj && !scene_obj->shader_name.empty())
+                                               {
+                                                   ptr->shader_name = scene_obj->shader_name;
+                                               }
+                                           });
+
+                ImGui::SeparatorText(ptr->shader_name.c_str());
+                scene_manager->shader_params.render(ptr->shader_name.c_str());
             }
         }
         else if (selection.type == pnanovdb_editor::ViewType::NanoVDBs)
         {
-            auto* scene_obj = ptr->editor_scene->get_scene_object(selection.name_token, selection.type);
-            if (scene_obj && !scene_obj->shader_name.empty())
-            {
-                ptr->shader_name = scene_obj->shader_name;
-            }
-            ImGui::SeparatorText(ptr->shader_name.c_str());
+            // Use with_object() to safely access shader_name while holding mutex
             auto* scene_manager = ptr->editor_scene->get_scene_manager();
             if (scene_manager)
             {
+                auto* scene_token = ptr->editor_scene->get_current_scene_token();
+                scene_manager->with_object(scene_token, selection.name_token,
+                                           [&](pnanovdb_editor::SceneObject* scene_obj)
+                                           {
+                                               if (scene_obj && !scene_obj->shader_name.empty())
+                                               {
+                                                   ptr->shader_name = scene_obj->shader_name;
+                                               }
+                                           });
+
+                ImGui::SeparatorText(ptr->shader_name.c_str());
                 scene_manager->shader_params.render(ptr->shader_name.c_str());
             }
         }

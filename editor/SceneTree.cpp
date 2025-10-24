@@ -107,7 +107,9 @@ bool SceneTree::renderSceneItem(const char* name,
     // Add visibility checkbox
     if (visibilityCheckbox)
     {
-        ImGui::SameLine();
+        // Position checkbox at fixed distance from right edge of window (same as tree node headers)
+        float checkboxXPos = ImGui::GetWindowContentRegionMax().x - ImGui::GetFrameHeight();
+        ImGui::SameLine(checkboxXPos);
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 3.0f);
 
         // Make checkbox smaller with reduced frame padding
@@ -148,7 +150,9 @@ bool SceneTree::renderTreeNodeHeader(const char* label, bool* visibilityCheckbox
     bool treeNodeOpen = ImGui::TreeNodeEx(label, flags);
     if (visibilityCheckbox)
     {
-        ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::GetFrameHeight() + ImGui::GetCursorPosX());
+        // Position checkbox at fixed distance from right edge of window
+        float checkboxXPos = ImGui::GetWindowContentRegionMax().x - ImGui::GetFrameHeight();
+        ImGui::SameLine(checkboxXPos);
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 1.0f);
 
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(1.0f, 1.0f));
@@ -180,7 +184,7 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
             pnanovdb_editor_token_t* current_scene = ptr->editor_scene->get_current_scene_token();
 
             // Get current scene name for display
-            const char* current_scene_name = current_scene ? current_scene->str : "default";
+            const char* current_scene_name = current_scene ? current_scene->str : "";
 
             ImGui::PushItemWidth(-1.0f); // Full width
             if (ImGui::BeginCombo("##SceneSelector", current_scene_name))
@@ -223,14 +227,15 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
             if (ptr->editor_scene)
             {
                 bool hasViewportCamera = false;
+                pnanovdb_editor_token_t* viewport_token = ptr->editor_scene->get_viewport_camera_token();
                 ptr->editor_scene->for_each_view(
                     ViewType::Cameras,
-                    [&](const std::string& name, const auto& view_data)
+                    [&](uint64_t name_id, const auto& view_data)
                     {
                         using ViewT = std::decay_t<decltype(view_data)>;
                         if constexpr (std::is_same_v<ViewT, pnanovdb_camera_view_t*>)
                         {
-                            if (name == VIEWPORT_CAMERA && view_data)
+                            if (viewport_token && name_id == viewport_token->id && view_data)
                             {
                                 hasViewportCamera = true;
                                 // Add partial indentation to distinguish from tree nodes
@@ -241,9 +246,7 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
 
                                 if (renderSceneItem(cameraName.c_str(), isSelected, indentSpacing, false))
                                 {
-                                    pnanovdb_editor_token_t* camera_token =
-                                        EditorToken::getInstance().getToken(cameraName.c_str());
-                                    ptr->editor_scene->set_properties_selection(ViewType::Cameras, camera_token);
+                                    ptr->editor_scene->set_properties_selection(ViewType::Cameras, viewport_token);
                                 }
 
                                 ImGui::Unindent(indentSpacing);
@@ -257,72 +260,76 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
             if (ptr->editor_scene && ptr->editor_scene->get_camera_views().size() > 1)
             {
                 bool allVisible = true;
-                ptr->editor_scene->for_each_view(ViewType::Cameras,
-                                                 [&](const std::string& name, const auto& view_data)
-                                                 {
-                                                     using ViewT = std::decay_t<decltype(view_data)>;
-                                                     if constexpr (std::is_same_v<ViewT, pnanovdb_camera_view_t*>)
-                                                     {
-                                                         if (name == VIEWPORT_CAMERA || !view_data)
-                                                         {
-                                                             return;
-                                                         }
-                                                         if (!view_data->is_visible)
-                                                         {
-                                                             allVisible = false;
-                                                         }
-                                                     }
-                                                 });
+                pnanovdb_editor_token_t* viewport_token = ptr->editor_scene->get_viewport_camera_token();
+                ptr->editor_scene->for_each_view(
+                    ViewType::Cameras,
+                    [&](uint64_t name_id, const auto& view_data)
+                    {
+                        using ViewT = std::decay_t<decltype(view_data)>;
+                        if constexpr (std::is_same_v<ViewT, pnanovdb_camera_view_t*>)
+                        {
+                            if ((viewport_token && name_id == viewport_token->id) || !view_data)
+                            {
+                                return;
+                            }
+                            if (!view_data->is_visible)
+                            {
+                                allVisible = false;
+                            }
+                        }
+                    });
                 bool commonVisible = allVisible;
 
-                bool treeNodeOpen = renderTreeNodeHeader("Camera Views", &commonVisible);
+                bool treeNodeOpen = renderTreeNodeHeader("Camera Views", &commonVisible, false, false);
 
                 // Update all camera views if visibility checkbox was toggled
                 if (commonVisible != allVisible && ptr->editor_scene)
                 {
                     // Note: We need mutable access to update visibility
-                    ptr->editor_scene->for_each_view(ViewType::Cameras,
-                                                     [&](const std::string& name, const auto& view_data)
-                                                     {
-                                                         using ViewT = std::decay_t<decltype(view_data)>;
-                                                         if constexpr (std::is_same_v<ViewT, pnanovdb_camera_view_t*>)
-                                                         {
-                                                             if (name == VIEWPORT_CAMERA || !view_data)
-                                                             {
-                                                                 return;
-                                                             }
-                                                             view_data->is_visible =
-                                                                 commonVisible ? PNANOVDB_TRUE : PNANOVDB_FALSE;
-                                                         }
-                                                     });
+                    ptr->editor_scene->for_each_view(
+                        ViewType::Cameras,
+                        [&](uint64_t name_id, const auto& view_data)
+                        {
+                            using ViewT = std::decay_t<decltype(view_data)>;
+                            if constexpr (std::is_same_v<ViewT, pnanovdb_camera_view_t*>)
+                            {
+                                if ((viewport_token && name_id == viewport_token->id) || !view_data)
+                                {
+                                    return;
+                                }
+                                view_data->is_visible = commonVisible ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+                            }
+                        });
                 }
 
                 if (treeNodeOpen)
                 {
                     // Collect cameras to delete (can't delete while iterating)
                     std::vector<std::string> camerasToDelete;
+                    pnanovdb_editor_token_t* viewport_token = ptr->editor_scene->get_viewport_camera_token();
 
                     ptr->editor_scene->for_each_view(
                         ViewType::Cameras,
-                        [&](const std::string& cameraName, const auto& view_data)
+                        [&](uint64_t name_id, const auto& view_data)
                         {
                             using ViewT = std::decay_t<decltype(view_data)>;
                             if constexpr (std::is_same_v<ViewT, pnanovdb_camera_view_t*>)
                             {
                                 pnanovdb_camera_view_t* camera = view_data;
-                                if (!camera || cameraName == VIEWPORT_CAMERA)
+                                pnanovdb_editor_token_t* camera_token = EditorToken::getInstance().getTokenById(name_id);
+                                if (!camera || !camera_token || !camera_token->str ||
+                                    (viewport_token && name_id == viewport_token->id))
                                 {
                                     return;
                                 }
 
+                                const char* cameraName = camera_token->str;
                                 bool isSelected = isSelectedInCurrentScene(cameraName, ptr, ViewType::Cameras);
                                 bool deleteRequested = false;
 
-                                if (renderSceneItem(cameraName.c_str(), isSelected, indentSpacing, false,
-                                                    &camera->is_visible, &deleteRequested))
+                                if (renderSceneItem(cameraName, isSelected, indentSpacing, false, &camera->is_visible,
+                                                    &deleteRequested))
                                 {
-                                    pnanovdb_editor_token_t* camera_token =
-                                        EditorToken::getInstance().getToken(cameraName.c_str());
                                     ptr->editor_scene->set_properties_selection(ViewType::Cameras, camera_token);
                                 }
 
@@ -377,23 +384,29 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                     // Collect items to delete (can't delete while iterating)
                     std::vector<std::string> itemsToDelete;
 
-                    ptr->editor_scene->for_each_view(viewType,
-                                                     [&](const std::string& name, const auto& /*view_data*/)
-                                                     {
-                                                         bool isSelected = isSelectedInCurrentScene(name, ptr, viewType);
-                                                         bool deleteRequested = false;
+                    ptr->editor_scene->for_each_view(
+                        viewType,
+                        [&](uint64_t name_id, const auto& /*view_data*/)
+                        {
+                            pnanovdb_editor_token_t* token = EditorToken::getInstance().getTokenById(name_id);
+                            if (!token || !token->str)
+                            {
+                                return;
+                            }
+                            const char* name = token->str;
+                            bool isSelected = isSelectedInCurrentScene(name, ptr, viewType);
+                            bool deleteRequested = false;
 
-                                                         if (renderSceneItem(name.c_str(), isSelected, indentSpacing,
-                                                                             false, nullptr, &deleteRequested))
-                                                         {
-                                                             pendingField = name;
-                                                         }
+                            if (renderSceneItem(name, isSelected, indentSpacing, false, nullptr, &deleteRequested))
+                            {
+                                pendingField = name;
+                            }
 
-                                                         if (deleteRequested)
-                                                         {
-                                                             itemsToDelete.push_back(name);
-                                                         }
-                                                     });
+                            if (deleteRequested)
+                            {
+                                itemsToDelete.push_back(name);
+                            }
+                        });
 
                     // Process deletions after iteration
                     if (!itemsToDelete.empty() && ptr->editor_scene)

@@ -10,7 +10,7 @@
 
 #define TEST_EDITOR
 // #define TEST_RASTER
-#define TEST_RASTER_2D
+// #define TEST_RASTER_2D
 #define TEST_CAMERA
 #define TEST_NVDB
 // #define TEST_FILE_FORMAT
@@ -128,13 +128,7 @@ int main(int argc, char* argv[])
 
     // Create scene tokens
     pnanovdb_editor_token_t* scene_main = editor.get_token("main_scene");
-
-    // Add initial data to main scene if available
-    if (data_nanovdb)
-    {
-        pnanovdb_editor_token_t* splats_token = editor.get_token("splats");
-        editor.add_nanovdb_2(&editor, scene_main, splats_token, data_nanovdb);
-    }
+    pnanovdb_editor_token_t* scene_secondary = editor.get_token("secondary_scene");
 
     pnanovdb_editor_config_t config = {};
     config.headless = PNANOVDB_TRUE;
@@ -183,7 +177,8 @@ int main(int argc, char* argv[])
         debug_camera.states[i] = debug_state_i;
         debug_camera.configs[i] = debug_config;
     }
-    editor.add_camera_view(&editor, &debug_camera);
+    editor.add_camera_view_2(&editor, scene_secondary, &debug_camera);
+    editor.add_camera_view_2(&editor, scene_main, &debug_camera);
 
     pnanovdb_camera_config_t default_config = {};
     pnanovdb_camera_config_default(&default_config);
@@ -201,14 +196,15 @@ int main(int argc, char* argv[])
     default_camera.states[0] = default_state;
     default_camera.configs = new pnanovdb_camera_config_t[default_camera.num_cameras];
     default_camera.configs[0] = default_config;
-    editor.add_camera_view(&editor, &default_camera);
+    editor.add_camera_view_2(&editor, scene_main, &default_camera);
+    editor.add_camera_view_2(&editor, scene_secondary, &default_camera);
 #    endif
 
 #    ifdef TEST_NVDB
     printf("\n=== Adding NanoVDB Volumes to Multiple Scenes ===\n");
 
     // Load and add dragon to both scenes
-    data_nanovdb = compute.load_nanovdb("../../data/dragon.nvdb");
+    // data_nanovdb = compute.load_nanovdb("../../data/dragon.nvdb");
     if (data_nanovdb)
     {
         pnanovdb_editor_token_t* dragon_token = editor.get_token("dragon");
@@ -219,17 +215,18 @@ int main(int argc, char* argv[])
         printf("Added dragon to test_scene (shared volume)\n");
     }
 
-    // Load and add splats to test scene only
-    pnanovdb_compute_array_t* data_nanovdb2 = compute.load_nanovdb("../../data/splats.nvdb");
+    // Load and add flow volume to secondary scene only
+    pnanovdb_compute_array_t* data_nanovdb2 = nullptr;
+    // data_nanovdb2 = compute.load_nanovdb("../../data/hexagon_flow_test2.nvdb");
     if (data_nanovdb2)
     {
-        pnanovdb_editor_token_t* splats_token = editor.get_token("splats_volume");
-        editor.add_nanovdb_2(&editor, scene_main, splats_token, data_nanovdb2);
+        pnanovdb_editor_token_t* flow_token = editor.get_token("flow_volume");
+        editor.add_nanovdb_2(&editor, scene_secondary, flow_token, data_nanovdb2);
     }
 
     printf("Scene Summary:\n");
     printf("  main_scene: dragon\n");
-    printf("  test_scene: dragon + splats_volume\n");
+    printf("  secondary_scene: dragon + flow_volume\n");
 #    endif
 
 #    ifdef TEST_RASTER_2D
@@ -339,8 +336,8 @@ int main(int argc, char* argv[])
                 desc.sh_0 = arrays[4];
                 desc.sh_n = arrays[5];
 
-                editor.add_gaussian_data_2(&editor, scene_main, garden_token, &desc);
-                printf("Added garden gaussian data (iteration %d)\n", i + 1);
+                editor.add_gaussian_data_2(&editor, scene_secondary, garden_token, &desc);
+                printf("Added garden gaussian data to secondary_scene (iteration %d)\n", i + 1);
 
                 for (int ai = 0; ai < 6; ++ai)
                 {
@@ -353,16 +350,17 @@ int main(int argc, char* argv[])
         }
 
         pnanovdb_raster_shader_params_t* garden_params =
-            (pnanovdb_raster_shader_params_t*)editor.map_params(&editor, scene_main, garden_token, data_type);
+            (pnanovdb_raster_shader_params_t*)editor.map_params(&editor, scene_secondary, garden_token, data_type);
         if (garden_params)
         {
             garden_params->sh_degree_override = 3;
             printf("Updating shader param sh_degree to %d\n", garden_params->sh_degree_override);
-            editor.unmap_params(&editor, scene_main, garden_token);
+            editor.unmap_params(&editor, scene_secondary, garden_token);
         }
 
         // Verify the parameter was updated
-        garden_params = (pnanovdb_raster_shader_params_t*)editor.map_params(&editor, scene_main, garden_token, data_type);
+        garden_params =
+            (pnanovdb_raster_shader_params_t*)editor.map_params(&editor, scene_secondary, garden_token, data_type);
         if (garden_params)
         {
             printf("Verifying garden sh_degree_override parameter: %d (expected 3)\n", garden_params->sh_degree_override);
@@ -371,7 +369,7 @@ int main(int argc, char* argv[])
                 printf("ERROR: Parameter verification failed! sh_degree_override = %d, expected 3\n",
                        garden_params->sh_degree_override);
             }
-            editor.unmap_params(&editor, scene_main, garden_token);
+            editor.unmap_params(&editor, scene_secondary, garden_token);
         }
 
         runEditorLoop(5);
@@ -401,16 +399,17 @@ int main(int argc, char* argv[])
         }
 
         pnanovdb_raster_shader_params_t* garden_params =
-            (pnanovdb_raster_shader_params_t*)editor.map_params(&editor, scene_main, garden_token, data_type);
+            (pnanovdb_raster_shader_params_t*)editor.map_params(&editor, scene_secondary, garden_token, data_type);
         if (garden_params)
         {
             garden_params->sh_degree_override = 3;
             printf("Updating shader param sh_degree to %d\n", garden_params->sh_degree_override);
-            editor.unmap_params(&editor, scene_main, garden_token);
+            editor.unmap_params(&editor, scene_secondary, garden_token);
         }
 
         // Verify the parameter was updated
-        garden_params = (pnanovdb_raster_shader_params_t*)editor.map_params(&editor, scene_main, garden_token, data_type);
+        garden_params =
+            (pnanovdb_raster_shader_params_t*)editor.map_params(&editor, scene_secondary, garden_token, data_type);
         if (garden_params)
         {
             printf("Verifying garden sh_degree_override parameter: %d (expected 3)\n", garden_params->sh_degree_override);
@@ -419,7 +418,7 @@ int main(int argc, char* argv[])
                 printf("ERROR: Parameter verification failed! sh_degree_override = %d, expected 3\n",
                        garden_params->sh_degree_override);
             }
-            editor.unmap_params(&editor, scene_main, garden_token);
+            editor.unmap_params(&editor, scene_secondary, garden_token);
         }
     }
 
@@ -447,7 +446,7 @@ int main(int argc, char* argv[])
         }
 
         pnanovdb_raster_shader_params_t* garden_params =
-            (pnanovdb_raster_shader_params_t*)editor.map_params(&editor, scene_main, garden_token, data_type);
+            (pnanovdb_raster_shader_params_t*)editor.map_params(&editor, scene_secondary, garden_token, data_type);
         if (garden_params)
         {
             printf("Garden current shader params:\n");
@@ -461,14 +460,21 @@ int main(int argc, char* argv[])
             {
                 printf("  State verification: PASSED\n");
             }
-            editor.unmap_params(&editor, scene_main, garden_token);
+            editor.unmap_params(&editor, scene_secondary, garden_token);
         }
     }
 #    endif
 
     pnanovdb_camera_t* cameraPtr = editor.get_camera(&editor, scene_main);
-    printf("Camera position: (%f, %f, %f)\n", cameraPtr->state.position.x, cameraPtr->state.position.y,
-           cameraPtr->state.position.z);
+    if (cameraPtr)
+    {
+        printf("Camera position: (%f, %f, %f)\n", cameraPtr->state.position.x, cameraPtr->state.position.y,
+               cameraPtr->state.position.z);
+    }
+    else
+    {
+        printf("No camera found\n");
+    }
 
     runEditorLoop(5);
 
@@ -479,8 +485,19 @@ int main(int argc, char* argv[])
     runEditorLoop(1);
 
     cameraPtr = editor.get_camera(&editor, scene_main);
-    printf("Camera position: (%f, %f, %f)\n", cameraPtr->state.position.x, cameraPtr->state.position.y,
-           cameraPtr->state.position.z);
+    if (cameraPtr)
+    {
+        printf("Camera position: (%f, %f, %f)\n", cameraPtr->state.position.x, cameraPtr->state.position.y,
+               cameraPtr->state.position.z);
+    }
+    else
+    {
+        printf("No camera found\n");
+    }
+
+    runEditorLoop(10);
+
+    editor.remove(&editor, scene_main, nullptr);
 
     runEditorLoop(1000);
 
@@ -496,12 +513,12 @@ int main(int argc, char* argv[])
 
 #if defined(TEST_RASTER) || defined(TEST_RASTER_2D)
     pnanovdb_raster_free(&raster);
+    pnanovdb_fileformat_free(&fileformat);
 #endif
 
     compute.device_interface.destroy_device(device_manager, device);
     compute.device_interface.destroy_device_manager(device_manager);
 
-    pnanovdb_fileformat_free(&fileformat);
     pnanovdb_compute_free(&compute);
 
     return 0;

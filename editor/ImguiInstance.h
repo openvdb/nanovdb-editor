@@ -43,11 +43,9 @@
 namespace imgui_instance_user
 {
 static const char* s_render_settings_default = "default";
-static const char* s_raster2d_shader_group = "raster/raster2d_group";
-
 static const char* s_viewer_profile_name = "viewer";
 
-// TODO: make unique label and save scene items in a map with unique keys rather than strings
+// UI labels
 static const char* VIEWPORT_CAMERA = "Viewport Camera";
 static const char* SCENE_ROOT_NODE = "Viewer";
 
@@ -154,6 +152,9 @@ struct Instance
     PendingState pending;
     WindowState window;
 
+    // Scene management and selection (delegated to EditorScene)
+    pnanovdb_editor::EditorScene* editor_scene = nullptr;
+
     const pnanovdb_compiler_t* compiler;
     const pnanovdb_compute_t* compute;
 
@@ -183,10 +184,6 @@ struct Instance
 
     ProgressBar progress;
 
-    // Scene management and selection (delegated to EditorScene)
-    pnanovdb_editor::EditorScene* editor_scene = nullptr;
-
-    std::string raster_shader_group = s_raster2d_shader_group;
     pnanovdb_camera_view_t default_camera_view; // default camera view that syncs with viewport
 
     bool is_docking_setup = false;

@@ -107,12 +107,12 @@ int main(int argc, char* argv[])
         pnanovdb_editor_t editor = {};
         pnanovdb_editor_load(&editor, &compute, &compiler);
 
-        pnanovdb_compute_array_t* data_in = compute.load_nanovdb(file);
+        pnanovdb_compute_array_t* data_nanovdb = compute.load_nanovdb(file);
 
         pnanovdb_editor_token_t* scene_main = editor.get_token("main");
         pnanovdb_editor_token_t* volume_token = editor.get_token("dragon");
 
-        editor.add_nanovdb_2(&editor, scene_main, volume_token, data_in);
+        editor.add_nanovdb_2(&editor, scene_main, volume_token, data_nanovdb);
 
         editor.show(&editor, device, &config);
 
@@ -190,7 +190,7 @@ int main(int argc, char* argv[])
 
                 inst.editor.reset(&inst.editor);
 
-                inst.editor.add_nanovdb(&inst.editor, inst.nanovdb_array);
+                inst.editor.add_nanovdb_2(&inst.editor, inst.nanovdb_array);
             }
         }
 #endif
