@@ -329,6 +329,7 @@ private:
     imgui_instance_user::Instance* m_imgui_instance;
     pnanovdb_editor_t* m_editor;
     EditorView* m_views;
+    std::vector<pnanovdb_camera_view_t*> m_camera_views_owned;
     const pnanovdb_compute_t* m_compute;
     pnanovdb_imgui_settings_render_t* m_imgui_settings;
     pnanovdb_compute_queue_t* m_device_queue;

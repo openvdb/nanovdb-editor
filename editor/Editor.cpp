@@ -308,8 +308,26 @@ void add_camera_view(pnanovdb_editor_t* editor, pnanovdb_camera_view_t* camera)
         if (editor->impl->editor_worker)
         {
             EditorWorker* worker = editor->impl->editor_worker;
+
+            // make deep copy, including arrays
+            size_t total_size = sizeof(pnanovdb_camera_view_t);
+            total_size += sizeof(pnanovdb_camera_config_t) * camera->num_cameras;
+            total_size += sizeof(pnanovdb_camera_state_t) * camera->num_cameras;
+            uint8_t* camera_raw = new unsigned char[total_size];
+            pnanovdb_camera_view_t* camera_dup = (pnanovdb_camera_view_t*)camera_raw;
+
+            *camera_dup = *camera;
+
+            camera_raw += sizeof(pnanovdb_camera_view_t);
+            camera_dup->configs = (pnanovdb_camera_config_t*)camera_raw;
+            camera_raw += sizeof(pnanovdb_camera_config_t) * camera->num_cameras;
+            camera_dup->states = (pnanovdb_camera_state_t*)camera_raw;
+
+            memcpy(camera_dup->configs, camera->configs, sizeof(pnanovdb_camera_config_t) * camera->num_cameras);
+            memcpy(camera_dup->states, camera->states, sizeof(pnanovdb_camera_state_t) * camera->num_cameras);
+
             uint idx = worker->pending_camera_view_idx.fetch_add(1u);
-            worker->pending_camera_view[idx & 31].set_pending(camera);
+            worker->pending_camera_view[idx & 31].set_pending(camera_dup);
         }
         else
         {

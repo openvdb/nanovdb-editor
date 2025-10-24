@@ -113,6 +113,13 @@ EditorScene::~EditorScene()
         }
     }
 
+    for (size_t idx = 0u; idx < m_camera_views_owned.size(); idx++)
+    {
+        uint8_t* camera_view_raw = (uint8_t*)m_camera_views_owned[idx];
+        delete [] camera_view_raw;
+        m_camera_views_owned[idx] = nullptr;
+    }
+
     // Clear loaded views
     m_scene_data.nanovdb_arrays.clear();
     m_scene_data.gaussian_views.clear();
@@ -395,6 +402,7 @@ void EditorScene::process_pending_editor_changes()
                 if (name_str)
                 {
                     m_views->add_camera(name_str, m_editor->impl->camera_view);
+                    m_camera_views_owned.push_back(m_editor->impl->camera_view);
                 }
             }
         }
