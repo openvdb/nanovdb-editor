@@ -73,6 +73,12 @@ struct GaussianDataDeleter
         {
             editor->impl->raster->destroy_gaussian_data(editor->impl->raster->compute, editor->impl->device_queue, data);
         }
+        else
+        {
+            printf("Skipping gaussian data delete impl(%p) raster(%p) device_queue(%p) data(%p)\n",
+                editor->impl, editor->impl->raster, editor->impl->device_queue, data
+            );
+        }
     }
 };
 
@@ -179,6 +185,12 @@ void shutdown(pnanovdb_editor_t* editor)
     // Temp: Clean up all data in the maps
     // The shared_ptr destructors will handle the actual cleanup
     editor->impl->gaussian_data_map.clear();
+
+    // invalidate now that gaussian_data_map cleared, since they came in with show()
+    editor->impl->device_queue = nullptr;
+    editor->impl->compute_queue = nullptr;
+    editor->impl->device = nullptr;
+
     if (editor->impl->raster)
     {
         pnanovdb_raster_free(editor->impl->raster);
@@ -586,6 +598,11 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         }
     }
 
+    if (editor->impl->editor_worker)
+    {
+        editor->impl->editor_worker->is_starting.store(false);
+    }
+
     bool should_run = true;
     while (should_run)
     {
@@ -856,10 +873,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
     raster.destroy_context(editor->impl->compute, device_queue, editor->impl->raster_ctx);
     editor->impl->raster_ctx = nullptr;
-    editor->impl->device_queue = nullptr;
-    editor->impl->compute_queue = nullptr;
-    editor->impl->device = nullptr;
-    editor->impl->raster = nullptr;
 }
 
 pnanovdb_int32_t get_resolved_port(pnanovdb_editor_t* editor, pnanovdb_bool_t should_wait)
@@ -1013,6 +1026,15 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
     if (!editor || !editor->impl || !desc)
     {
         return;
+    }
+
+    if (editor->impl->editor_worker)
+    {
+        EditorWorker* worker = editor->impl->editor_worker;
+        while (worker->is_starting.load())
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
     }
 
     // Check if we have the required resources
