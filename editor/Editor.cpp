@@ -308,7 +308,8 @@ void add_camera_view(pnanovdb_editor_t* editor, pnanovdb_camera_view_t* camera)
         if (editor->impl->editor_worker)
         {
             EditorWorker* worker = editor->impl->editor_worker;
-            worker->pending_camera_view.set_pending(camera);
+            uint idx = worker->pending_camera_view_idx.fetch_add(1u);
+            worker->pending_camera_view[idx & 31].set_pending(camera);
         }
         else
         {

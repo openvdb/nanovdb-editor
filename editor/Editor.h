@@ -125,7 +125,8 @@ struct EditorWorker
     PendingData<pnanovdb_compute_array_t> pending_data_array;
     PendingData<pnanovdb_raster_gaussian_data_t> pending_gaussian_data;
     PendingData<pnanovdb_camera_t> pending_camera;
-    PendingData<pnanovdb_camera_view_t> pending_camera_view;
+    PendingData<pnanovdb_camera_view_t> pending_camera_view[32];
+    std::atomic<uint32_t> pending_camera_view_idx;
     PendingData<void> pending_shader_params;
     ConstPendingData<pnanovdb_reflect_data_type_t> pending_shader_params_data_type;
 
