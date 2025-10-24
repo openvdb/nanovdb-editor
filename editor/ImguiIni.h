@@ -50,7 +50,7 @@ Size=1078,144
 Collapsed=0
 DockId=0x00000009,0
 
-[Window][Scene]
+[Window][Scenes]
 Pos=0,21
 Size=288,275
 Collapsed=0

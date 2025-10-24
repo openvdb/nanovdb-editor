@@ -10,7 +10,7 @@
 
 #define TEST_EDITOR
 // #define TEST_RASTER
-// #define TEST_RASTER_2D
+#define TEST_RASTER_2D
 #define TEST_CAMERA
 #define TEST_NVDB
 // #define TEST_FILE_FORMAT
@@ -46,6 +46,7 @@ void pnanovdb_compute_log_print(pnanovdb_compute_log_level_t level, const char* 
 int main(int argc, char* argv[])
 {
     pnanovdb_compute_array_t* data_nanovdb = nullptr;
+    pnanovdb_compute_array_t* data_nanovdb2 = nullptr;
 
     pnanovdb_compiler_t compiler = {};
     pnanovdb_compiler_load(&compiler);
@@ -204,7 +205,7 @@ int main(int argc, char* argv[])
     printf("\n=== Adding NanoVDB Volumes to Multiple Scenes ===\n");
 
     // Load and add dragon to both scenes
-    // data_nanovdb = compute.load_nanovdb("../../data/dragon.nvdb");
+    data_nanovdb = compute.load_nanovdb("../../data/dragon.nvdb");
     if (data_nanovdb)
     {
         pnanovdb_editor_token_t* dragon_token = editor.get_token("dragon");
@@ -216,8 +217,7 @@ int main(int argc, char* argv[])
     }
 
     // Load and add flow volume to secondary scene only
-    pnanovdb_compute_array_t* data_nanovdb2 = nullptr;
-    // data_nanovdb2 = compute.load_nanovdb("../../data/hexagon_flow_test2.nvdb");
+    data_nanovdb2 = compute.load_nanovdb("../../data/hexagon_flow_test2.nvdb");
     if (data_nanovdb2)
     {
         pnanovdb_editor_token_t* flow_token = editor.get_token("flow_volume");
@@ -497,7 +497,7 @@ int main(int argc, char* argv[])
 
     runEditorLoop(10);
 
-    editor.remove(&editor, scene_main, nullptr);
+    // editor.remove(&editor, scene_main, nullptr);
 
     runEditorLoop(1000);
 

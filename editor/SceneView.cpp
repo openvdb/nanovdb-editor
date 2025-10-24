@@ -32,7 +32,7 @@ static auto find_in_map(MapType& map, uint64_t token_id) -> decltype(&map.begin(
 }
 
 // Scene management
-SceneViewData* SceneView::get_or_create_scene(pnanovdb_editor_token_t* scene_token)
+SceneViewData* SceneView::get_or_create_scene(pnanovdb_editor_token_t* scene_token, pnanovdb_bool_t is_y_up)
 {
     if (!scene_token)
     {
@@ -53,9 +53,9 @@ SceneViewData* SceneView::get_or_create_scene(pnanovdb_editor_token_t* scene_tok
     // New scene being created - initialize it with a default camera
     SceneViewData& new_scene = m_scene_view_data[scene_token->id];
 
-    // Initialize default camera config and state with Y-up orientation
+    // Initialize default camera config and state with is_y_up setting from render settings
     pnanovdb_camera_config_default(&new_scene.default_camera_config);
-    pnanovdb_camera_state_default(&new_scene.default_camera_state, PNANOVDB_TRUE);
+    pnanovdb_camera_state_default(&new_scene.default_camera_state, is_y_up);
 
     // Create viewport camera view pointing to this scene's camera
     pnanovdb_camera_view_default(&new_scene.default_camera_view);

@@ -58,7 +58,7 @@ static const char* CONSOLE = "Log";
 static const char* SHADER_PARAMS = "Shader Params";
 static const char* BENCHMARK = "Benchmark";
 static const char* FILE_HEADER = "File Header";
-static const char* SCENE = "Scene";
+static const char* SCENE = "Scenes";
 static const char* PROPERTIES = "Properties";
 
 enum class ViewportOption : int

@@ -65,7 +65,7 @@ public:
     ~SceneView() = default;
 
     // Scene management
-    SceneViewData* get_or_create_scene(pnanovdb_editor_token_t* scene_token);
+    SceneViewData* get_or_create_scene(pnanovdb_editor_token_t* scene_token, pnanovdb_bool_t is_y_up = PNANOVDB_TRUE);
     SceneViewData* get_scene(pnanovdb_editor_token_t* scene_token);
     const SceneViewData* get_scene(pnanovdb_editor_token_t* scene_token) const;
 

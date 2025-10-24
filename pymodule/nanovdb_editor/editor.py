@@ -341,9 +341,7 @@ class Editor:
         if result != 0:
             self._editor.contents.init(self._editor)
 
-    def _get_or_default_config(
-        self, config: EditorConfig | None
-    ) -> EditorConfig:
+    def _get_or_default_config(self, config: EditorConfig | None) -> EditorConfig:
         if config is not None:
             return config
         cfg = EditorConfig()

@@ -283,56 +283,10 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
 
     if (ImGui::Begin(VIEWPORT_SETTINGS, &ptr->window.show_viewport_settings))
     {
-        // viewport options
+        ImGui::SeparatorText("Viewport Camera");
         {
             ImGui::BeginGroup();
-            ViewportOption selectedOption = ptr->viewport_option;
-            if (ImGui::RadioButton("NanoVDB", selectedOption == ViewportOption::NanoVDB))
-            {
-                ptr->viewport_option = ViewportOption::NanoVDB;
-                ptr->render_settings_name = ptr->viewport_settings[(int)ptr->viewport_option].render_settings_name;
-                if (!ptr->is_viewer())
-                {
-                    // Load camera state
-                    if (ptr->editor_scene)
-                    {
-                        pnanovdb_editor_token_t* name_token =
-                            pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
-                        const pnanovdb_camera_state_t* state = ptr->editor_scene->get_saved_camera_state(name_token);
-                        if (state)
-                        {
-                            ptr->render_settings->camera_state = *state;
-                            ptr->render_settings->sync_camera = PNANOVDB_TRUE;
-                        }
-                    }
-                }
-            }
-            ImGui::SameLine();
-            if (ImGui::RadioButton("Raster2D", selectedOption == ViewportOption::Raster2D))
-            {
-                ptr->viewport_option = ViewportOption::Raster2D;
-                ptr->render_settings_name = ptr->viewport_settings[(int)ptr->viewport_option].render_settings_name;
-                if (!ptr->is_viewer())
-                {
-                    // Load camera state
-                    if (ptr->editor_scene)
-                    {
-                        pnanovdb_editor_token_t* name_token =
-                            pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
-                        const pnanovdb_camera_state_t* state = ptr->editor_scene->get_saved_camera_state(name_token);
-                        if (state)
-                        {
-                            ptr->render_settings->camera_state = *state;
-                            ptr->render_settings->sync_camera = PNANOVDB_TRUE;
-                        }
-                    }
-                }
-            }
-            ImGui::EndGroup();
-        }
-        {
-            ImGui::BeginGroup();
-            if (ImGui::BeginCombo("Viewport Camera", "Select..."))
+            if (ImGui::BeginCombo("##viewpor_camera", "Select..."))
             {
                 for (const auto& pair : ptr->saved_render_settings)
                 {
@@ -415,9 +369,56 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
             }
             ImGui::EndGroup();
         }
-        ImGui::Separator();
 
-        ImGui::Text("Gaussian File");
+        ImGui::SeparatorText("Viewport Options");
+        {
+            ImGui::BeginGroup();
+            ViewportOption selectedOption = ptr->viewport_option;
+            if (ImGui::RadioButton("NanoVDB", selectedOption == ViewportOption::NanoVDB))
+            {
+                ptr->viewport_option = ViewportOption::NanoVDB;
+                ptr->render_settings_name = ptr->viewport_settings[(int)ptr->viewport_option].render_settings_name;
+                if (!ptr->is_viewer())
+                {
+                    // Load camera state
+                    if (ptr->editor_scene)
+                    {
+                        pnanovdb_editor_token_t* name_token =
+                            pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
+                        const pnanovdb_camera_state_t* state = ptr->editor_scene->get_saved_camera_state(name_token);
+                        if (state)
+                        {
+                            ptr->render_settings->camera_state = *state;
+                            ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                        }
+                    }
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Raster2D", selectedOption == ViewportOption::Raster2D))
+            {
+                ptr->viewport_option = ViewportOption::Raster2D;
+                ptr->render_settings_name = ptr->viewport_settings[(int)ptr->viewport_option].render_settings_name;
+                if (!ptr->is_viewer())
+                {
+                    // Load camera state
+                    if (ptr->editor_scene)
+                    {
+                        pnanovdb_editor_token_t* name_token =
+                            pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
+                        const pnanovdb_camera_state_t* state = ptr->editor_scene->get_saved_camera_state(name_token);
+                        if (state)
+                        {
+                            ptr->render_settings->camera_state = *state;
+                            ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                        }
+                    }
+                }
+            }
+            ImGui::EndGroup();
+        }
+
+        ImGui::SeparatorText("Gaussian File");
         {
             ImGui::BeginGroup();
             ImGui::InputText("##viewport_raster_file", &ptr->raster_filepath);
@@ -441,7 +442,7 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
 
         if (ptr->viewport_option == ViewportOption::NanoVDB)
         {
-            ImGui::Text("NanoVDB File");
+            ImGui::SeparatorText("NanoVDB File");
             {
                 ImGui::BeginGroup();
                 ImGui::InputText("##viewport_nanovdb_file", &ptr->nanovdb_filepath);
@@ -459,14 +460,13 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
                 ImGui::EndGroup();
             }
         }
-        ImGui::Separator();
 
-        // UI profile
+        ImGui::SeparatorText("UI Profile");
         {
             const char* profile_options[] = { "default", "viewer" }; // TODO: load from current dir
             const char* current_profile =
                 ptr->render_settings->ui_profile_name[0] != '\0' ? ptr->render_settings->ui_profile_name : "default";
-            if (ImGui::BeginCombo("UI Profile", current_profile))
+            if (ImGui::BeginCombo("##ui_profile", current_profile))
             {
                 for (int i = 0; i < IM_ARRAYSIZE(profile_options); i++)
                 {

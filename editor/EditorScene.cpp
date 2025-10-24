@@ -661,8 +661,8 @@ void EditorScene::init_default_camera_for_scene(pnanovdb_editor_token_t* scene_t
         return;
     }
 
-    // Get or create the scene - this will set up the default camera automatically
-    SceneViewData* scene = m_scene_view.get_or_create_scene(scene_token);
+    // Get or create the scene - pass the is_y_up setting from render settings
+    SceneViewData* scene = m_scene_view.get_or_create_scene(scene_token, m_imgui_settings->is_y_up);
     if (!scene)
     {
         return;

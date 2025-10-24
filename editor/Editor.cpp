@@ -680,6 +680,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         {
             cleanup_background();
         }
+
         // 3-frame destruction pipeline for gaussian data:
         // This prevents GPU from accessing freed memory by deferring destruction for 3 frames
         // 1. Destroy items in ready queue (have been pending for 3 frames)
@@ -988,16 +989,9 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
     pnanovdb_compute_device_t* device = editor->impl->device;
     pnanovdb_compute_queue_t* device_queue = editor->impl->device_queue;
 
-    if (!device || !device_queue)
+    if (editor->impl->editor_worker && (!device || !device_queue))
     {
-        Console::getInstance().addLog("[API] Error: Editor not running. Call editor.start() or editor.show() first.");
-        Console::getInstance().addLog("[API] Device and queue are initialized when the editor starts.");
-        return;
-    }
-
-    // If there's a worker thread, wait for it to start and initialize queues
-    if (editor->impl->editor_worker)
-    {
+        // Wait for a worker thread to start and initialize queues
         while (!editor->impl->editor_worker->has_started.load())
         {
             std::this_thread::yield();
@@ -1512,18 +1506,15 @@ void* map_params(pnanovdb_editor_t* editor,
         // WARNING: Caller must ensure object lifetime - removing the object while using
         // this pointer results in use-after-free (similar to STL iterator invalidation)
         void* result = nullptr;
-        if (editor->impl->scene_manager)
-        {
-            editor->impl->scene_manager->with_object(
-                scene, name,
-                [&](SceneObject* obj)
+        editor->impl->scene_manager->with_object(
+            scene, name,
+            [&](SceneObject* obj)
+            {
+                if (obj && obj->shader_params && pnanovdb_reflect_layout_compare(obj->shader_params_data_type, data_type))
                 {
-                    if (obj && obj->shader_params && obj->shader_params_data_type == data_type)
-                    {
-                        result = obj->shader_params;
-                    }
-                });
-        }
+                    result = obj->shader_params;
+                }
+            });
         return result;
     }
 
@@ -1541,19 +1532,16 @@ void* map_params(pnanovdb_editor_t* editor,
 
     // Find params in scene manager
     void* result = nullptr;
-    if (editor->impl->scene_manager)
-    {
-        editor->impl->scene_manager->with_object(
-            scene, name,
-            [&](SceneObject* obj)
+    editor->impl->scene_manager->with_object(
+        scene, name,
+        [&](SceneObject* obj)
+        {
+            if (obj && obj->shader_params && pnanovdb_reflect_layout_compare(obj->shader_params_data_type, data_type))
             {
-                if (obj && obj->shader_params && obj->shader_params_data_type == data_type)
-                {
-                    Console::getInstance().addLog("[API] map_params: Found params in scene manager");
-                    result = obj->shader_params;
-                }
-            });
-    }
+                Console::getInstance().addLog("[API] map_params: Found params in scene manager");
+                result = obj->shader_params;
+            }
+        });
 
     // If not found, unlock and return nullptr
     if (!result)

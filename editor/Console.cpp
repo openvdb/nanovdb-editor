@@ -25,7 +25,9 @@ bool Console::render()
     if (ImGui::BeginChild("ScrollingRegion", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()), false,
                           ImGuiWindowFlags_HorizontalScrollbar))
     {
-        ImGui::TextUnformatted(buffer_.begin());
+        // Use InputTextMultiline in read-only mode to enable text selection
+        ImGui::InputTextMultiline("##console_log", (char*)buffer_.c_str(), buffer_.size(),
+                                 ImVec2(-1, -1), ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoHorizontalScroll);
 
         // Auto-scroll to bottom when new content arrives, or if user is already at the bottom
         if (scrollToBottom_)
