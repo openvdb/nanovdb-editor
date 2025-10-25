@@ -525,8 +525,21 @@ void destroy_instance(pnanovdb_server_instance_t* instance)
 
     std::lock_guard<std::mutex> guard(g_mutex[instance_idx]);
 
+    // Ensure any active periodic timer is cancelled and destroyed
+    if (g_timer[instance_idx] != nullptr)
+    {
+        g_timer[instance_idx]->cancel();
+        g_timer[instance_idx].reset();
+    }
+
+    // Stop server threads and wait for completion
     ptr->server->stop();
     ptr->server->wait();
+
+    // Clear registries and global pointers for this instance
+    g_ws_registry[instance_idx].clear();
+    g_server_instance[instance_idx] = nullptr;
+    g_ioctx[instance_idx] = nullptr;
 
     delete ptr;
 }

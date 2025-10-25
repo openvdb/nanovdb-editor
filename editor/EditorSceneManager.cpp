@@ -77,6 +77,50 @@ pnanovdb_compute_array_t* EditorSceneManager::create_initialized_shader_params(
     return params_array;
 }
 
+void EditorSceneManager::refresh_params_for_shader(const pnanovdb_compute_t* compute, const char* shader_name)
+{
+    if (!compute || !shader_name)
+    {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    for (auto& [key, obj] : m_objects)
+    {
+        if (obj.type == SceneObjectType::NanoVDB && obj.shader_name == shader_name)
+        {
+            // Destroy old params array owner first (if different)
+            if (obj.shader_params_array_owner)
+            {
+                obj.shader_params_array_owner.reset();
+            }
+
+            // Recreate from JSON defaults for this shader
+            pnanovdb_compute_array_t* params_array = shader_params.get_compute_array_for_shader(shader_name, compute);
+            if (!params_array)
+            {
+                params_array = create_params_array(compute, nullptr, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
+            }
+
+            obj.shader_params_array = params_array;
+            obj.shader_params = params_array ? params_array->data : nullptr;
+
+            if (params_array)
+            {
+                obj.shader_params_array_owner = std::shared_ptr<pnanovdb_compute_array_t>(
+                    params_array,
+                    [destroy_fn = compute->destroy_array](pnanovdb_compute_array_t* ptr)
+                    {
+                        if (ptr)
+                        {
+                            destroy_fn(ptr);
+                        }
+                    });
+            }
+        }
+    }
+}
+
 void EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
                                      pnanovdb_editor_token_t* name,
                                      pnanovdb_compute_array_t* array,
@@ -477,6 +521,49 @@ void EditorSceneManager::clear()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_objects.clear();
+}
+
+void EditorSceneManager::set_params_array(pnanovdb_editor_token_t* scene,
+                                          pnanovdb_editor_token_t* name,
+                                          pnanovdb_compute_array_t* params_array,
+                                          const pnanovdb_compute_t* compute)
+{
+    if (!name)
+    {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(m_mutex);
+    uint64_t key = make_key(scene, name);
+    auto it = m_objects.find(key);
+    if (it == m_objects.end())
+    {
+        return;
+    }
+
+    SceneObject& obj = it->second;
+    if (obj.type == SceneObjectType::Camera)
+    {
+        return;
+    }
+
+    // Reset old owner (safe even if null)
+    obj.shader_params_array_owner.reset();
+
+    obj.shader_params_array = params_array;
+    obj.shader_params = params_array ? params_array->data : nullptr;
+
+    if (compute && params_array)
+    {
+        obj.shader_params_array_owner = std::shared_ptr<pnanovdb_compute_array_t>(
+            params_array,
+            [destroy_fn = compute->destroy_array](pnanovdb_compute_array_t* ptr)
+            {
+                if (ptr)
+                {
+                    destroy_fn(ptr);
+                }
+            });
+    }
 }
 
 } // namespace pnanovdb_editor

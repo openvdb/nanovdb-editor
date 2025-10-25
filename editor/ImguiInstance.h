@@ -171,8 +171,9 @@ struct Instance
     std::string raster_filepath = "";
     float raster_voxels_per_unit = 128.f;
 
-    std::string shader_group = ""; // selected group in shader params window
-    std::string shader_name = ""; // current shader name (synced with selection)
+    // shader params window selection
+    std::string shader_group = "";
+    std::string shader_name = "";
 
     ImVec2 dialog_size{ 768.f, 512.f };
 
