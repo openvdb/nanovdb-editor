@@ -44,8 +44,8 @@ private:
     Console& operator=(const Console&) = delete;
     Console(Console&&) = delete;
     Console& operator=(Console&&) = delete;
-    ImGuiTextBuffer buffer_;
-    bool scrollToBottom_ = false;
+
+    TextEditor editor_;
     std::mutex logMutex_;
 };
 }

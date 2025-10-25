@@ -18,29 +18,20 @@ namespace pnanovdb_editor
 {
 Console::Console()
 {
+    editor_.SetShowLineNumbersEnabled(false);
+    editor_.SetReadOnlyEnabled(true);
+
+    // Hide cursor by making it the same color as the background
+    TextEditor::Palette palette = editor_.GetPalette();
+    palette[static_cast<size_t>(TextEditor::Color::cursor)] = palette[static_cast<size_t>(TextEditor::Color::background)];
+    editor_.SetPalette(palette);
+
+    editor_.ClearCursors();
 }
 
 bool Console::render()
 {
-    if (ImGui::BeginChild("ScrollingRegion", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()), false,
-                          ImGuiWindowFlags_HorizontalScrollbar))
-    {
-        // Use InputTextMultiline in read-only mode to enable text selection
-        ImGui::InputTextMultiline("##console_log", (char*)buffer_.c_str(), buffer_.size() + 1,
-                                 ImVec2(-1, -1), ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoHorizontalScroll);
-
-        // Auto-scroll to bottom when new content arrives, or if user is already at the bottom
-        if (scrollToBottom_)
-        {
-            ImGui::SetScrollHereY(1.0f);
-            scrollToBottom_ = false;
-        }
-        else if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
-        {
-            ImGui::SetScrollHereY(1.0f);
-        }
-    }
-    ImGui::EndChild();
+    editor_.Render("##console_log", ImVec2(-1, -ImGui::GetFrameHeightWithSpacing()), false);
 
     return true;
 }
@@ -61,21 +52,38 @@ void Console::addLog(const char* fmt, ...)
     localtime_r(&time, &tm);
 #endif
 
-    std::ostringstream timestamp;
-    timestamp << "[" << std::setfill('0') << std::setw(4) << (tm.tm_year + 1900) << "-" << std::setfill('0')
+    std::ostringstream log;
+
+    std::string currentText = editor_.GetText();
+    if (!currentText.empty())
+    {
+        log << "\n";
+    }
+
+    log << "[" << std::setfill('0') << std::setw(4) << (tm.tm_year + 1900) << "-" << std::setfill('0')
               << std::setw(2) << (tm.tm_mon + 1) << "-" << std::setfill('0') << std::setw(2) << tm.tm_mday << " "
               << std::setfill('0') << std::setw(2) << tm.tm_hour << ":" << std::setfill('0') << std::setw(2)
               << tm.tm_min << ":" << std::setfill('0') << std::setw(2) << tm.tm_sec << "." << std::setfill('0')
               << std::setw(3) << ms.count() << "] ";
 
-    buffer_.append(timestamp.str().c_str());
-
     va_list args;
     va_start(args, fmt);
-    buffer_.appendfv(fmt, args);
+
+    char buffer[1024];
+    vsnprintf(buffer, sizeof(buffer), fmt, args);
     va_end(args);
-    buffer_.append("\n");
-    scrollToBottom_ = true;
+
+    log << buffer;
+
+    // Append to existing text
+    editor_.SetText(currentText + log.str());
+
+    // Scroll to bottom
+    int lineCount = editor_.GetLineCount();
+    if (lineCount > 0)
+    {
+        editor_.ScrollToLine(lineCount - 1, TextEditor::Scroll::alignBottom);
+    }
 }
 
 }
