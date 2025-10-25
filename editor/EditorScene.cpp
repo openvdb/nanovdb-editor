@@ -56,6 +56,9 @@ EditorScene::EditorScene(const EditorSceneConfig& config)
     // Setup views UI - ImguiInstance accesses views through EditorScene
     m_imgui_instance->editor_scene = this;
 
+    // Provide render settings to SceneView so it can derive is_y_up on scene creation
+    m_scene_view.set_render_settings(m_imgui_settings);
+
     // Sync editor's camera from the default scene's camera (picks up is_y_up setting from render settings)
     sync_editor_camera_from_scene();
 
@@ -363,6 +366,11 @@ void EditorScene::process_pending_editor_changes()
     updated = worker->pending_camera.process_pending(m_editor->impl->camera, old_camera);
     if (updated)
     {
+        if (old_camera)
+        {
+            delete old_camera;
+        }
+
         m_imgui_settings->camera_state = m_editor->impl->camera->state;
         m_imgui_settings->camera_config = m_editor->impl->camera->config;
         m_imgui_settings->sync_camera = PNANOVDB_TRUE;
@@ -423,7 +431,7 @@ void EditorScene::process_pending_editor_changes()
                     if (scene_removed)
                     {
                         Console::getInstance().addLog(
-                            "[API] Successfully removed scene '%s' from SceneView on render thread", removal.scene->str);
+                            "[API] Removed scene '%s' from SceneView on render thread", removal.scene->str);
                     }
                     else
                     {
@@ -632,10 +640,38 @@ void EditorScene::sync_views_from_scene_manager()
             return true; // Continue iteration
         });
 
-    // After syncing all views, select the last added view if we have it
-    if (last_added_scene_token && last_added_name_token)
+    // After syncing, switch to the scene and select the last added view if we have it
+    if (last_added_scene_token)
     {
-        m_scene_view.set_current_view(last_added_scene_token, last_added_name_token);
+        // Use scene switching API to run camera sync and viewport push
+        set_current_scene(last_added_scene_token);
+
+        // If we don't have an explicit last-added view token, pick a sensible default
+        pnanovdb_editor_token_t* view_token = last_added_name_token;
+        if (!view_token)
+        {
+            view_token = find_next_available_view(last_added_scene_token);
+        }
+
+        if (view_token)
+        {
+            // Ensure SceneView's current view is set so selection logic sees it this frame
+            m_scene_view.set_current_view(last_added_scene_token, view_token);
+
+            // Determine view type and set render view to ensure viewport_option and editor state update
+            if (m_scene_view.get_nanovdb(last_added_scene_token, view_token))
+            {
+                set_render_view(ViewType::NanoVDBs, view_token, last_added_scene_token);
+            }
+            else if (m_scene_view.get_gaussian(last_added_scene_token, view_token))
+            {
+                set_render_view(ViewType::GaussianScenes, view_token, last_added_scene_token);
+            }
+            else if (m_scene_view.get_camera(last_added_scene_token, view_token))
+            {
+                set_render_view(ViewType::Cameras, view_token, last_added_scene_token);
+            }
+        }
 
         // Clear the token IDs so we don't re-select on future syncs
         if (m_editor->impl->editor_worker)
@@ -643,6 +679,12 @@ void EditorScene::sync_views_from_scene_manager()
             m_editor->impl->editor_worker->last_added_scene_token_id.store(0, std::memory_order_relaxed);
             m_editor->impl->editor_worker->last_added_name_token_id.store(0, std::memory_order_relaxed);
         }
+
+        // Ensure viewport jumps to the scene camera in the same frame
+        apply_editor_camera_to_viewport();
+
+        // Ensure selection/render view states are consistent this frame
+        sync_selected_view_with_current();
     }
 }
 
@@ -873,8 +915,8 @@ bool EditorScene::remove_object(pnanovdb_editor_token_t* scene_token, const char
     if (removed)
     {
         // Clear selection if the removed object is currently selected
-        clear_selection_if_matches(m_view_selection, name, scene_token,
-                                   "Cleared selection (removed object was selected)");
+        clear_selection_if_matches(
+            m_view_selection, name, scene_token, "Cleared selection (removed object was selected)");
 
         // Clear render view if the removed object is currently rendered
         clear_selection_if_matches(m_render_view_selection, name, scene_token,
@@ -989,6 +1031,17 @@ EditorSceneManager* EditorScene::get_scene_manager() const
     return &m_scene_manager;
 }
 
+void EditorScene::apply_editor_camera_to_viewport()
+{
+    if (!(m_editor && m_editor->impl && m_editor->impl->camera && m_imgui_settings))
+    {
+        return;
+    }
+    m_imgui_settings->camera_state = m_editor->impl->camera->state;
+    m_imgui_settings->camera_config = m_editor->impl->camera->config;
+    m_imgui_settings->sync_camera = PNANOVDB_TRUE;
+}
+
 void EditorScene::set_current_scene(pnanovdb_editor_token_t* scene_token)
 {
     if (!scene_token)
@@ -1003,22 +1056,20 @@ void EditorScene::set_current_scene(pnanovdb_editor_token_t* scene_token)
 
     m_scene_view.set_current_scene(scene_token);
 
+    // Ensure the scene is created with the correct up-axis from render settings
+    m_scene_view.get_or_create_scene(scene_token);
+
     // Sync editor's camera from the new scene's viewport camera when switching
-    if (is_switching_scenes(old_scene, scene_token))
+    const bool switched = is_switching_scenes(old_scene, scene_token);
+    if (switched)
     {
         sync_editor_camera_from_scene();
-
-        // Push the new scene's camera to the viewport (make viewport jump to scene's camera position)
-        if (m_editor && m_editor->impl && m_editor->impl->camera)
-        {
-            m_imgui_settings->camera_state = m_editor->impl->camera->state;
-            m_imgui_settings->camera_config = m_editor->impl->camera->config;
-            m_imgui_settings->sync_camera = PNANOVDB_TRUE;
-        }
+        // Push the new scene camera into the viewport for one-frame sync
+        apply_editor_camera_to_viewport();
     }
 
     // Handle view selection when switching scenes
-    if (is_switching_scenes(old_scene, scene_token))
+    if (switched)
     {
         pnanovdb_editor_token_t* view_to_select = nullptr;
 
@@ -1222,8 +1273,7 @@ void EditorScene::clear_selection_if_matches(SceneSelection& selection,
     }
 }
 
-bool EditorScene::is_switching_scenes(pnanovdb_editor_token_t* from_scene,
-                                      pnanovdb_editor_token_t* to_scene) const
+bool EditorScene::is_switching_scenes(pnanovdb_editor_token_t* from_scene, pnanovdb_editor_token_t* to_scene) const
 {
     // Null to null is not a switch
     if (!from_scene && !to_scene)

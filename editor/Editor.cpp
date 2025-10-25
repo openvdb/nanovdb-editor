@@ -195,12 +195,13 @@ void add_gaussian_data(pnanovdb_editor_t* editor,
 
 void update_camera(pnanovdb_editor_t* editor, pnanovdb_camera_t* camera)
 {
-    dispatch_worker_or_immediate(
-        editor,
-        // Worker mode: queue for render thread
-        [&](EditorWorker* worker) { worker->pending_camera.set_pending(camera); },
-        // Non-worker mode: execute immediately
-        [&]() { editor->impl->camera = camera; });
+    // Deprecated API: prefer token-based update_camera_2
+    Console::getInstance().addLog(
+        "[OBSOLETE API] update_camera() is deprecated and no longer supported. Use update_camera_2(editor, scene, camera).");
+
+    // Do nothing - old API is no longer supported
+    (void)editor;
+    (void)camera;
 }
 
 void add_camera_view(pnanovdb_editor_t* editor, pnanovdb_camera_view_t* camera)
@@ -344,7 +345,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     if (views)
     {
         pnanovdb_editor_token_t* default_scene = EditorToken::getInstance().getToken("scene");
-        views->get_or_create_scene(default_scene, imgui_user_settings->is_y_up);
+        views->get_or_create_scene(default_scene);
 
         // Set current scene if no current scene is set
         if (!views->get_current_scene_token())
@@ -1168,10 +1169,32 @@ void update_camera_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, 
     {
         dispatch_worker_or_immediate(
             editor,
-            // Worker mode: queue for render thread
-            [&](EditorWorker* worker) { worker->pending_camera.set_pending(camera); },
-            // Non-worker mode: execute immediately
-            [&]() { editor->impl->camera = camera; });
+            // Worker mode: queue for render thread (deep copy to take ownership)
+            [&](EditorWorker* worker)
+            {
+                pnanovdb_camera_t* owned = new pnanovdb_camera_t();
+                pnanovdb_camera_init(owned);
+                owned->config = camera->config;
+                owned->state = camera->state;
+
+                pnanovdb_camera_t* prev_pending = worker->pending_camera.set_pending(owned);
+                if (prev_pending)
+                {
+                    // Previous pending camera was also heap-allocated by us
+                    delete prev_pending;
+                }
+            },
+            // Non-worker mode: execute immediately (ensure internal ownership)
+            [&]()
+            {
+                if (!editor->impl->camera)
+                {
+                    editor->impl->camera = new pnanovdb_camera_t();
+                    pnanovdb_camera_init(editor->impl->camera);
+                }
+                editor->impl->camera->config = camera->config;
+                editor->impl->camera->state = camera->state;
+            });
     }
 }
 
@@ -1379,7 +1402,7 @@ void execute_removal(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, 
 
     if (removed_from_manager)
     {
-        Console::getInstance().addLog("[API] Successfully removed object '%s' from scene '%s'", name->str, scene->str);
+        Console::getInstance().addLog("[API] Removed object '%s' from scene '%s'", name->str, scene->str);
     }
     else
     {
@@ -1447,7 +1470,7 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
                     bool scene_removed = editor->impl->scene_view->remove_scene(scene);
                     if (scene_removed)
                     {
-                        Console::getInstance().addLog("[API] Successfully removed scene '%s' from SceneView", scene->str);
+                        Console::getInstance().addLog("[API] Removed scene '%s' from SceneView", scene->str);
                     }
                     else
                     {

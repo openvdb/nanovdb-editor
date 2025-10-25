@@ -32,7 +32,7 @@ static auto find_in_map(MapType& map, uint64_t token_id) -> decltype(&map.begin(
 }
 
 // Scene management
-SceneViewData* SceneView::get_or_create_scene(pnanovdb_editor_token_t* scene_token, pnanovdb_bool_t is_y_up)
+SceneViewData* SceneView::get_or_create_scene(pnanovdb_editor_token_t* scene_token)
 {
     if (!scene_token)
     {
@@ -53,7 +53,8 @@ SceneViewData* SceneView::get_or_create_scene(pnanovdb_editor_token_t* scene_tok
     // New scene being created - initialize it with a default camera
     SceneViewData& new_scene = m_scene_view_data[scene_token->id];
 
-    // Initialize default camera config and state with is_y_up setting from render settings
+    // Initialize default camera config and state with is_y_up derived from render settings if available
+    const pnanovdb_bool_t is_y_up = (m_imgui_settings ? m_imgui_settings->is_y_up : PNANOVDB_TRUE);
     pnanovdb_camera_config_default(&new_scene.default_camera_config);
     pnanovdb_camera_state_default(&new_scene.default_camera_state, is_y_up);
 
@@ -91,7 +92,7 @@ const SceneViewData* SceneView::get_scene(pnanovdb_editor_token_t* scene_token) 
 
 SceneViewData* SceneView::get_current_scene()
 {
-    return get_or_create_scene(m_current_scene_token);
+    return get_scene(m_current_scene_token);
 }
 
 const SceneViewData* SceneView::get_current_scene() const
@@ -144,8 +145,7 @@ void SceneView::add_camera(pnanovdb_editor_token_t* scene_token,
     {
         scene->cameras[name_token->id] = camera;
         scene->last_added_view_token_id = name_token->id;
-        printf("View added: camera '%s' to scene '%s'\n",
-               name_token ? name_token->str : "null",
+        printf("View added: camera '%s' to scene '%s'\n", name_token ? name_token->str : "null",
                scene_token ? scene_token->str : "null");
         set_current_scene(scene_token);
     }
@@ -209,8 +209,7 @@ void SceneView::set_current_view(pnanovdb_editor_token_t* scene_token, pnanovdb_
 {
     SceneViewData* scene = get_or_create_scene(scene_token);
     set_view(scene, view_token);
-    printf("Selection changed: scene='%s', view='%s'\n",
-           scene_token ? scene_token->str : "null",
+    printf("Selection changed: scene='%s', view='%s'\n", scene_token ? scene_token->str : "null",
            view_token ? view_token->str : "null");
 }
 
@@ -265,8 +264,7 @@ void SceneView::add_gaussian(pnanovdb_editor_token_t* scene_token,
     {
         scene->gaussians[name_token->id] = ctx;
         scene->last_added_view_token_id = name_token->id;
-        printf("View added: gaussian '%s' to scene '%s'\n",
-               name_token ? name_token->str : "null",
+        printf("View added: gaussian '%s' to scene '%s'\n", name_token ? name_token->str : "null",
                scene_token ? scene_token->str : "null");
         set_current_scene(scene_token);
     }
@@ -326,8 +324,7 @@ void SceneView::add_nanovdb(pnanovdb_editor_token_t* scene_token,
     {
         scene->nanovdbs[name_token->id] = ctx;
         scene->last_added_view_token_id = name_token->id;
-        printf("View added: nanovdb '%s' to scene '%s'\n",
-               name_token ? name_token->str : "null",
+        printf("View added: nanovdb '%s' to scene '%s'\n", name_token ? name_token->str : "null",
                scene_token ? scene_token->str : "null");
         set_current_scene(scene_token);
     }

@@ -29,8 +29,8 @@
 // #define TEST_CPU_COMPILER         // TODO: test needs to check if slang-llvm is in the slang package
 // #define TEST_EMPTY_COMPILER
 // #define TEST_COMPUTE
-#define TEST_EDITOR
-// #define TEST_EDITOR_START_STOP
+// #define TEST_EDITOR
+#define TEST_EDITOR_START_STOP
 // #define TEST_RASTER
 // #define TEST_RASTER_2D   // this does not work now, editor nees to be have queue and device first
 // #define TEST_SVRASTER
@@ -38,8 +38,6 @@
 #define TEST_CAMERA
 // #define TEST_H264
 
-// Use old API - it will automatically use default scene internally
-#define USE_OLD_API
 
 struct constants_t
 {
@@ -436,7 +434,7 @@ int main(int argc, char* argv[])
     camera.state.eye_direction = { -0.022936, 0.760122, -0.649375 };
     camera.state.eye_up = { 0.000000, 1.000000, 0.000000 };
     camera.state.eye_distance_from_position = -0.072589;
-    editor.update_camera(&editor, &camera);
+    editor.update_camera_2(&editor, &camera);
 #    endif
 
 #    ifdef TEST_RASTER_2D
@@ -534,7 +532,7 @@ int main(int argc, char* argv[])
     config.port = 8080;
 
     editor.start(&editor, device, &config);
-    
+
     pnanovdb_int32_t port = editor.get_resolved_port(&editor, PNANOVDB_TRUE);
     printf("Editor starting on port: %d\n", port);
 
@@ -555,10 +553,6 @@ int main(int argc, char* argv[])
 
     editor.add_nanovdb_2(&editor, scene_token, volume_token, data_nanovdb);
     editor.add_nanovdb_2(&editor, main_token, volume_token, data_nanovdb);
-
-    pnanovdb_camera_t camera;
-    pnanovdb_camera_init(&camera);
-    editor.update_camera(&editor, &camera);
 
     runEditorLoop(100);
 

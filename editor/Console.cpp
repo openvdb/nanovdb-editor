@@ -60,11 +60,11 @@ void Console::addLog(const char* fmt, ...)
         log << "\n";
     }
 
-    log << "[" << std::setfill('0') << std::setw(4) << (tm.tm_year + 1900) << "-" << std::setfill('0')
-              << std::setw(2) << (tm.tm_mon + 1) << "-" << std::setfill('0') << std::setw(2) << tm.tm_mday << " "
-              << std::setfill('0') << std::setw(2) << tm.tm_hour << ":" << std::setfill('0') << std::setw(2)
-              << tm.tm_min << ":" << std::setfill('0') << std::setw(2) << tm.tm_sec << "." << std::setfill('0')
-              << std::setw(3) << ms.count() << "] ";
+    log << "[" << std::setfill('0') << std::setw(4) << (tm.tm_year + 1900) << "-" << std::setfill('0') << std::setw(2)
+        << (tm.tm_mon + 1) << "-" << std::setfill('0') << std::setw(2) << tm.tm_mday << " " << std::setfill('0')
+        << std::setw(2) << tm.tm_hour << ":" << std::setfill('0') << std::setw(2) << tm.tm_min << ":"
+        << std::setfill('0') << std::setw(2) << tm.tm_sec << "." << std::setfill('0') << std::setw(3) << ms.count()
+        << "] ";
 
     va_list args;
     va_start(args, fmt);

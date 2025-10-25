@@ -251,8 +251,8 @@ private:
                                     const char* name,
                                     pnanovdb_editor_token_t* scene_token,
                                     const char* log_message);
-    bool is_switching_scenes(pnanovdb_editor_token_t* from_scene,
-                            pnanovdb_editor_token_t* to_scene) const;
+    bool is_switching_scenes(pnanovdb_editor_token_t* from_scene, pnanovdb_editor_token_t* to_scene) const;
+    void apply_editor_camera_to_viewport();
     pnanovdb_editor_token_t* find_next_available_view(pnanovdb_editor_token_t* scene_token) const;
     void* get_view_params_with_fallback(SceneShaderParams& params, void* obj_params) const;
 

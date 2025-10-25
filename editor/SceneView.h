@@ -19,6 +19,8 @@
 #include <atomic>
 #include <vector>
 
+struct pnanovdb_imgui_settings_render_t;
+
 namespace pnanovdb_editor
 {
 
@@ -65,7 +67,7 @@ public:
     ~SceneView() = default;
 
     // Scene management
-    SceneViewData* get_or_create_scene(pnanovdb_editor_token_t* scene_token, pnanovdb_bool_t is_y_up = PNANOVDB_TRUE);
+    SceneViewData* get_or_create_scene(pnanovdb_editor_token_t* scene_token);
 
     // Get current scene (defaults to default scene if none set)
     SceneViewData* get_current_scene();
@@ -149,6 +151,12 @@ public:
     // Remove entire scene
     bool remove_scene(pnanovdb_editor_token_t* scene_token);
 
+    // Set current render settings so SceneView can derive is_y_up at scene creation time
+    void set_render_settings(pnanovdb_imgui_settings_render_t* settings)
+    {
+        m_imgui_settings = settings;
+    }
+
 private:
     // Internal helper methods
     SceneViewData* get_scene(pnanovdb_editor_token_t* scene_token);
@@ -160,6 +168,9 @@ private:
                          pnanovdb_editor_token_t* name_token);
 
     void set_view(SceneViewData* scene, pnanovdb_editor_token_t* view_token);
+
+    // Non-owning pointer to current render settings (provided by EditorScene)
+    pnanovdb_imgui_settings_render_t* m_imgui_settings = nullptr;
 
     // Map of scene ID -> SceneViewData
     std::map<uint64_t, SceneViewData> m_scene_view_data;
