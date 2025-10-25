@@ -195,6 +195,7 @@ void EditorScene::copy_shader_params_from_ui_to_view(SceneShaderParams* params, 
         return;
     }
 
+    // Avoid locking SceneManager inside a SceneManager callback. Just produce a fresh array and copy.
     auto* old_array = params->current_array;
     pnanovdb_compute_array_t* new_array =
         m_scene_manager.shader_params.get_compute_array_for_shader(params->shader_name, m_compute);
@@ -690,15 +691,32 @@ void EditorScene::sync_views_from_scene_manager()
 
 void EditorScene::reload_shader_params_for_current_view()
 {
-    if (m_nanovdb_params.default_array)
+    auto destroy_default_array = [&](SceneShaderParams& params)
     {
-        m_compute->destroy_array(m_nanovdb_params.default_array);
-        m_nanovdb_params.default_array = nullptr; // Prevent double-free
-    }
+        if (params.default_array)
+        {
+            m_compute->destroy_array(params.default_array);
+            params.default_array = nullptr;
+        }
+    };
 
-    m_nanovdb_params.shader_name = m_imgui_instance->shader_name;
-    m_nanovdb_params.default_array = m_scene_manager.create_initialized_shader_params(
-        m_compute, m_nanovdb_params.shader_name.c_str(), nullptr, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
+    // Handle based on active render view
+    if (m_render_view_selection.type == ViewType::GaussianScenes)
+    {
+        destroy_default_array(m_raster2d_params);
+        m_raster2d_params.default_array = m_scene_manager.create_initialized_shader_params(
+            m_compute, nullptr, pnanovdb_editor::s_raster2d_shader_group, m_raster2d_params.size,
+            m_raster_shader_params_data_type);
+    }
+    else if (m_render_view_selection.type == ViewType::NanoVDBs)
+    {
+        destroy_default_array(m_nanovdb_params);
+        // Use the already-synced UI/editor shader name to avoid nested locks
+        m_nanovdb_params.shader_name =
+            !m_imgui_instance->shader_name.empty() ? m_imgui_instance->shader_name : m_editor->impl->shader_name;
+        m_nanovdb_params.default_array = m_scene_manager.create_initialized_shader_params(
+            m_compute, m_nanovdb_params.shader_name.c_str(), nullptr, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
+    }
 }
 
 void EditorScene::sync_editor_camera_from_scene()
@@ -831,10 +849,8 @@ void EditorScene::handle_nanovdb_data_load(pnanovdb_compute_array_t* nanovdb_arr
     pnanovdb_editor_token_t* scene_token = get_current_scene_token();
     pnanovdb_editor_token_t* name_token = EditorToken::getInstance().getToken(view_name.c_str());
 
-    // Create params array initialized from JSON (like m_nanovdb_params.default_array)
-    pnanovdb_compute_array_t* params_array = m_scene_manager.create_initialized_shader_params(
-        m_compute, m_nanovdb_params.shader_name.c_str(), nullptr, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
-
+    // Do not create per-object params now; use shared defaults until user edits (copy-on-write)
+    pnanovdb_compute_array_t* params_array = nullptr;
     m_scene_manager.add_nanovdb(
         scene_token, name_token, nanovdb_array, params_array, m_compute, m_nanovdb_params.shader_name.c_str());
 
@@ -863,9 +879,8 @@ void EditorScene::handle_gaussian_data_load(pnanovdb_raster_gaussian_data_t* gau
     pnanovdb_editor_token_t* scene_token = get_current_scene_token();
     pnanovdb_editor_token_t* name_token = EditorToken::getInstance().getToken(view_name.c_str());
 
-    // Create params array initialized from JSON (like m_raster2d_params.default_array)
-    pnanovdb_compute_array_t* params_array = m_scene_manager.create_initialized_shader_params(
-        m_compute, nullptr, pnanovdb_editor::s_raster2d_shader_group, 0, m_raster_shader_params_data_type);
+    // Do not create per-object params now; use shared defaults until user edits (copy-on-write)
+    pnanovdb_compute_array_t* params_array = nullptr;
 
     // Add with deferred destruction handling
     std::shared_ptr<pnanovdb_raster_gaussian_data_t> old_owner;
@@ -1194,6 +1209,11 @@ void EditorScene::set_render_view(ViewType type, pnanovdb_editor_token_t* name_t
             if (scene_obj)
             {
                 load_view_into_editor_and_ui(scene_obj);
+                // Ensure default shader params for the selected view are ready even before (re)compile.
+                // Note: Avoid calling functions that acquire SceneManager locks from inside this callback
+                // (we're already in with_object()). reload_shader_params_for_current_view() only reads JSON
+                // and creates arrays; it does not call with_object or refresh other objects.
+                reload_shader_params_for_current_view();
                 if (type == ViewType::NanoVDBs)
                 {
                     m_imgui_instance->viewport_option = imgui_instance_user::ViewportOption::NanoVDB;

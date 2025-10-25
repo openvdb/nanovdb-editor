@@ -157,12 +157,15 @@ public:
     void set_compute_array_for_shader(const std::string& shader_name, pnanovdb_compute_array_t* array);
     pnanovdb_compute_array_t* get_compute_array_for_shader(const std::string& shader_name,
                                                            const pnanovdb_compute_t* compute);
+    void clear_pending_array_for_shader(const std::string& shader_name);
 
 private:
     std::vector<std::vector<char>> shader_params_pool_; // each array corresponds to a shader parameter pool index
     std::map<std::string, std::vector<ShaderParam>> params_map_; // <shader_name, shader_params>
     std::map<size_t, std::pair<std::string, ShaderParam>> group_params_; // <pool_index, <shader_file, ShaderParam>>
-    std::map<std::string, pnanovdb_compute_array_t*> pending_arrays_; // <shader_name, array>
+    // When JSON isn't loaded yet, we stash a copy of the raw constant buffer bytes
+    // keyed by shader name and apply them once params are loaded.
+    std::map<std::string, std::vector<char>> pending_arrays_data_; // <shader_name, raw bytes>
 
     void* getValue(ShaderParam& shader_param);
     void createDefaultScalarNParam(const std::string& name,

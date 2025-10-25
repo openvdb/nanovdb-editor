@@ -344,7 +344,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     SceneView* views = editor->impl->scene_view;
     if (views)
     {
-        pnanovdb_editor_token_t* default_scene = EditorToken::getInstance().getToken("scene");
+        pnanovdb_editor_token_t* default_scene = EditorToken::getInstance().getToken(pnanovdb_editor::DEFAULT_SCENE_NAME);
         views->get_or_create_scene(default_scene);
 
         // Set current scene if no current scene is set
@@ -633,6 +633,11 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 {
                     // now that shader definitely exists, reload shader params
                     editor_scene.reload_shader_params_for_current_view();
+                    // Refresh params for all views using this shader that may have been created before JSON existed
+                    if (auto* sm = editor_scene.get_scene_manager())
+                    {
+                        sm->refresh_params_for_shader(editor->impl->compute, editor->impl->shader_name.c_str());
+                    }
 
                     dispatch_shader = true;
                 }
@@ -1011,12 +1016,22 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
 
     if (editor->impl->editor_worker && (!device || !device_queue))
     {
-        // Wait for a worker thread to start and initialize queues
-        while (!editor->impl->editor_worker->has_started.load())
+        // Wait for the worker render loop to start (queues become valid)
+        // Also break out if a stop is requested or the worker is replaced
+        auto* worker = editor->impl->editor_worker;
+        while (!worker->has_started.load())
         {
-            Console::getInstance().addLog("Waiting for worker thread to start...\n");
-            std::this_thread::yield();
+            if (worker->should_stop.load() || editor->impl->editor_worker != worker)
+            {
+                Console::getInstance().addLog("Worker not started; aborting wait due to stop/requested shutdown");
+                return;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
+
+        // Refresh device handles now that the worker initialized them
+        device = editor->impl->device;
+        device_queue = editor->impl->device_queue;
     }
 
     pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr;

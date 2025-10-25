@@ -117,6 +117,9 @@ public:
         size_t fallback_size,
         const pnanovdb_reflect_data_type_t* fallback_data_type = nullptr);
 
+    // Reinitialize params arrays for all NanoVDB objects using the given shader
+    void refresh_params_for_shader(const pnanovdb_compute_t* compute, const char* shader_name);
+
     /*!
         \brief Create a unique key from scene and name tokens
 
@@ -306,6 +309,12 @@ public:
         \note Thread-safe
     */
     void clear();
+
+    // Set (or replace) per-object params array for an object; updates ownership and raw pointer
+    void set_params_array(pnanovdb_editor_token_t* scene,
+                          pnanovdb_editor_token_t* name,
+                          pnanovdb_compute_array_t* params_array,
+                          const pnanovdb_compute_t* compute);
 
 private:
     mutable std::mutex m_mutex; ///< Protects all operations
