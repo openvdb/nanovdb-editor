@@ -39,6 +39,20 @@ static const char* s_raster_file = "";
 
 namespace pnanovdb_editor
 {
+
+template <typename WorkerOp, typename ImmediateOp>
+static void dispatch_worker_or_immediate(pnanovdb_editor_t* editor, WorkerOp worker_op, ImmediateOp immediate_op)
+{
+    if (editor->impl->editor_worker)
+    {
+        worker_op(editor->impl->editor_worker);
+    }
+    else
+    {
+        immediate_op();
+    }
+}
+
 // mirrored from shader
 struct EditorParams
 {
@@ -183,15 +197,12 @@ void add_gaussian_data(pnanovdb_editor_t* editor,
 
 void update_camera(pnanovdb_editor_t* editor, pnanovdb_camera_t* camera)
 {
-    if (editor->impl->editor_worker)
-    {
-        EditorWorker* worker = editor->impl->editor_worker;
-        worker->pending_camera.set_pending(camera);
-    }
-    else
-    {
-        editor->impl->camera = camera;
-    }
+    dispatch_worker_or_immediate(
+        editor,
+        // Worker mode: queue for render thread
+        [&](EditorWorker* worker) { worker->pending_camera.set_pending(camera); },
+        // Non-worker mode: execute immediately
+        [&]() { editor->impl->camera = camera; });
 }
 
 void add_camera_view(pnanovdb_editor_t* editor, pnanovdb_camera_view_t* camera)
@@ -929,41 +940,45 @@ void add_nanovdb_2(pnanovdb_editor_t* editor,
 
     Console::getInstance().addLog("[API] Added NanoVDB '%s' to scene '%s'", name->str, scene->str);
 
-    if (editor->impl->editor_worker)
-    {
-        EditorWorker* worker = editor->impl->editor_worker;
-        worker->pending_nanovdb.set_pending(array);
-        worker->views_need_sync.store(true); // Signal render thread to sync views from scene_manager
-    }
-    else
-    {
-        // Non-worker mode: safe to directly update views from this thread (render thread)
-        SceneView* views = editor->impl->scene_view;
-        if (views)
+    dispatch_worker_or_immediate(
+        editor,
+        // Worker mode: queue for render thread
+        [&](EditorWorker* worker)
         {
-            void* shader_params_ptr = nullptr;
+            worker->pending_nanovdb.set_pending(array);
+            worker->last_added_scene_token_id.store(scene->id, std::memory_order_relaxed);
+            worker->last_added_name_token_id.store(name->id, std::memory_order_relaxed);
+            worker->views_need_sync.store(true);
+        },
+        // Non-worker mode: execute immediately
+        [&]()
+        {
+            SceneView* views = editor->impl->scene_view;
+            if (views)
+            {
+                void* shader_params_ptr = nullptr;
+                editor->impl->scene_manager->with_object(scene, name,
+                                                         [&](SceneObject* obj)
+                                                         {
+                                                             if (obj)
+                                                             {
+                                                                 shader_params_ptr = obj->shader_params;
+                                                             }
+                                                         });
+                views->add_nanovdb_to_scene(scene, name, array, shader_params_ptr);
+            }
+
+            editor->impl->nanovdb_array = array;
             editor->impl->scene_manager->with_object(scene, name,
                                                      [&](SceneObject* obj)
                                                      {
                                                          if (obj)
                                                          {
-                                                             shader_params_ptr = obj->shader_params;
+                                                             editor->impl->shader_params = obj->shader_params;
+                                                             editor->impl->shader_params_data_type = nullptr;
                                                          }
                                                      });
-            views->add_nanovdb_to_scene(scene, name, array, shader_params_ptr);
-        }
-
-        editor->impl->nanovdb_array = array;
-        editor->impl->scene_manager->with_object(scene, name,
-                                                 [&](SceneObject* obj)
-                                                 {
-                                                     if (obj)
-                                                     {
-                                                         editor->impl->shader_params = obj->shader_params;
-                                                         editor->impl->shader_params_data_type = nullptr;
-                                                     }
-                                                 });
-    }
+        });
 }
 
 void add_gaussian_data_2(pnanovdb_editor_t* editor,
@@ -982,7 +997,7 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
 
     if (!editor->impl->compute)
     {
-        Console::getInstance().addLog("[API] Error: No compute interface available");
+        Console::getInstance().addLog("Error: No compute interface available");
         return;
     }
 
@@ -994,6 +1009,7 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
         // Wait for a worker thread to start and initialize queues
         while (!editor->impl->editor_worker->has_started.load())
         {
+            Console::getInstance().addLog("Waiting for worker thread to start...\n");
             std::this_thread::yield();
         }
     }
@@ -1035,44 +1051,48 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
 
     Console::getInstance().addLog("[API] Added Gaussian data '%s' to scene '%s'", name->str, scene->str);
 
-    if (editor->impl->editor_worker)
-    {
-        EditorWorker* worker = editor->impl->editor_worker;
-        worker->pending_gaussian_data.set_pending(gaussian_data);
-        worker->pending_shader_params.set_pending(raster_params_array ? raster_params_array->data : nullptr);
-        worker->pending_shader_params_data_type.set_pending(raster_params_dt);
-        worker->views_need_sync.store(true); // Signal render thread to sync views from scene_manager
-    }
-    else
-    {
-        // Non-worker mode: safe to directly update views from this thread (render thread)
-        SceneView* views = editor->impl->scene_view;
-        if (views)
+    dispatch_worker_or_immediate(
+        editor,
+        // Worker mode: queue for render thread
+        [&](EditorWorker* worker)
         {
-            pnanovdb_raster_shader_params_t* shader_params_ptr = nullptr;
+            worker->pending_gaussian_data.set_pending(gaussian_data);
+            worker->pending_shader_params.set_pending(raster_params_array ? raster_params_array->data : nullptr);
+            worker->pending_shader_params_data_type.set_pending(raster_params_dt);
+            worker->last_added_scene_token_id.store(scene->id, std::memory_order_relaxed);
+            worker->last_added_name_token_id.store(name->id, std::memory_order_relaxed);
+            worker->views_need_sync.store(true);
+        },
+        // Non-worker mode: execute immediately
+        [&]()
+        {
+            SceneView* views = editor->impl->scene_view;
+            if (views)
+            {
+                pnanovdb_raster_shader_params_t* shader_params_ptr = nullptr;
+                editor->impl->scene_manager->with_object(
+                    scene, name,
+                    [&](SceneObject* obj)
+                    {
+                        if (obj)
+                        {
+                            shader_params_ptr = (pnanovdb_raster_shader_params_t*)obj->shader_params;
+                        }
+                    });
+                views->add_gaussian_to_scene(scene, name, gaussian_data, shader_params_ptr);
+            }
+
+            editor->impl->gaussian_data = gaussian_data;
             editor->impl->scene_manager->with_object(scene, name,
                                                      [&](SceneObject* obj)
                                                      {
                                                          if (obj)
                                                          {
-                                                             shader_params_ptr =
-                                                                 (pnanovdb_raster_shader_params_t*)obj->shader_params;
+                                                             editor->impl->shader_params = obj->shader_params;
+                                                             editor->impl->shader_params_data_type = raster_params_dt;
                                                          }
                                                      });
-            views->add_gaussian_to_scene(scene, name, gaussian_data, shader_params_ptr);
-        }
-
-        editor->impl->gaussian_data = gaussian_data;
-        editor->impl->scene_manager->with_object(scene, name,
-                                                 [&](SceneObject* obj)
-                                                 {
-                                                     if (obj)
-                                                     {
-                                                         editor->impl->shader_params = obj->shader_params;
-                                                         editor->impl->shader_params_data_type = raster_params_dt;
-                                                     }
-                                                 });
-    }
+        });
 }
 
 void add_camera_view_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_camera_view_t* camera)
@@ -1092,19 +1112,24 @@ void add_camera_view_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene
 
     editor->impl->scene_manager->add_camera(scene, camera->name, camera);
 
-    if (editor->impl->editor_worker)
-    {
-        editor->impl->editor_worker->views_need_sync.store(true); // Signal render thread to sync views
-    }
-    else
-    {
-        // Non-worker mode: safe to directly update views from this thread (render thread)
-        SceneView* views = editor->impl->scene_view;
-        if (views)
+    dispatch_worker_or_immediate(
+        editor,
+        // Worker mode: queue for render thread
+        [&](EditorWorker* worker)
         {
-            views->add_camera(scene, camera->name, camera);
-        }
-    }
+            worker->last_added_scene_token_id.store(scene->id, std::memory_order_relaxed);
+            worker->last_added_name_token_id.store(camera->name->id, std::memory_order_relaxed);
+            worker->views_need_sync.store(true);
+        },
+        // Non-worker mode: execute immediately
+        [&]()
+        {
+            SceneView* views = editor->impl->scene_view;
+            if (views)
+            {
+                views->add_camera(scene, camera->name, camera);
+            }
+        });
 }
 
 void update_camera_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_camera_t* camera)
@@ -1137,15 +1162,12 @@ void update_camera_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, 
 
     if (is_current_scene_displayed)
     {
-        if (editor->impl->editor_worker)
-        {
-            EditorWorker* worker = editor->impl->editor_worker;
-            worker->pending_camera.set_pending(camera);
-        }
-        else
-        {
-            editor->impl->camera = camera;
-        }
+        dispatch_worker_or_immediate(
+            editor,
+            // Worker mode: queue for render thread
+            [&](EditorWorker* worker) { worker->pending_camera.set_pending(camera); },
+            // Non-worker mode: execute immediately
+            [&]() { editor->impl->camera = camera; });
     }
 }
 
@@ -1196,22 +1218,12 @@ void execute_removal(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, 
     SceneView* views = editor->impl->scene_view;
     bool removed_from_ui = false;
 
-    // Try removing from each type (convert name_str to token)
+    // Remove view from scene (tries all types: camera, nanovdb, gaussian)
     pnanovdb_editor_token_t* name_token = name ? name : EditorToken::getInstance().getToken(name_str.c_str());
 
-    if (views->remove_camera(scene, name_token))
+    if (views->remove(scene, name_token))
     {
-        Console::getInstance().addLog("[API] Removed camera from UI");
-        removed_from_ui = true;
-    }
-    else if (views->remove_nanovdb(scene, name_token))
-    {
-        Console::getInstance().addLog("[API] Removed NanoVDB from UI");
-        removed_from_ui = true;
-    }
-    else if (views->remove_gaussian(scene, name_token))
-    {
-        Console::getInstance().addLog("[API] Removed Gaussian data from UI");
+        Console::getInstance().addLog("[API] Removed view from UI");
         removed_from_ui = true;
     }
 
@@ -1398,47 +1410,49 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
 
         Console::getInstance().addLog("[API] Found %zu objects to remove from scene", objects_to_remove.size());
 
-        if (editor->impl->editor_worker)
-        {
-            // Worker mode: queue all removals for render thread (including scene removal)
-            std::lock_guard<std::mutex> lock(editor->impl->editor_worker->pending_removals_mutex);
-
-            // Queue each object removal
-            for (auto* obj_name : objects_to_remove)
+        dispatch_worker_or_immediate(
+            editor,
+            // Worker mode: queue all removals for render thread
+            [&](EditorWorker* worker)
             {
-                editor->impl->editor_worker->pending_removals.push_back({ scene, obj_name });
-            }
+                std::lock_guard<std::mutex> lock(worker->pending_removals_mutex);
 
-            // Queue scene removal (nullptr name signals to remove the scene itself after objects)
-            editor->impl->editor_worker->pending_removals.push_back({ scene, nullptr });
-
-            Console::getInstance().addLog(
-                "[API] Queued %zu object removals + scene removal for next frame", objects_to_remove.size());
-        }
-        else
-        {
-            // Non-worker mode: execute removals immediately (same thread as render)
-            for (auto* obj_name : objects_to_remove)
-            {
-                execute_removal(editor, scene, obj_name);
-            }
-
-            // After removing all objects, remove the scene itself from SceneView
-            if (editor->impl->scene_view)
-            {
-                bool scene_removed = editor->impl->scene_view->remove_scene(scene);
-                if (scene_removed)
+                // Queue each object removal
+                for (auto* obj_name : objects_to_remove)
                 {
-                    Console::getInstance().addLog("[API] Successfully removed scene '%s' from SceneView", scene->str);
+                    worker->pending_removals.push_back({ scene, obj_name });
                 }
-                else
-                {
-                    Console::getInstance().addLog("[API] Scene '%s' was not found in SceneView", scene->str);
-                }
-            }
 
-            Console::getInstance().addLog("[API] Completed removal of scene '%s' and all its objects", scene->str);
-        }
+                // Queue scene removal (nullptr name signals to remove the scene itself after objects)
+                worker->pending_removals.push_back({ scene, nullptr });
+
+                Console::getInstance().addLog(
+                    "[API] Queued %zu object removals + scene removal for next frame", objects_to_remove.size());
+            },
+            // Non-worker mode: execute removals immediately
+            [&]()
+            {
+                for (auto* obj_name : objects_to_remove)
+                {
+                    execute_removal(editor, scene, obj_name);
+                }
+
+                // After removing all objects, remove the scene itself from SceneView
+                if (editor->impl->scene_view)
+                {
+                    bool scene_removed = editor->impl->scene_view->remove_scene(scene);
+                    if (scene_removed)
+                    {
+                        Console::getInstance().addLog("[API] Successfully removed scene '%s' from SceneView", scene->str);
+                    }
+                    else
+                    {
+                        Console::getInstance().addLog("[API] Scene '%s' was not found in SceneView", scene->str);
+                    }
+                }
+
+                Console::getInstance().addLog("[API] Completed removal of scene '%s' and all its objects", scene->str);
+            });
 
         return;
     }
@@ -1447,20 +1461,17 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
     Console::getInstance().addLog("[API] remove: scene='%s' (id=%llu), name='%s' (id=%llu)", token_to_string(scene),
                                   (unsigned long long)scene->id, token_to_string(name), (unsigned long long)name->id);
 
-    if (editor->impl->editor_worker)
-    {
+    dispatch_worker_or_immediate(
+        editor,
         // Worker mode: queue removal for next frame boundary (prevents UAF)
-        // The render thread will execute it when safe
-        Console::getInstance().addLog("[API] Queuing removal for next frame");
-
-        std::lock_guard<std::mutex> lock(editor->impl->editor_worker->pending_removals_mutex);
-        editor->impl->editor_worker->pending_removals.push_back({ scene, name });
-    }
-    else
-    {
+        [&](EditorWorker* worker)
+        {
+            Console::getInstance().addLog("[API] Queuing removal for next frame");
+            std::lock_guard<std::mutex> lock(worker->pending_removals_mutex);
+            worker->pending_removals.push_back({ scene, name });
+        },
         // Non-worker mode: execute removal immediately (same thread as render)
-        execute_removal(editor, scene, name);
-    }
+        [&]() { execute_removal(editor, scene, name); });
 }
 
 /*!

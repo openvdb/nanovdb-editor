@@ -11,9 +11,9 @@
 
 #pragma once
 
-#include "ImguiInstance.h"
 #include "SceneView.h"
 #include "nanovdb_editor/putil/Editor.h"
+#include "imgui/ImguiWindow.h"
 
 #include <string>
 #include <map>
@@ -21,16 +21,17 @@
 #include <variant>
 #include <memory>
 
-// Forward declarations
-namespace pnanovdb_editor
+namespace imgui_instance_user
 {
-class EditorSceneManager;
-struct SceneObject;
-enum class SceneObjectType; // Forward declare enum
+struct Instance;
 }
 
 namespace pnanovdb_editor
 {
+class EditorSceneManager;
+struct SceneObject;
+enum class SceneObjectType;
+
 enum class ViewType
 {
     Root,
@@ -39,7 +40,6 @@ enum class ViewType
     NanoVDBs,
     None
 };
-
 
 // Configuration structure for EditorScene
 struct EditorSceneConfig
@@ -71,20 +71,8 @@ struct SceneSelection
     {
         return type != ViewType::None && name_token != nullptr;
     }
-    bool operator==(const SceneSelection& other) const
-    {
-        // Compare token IDs for efficiency
-        uint64_t this_name_id = name_token ? name_token->id : 0;
-        uint64_t other_name_id = other.name_token ? other.name_token->id : 0;
-        uint64_t this_scene_id = scene_token ? scene_token->id : 0;
-        uint64_t other_scene_id = other.scene_token ? other.scene_token->id : 0;
-
-        return type == other.type && this_name_id == other_name_id && this_scene_id == other_scene_id;
-    }
-    bool operator!=(const SceneSelection& other) const
-    {
-        return !(*this == other);
-    }
+    bool operator==(const SceneSelection& other) const;
+    bool operator!=(const SceneSelection& other) const;
 };
 
 struct SceneShaderParams
@@ -118,8 +106,6 @@ public:
     ~EditorScene();
 
     SceneObject* get_scene_object(pnanovdb_editor_token_t* view_name_token, ViewType view_type) const;
-    SceneObject* get_current_scene_object() const;
-    SceneObject* get_render_scene_object() const;
     uint64_t get_current_view_epoch() const
     {
         return m_scene_view.get_current_view_epoch();
@@ -150,7 +136,6 @@ public:
     std::vector<pnanovdb_editor_token_t*> get_all_scene_tokens() const;
 
     // Scene selection management
-    bool has_valid_selection() const;
     void clear_selection();
 
     void set_properties_selection(ViewType type,
@@ -166,7 +151,6 @@ public:
     // Camera state management
     void save_camera_state(pnanovdb_editor_token_t* name_token, const pnanovdb_camera_state_t& state);
     const pnanovdb_camera_state_t* get_saved_camera_state(pnanovdb_editor_token_t* name_token) const;
-    void update_view_camera_state(pnanovdb_editor_token_t* view_name_token, const pnanovdb_camera_state_t& state);
     const std::map<uint64_t, pnanovdb_camera_state_t>& get_views_camera_states() const
     {
         return m_scene_view_camera_state;
@@ -261,6 +245,19 @@ private:
     // NanoVDB file operations
     void load_nanovdb_to_editor();
     void save_editor_nanovdb();
+
+    // Helper methods for internal use
+    SceneObject* get_current_scene_object() const;
+    SceneObject* get_render_scene_object() const;
+    bool has_valid_selection() const;
+    void clear_selection_if_matches(SceneSelection& selection,
+                                    const char* name,
+                                    pnanovdb_editor_token_t* scene_token,
+                                    const char* log_message);
+    bool is_switching_scenes(pnanovdb_editor_token_t* from_scene,
+                            pnanovdb_editor_token_t* to_scene) const;
+    pnanovdb_editor_token_t* find_next_available_view(pnanovdb_editor_token_t* scene_token) const;
+    void* get_view_params_with_fallback(SceneShaderParams& params, void* obj_params) const;
 
     imgui_instance_user::Instance* m_imgui_instance;
     pnanovdb_editor_t* m_editor;

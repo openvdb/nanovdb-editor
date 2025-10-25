@@ -13,7 +13,6 @@
 
 #include "nanovdb_editor/putil/Editor.h"
 #include "nanovdb_editor/putil/Raster.h"
-#include "imgui/ImguiWindow.h"
 
 #include <string>
 #include <map>
@@ -46,6 +45,7 @@ struct SceneViewData
     std::map<uint64_t, pnanovdb_camera_view_t*> cameras; // Key = token ID
     std::map<uint64_t, GaussianDataContext> gaussians; // Key = token ID
     std::map<uint64_t, NanoVDBContext> nanovdbs; // Key = token ID
+    uint64_t last_added_view_token_id = 0; // Track last added view for auto-selection on scene switch
     uint64_t current_view_token_id = 0; // Current view token ID selected in this scene
     std::atomic<uint64_t> current_view_epoch{ 0 };
     int unnamed_counter = 0;
@@ -66,8 +66,6 @@ public:
 
     // Scene management
     SceneViewData* get_or_create_scene(pnanovdb_editor_token_t* scene_token, pnanovdb_bool_t is_y_up = PNANOVDB_TRUE);
-    SceneViewData* get_scene(pnanovdb_editor_token_t* scene_token);
-    const SceneViewData* get_scene(pnanovdb_editor_token_t* scene_token) const;
 
     // Get current scene (defaults to default scene if none set)
     SceneViewData* get_current_scene();
@@ -85,9 +83,6 @@ public:
     {
         return m_current_scene_token;
     }
-
-    // Initialize default viewport camera for a scene
-    void init_scene_viewport_camera(pnanovdb_editor_token_t* scene_token, pnanovdb_camera_view_t* viewport_camera);
 
     // Get all scene tokens
     std::vector<pnanovdb_editor_token_t*> get_all_scene_tokens() const;
@@ -121,9 +116,7 @@ public:
     void add_gaussian(pnanovdb_editor_token_t* scene_token,
                       pnanovdb_editor_token_t* name_token,
                       const GaussianDataContext& ctx);
-    GaussianDataContext* get_gaussian(pnanovdb_editor_token_t* name_token);
     GaussianDataContext* get_gaussian(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token);
-    const GaussianDataContext* get_gaussian(pnanovdb_editor_token_t* name_token) const;
     const GaussianDataContext* get_gaussian(pnanovdb_editor_token_t* scene_token,
                                             pnanovdb_editor_token_t* name_token) const;
     std::map<uint64_t, GaussianDataContext>& get_gaussians();
@@ -132,16 +125,12 @@ public:
     // NanoVDBs (in current scene)
     void add_nanovdb(pnanovdb_editor_token_t* name_token, const NanoVDBContext& ctx);
     void add_nanovdb(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token, const NanoVDBContext& ctx);
-    NanoVDBContext* get_nanovdb(pnanovdb_editor_token_t* name_token);
     NanoVDBContext* get_nanovdb(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token);
-    const NanoVDBContext* get_nanovdb(pnanovdb_editor_token_t* name_token) const;
     const NanoVDBContext* get_nanovdb(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token) const;
     std::map<uint64_t, NanoVDBContext>& get_nanovdbs();
     const std::map<uint64_t, NanoVDBContext>& get_nanovdbs() const;
 
     std::string add_nanovdb_view(pnanovdb_compute_array_t* nanovdb_array, void* shader_params);
-    std::string add_gaussian_view(pnanovdb_raster_gaussian_data_t* gaussian_data,
-                                  pnanovdb_raster_shader_params_t* shader_params);
 
     // Scene-scoped helpers to add views and set current view for that scene
     void add_nanovdb_to_scene(pnanovdb_editor_token_t* scene_token,
@@ -153,25 +142,24 @@ public:
                                pnanovdb_raster_gaussian_data_t* gaussian_data,
                                pnanovdb_raster_shader_params_t* shader_params);
 
-    // Remove views
-    bool remove_camera(pnanovdb_editor_token_t* name_token);
-    bool remove_camera(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token);
-    bool remove_nanovdb(pnanovdb_editor_token_t* name_token);
-    bool remove_nanovdb(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token);
-    bool remove_gaussian(pnanovdb_editor_token_t* name_token);
-    bool remove_gaussian(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token);
+    // Remove view by name (tries all types: camera, nanovdb, gaussian)
+    // scene_token = nullptr uses current scene
+    bool remove(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token);
 
     // Remove entire scene
     bool remove_scene(pnanovdb_editor_token_t* scene_token);
 
 private:
-    template <typename MapType>
-    bool remove_from_map(MapType SceneViewData::*map_member, pnanovdb_editor_token_t* name_token);
+    // Internal helper methods
+    SceneViewData* get_scene(pnanovdb_editor_token_t* scene_token);
+    const SceneViewData* get_scene(pnanovdb_editor_token_t* scene_token) const;
 
     template <typename MapType>
     bool remove_from_map(MapType SceneViewData::*map_member,
                          pnanovdb_editor_token_t* scene_token,
                          pnanovdb_editor_token_t* name_token);
+
+    void set_view(SceneViewData* scene, pnanovdb_editor_token_t* view_token);
 
     // Map of scene ID -> SceneViewData
     std::map<uint64_t, SceneViewData> m_scene_view_data;

@@ -36,9 +36,9 @@ constexpr const char* s_raster2d_gaussian_shader = "raster/gaussian_rasterize_2d
 // Thread Synchronization Model
 // ----------------------------
 // Worker Thread              Render Thread
-// ━━━━━━━━━━━━━━            ━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━              ━━━━━━━━━━━━━
 // add_xyz()                  show() render loop
-//   └─ scene_manager (mutex)   ├─ views (no mutex, render thread only)
+//   └─ scene_manager (mutex)   ├─ scen_views (no mutex, render thread only)
 //   └─ set views_need_sync ───►└─ sync_views_from_scene_manager()
 //                                    └─ for_each_object() (mutex held)
 
@@ -154,6 +154,10 @@ struct EditorWorker
     std::atomic<uint32_t> pending_camera_view_idx;
     PendingData<void> pending_shader_params;
     ConstPendingData<pnanovdb_reflect_data_type_t> pending_shader_params_data_type;
+
+    // Track last added view to auto-select after sync
+    std::atomic<uint64_t> last_added_scene_token_id{ 0 };
+    std::atomic<uint64_t> last_added_name_token_id{ 0 };
 
     // Deferred removal queue (worker thread adds, render thread processes)
     std::mutex pending_removals_mutex;

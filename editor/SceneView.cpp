@@ -71,15 +71,6 @@ SceneViewData* SceneView::get_or_create_scene(pnanovdb_editor_token_t* scene_tok
     return &new_scene;
 }
 
-void SceneView::init_scene_viewport_camera(pnanovdb_editor_token_t* scene_token, pnanovdb_camera_view_t* viewport_camera)
-{
-    SceneViewData* scene = get_scene(scene_token);
-    if (scene)
-    {
-        scene->cameras[m_viewport_camera_token->id] = viewport_camera;
-    }
-}
-
 SceneViewData* SceneView::get_scene(pnanovdb_editor_token_t* scene_token)
 {
     if (!scene_token)
@@ -105,18 +96,8 @@ SceneViewData* SceneView::get_current_scene()
 
 const SceneViewData* SceneView::get_current_scene() const
 {
-    if (!m_current_scene_token)
-    {
-        if (!m_default_scene_token)
-        {
-            return nullptr;
-        }
-        auto it = m_scene_view_data.find(m_default_scene_token->id);
-        return (it != m_scene_view_data.end()) ? &it->second : nullptr;
-    }
-
-    auto it = m_scene_view_data.find(m_current_scene_token->id);
-    return (it != m_scene_view_data.end()) ? &it->second : nullptr;
+    pnanovdb_editor_token_t* token = m_current_scene_token ? m_current_scene_token : m_default_scene_token;
+    return get_scene(token);
 }
 
 void SceneView::set_current_scene(pnanovdb_editor_token_t* scene_token)
@@ -161,7 +142,7 @@ void SceneView::add_camera(pnanovdb_editor_token_t* scene_token,
     if (scene)
     {
         scene->cameras[name_token->id] = camera;
-        // Automatically select the scene when a camera is added to it
+        scene->last_added_view_token_id = name_token->id;
         set_current_scene(scene_token);
     }
 }
@@ -203,10 +184,8 @@ const std::map<uint64_t, pnanovdb_camera_view_t*>& SceneView::get_cameras() cons
     return scene ? scene->cameras : empty_map;
 }
 
-// Current view selection
-void SceneView::set_current_view(pnanovdb_editor_token_t* view_token)
+void SceneView::set_view(SceneViewData* scene, pnanovdb_editor_token_t* view_token)
 {
-    SceneViewData* scene = get_current_scene();
     if (scene)
     {
         scene->current_view_token_id = view_token ? view_token->id : 0;
@@ -214,14 +193,17 @@ void SceneView::set_current_view(pnanovdb_editor_token_t* view_token)
     }
 }
 
+// Current view selection
+void SceneView::set_current_view(pnanovdb_editor_token_t* view_token)
+{
+    SceneViewData* scene = get_current_scene();
+    set_view(scene, view_token);
+}
+
 void SceneView::set_current_view(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* view_token)
 {
     SceneViewData* scene = get_or_create_scene(scene_token);
-    if (scene)
-    {
-        scene->current_view_token_id = view_token ? view_token->id : 0;
-        scene->current_view_epoch.fetch_add(1, std::memory_order_relaxed);
-    }
+    set_view(scene, view_token);
 }
 
 pnanovdb_editor_token_t* SceneView::get_current_view() const
@@ -274,17 +256,9 @@ void SceneView::add_gaussian(pnanovdb_editor_token_t* scene_token,
     if (scene)
     {
         scene->gaussians[name_token->id] = ctx;
-        // Automatically select the scene when an object is added to it
+        scene->last_added_view_token_id = name_token->id;
         set_current_scene(scene_token);
     }
-}
-
-GaussianDataContext* SceneView::get_gaussian(pnanovdb_editor_token_t* name_token)
-{
-    if (!name_token)
-        return nullptr;
-    SceneViewData* scene = get_current_scene();
-    return scene ? find_in_map(scene->gaussians, name_token->id) : nullptr;
 }
 
 GaussianDataContext* SceneView::get_gaussian(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token)
@@ -292,14 +266,6 @@ GaussianDataContext* SceneView::get_gaussian(pnanovdb_editor_token_t* scene_toke
     if (!name_token)
         return nullptr;
     SceneViewData* scene = get_scene(scene_token);
-    return scene ? find_in_map(scene->gaussians, name_token->id) : nullptr;
-}
-
-const GaussianDataContext* SceneView::get_gaussian(pnanovdb_editor_token_t* name_token) const
-{
-    if (!name_token)
-        return nullptr;
-    const SceneViewData* scene = get_current_scene();
     return scene ? find_in_map(scene->gaussians, name_token->id) : nullptr;
 }
 
@@ -348,17 +314,9 @@ void SceneView::add_nanovdb(pnanovdb_editor_token_t* scene_token,
     if (scene)
     {
         scene->nanovdbs[name_token->id] = ctx;
-        // Automatically select the scene when an object is added to it
+        scene->last_added_view_token_id = name_token->id;
         set_current_scene(scene_token);
     }
-}
-
-NanoVDBContext* SceneView::get_nanovdb(pnanovdb_editor_token_t* name_token)
-{
-    if (!name_token)
-        return nullptr;
-    SceneViewData* scene = get_current_scene();
-    return scene ? find_in_map(scene->nanovdbs, name_token->id) : nullptr;
 }
 
 NanoVDBContext* SceneView::get_nanovdb(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token)
@@ -366,14 +324,6 @@ NanoVDBContext* SceneView::get_nanovdb(pnanovdb_editor_token_t* scene_token, pna
     if (!name_token)
         return nullptr;
     SceneViewData* scene = get_scene(scene_token);
-    return scene ? find_in_map(scene->nanovdbs, name_token->id) : nullptr;
-}
-
-const NanoVDBContext* SceneView::get_nanovdb(pnanovdb_editor_token_t* name_token) const
-{
-    if (!name_token)
-        return nullptr;
-    const SceneViewData* scene = get_current_scene();
     return scene ? find_in_map(scene->nanovdbs, name_token->id) : nullptr;
 }
 
@@ -466,38 +416,6 @@ std::string SceneView::add_nanovdb_view(pnanovdb_compute_array_t* nanovdb_array,
     return view_name;
 }
 
-std::string SceneView::add_gaussian_view(pnanovdb_raster_gaussian_data_t* gaussian_data,
-                                         pnanovdb_raster_shader_params_t* shader_params)
-{
-    if (!gaussian_data || !shader_params)
-    {
-        return "";
-    }
-
-    std::string view_name;
-    if (shader_params->name)
-    {
-        view_name = shader_params->name;
-    }
-
-    SceneViewData* scene = get_current_scene();
-    if (!scene)
-        return "";
-
-    view_name = add_view(
-        scene->gaussians, "gaussian_", view_name, GaussianDataContext{ gaussian_data, shader_params },
-        [this](pnanovdb_editor_token_t* name_token, GaussianDataContext&& ctx) { add_gaussian(name_token, ctx); },
-        scene->unnamed_counter);
-
-    pnanovdb_editor_token_t* name_token = EditorToken::getInstance().getToken(view_name.c_str());
-    if (name_token)
-    {
-        set_current_view(name_token);
-    }
-
-    return view_name;
-}
-
 void SceneView::add_nanovdb_to_scene(pnanovdb_editor_token_t* scene_token,
                                      pnanovdb_editor_token_t* name_token,
                                      pnanovdb_compute_array_t* nanovdb_array,
@@ -535,58 +453,29 @@ void SceneView::add_gaussian_to_scene(pnanovdb_editor_token_t* scene_token,
 }
 
 template <typename MapType>
-bool SceneView::remove_from_map(MapType SceneViewData::*map_member, pnanovdb_editor_token_t* name_token)
-{
-    if (!name_token)
-        return false;
-    SceneViewData* scene = get_current_scene();
-    if (!scene)
-        return false;
-    return (scene->*map_member).erase(name_token->id) > 0;
-}
-
-template <typename MapType>
 bool SceneView::remove_from_map(MapType SceneViewData::*map_member,
                                 pnanovdb_editor_token_t* scene_token,
                                 pnanovdb_editor_token_t* name_token)
 {
     if (!name_token)
         return false;
-    SceneViewData* scene = get_or_create_scene(scene_token);
+
+    // If no scene_token provided, use current scene
+    SceneViewData* scene = scene_token ? get_or_create_scene(scene_token) : get_current_scene();
     if (!scene)
         return false;
+
     return (scene->*map_member).erase(name_token->id) > 0;
 }
 
-// Remove views (current scene)
-bool SceneView::remove_camera(pnanovdb_editor_token_t* name_token)
+// Remove view by name (tries all types: camera, nanovdb, gaussian)
+bool SceneView::remove(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token)
 {
-    return remove_from_map(&SceneViewData::cameras, name_token);
-}
-
-bool SceneView::remove_camera(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token)
-{
-    return remove_from_map(&SceneViewData::cameras, scene_token, name_token);
-}
-
-bool SceneView::remove_nanovdb(pnanovdb_editor_token_t* name_token)
-{
-    return remove_from_map(&SceneViewData::nanovdbs, name_token);
-}
-
-bool SceneView::remove_nanovdb(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token)
-{
-    return remove_from_map(&SceneViewData::nanovdbs, scene_token, name_token);
-}
-
-bool SceneView::remove_gaussian(pnanovdb_editor_token_t* name_token)
-{
-    return remove_from_map(&SceneViewData::gaussians, name_token);
-}
-
-bool SceneView::remove_gaussian(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token)
-{
-    return remove_from_map(&SceneViewData::gaussians, scene_token, name_token);
+    // Try to remove from all view types, return true if any succeeded
+    bool removed = remove_from_map(&SceneViewData::cameras, scene_token, name_token);
+    removed = remove_from_map(&SceneViewData::nanovdbs, scene_token, name_token) || removed;
+    removed = remove_from_map(&SceneViewData::gaussians, scene_token, name_token) || removed;
+    return removed;
 }
 
 bool SceneView::remove_scene(pnanovdb_editor_token_t* scene_token)

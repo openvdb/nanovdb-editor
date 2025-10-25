@@ -28,6 +28,22 @@
 namespace pnanovdb_editor
 {
 
+bool SceneSelection::operator==(const SceneSelection& other) const
+{
+    // Compare token IDs for efficiency
+    uint64_t this_name_id = name_token ? name_token->id : 0;
+    uint64_t other_name_id = other.name_token ? other.name_token->id : 0;
+    uint64_t this_scene_id = scene_token ? scene_token->id : 0;
+    uint64_t other_scene_id = other.scene_token ? other.scene_token->id : 0;
+
+    return type == other.type && this_name_id == other_name_id && this_scene_id == other_scene_id;
+}
+
+bool SceneSelection::operator!=(const SceneSelection& other) const
+{
+    return !(*this == other);
+}
+
 EditorScene::EditorScene(const EditorSceneConfig& config)
     : m_imgui_instance(config.imgui_instance),
       m_editor(config.editor),
@@ -222,19 +238,12 @@ void EditorScene::copy_shader_params(SceneObjectType obj_type,
     if (obj_type == SceneObjectType::GaussianData)
     {
         params = &m_raster2d_params;
-        // Use scene object's params if available, otherwise fall back to default
-        view_params = obj_shader_params ? obj_shader_params :
-                                          (m_raster2d_params.default_array ?
-                                               (pnanovdb_raster_shader_params_t*)m_raster2d_params.default_array->data :
-                                               nullptr);
+        view_params = get_view_params_with_fallback(m_raster2d_params, obj_shader_params);
     }
     else if (obj_type == SceneObjectType::NanoVDB)
     {
         params = &m_nanovdb_params;
-        // Use scene object's params if available, otherwise fall back to default
-        view_params = obj_shader_params ?
-                          obj_shader_params :
-                          (m_nanovdb_params.default_array ? m_nanovdb_params.default_array->data : nullptr);
+        view_params = get_view_params_with_fallback(m_nanovdb_params, obj_shader_params);
     }
 
     if (params && view_params)
@@ -559,6 +568,22 @@ void EditorScene::sync_views_from_scene_manager()
         return;
     }
 
+    // Get the last added view tokens if we're in worker mode
+    pnanovdb_editor_token_t* last_added_scene_token = nullptr;
+    pnanovdb_editor_token_t* last_added_name_token = nullptr;
+
+    if (m_editor->impl->editor_worker)
+    {
+        uint64_t scene_id = m_editor->impl->editor_worker->last_added_scene_token_id.load(std::memory_order_relaxed);
+        uint64_t name_id = m_editor->impl->editor_worker->last_added_name_token_id.load(std::memory_order_relaxed);
+
+        if (scene_id != 0 && name_id != 0)
+        {
+            last_added_scene_token = EditorToken::getInstance().getTokenById(scene_id);
+            last_added_name_token = EditorToken::getInstance().getTokenById(name_id);
+        }
+    }
+
     // Iterate over all objects while holding the scene_manager mutex
     // This prevents race conditions where objects might be removed by worker thread during iteration
     m_scene_manager.for_each_object(
@@ -600,6 +625,19 @@ void EditorScene::sync_views_from_scene_manager()
 
             return true; // Continue iteration
         });
+
+    // After syncing all views, select the last added view if we have it
+    if (last_added_scene_token && last_added_name_token)
+    {
+        m_scene_view.set_current_view(last_added_scene_token, last_added_name_token);
+
+        // Clear the token IDs so we don't re-select on future syncs
+        if (m_editor->impl->editor_worker)
+        {
+            m_editor->impl->editor_worker->last_added_scene_token_id.store(0, std::memory_order_relaxed);
+            m_editor->impl->editor_worker->last_added_name_token_id.store(0, std::memory_order_relaxed);
+        }
+    }
 }
 
 void EditorScene::reload_shader_params_for_current_view()
@@ -808,82 +846,28 @@ bool EditorScene::remove_object(pnanovdb_editor_token_t* scene_token, const char
     pnanovdb_editor_token_t* name_token = EditorToken::getInstance().getToken(name);
 
     // Try to remove from SceneView (this handles UI scene tree)
-    if (m_scene_view.remove_camera(scene_token, name_token))
+    if (m_scene_view.remove(scene_token, name_token))
     {
-        Console::getInstance().addLog("Removed camera '%s' from scene", name);
-        removed = true;
-    }
-    else if (m_scene_view.remove_nanovdb(scene_token, name_token))
-    {
-        Console::getInstance().addLog("Removed NanoVDB '%s' from scene", name);
-        removed = true;
-    }
-    else if (m_scene_view.remove_gaussian(scene_token, name_token))
-    {
-        Console::getInstance().addLog("Removed Gaussian data '%s' from scene", name);
+        Console::getInstance().addLog("Removed view '%s' from scene", name);
         removed = true;
     }
 
     if (removed)
     {
         // Clear selection if the removed object is currently selected
-        if (m_view_selection.name_token && m_view_selection.name_token->str &&
-            strcmp(m_view_selection.name_token->str, name) == 0)
-        {
-            // Check if selection belongs to the same scene
-            if (!m_view_selection.scene_token || !scene_token || m_view_selection.scene_token->id == scene_token->id)
-            {
-                m_view_selection.type = ViewType::None;
-                m_view_selection.name_token = nullptr;
-                m_view_selection.scene_token = nullptr;
-                Console::getInstance().addLog("Cleared selection (removed object was selected)");
-            }
-        }
+        clear_selection_if_matches(m_view_selection, name, scene_token,
+                                   "Cleared selection (removed object was selected)");
 
         // Clear render view if the removed object is currently rendered
-        if (m_render_view_selection.name_token && m_render_view_selection.name_token->str &&
-            strcmp(m_render_view_selection.name_token->str, name) == 0)
-        {
-            if (!m_render_view_selection.scene_token || !scene_token ||
-                m_render_view_selection.scene_token->id == scene_token->id)
-            {
-                m_render_view_selection.type = ViewType::None;
-                m_render_view_selection.name_token = nullptr;
-                m_render_view_selection.scene_token = nullptr;
-
-                // Note: Renderer state will be cleared automatically on next frame
-                // when sync_selected_view_with_current() runs
-                Console::getInstance().addLog("Cleared render view selection (renderer will update next frame)");
-            }
-        }
+        clear_selection_if_matches(m_render_view_selection, name, scene_token,
+                                   "Cleared render view selection (renderer will update next frame)");
 
         // If current view was removed, try to switch to another view
         pnanovdb_editor_token_t* current_view_token = m_scene_view.get_current_view(scene_token);
         if (current_view_token && current_view_token->id == name_token->id)
         {
-            // Try to find another view to switch to
-            const auto& nanovdbs = m_scene_view.get_nanovdbs();
-            const auto& gaussians = m_scene_view.get_gaussians();
-
-            if (!nanovdbs.empty())
-            {
-                pnanovdb_editor_token_t* new_view_token =
-                    EditorToken::getInstance().getTokenById(nanovdbs.begin()->first);
-                m_scene_view.set_current_view(scene_token, new_view_token);
-                Console::getInstance().addLog("Switched view to '%s'", new_view_token ? new_view_token->str : "unknown");
-            }
-            else if (!gaussians.empty())
-            {
-                pnanovdb_editor_token_t* new_view_token =
-                    EditorToken::getInstance().getTokenById(gaussians.begin()->first);
-                m_scene_view.set_current_view(scene_token, new_view_token);
-                Console::getInstance().addLog("Switched view to '%s'", new_view_token ? new_view_token->str : "unknown");
-            }
-            else
-            {
-                m_scene_view.set_current_view(scene_token, nullptr);
-                Console::getInstance().addLog("No views remaining in scene");
-            }
+            pnanovdb_editor_token_t* new_view_token = find_next_available_view(scene_token);
+            m_scene_view.set_current_view(scene_token, new_view_token);
         }
     }
 
@@ -998,6 +982,10 @@ EditorSceneManager* EditorScene::get_scene_manager() const
 void EditorScene::set_current_scene(pnanovdb_editor_token_t* scene_token)
 {
     pnanovdb_editor_token_t* old_scene = m_scene_view.get_current_scene_token();
+
+    // Get the currently selected view token before switching (to try to keep same name selected)
+    pnanovdb_editor_token_t* previous_view_token = m_scene_view.get_current_view();
+
     m_scene_view.set_current_scene(scene_token);
 
     // Ensure this scene has a default camera
@@ -1006,31 +994,41 @@ void EditorScene::set_current_scene(pnanovdb_editor_token_t* scene_token)
         init_default_camera_for_scene(scene_token);
     }
 
-    // Clear selection if it belongs to a different scene
-    if (m_view_selection.scene_token)
+    // Handle view selection when switching scenes
+    if (is_switching_scenes(old_scene, scene_token))
     {
-        // Compare scene tokens to see if we're switching to a different scene
-        bool switching_scenes = false;
+        pnanovdb_editor_token_t* view_to_select = nullptr;
 
-        if (!scene_token && old_scene)
+        // Try to keep the same view name selected if it exists in the new scene
+        if (previous_view_token)
         {
-            // Switching from a scene to null (shouldn't happen normally)
-            switching_scenes = (m_view_selection.scene_token->id != 0);
-        }
-        else if (scene_token && !old_scene)
-        {
-            // Switching from null to a scene
-            switching_scenes = true;
-        }
-        else if (scene_token && old_scene && scene_token->id != old_scene->id)
-        {
-            // Switching between different scenes
-            switching_scenes = true;
+            // Check if a view with the same name exists in the new scene
+            if (m_scene_view.get_nanovdb(scene_token, previous_view_token) ||
+                m_scene_view.get_gaussian(scene_token, previous_view_token) ||
+                m_scene_view.get_camera(scene_token, previous_view_token))
+            {
+                view_to_select = previous_view_token;
+            }
         }
 
-        // If switching to a different scene and selection belongs to the old scene, clear it
-        if (switching_scenes && m_view_selection.scene_token->id != (scene_token ? scene_token->id : 0))
+        // If no matching view found, select the last added view in the new scene
+        if (!view_to_select)
         {
+            SceneViewData* new_scene_data = m_scene_view.get_or_create_scene(scene_token);
+            if (new_scene_data && new_scene_data->last_added_view_token_id != 0)
+            {
+                view_to_select = EditorToken::getInstance().getTokenById(new_scene_data->last_added_view_token_id);
+            }
+        }
+
+        // Select the chosen view or clear selection if nothing found
+        if (view_to_select)
+        {
+            m_scene_view.set_current_view(scene_token, view_to_select);
+        }
+        else
+        {
+            // No views in the scene, clear selection
             clear_selection();
         }
     }
@@ -1078,7 +1076,6 @@ void EditorScene::set_properties_selection(ViewType type,
 
         // Update shader_name to reflect the selected object's shader
         // Use with_object() to safely access shader_name while holding mutex
-        pnanovdb_editor_token_t* scene_token = get_current_scene_token();
         m_scene_manager.with_object(scene_token, name_token,
                                     [&](SceneObject* obj)
                                     {
@@ -1103,22 +1100,12 @@ SceneSelection EditorScene::get_properties_selection() const
 
 void EditorScene::set_render_view(ViewType type, pnanovdb_editor_token_t* name_token, pnanovdb_editor_token_t* scene_token)
 {
-    // Handle empty scene - clear the display
-    if (!name_token)
+    // Validate selection (handles null name_token, invalid selection, and type checking)
+    if (!name_token || !is_selection_valid(SceneSelection{ type, name_token, scene_token }) ||
+        (type != ViewType::NanoVDBs && type != ViewType::GaussianScenes))
     {
         clear_editor_view_state();
         m_render_view_selection = SceneSelection();
-        return;
-    }
-
-    if (!is_selection_valid(SceneSelection{ type, name_token, scene_token }))
-    {
-        clear_editor_view_state();
-        m_render_view_selection = SceneSelection();
-        return;
-    }
-    if (type != ViewType::NanoVDBs && type != ViewType::GaussianScenes)
-    {
         return;
     }
 
@@ -1172,14 +1159,6 @@ const pnanovdb_camera_state_t* EditorScene::get_saved_camera_state(pnanovdb_edit
     return (it != m_saved_camera_states.end()) ? &it->second : nullptr;
 }
 
-void EditorScene::update_view_camera_state(pnanovdb_editor_token_t* view_name_token, const pnanovdb_camera_state_t& state)
-{
-    if (view_name_token)
-    {
-        m_scene_view_camera_state[view_name_token->id] = state;
-    }
-}
-
 int EditorScene::get_camera_frustum_index(pnanovdb_editor_token_t* camera_name_token) const
 {
     if (!camera_name_token)
@@ -1196,6 +1175,83 @@ void EditorScene::set_camera_frustum_index(pnanovdb_editor_token_t* camera_name_
     {
         m_camera_frustum_index[camera_name_token->id] = index;
     }
+}
+
+// ============================================================================
+// Helper Methods (Private)
+// ============================================================================
+
+void EditorScene::clear_selection_if_matches(SceneSelection& selection,
+                                             const char* name,
+                                             pnanovdb_editor_token_t* scene_token,
+                                             const char* log_message)
+{
+    if (selection.name_token && selection.name_token->str && strcmp(selection.name_token->str, name) == 0)
+    {
+        // Check if selection belongs to the same scene
+        if (!selection.scene_token || !scene_token || selection.scene_token->id == scene_token->id)
+        {
+            selection.type = ViewType::None;
+            selection.name_token = nullptr;
+            selection.scene_token = nullptr;
+            Console::getInstance().addLog("%s", log_message);
+        }
+    }
+}
+
+bool EditorScene::is_switching_scenes(pnanovdb_editor_token_t* from_scene,
+                                      pnanovdb_editor_token_t* to_scene) const
+{
+    // Null to null is not a switch
+    if (!from_scene && !to_scene)
+    {
+        return false;
+    }
+
+    // Null to non-null or non-null to null is a switch
+    if (!from_scene || !to_scene)
+    {
+        return true;
+    }
+
+    return from_scene != to_scene;
+}
+
+pnanovdb_editor_token_t* EditorScene::find_next_available_view(pnanovdb_editor_token_t* scene_token) const
+{
+    const auto& nanovdbs = m_scene_view.get_nanovdbs();
+    const auto& gaussians = m_scene_view.get_gaussians();
+
+    if (!nanovdbs.empty())
+    {
+        pnanovdb_editor_token_t* new_view_token = EditorToken::getInstance().getTokenById(nanovdbs.begin()->first);
+        Console::getInstance().addLog("Switched view to '%s'", new_view_token ? new_view_token->str : "unknown");
+        return new_view_token;
+    }
+    else if (!gaussians.empty())
+    {
+        pnanovdb_editor_token_t* new_view_token = EditorToken::getInstance().getTokenById(gaussians.begin()->first);
+        Console::getInstance().addLog("Switched view to '%s'", new_view_token ? new_view_token->str : "unknown");
+        return new_view_token;
+    }
+
+    Console::getInstance().addLog("No views remaining in scene");
+    return nullptr;
+}
+
+void* EditorScene::get_view_params_with_fallback(SceneShaderParams& params, void* obj_params) const
+{
+    if (obj_params)
+    {
+        return obj_params;
+    }
+
+    if (params.default_array && params.default_array->data)
+    {
+        return params.default_array->data;
+    }
+
+    return nullptr;
 }
 
 // ============================================================================

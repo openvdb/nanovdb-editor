@@ -350,7 +350,6 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                         if (!current_scene && editor)
                         {
                             current_scene = editor->get_token(DEFAULT_SCENE_NAME);
-                            Console::getInstance().addLog("[SceneTree] No current scene, using default for deletion");
                         }
 
                         for (const auto& cameraName : camerasToDelete)
@@ -359,13 +358,11 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                             if (editor && current_scene && name_token)
                             {
                                 editor->remove(editor, current_scene, name_token);
-                                Console::getInstance().addLog(
-                                    "[UI] Deleted camera '%s' from scene '%s'", cameraName.c_str(), current_scene->str);
                             }
                             else
                             {
                                 Console::getInstance().addLog(
-                                    "[SceneTree] Failed to delete camera '%s': editor=%p, scene=%p, token=%p",
+                                    "Error: Failed to delete camera '%s': editor=%p, scene=%p, token=%p",
                                     cameraName.c_str(), (void*)editor, (void*)current_scene, (void*)name_token);
                             }
                         }
@@ -418,7 +415,6 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                         if (!current_scene && editor)
                         {
                             current_scene = editor->get_token(DEFAULT_SCENE_NAME);
-                            Console::getInstance().addLog("[SceneTree] No current scene, using default for deletion");
                         }
 
                         for (const auto& itemName : itemsToDelete)
@@ -427,14 +423,12 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                             if (editor && current_scene && name_token)
                             {
                                 editor->remove(editor, current_scene, name_token);
-                                Console::getInstance().addLog(
-                                    "[UI] Deleted '%s' from scene '%s'", itemName.c_str(), current_scene->str);
                             }
                             else
                             {
                                 Console::getInstance().addLog(
-                                    "[SceneTree] Failed to delete '%s': editor=%p, scene=%p, token=%p",
-                                    itemName.c_str(), (void*)editor, (void*)current_scene, (void*)name_token);
+                                    "Error: Failed to delete '%s': editor=%p, scene=%p, token=%p", itemName.c_str(),
+                                    (void*)editor, (void*)current_scene, (void*)name_token);
                             }
                         }
                     }

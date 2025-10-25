@@ -15,10 +15,7 @@
 #include "EditorToken.h"
 #include "ShaderParams.h"
 #include "nanovdb_editor/putil/Editor.h"
-#include "nanovdb_editor/putil/Compute.h"
 #include "nanovdb_editor/putil/Raster.h"
-#include "nanovdb_editor/putil/Reflect.h"
-#include "nanovdb_editor/putil/Camera.h"
 
 #include <map>
 #include <mutex>
