@@ -1137,8 +1137,6 @@ void add_camera_view_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene
         // Worker mode: queue for render thread
         [&](EditorWorker* worker)
         {
-            worker->last_added_scene_token_id.store(scene->id, std::memory_order_relaxed);
-            worker->last_added_name_token_id.store(camera->name->id, std::memory_order_relaxed);
             worker->views_need_sync.store(true);
         },
         // Non-worker mode: execute immediately

@@ -641,37 +641,63 @@ void EditorScene::sync_views_from_scene_manager()
             return true; // Continue iteration
         });
 
-    // After syncing, switch to the scene and select the last added view if we have it
-    if (last_added_scene_token)
+    // After syncing, if worker specified a view to select, do so
+    if (last_added_scene_token && last_added_name_token)
     {
-        // Use scene switching API to run camera sync and viewport push
-        set_current_scene(last_added_scene_token);
+        pnanovdb_editor_token_t* old_scene = m_scene_view.get_current_scene_token();
+        m_scene_view.set_current_scene(last_added_scene_token);
 
-        // If we don't have an explicit last-added view token, pick a sensible default
-        pnanovdb_editor_token_t* view_token = last_added_name_token;
-        if (!view_token)
+        // Sync camera if we switched scenes
+        if (is_switching_scenes(old_scene, last_added_scene_token))
         {
-            view_token = find_next_available_view(last_added_scene_token);
+            sync_editor_camera_from_scene();
+            apply_editor_camera_to_viewport();
         }
 
-        if (view_token)
-        {
-            // Ensure SceneView's current view is set so selection logic sees it this frame
-            m_scene_view.set_current_view(last_added_scene_token, view_token);
+        // Determine what view to select - prefer content views over cameras
+        pnanovdb_editor_token_t* view_to_select = last_added_name_token;
+        ViewType view_type = determine_view_type(view_to_select, last_added_scene_token);
 
-            // Determine view type and set render view to ensure viewport_option and editor state update
-            if (m_scene_view.get_nanovdb(last_added_scene_token, view_token))
+        // If worker token is a camera (not a content view), try scene's last_added_view_token_id
+        if (view_type == ViewType::None)
+        {
+            SceneViewData* scene = m_scene_view.get_or_create_scene(last_added_scene_token);
+            if (scene && scene->last_added_view_token_id != 0)
             {
-                set_render_view(ViewType::NanoVDBs, view_token, last_added_scene_token);
+                view_to_select = EditorToken::getInstance().getTokenById(scene->last_added_view_token_id);
+                if (view_to_select)
+                {
+                    // Verify the view actually exists in the scene
+                    view_type = determine_view_type(view_to_select, last_added_scene_token);
+
+                    // If last_added view doesn't exist anymore, find any available view
+                    if (view_type == ViewType::None)
+                    {
+                        view_to_select = find_any_view_in_scene(last_added_scene_token);
+                        if (view_to_select)
+                        {
+                            view_type = determine_view_type(view_to_select, last_added_scene_token);
+                        }
+                    }
+                }
             }
-            else if (m_scene_view.get_gaussian(last_added_scene_token, view_token))
+            else
             {
-                set_render_view(ViewType::GaussianScenes, view_token, last_added_scene_token);
+                // No last_added tracked, find any available view
+                view_to_select = find_any_view_in_scene(last_added_scene_token);
+                if (view_to_select)
+                {
+                    view_type = determine_view_type(view_to_select, last_added_scene_token);
+                }
             }
-            else if (m_scene_view.get_camera(last_added_scene_token, view_token))
-            {
-                set_render_view(ViewType::Cameras, view_token, last_added_scene_token);
-            }
+        }
+
+        // Set the view and update selection
+        if (view_to_select && view_type != ViewType::None)
+        {
+            m_scene_view.set_current_view(last_added_scene_token, view_to_select);
+            set_properties_selection(view_type, view_to_select, last_added_scene_token);
+            set_render_view(view_type, view_to_select, last_added_scene_token);
         }
 
         // Clear the token IDs so we don't re-select on future syncs
@@ -680,12 +706,6 @@ void EditorScene::sync_views_from_scene_manager()
             m_editor->impl->editor_worker->last_added_scene_token_id.store(0, std::memory_order_relaxed);
             m_editor->impl->editor_worker->last_added_name_token_id.store(0, std::memory_order_relaxed);
         }
-
-        // Ensure viewport jumps to the scene camera in the same frame
-        apply_editor_camera_to_viewport();
-
-        // Ensure selection/render view states are consistent this frame
-        sync_selected_view_with_current();
     }
 }
 
@@ -1100,13 +1120,29 @@ void EditorScene::set_current_scene(pnanovdb_editor_token_t* scene_token)
             }
         }
 
-        // If no matching view found, select the last added view in the new scene
+        // If no matching view found, try the last added view in the new scene
         if (!view_to_select)
         {
             SceneViewData* new_scene_data = m_scene_view.get_or_create_scene(scene_token);
             if (new_scene_data && new_scene_data->last_added_view_token_id != 0)
             {
                 view_to_select = EditorToken::getInstance().getTokenById(new_scene_data->last_added_view_token_id);
+
+                // Verify the last_added view actually exists in the scene
+                if (view_to_select)
+                {
+                    ViewType check_type = determine_view_type(view_to_select, scene_token);
+                    if (check_type == ViewType::None)
+                    {
+                        // Last added view doesn't exist anymore, find any available view
+                        view_to_select = find_any_view_in_scene(scene_token);
+                    }
+                }
+            }
+            else
+            {
+                // No last_added tracked, find any available view
+                view_to_select = find_any_view_in_scene(scene_token);
             }
         }
 
@@ -1114,6 +1150,16 @@ void EditorScene::set_current_scene(pnanovdb_editor_token_t* scene_token)
         if (view_to_select)
         {
             m_scene_view.set_current_view(scene_token, view_to_select);
+
+            // Immediately update the editor's selection state
+            // This is necessary because sync_selected_view_with_current() won't detect
+            // the change if we call it right after setting the view (no before/after difference)
+            ViewType view_type = determine_view_type(view_to_select, scene_token);
+            if (view_type != ViewType::None)
+            {
+                set_properties_selection(view_type, view_to_select, scene_token);
+                set_render_view(view_type, view_to_select, scene_token);
+            }
         }
         else
         {
@@ -1329,6 +1375,38 @@ pnanovdb_editor_token_t* EditorScene::find_next_available_view(pnanovdb_editor_t
     }
 
     Console::getInstance().addLog("No views remaining in scene");
+    return nullptr;
+}
+
+pnanovdb_editor_token_t* EditorScene::find_any_view_in_scene(pnanovdb_editor_token_t* scene_token) const
+{
+    if (!scene_token)
+    {
+        return nullptr;
+    }
+
+    // Cast away const since we're not modifying the scene, just reading its contents
+    // This is safe because get_or_create_scene only creates if needed, and we're just reading the maps
+    SceneView& non_const_view = const_cast<SceneView&>(m_scene_view);
+    SceneViewData* scene = non_const_view.get_or_create_scene(scene_token);
+    if (!scene)
+    {
+        return nullptr;
+    }
+
+    // Try to find a nanovdb first
+    if (!scene->nanovdbs.empty())
+    {
+        return EditorToken::getInstance().getTokenById(scene->nanovdbs.begin()->first);
+    }
+
+    // Then try gaussians
+    if (!scene->gaussians.empty())
+    {
+        return EditorToken::getInstance().getTokenById(scene->gaussians.begin()->first);
+    }
+
+    // No content views found
     return nullptr;
 }
 
