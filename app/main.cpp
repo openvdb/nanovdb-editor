@@ -39,7 +39,7 @@ struct NanoVDBEditorArgs : public argparse::Args
     std::string& ip_address = kwarg("ip,address", "IP address for streaming").set_default("127.0.0.1");
     int& port = kwarg("p,port", "Port for streaming").set_default(8080);
     int& instance_count = kwarg("instance-count", "Number of headless instances to launch").set_default(1);
-    int& device_index = kwarg("d,device", "Vulkan device index").set_default(1);
+    int& device_index = kwarg("d,device", "Vulkan device index").set_default(0);
 };
 
 int main(int argc, char* argv[])
