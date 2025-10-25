@@ -103,6 +103,7 @@ const SceneViewData* SceneView::get_current_scene() const
 void SceneView::set_current_scene(pnanovdb_editor_token_t* scene_token)
 {
     m_current_scene_token = scene_token;
+    printf("Selection changed: scene='%s'\n", scene_token ? scene_token->str : "null");
 }
 
 std::vector<pnanovdb_editor_token_t*> SceneView::get_all_scene_tokens() const
@@ -143,6 +144,9 @@ void SceneView::add_camera(pnanovdb_editor_token_t* scene_token,
     {
         scene->cameras[name_token->id] = camera;
         scene->last_added_view_token_id = name_token->id;
+        printf("View added: camera '%s' to scene '%s'\n",
+               name_token ? name_token->str : "null",
+               scene_token ? scene_token->str : "null");
         set_current_scene(scene_token);
     }
 }
@@ -198,12 +202,16 @@ void SceneView::set_current_view(pnanovdb_editor_token_t* view_token)
 {
     SceneViewData* scene = get_current_scene();
     set_view(scene, view_token);
+    printf("Selection changed: view='%s'\n", view_token ? view_token->str : "null");
 }
 
 void SceneView::set_current_view(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* view_token)
 {
     SceneViewData* scene = get_or_create_scene(scene_token);
     set_view(scene, view_token);
+    printf("Selection changed: scene='%s', view='%s'\n",
+           scene_token ? scene_token->str : "null",
+           view_token ? view_token->str : "null");
 }
 
 pnanovdb_editor_token_t* SceneView::get_current_view() const
@@ -257,6 +265,9 @@ void SceneView::add_gaussian(pnanovdb_editor_token_t* scene_token,
     {
         scene->gaussians[name_token->id] = ctx;
         scene->last_added_view_token_id = name_token->id;
+        printf("View added: gaussian '%s' to scene '%s'\n",
+               name_token ? name_token->str : "null",
+               scene_token ? scene_token->str : "null");
         set_current_scene(scene_token);
     }
 }
@@ -315,6 +326,9 @@ void SceneView::add_nanovdb(pnanovdb_editor_token_t* scene_token,
     {
         scene->nanovdbs[name_token->id] = ctx;
         scene->last_added_view_token_id = name_token->id;
+        printf("View added: nanovdb '%s' to scene '%s'\n",
+               name_token ? name_token->str : "null",
+               scene_token ? scene_token->str : "null");
         set_current_scene(scene_token);
     }
 }
