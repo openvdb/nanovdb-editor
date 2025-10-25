@@ -831,6 +831,14 @@ void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
             ptr->pending.shader_selection_mode = ShaderSelectionMode::UseViewportShader;
         }
 
+        // Display the currently active viewport shader filename (if any)
+        if (!ptr->shader_name.empty())
+        {
+            ImGui::SameLine();
+            std::filesystem::path vpPath(ptr->shader_name);
+            ImGui::Text("%s", vpPath.filename().string().c_str());
+        }
+
         // Show params which are parsed from the shader opened in the code editor
         if (ImGui::RadioButton("Shader Editor Selected:",
                                ptr->pending.shader_selection_mode == ShaderSelectionMode::UseCodeEditorShader))
@@ -857,7 +865,9 @@ void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
         }
         ImGui::EndGroup();
 
-        const std::string& target_name = is_group_mode ? ptr->shader_group : shader_name;
+        const bool is_viewport_mode = ptr->pending.shader_selection_mode == ShaderSelectionMode::UseViewportShader;
+        const std::string& target_name =
+            is_group_mode ? ptr->shader_group : (is_viewport_mode ? ptr->shader_name : shader_name);
         if (!target_name.empty())
         {
             if (shader_params.isJsonLoaded(target_name, is_group_mode))
