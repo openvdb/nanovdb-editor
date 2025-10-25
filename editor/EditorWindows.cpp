@@ -1180,7 +1180,11 @@ void showAboutWindow(imgui_instance_user::Instance* ptr)
         ImGui::Separator();
 
         // Display version from VERSION.txt
-        ImGui::Text("Version: %s", NANOVDB_EDITOR_VERSION);
+#ifdef NANOVDB_EDITOR_PYPI_BUILD
+        ImGui::Text("Version: %s (PyPI Build)", NANOVDB_EDITOR_VERSION);
+#else
+         ImGui::Text("Version: %s", NANOVDB_EDITOR_VERSION);
+#endif
 
         // Display git hash from CMake
         ImGui::Text("Build: %s", NANOVDB_EDITOR_COMMIT_HASH);
