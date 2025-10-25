@@ -349,6 +349,7 @@ int main(int argc, char* argv[])
 
     pnanovdb_editor_token_t* volume_token = editor.get_token("dragon");
     editor.add_nanovdb_2(&editor, scene_main, volume_token, data_nanovdb);
+    editor.add_nanovdb_2(&editor, scene_secondary, volume_token, data_nanovdb);
     printf("Added dragon volume to main scene using add_nanovdb()\n");
 
     pnanovdb_compute_array_t* data_nanovdb2 = compute.load_nanovdb("./data/hexagon_flow_test2.nvdb");
@@ -511,6 +512,7 @@ int main(int argc, char* argv[])
     // config.ui_profile_name = "viewer";
     editor.show(&editor, device, &config);
 
+
     // if (editor.camera)
     // {
     //     pnanovdb_vec3_t position = editor.camera->state.position;
@@ -526,12 +528,15 @@ int main(int argc, char* argv[])
     pnanovdb_editor_load(&editor, &compute, &compiler);
 
     pnanovdb_editor_config_t config = {};
-    config.headless = PNANOVDB_FALSE;
-    config.streaming = PNANOVDB_FALSE;
+    config.headless = PNANOVDB_TRUE;
+    config.streaming = PNANOVDB_TRUE;
     config.ip_address = "127.0.0.1";
     config.port = 8080;
 
     editor.start(&editor, device, &config);
+    
+    pnanovdb_int32_t port = editor.get_resolved_port(&editor, PNANOVDB_TRUE);
+    printf("Editor starting on port: %d\n", port);
 
     auto runEditorLoop = [](int iterations = 5)
     {
@@ -544,19 +549,18 @@ int main(int argc, char* argv[])
 
     runEditorLoop();
 
-    editor.add_nanovdb(&editor, data_nanovdb);
+    pnanovdb_editor_token_t* scene_token = editor.get_token("scene");
+    pnanovdb_editor_token_t* main_token = editor.get_token("main");
+    pnanovdb_editor_token_t* volume_token = editor.get_token("dragon");
+
+    editor.add_nanovdb_2(&editor, scene_token, volume_token, data_nanovdb);
+    editor.add_nanovdb_2(&editor, main_token, volume_token, data_nanovdb);
 
     pnanovdb_camera_t camera;
     pnanovdb_camera_init(&camera);
     editor.update_camera(&editor, &camera);
 
-    runEditorLoop(10);
-
-    if (editor.camera)
-    {
-        pnanovdb_vec3_t position = editor.camera->state.position;
-        printf("Camera position: %f, %f, %f\n", position.x, position.y, position.z);
-    }
+    runEditorLoop(100);
 
     editor.stop(&editor);
 

@@ -113,9 +113,7 @@ static pnanovdb_bool_t init_impl(pnanovdb_editor_t* editor,
 void init(pnanovdb_editor_t* editor)
 {
     editor->impl->scene_manager = new EditorSceneManager();
-
     editor->impl->scene_view = new SceneView();
-    editor->impl->scene_view->get_or_create_scene(nullptr);
 
     editor->impl->raster = new pnanovdb_raster_t();
     pnanovdb_raster_load(editor->impl->raster, editor->impl->compute);
@@ -341,14 +339,17 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         editor->impl->raster_ctx = editor->impl->raster->create_context(editor->impl->raster->compute, device_queue);
     }
 
-    // Set current scene to the first scene if no current scene is set
+    // Create and set default scene with proper is_y_up setting from render settings
     SceneView* views = editor->impl->scene_view;
-    if (views && views->has_scenes() && !views->get_current_scene_token())
+    if (views)
     {
-        auto scene_tokens = views->get_all_scene_tokens();
-        if (!scene_tokens.empty())
+        pnanovdb_editor_token_t* default_scene = EditorToken::getInstance().getToken("scene");
+        views->get_or_create_scene(default_scene, imgui_user_settings->is_y_up);
+
+        // Set current scene if no current scene is set
+        if (!views->get_current_scene_token())
         {
-            views->set_current_scene(scene_tokens[0]);
+            views->set_current_scene(default_scene);
         }
     }
 
@@ -693,35 +694,38 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         }
 
         // 3-frame destruction pipeline for gaussian data:
-        // This prevents GPU from accessing freed memory by deferring destruction for 3 frames
-        // 1. Destroy items in ready queue (have been pending for 3 frames)
-        if (!editor->impl->gaussian_data_destruction_queue_ready.empty())
         {
-            editor->impl->gaussian_data_destruction_queue_ready.clear();
-        }
+            // This prevents GPU from accessing freed memory by deferring destruction for 3 frames
+            // 1. Destroy items in ready queue (have been pending for 3 frames)
+            if (!editor->impl->gaussian_data_destruction_queue_ready.empty())
+            {
+                editor->impl->gaussian_data_destruction_queue_ready.clear();
+            }
 
-        // 2. Move pending queue to ready queue (advance pipeline)
-        if (!editor->impl->gaussian_data_destruction_queue_pending.empty())
-        {
-            editor->impl->gaussian_data_destruction_queue_ready =
-                std::move(editor->impl->gaussian_data_destruction_queue_pending);
-            editor->impl->gaussian_data_destruction_queue_pending.clear();
-        }
+            // 2. Move pending queue to ready queue (advance pipeline)
+            if (!editor->impl->gaussian_data_destruction_queue_pending.empty())
+            {
+                editor->impl->gaussian_data_destruction_queue_ready =
+                    std::move(editor->impl->gaussian_data_destruction_queue_pending);
+                editor->impl->gaussian_data_destruction_queue_pending.clear();
+            }
 
-        // 3. Move gaussian_data_old to pending queue (start of pipeline)
-        if (editor->impl->gaussian_data_old)
-        {
-            editor->impl->gaussian_data_destruction_queue_pending.push_back(std::move(editor->impl->gaussian_data_old));
-        }
-        if (editor->impl->camera && imgui_user_settings->sync_camera == PNANOVDB_FALSE)
-        {
-            imgui_window_iface->get_camera(imgui_window, &editor->impl->camera->state, &editor->impl->camera->config);
+            // 3. Move gaussian_data_old to pending queue (start of pipeline)
+            if (editor->impl->gaussian_data_old)
+            {
+                editor->impl->gaussian_data_destruction_queue_pending.push_back(
+                    std::move(editor->impl->gaussian_data_old));
+            }
+            if (editor->impl->camera && imgui_user_settings->sync_camera == PNANOVDB_FALSE)
+            {
+                imgui_window_iface->get_camera(imgui_window, &editor->impl->camera->state, &editor->impl->camera->config);
+
+                // Sync the updated camera back to the scene's viewport camera for properties display
+                editor_scene.sync_scene_camera_from_editor();
+            }
         }
 
         imgui_window_iface->update_camera(imgui_window, imgui_user_settings);
-
-        // update after switching views
-        editor_scene.sync_default_camera_view();
 
         // update viewport image
         should_run = imgui_window_iface->update(

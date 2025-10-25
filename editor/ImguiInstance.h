@@ -184,8 +184,6 @@ struct Instance
 
     ProgressBar progress;
 
-    pnanovdb_camera_view_t default_camera_view; // default camera view that syncs with viewport
-
     bool is_docking_setup = false;
     bool loaded_ini_once = false;
     std::string current_profile_name = ""; // Track current profile for switching

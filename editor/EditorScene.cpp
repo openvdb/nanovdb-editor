@@ -56,6 +56,9 @@ EditorScene::EditorScene(const EditorSceneConfig& config)
     // Setup views UI - ImguiInstance accesses views through EditorScene
     m_imgui_instance->editor_scene = this;
 
+    // Sync editor's camera from the default scene's camera (picks up is_y_up setting from render settings)
+    sync_editor_camera_from_scene();
+
     // Initialize NanoVDB shader params arrays with defaults
     {
         m_nanovdb_params.shader_name = config.default_shader_name;
@@ -298,8 +301,11 @@ void EditorScene::load_view_into_editor_and_ui(SceneObject* scene_obj)
 
     copy_shader_params(obj_type, obj_shader_params, obj_shader_name, SyncDirection::EditorToUI);
 
-    // Sync the editor's camera from the current scene's viewport camera
-    sync_editor_camera_from_scene();
+    // Note: Camera sync is NOT done here - camera is per-scene, not per-view
+    // Camera syncing happens when:
+    //   1. At startup (EditorScene constructor)
+    //   2. When switching scenes (set_current_scene)
+    //   3. When user moves viewport (sync_scene_camera_from_editor in render loop)
 }
 
 bool EditorScene::handle_pending_view_changes()
@@ -692,23 +698,35 @@ void EditorScene::sync_editor_camera_from_scene()
     }
 }
 
-void EditorScene::init_default_camera_for_scene(pnanovdb_editor_token_t* scene_token)
+void EditorScene::sync_scene_camera_from_editor()
 {
-    if (!scene_token)
+    if (!m_editor || !m_editor->impl || !m_editor->impl->camera)
     {
         return;
     }
 
-    // Get or create the scene - pass the is_y_up setting from render settings
-    SceneViewData* scene = m_scene_view.get_or_create_scene(scene_token, m_imgui_settings->is_y_up);
-    if (!scene)
+    // Get the viewport camera for the current scene
+    pnanovdb_editor_token_t* current_scene = get_current_scene_token();
+    if (!current_scene)
     {
         return;
     }
 
-    // The scene already has default_camera_view set up in get_or_create_scene()
-    // which points to scene->default_camera_config and scene->default_camera_state
-    // These pointers are stable since they're embedded in the SceneViewData object
+    pnanovdb_editor_token_t* viewport_token = m_scene_view.get_viewport_camera_token();
+    pnanovdb_camera_view_t* viewport_view = m_scene_view.get_camera(current_scene, viewport_token);
+    if (viewport_view && viewport_view->num_cameras > 0)
+    {
+        // Verify that configs and states pointers are still valid
+        if (!viewport_view->configs || !viewport_view->states)
+        {
+            return;
+        }
+
+        // Update the scene's viewport camera from the global camera
+        // This syncs user camera movements back to the scene for properties display
+        viewport_view->configs[0] = m_editor->impl->camera->config;
+        viewport_view->states[0] = m_editor->impl->camera->state;
+    }
 }
 
 void EditorScene::get_shader_params_for_current_view(void* shader_params_data)
@@ -874,14 +892,6 @@ bool EditorScene::remove_object(pnanovdb_editor_token_t* scene_token, const char
     return removed;
 }
 
-void EditorScene::sync_default_camera_view()
-{
-    // Update default camera view to sync with viewport camera to preserve changes when switching views
-    m_default_camera_view_state = m_imgui_settings->camera_state;
-    m_default_camera_view_config = m_imgui_settings->camera_config;
-    m_imgui_instance->default_camera_view.states = &m_default_camera_view_state;
-    m_imgui_instance->default_camera_view.configs = &m_default_camera_view_config;
-}
 
 const std::map<uint64_t, pnanovdb_camera_view_t*>& EditorScene::get_camera_views() const
 {
@@ -981,6 +991,11 @@ EditorSceneManager* EditorScene::get_scene_manager() const
 
 void EditorScene::set_current_scene(pnanovdb_editor_token_t* scene_token)
 {
+    if (!scene_token)
+    {
+        return;
+    }
+
     pnanovdb_editor_token_t* old_scene = m_scene_view.get_current_scene_token();
 
     // Get the currently selected view token before switching (to try to keep same name selected)
@@ -988,10 +1003,18 @@ void EditorScene::set_current_scene(pnanovdb_editor_token_t* scene_token)
 
     m_scene_view.set_current_scene(scene_token);
 
-    // Ensure this scene has a default camera
-    if (scene_token)
+    // Sync editor's camera from the new scene's viewport camera when switching
+    if (is_switching_scenes(old_scene, scene_token))
     {
-        init_default_camera_for_scene(scene_token);
+        sync_editor_camera_from_scene();
+
+        // Push the new scene's camera to the viewport (make viewport jump to scene's camera position)
+        if (m_editor && m_editor->impl && m_editor->impl->camera)
+        {
+            m_imgui_settings->camera_state = m_editor->impl->camera->state;
+            m_imgui_settings->camera_config = m_editor->impl->camera->config;
+            m_imgui_settings->sync_camera = PNANOVDB_TRUE;
+        }
     }
 
     // Handle view selection when switching scenes

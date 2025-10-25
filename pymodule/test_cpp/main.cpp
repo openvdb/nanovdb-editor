@@ -10,7 +10,7 @@
 
 #define TEST_EDITOR
 // #define TEST_RASTER
-#define TEST_RASTER_2D
+// #define TEST_RASTER_2D
 #define TEST_CAMERA
 #define TEST_NVDB
 // #define TEST_FILE_FORMAT
@@ -55,6 +55,7 @@ int main(int argc, char* argv[])
     pnanovdb_compute_load(&compute, &compiler);
 
     pnanovdb_compute_device_desc_t device_desc = {};
+    device_desc.device_index = 1;
     // device_desc.log_print = pnanovdb_compute_log_print;
 
     pnanovdb_compute_device_manager_t* device_manager = compute.device_interface.create_device_manager(PNANOVDB_FALSE);
@@ -137,6 +138,9 @@ int main(int argc, char* argv[])
     config.ip_address = "192.168.0.6";
     config.port = 8080;
     editor.start(&editor, device, &config);
+
+    pnanovdb_int32_t port = editor.get_resolved_port(&editor, PNANOVDB_TRUE);
+    printf("Editor starting on port: %d\n", port);
 
     auto runEditorLoop = [](int iterations = 5)
     {

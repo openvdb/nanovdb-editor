@@ -176,9 +176,6 @@ public:
     // Remove object from scene (UI, loaded data, renderer state, selection)
     bool remove_object(pnanovdb_editor_token_t* scene_token, const char* name);
 
-    // Sync default camera view with current viewport camera
-    void sync_default_camera_view();
-
     const pnanovdb_reflect_data_type_t* get_raster_shader_params_data_type() const
     {
         return m_raster_shader_params_data_type;
@@ -203,11 +200,8 @@ public:
     // Check if a selection is valid (item exists in the appropriate view map)
     bool is_selection_valid(const SceneSelection& selection) const;
 
-    // Initialize default viewport camera for a scene
-    void init_default_camera_for_scene(pnanovdb_editor_token_t* scene_token);
-
-    // Sync editor's camera from current scene's viewport camera
-    void sync_editor_camera_from_scene();
+    // Sync current scene's viewport camera from editor's camera (for properties display)
+    void sync_scene_camera_from_editor();
 
     // Generic iteration over views of any type
     // Callback signature: void(const std::string& name, const auto& view_data)
@@ -241,6 +235,9 @@ private:
     void clear_editor_view_state();
     void load_view_into_editor_and_ui(SceneObject* scene_obj);
     bool handle_pending_view_changes();
+
+    // Sync editor's camera from current scene's viewport camera
+    void sync_editor_camera_from_scene();
 
     // NanoVDB file operations
     void load_nanovdb_to_editor();
@@ -278,9 +275,6 @@ private:
 
     SceneShaderParams m_nanovdb_params;
     SceneShaderParams m_raster2d_params;
-
-    pnanovdb_camera_config_t m_default_camera_view_config;
-    pnanovdb_camera_state_t m_default_camera_view_state;
 };
 
 } // namespace pnanovdb_editor
