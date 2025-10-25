@@ -1120,10 +1120,7 @@ void add_camera_view_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene
     dispatch_worker_or_immediate(
         editor,
         // Worker mode: queue for render thread
-        [&](EditorWorker* worker)
-        {
-            worker->views_need_sync.store(true);
-        },
+        [&](EditorWorker* worker) { worker->views_need_sync.store(true); },
         // Non-worker mode: execute immediately
         [&]()
         {
@@ -1412,6 +1409,12 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
 {
     if (!editor || !editor->impl || !scene)
     {
+        return;
+    }
+
+    if (!name)
+    {
+        // TODO: Remove when supported removing scenes when name is nullptr
         return;
     }
 
