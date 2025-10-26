@@ -1423,7 +1423,7 @@ void EditorScene::save_editor_nanovdb()
 {
     if (!m_editor || !m_editor->impl || !m_editor->impl->nanovdb_array)
     {
-        pnanovdb_editor::Console::getInstance().addLog("Error: No NanoVDB array to save");
+        pnanovdb_editor::Console::getInstance().addLog(Console::LogLevel::Error, "No NanoVDB array to save");
         return;
     }
 
