@@ -79,13 +79,13 @@ bool Console::render()
     ImGui::AlignTextToFramePadding();
 
     // Left-aligned verbosity buttons group
-    drawToggle(LABEL_DEBUG, showDebug_, ImVec4(0.20f, 0.50f, 0.90f, 0.80f), TIP_DEBUG);
-    ImGui::SameLine();
-    drawToggle(LABEL_INFO, showInfo_, ImVec4(0.30f, 0.70f, 0.30f, 0.80f), TIP_INFO);
+    drawToggle(LABEL_ERROR, showError_, ImVec4(0.90f, 0.25f, 0.25f, 0.90f), TIP_ERROR);
     ImGui::SameLine();
     drawToggle(LABEL_WARNING, showWarning_, ImVec4(0.85f, 0.70f, 0.20f, 0.85f), TIP_WARNING);
     ImGui::SameLine();
-    drawToggle(LABEL_ERROR, showError_, ImVec4(0.90f, 0.25f, 0.25f, 0.90f), TIP_ERROR);
+    drawToggle(LABEL_INFO, showInfo_, ImVec4(0.30f, 0.70f, 0.30f, 0.80f), TIP_INFO);
+    ImGui::SameLine();
+    drawToggle(LABEL_DEBUG, showDebug_, ImVec4(0.20f, 0.50f, 0.90f, 0.80f), TIP_DEBUG);
     ImGui::SameLine();
     if (ImGui::SmallButton(LABEL_ALL))
     {
