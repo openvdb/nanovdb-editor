@@ -478,6 +478,56 @@ bool SceneView::remove(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_tok
     return removed;
 }
 
+pnanovdb_editor_token_t* SceneView::find_next_available_view(pnanovdb_editor_token_t* scene_token) const
+{
+    // Temporarily switch context to the target scene to reuse getters
+    const SceneViewData* scene = get_scene(scene_token);
+    if (!scene)
+    {
+        return nullptr;
+    }
+
+    // Prefer NanoVDBs, then Gaussians
+    if (!scene->nanovdbs.empty())
+    {
+        return EditorToken::getInstance().getTokenById(scene->nanovdbs.begin()->first);
+    }
+    if (!scene->gaussians.empty())
+    {
+        return EditorToken::getInstance().getTokenById(scene->gaussians.begin()->first);
+    }
+    return nullptr;
+}
+
+bool SceneView::remove_and_fix_current(pnanovdb_editor_token_t* scene_token,
+                                       pnanovdb_editor_token_t* name_token,
+                                       pnanovdb_editor_token_t** out_new_view)
+{
+    if (!name_token)
+        return false;
+
+    bool removed = remove(scene_token, name_token);
+    if (!removed)
+        return false;
+
+    // If the removed was current, select a fallback
+    pnanovdb_editor_token_t* current = get_current_view(scene_token);
+    if (current && current->id == name_token->id)
+    {
+        pnanovdb_editor_token_t* next = find_next_available_view(scene_token);
+        set_current_view(scene_token, next);
+        if (out_new_view)
+        {
+            *out_new_view = next;
+        }
+    }
+    else if (out_new_view)
+    {
+        *out_new_view = nullptr;
+    }
+    return true;
+}
+
 bool SceneView::remove_scene(pnanovdb_editor_token_t* scene_token)
 {
     if (!scene_token)

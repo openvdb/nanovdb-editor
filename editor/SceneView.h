@@ -148,6 +148,15 @@ public:
     // scene_token = nullptr uses current scene
     bool remove(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token);
 
+    // Pick a next available view in the given scene (NanoVDB preferred, then Gaussian). Returns nullptr if none.
+    pnanovdb_editor_token_t* find_next_available_view(pnanovdb_editor_token_t* scene_token) const;
+
+    // Remove a view and, if it was the current one, select a reasonable fallback in the same scene.
+    // If out_new_view is provided, it's set to the newly selected view (or nullptr if none).
+    bool remove_and_fix_current(pnanovdb_editor_token_t* scene_token,
+                                pnanovdb_editor_token_t* name_token,
+                                pnanovdb_editor_token_t** out_new_view = nullptr);
+
     // Remove entire scene
     bool remove_scene(pnanovdb_editor_token_t* scene_token);
 

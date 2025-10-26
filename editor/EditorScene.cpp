@@ -388,7 +388,7 @@ void EditorScene::process_pending_editor_changes()
     // Process pending shader params
     // Note: Shader params are set in scene objects, we just update the global pointer for legacy renderer access
     {
-        std::lock_guard<std::mutex> lock(m_editor->impl->editor_worker->shader_params_mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_editor->impl->editor_worker->shader_params_mutex);
         void* old_shader_params = nullptr;
         worker->pending_shader_params.process_pending(m_editor->impl->shader_params, old_shader_params);
 
@@ -432,11 +432,11 @@ void EditorScene::process_pending_editor_changes()
                     if (scene_removed)
                     {
                         Console::getInstance().addLog(
-                            "[API] Removed scene '%s' from SceneView on render thread", removal.scene->str);
+                            "Removed scene '%s' from SceneView on render thread", removal.scene->str);
                     }
                     else
                     {
-                        Console::getInstance().addLog("[API] Scene '%s' was not found in SceneView", removal.scene->str);
+                        Console::getInstance().addLog("Scene '%s' was not found in SceneView", removal.scene->str);
                     }
                 }
             }
@@ -552,7 +552,7 @@ void EditorScene::sync_shader_params_from_editor()
         // Only lock if params are dirty
         if (m_editor->impl->editor_worker->params_dirty.load())
         {
-            std::lock_guard<std::mutex> lock(m_editor->impl->editor_worker->shader_params_mutex);
+            std::lock_guard<std::recursive_mutex> lock(m_editor->impl->editor_worker->shader_params_mutex);
 
             // Check again after acquiring lock (double-check pattern)
             if (m_editor->impl->editor_worker->params_dirty.exchange(false))
@@ -811,13 +811,7 @@ void EditorScene::sync_scene_camera_from_editor()
 
 void EditorScene::get_shader_params_for_current_view(void* shader_params_data)
 {
-    if (!shader_params_data)
-    {
-        return;
-    }
-
-    // Use with_object() to safely copy fields while holding mutex
-    if (!m_render_view_selection.is_valid() || !m_editor->impl->scene_manager)
+    if (!shader_params_data || !m_render_view_selection.is_valid() || !m_editor->impl->scene_manager)
     {
         return;
     }
@@ -877,9 +871,6 @@ void EditorScene::handle_nanovdb_data_load(pnanovdb_compute_array_t* nanovdb_arr
     // Register in SceneView (for scene tree display)
     m_scene_view.add_nanovdb_to_scene(
         scene_token, name_token, nanovdb_array, params_array ? params_array->data : nullptr);
-
-    // Select the newly loaded rasterized view
-    m_scene_view.set_current_view(scene_token, name_token);
 }
 
 void EditorScene::handle_gaussian_data_load(pnanovdb_raster_gaussian_data_t* gaussian_data,
@@ -924,9 +915,6 @@ void EditorScene::handle_gaussian_data_load(pnanovdb_raster_gaussian_data_t* gau
     m_scene_view.add_gaussian_to_scene(
         scene_token, name_token, gaussian_data,
         static_cast<pnanovdb_raster_shader_params_t*>(params_array ? params_array->data : nullptr));
-
-    // Select the newly loaded rasterized view
-    m_scene_view.set_current_view(scene_token, name_token);
 }
 
 bool EditorScene::remove_object(pnanovdb_editor_token_t* scene_token, const char* name)
@@ -1210,7 +1198,6 @@ void EditorScene::set_properties_selection(ViewType type,
         m_view_selection = candidate;
 
         // Update shader_name to reflect the selected object's shader
-        // Use with_object() to safely access shader_name while holding mutex
         m_scene_manager.with_object(scene_token, name_token,
                                     [&](SceneObject* obj)
                                     {
@@ -1235,7 +1222,6 @@ SceneSelection EditorScene::get_properties_selection() const
 
 void EditorScene::set_render_view(ViewType type, pnanovdb_editor_token_t* name_token, pnanovdb_editor_token_t* scene_token)
 {
-    // Validate selection (handles null name_token, invalid selection, and type checking)
     if (!name_token || !is_selection_valid(SceneSelection{ type, name_token, scene_token }) ||
         (type != ViewType::NanoVDBs && type != ViewType::GaussianScenes))
     {
@@ -1246,30 +1232,29 @@ void EditorScene::set_render_view(ViewType type, pnanovdb_editor_token_t* name_t
 
     m_render_view_selection = { type, name_token, scene_token };
 
-    // Load into editor and UI so renderer switches to the requested view
-    // Use with_object() to safely copy data while holding mutex
-    m_scene_manager.with_object(
-        scene_token, name_token,
-        [&](SceneObject* scene_obj)
-        {
-            if (scene_obj)
-            {
-                load_view_into_editor_and_ui(scene_obj);
-                // Ensure default shader params for the selected view are ready even before (re)compile.
-                // Note: Avoid calling functions that acquire SceneManager locks from inside this callback
-                // (we're already in with_object()). reload_shader_params_for_current_view() only reads JSON
-                // and creates arrays; it does not call with_object or refresh other objects.
-                reload_shader_params_for_current_view();
-                if (type == ViewType::NanoVDBs)
-                {
-                    m_imgui_instance->viewport_option = imgui_instance_user::ViewportOption::NanoVDB;
-                }
-                else if (type == ViewType::GaussianScenes)
-                {
-                    m_imgui_instance->viewport_option = imgui_instance_user::ViewportOption::Raster2D;
-                }
-            }
-        });
+    m_scene_manager.with_object(scene_token, name_token,
+                                [&](SceneObject* scene_obj)
+                                {
+                                    if (!scene_obj)
+                                    {
+                                        return;
+                                    }
+
+                                    // Load into editor and UI so renderer switches to the requested view
+                                    load_view_into_editor_and_ui(scene_obj);
+
+                                    // Ensure default shader params for the selected view are ready even before
+                                    // (re)compile.
+                                    reload_shader_params_for_current_view();
+                                    if (type == ViewType::NanoVDBs)
+                                    {
+                                        m_imgui_instance->viewport_option = imgui_instance_user::ViewportOption::NanoVDB;
+                                    }
+                                    else if (type == ViewType::GaussianScenes)
+                                    {
+                                        m_imgui_instance->viewport_option = imgui_instance_user::ViewportOption::Raster2D;
+                                    }
+                                });
 }
 
 SceneSelection EditorScene::get_render_view_selection() const

@@ -386,7 +386,6 @@ void Properties::render(imgui_instance_user::Instance* ptr)
         }
         else if (selection.type == pnanovdb_editor::ViewType::GaussianScenes)
         {
-            // Use with_object() to safely access shader_name while holding mutex
             auto* scene_manager = ptr->editor_scene->get_scene_manager();
             if (scene_manager)
             {

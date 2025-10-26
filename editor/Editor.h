@@ -142,10 +142,10 @@ struct EditorWorker
 {
     std::thread* thread;
     std::atomic<bool> should_stop{ false };
-    std::atomic<bool> has_started{ false };
+    std::atomic<bool> is_starting{ true };
     std::atomic<bool> params_dirty{ false };
     std::atomic<bool> views_need_sync{ false }; // Signal that views need to sync from scene_manager
-    std::mutex shader_params_mutex;
+    std::recursive_mutex shader_params_mutex; // TODO: Use mutex per map_params()/unmap_params() call
     PendingData<pnanovdb_compute_array_t> pending_nanovdb;
     PendingData<pnanovdb_compute_array_t> pending_data_array;
     PendingData<pnanovdb_raster_gaussian_data_t> pending_gaussian_data;

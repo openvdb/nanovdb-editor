@@ -76,6 +76,36 @@ struct GaussianDataDeleter
         {
             editor->impl->raster->destroy_gaussian_data(editor->impl->raster->compute, editor->impl->device_queue, data);
         }
+        else
+        {
+            if (editor && editor->impl && editor->impl->compute)
+            {
+                auto* queue = editor->impl->device_queue;
+                auto* compute = editor->impl->compute;
+                pnanovdb_compute_interface_t* compute_interface = nullptr;
+                pnanovdb_compute_context_t* compute_context = nullptr;
+
+                if (queue)
+                {
+                    compute_interface = compute->device_interface.get_compute_interface(queue);
+                    compute_context = compute->device_interface.get_compute_context(queue);
+                }
+
+                if (compute_interface && compute_context)
+                {
+                    auto log_print = compute_interface->get_log_print(compute_context);
+                    if (log_print)
+                    {
+                        log_print(
+                            PNANOVDB_COMPUTE_LOG_LEVEL_WARNING,
+                            "GaussianDataDeleter: cannot destroy gaussian data (editor:%p impl:%p raster:%p queue:%p data:%p)",
+                            editor, editor ? editor->impl : nullptr,
+                            (editor && editor->impl) ? editor->impl->raster : nullptr,
+                            (editor && editor->impl) ? editor->impl->device_queue : nullptr, data);
+                    }
+                }
+            }
+        }
     }
 };
 
@@ -341,8 +371,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     }
 
     // Create and set default scene with proper is_y_up setting from render settings
-    SceneView* views = editor->impl->scene_view;
-    if (views)
+    if (SceneView* views = editor->impl->scene_view)
     {
         pnanovdb_editor_token_t* default_scene = EditorToken::getInstance().getToken(pnanovdb_editor::DEFAULT_SCENE_NAME);
         views->get_or_create_scene(default_scene);
@@ -458,26 +487,26 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         }
     }
 
+    if (editor->impl->editor_worker)
+    {
+        // Signal that the render loop has started
+        editor->impl->editor_worker->is_starting.store(false);
+        auto log_print = compute_interface->get_log_print(compute_context);
+        if (log_print)
+        {
+            log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Render loop started\n");
+        }
+    }
+
     bool should_run = true;
     while (should_run)
     {
-        // Signal that the render loop has started and queues are ready
-        if (editor->impl->editor_worker && !editor->impl->editor_worker->has_started.load())
-        {
-            editor->impl->editor_worker->has_started.store(true);
-            auto log_print = compute_interface->get_log_print(compute_context);
-            if (log_print)
-            {
-                log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Started\n");
-            }
-        }
-
         if (editor->impl->editor_worker && editor->impl->editor_worker->should_stop.load())
         {
             auto log_print = compute_interface->get_log_print(compute_context);
             if (log_print)
             {
-                log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Stopped\n");
+                log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Render loop stopped\n");
             }
             should_run = false;
             break;
@@ -836,6 +865,7 @@ void stop(pnanovdb_editor_t* editor)
     {
         return;
     }
+
     auto* editor_worker = editor->impl->editor_worker;
     editor_worker->should_stop.store(true);
     editor_worker->thread->join();
@@ -963,31 +993,24 @@ void add_nanovdb_2(pnanovdb_editor_t* editor,
         // Non-worker mode: execute immediately
         [&]()
         {
-            SceneView* views = editor->impl->scene_view;
-            if (views)
-            {
-                void* shader_params_ptr = nullptr;
-                editor->impl->scene_manager->with_object(scene, name,
-                                                         [&](SceneObject* obj)
-                                                         {
-                                                             if (obj)
-                                                             {
-                                                                 shader_params_ptr = obj->shader_params;
-                                                             }
-                                                         });
-                views->add_nanovdb_to_scene(scene, name, array, shader_params_ptr);
-            }
-
             editor->impl->nanovdb_array = array;
+
+            void* shader_params_ptr = nullptr;
             editor->impl->scene_manager->with_object(scene, name,
                                                      [&](SceneObject* obj)
                                                      {
                                                          if (obj)
                                                          {
+                                                             shader_params_ptr = obj->shader_params;
                                                              editor->impl->shader_params = obj->shader_params;
                                                              editor->impl->shader_params_data_type = nullptr;
                                                          }
                                                      });
+
+            if (SceneView* views = editor->impl->scene_view)
+            {
+                views->add_nanovdb_to_scene(scene, name, array, shader_params_ptr);
+            }
         });
 }
 
@@ -1014,12 +1037,10 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
     pnanovdb_compute_device_t* device = editor->impl->device;
     pnanovdb_compute_queue_t* device_queue = editor->impl->device_queue;
 
-    if (editor->impl->editor_worker && (!device || !device_queue))
+    auto* worker = editor->impl->editor_worker;
+    if (worker && (!device || !device_queue))
     {
-        // Wait for the worker render loop to start (queues become valid)
-        // Also break out if a stop is requested or the worker is replaced
-        auto* worker = editor->impl->editor_worker;
-        while (!worker->has_started.load())
+        while (worker->is_starting.load())
         {
             if (worker->should_stop.load() || editor->impl->editor_worker != worker)
             {
@@ -1086,32 +1107,25 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
         // Non-worker mode: execute immediately
         [&]()
         {
-            SceneView* views = editor->impl->scene_view;
-            if (views)
-            {
-                pnanovdb_raster_shader_params_t* shader_params_ptr = nullptr;
-                editor->impl->scene_manager->with_object(
-                    scene, name,
-                    [&](SceneObject* obj)
-                    {
-                        if (obj)
-                        {
-                            shader_params_ptr = (pnanovdb_raster_shader_params_t*)obj->shader_params;
-                        }
-                    });
-                views->add_gaussian_to_scene(scene, name, gaussian_data, shader_params_ptr);
-            }
-
             editor->impl->gaussian_data = gaussian_data;
+
+            pnanovdb_raster_shader_params_t* shader_params_ptr = nullptr;
             editor->impl->scene_manager->with_object(scene, name,
                                                      [&](SceneObject* obj)
                                                      {
                                                          if (obj)
                                                          {
+                                                             shader_params_ptr =
+                                                                 (pnanovdb_raster_shader_params_t*)obj->shader_params;
                                                              editor->impl->shader_params = obj->shader_params;
                                                              editor->impl->shader_params_data_type = raster_params_dt;
                                                          }
                                                      });
+
+            if (SceneView* views = editor->impl->scene_view)
+            {
+                views->add_gaussian_to_scene(scene, name, gaussian_data, shader_params_ptr);
+            }
         });
 }
 
@@ -1139,8 +1153,7 @@ void add_camera_view_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene
         // Non-worker mode: execute immediately
         [&]()
         {
-            SceneView* views = editor->impl->scene_view;
-            if (views)
+            if (SceneView* views = editor->impl->scene_view)
             {
                 views->add_camera(scene, camera->name, camera);
             }
@@ -1221,7 +1234,6 @@ void execute_removal(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, 
 
     // Get the object from scene manager BEFORE removing it, so we can save its info
     // IMPORTANT: Must save data before remove() since the object will be destroyed
-    // Use with_object() to safely access fields while holding mutex
     bool obj_found = false;
     SceneObjectType obj_type = SceneObjectType::NanoVDB; // default
     pnanovdb_editor_token_t* obj_name_token = nullptr;
@@ -1253,58 +1265,19 @@ void execute_removal(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, 
 
     // Update views (this function is always called from render thread, so it's safe)
     SceneView* views = editor->impl->scene_view;
-    bool removed_from_ui = false;
-
-    // Remove view from scene (tries all types: camera, nanovdb, gaussian)
     pnanovdb_editor_token_t* name_token = name ? name : EditorToken::getInstance().getToken(name_str.c_str());
 
-    if (views->remove(scene, name_token))
+    pnanovdb_editor_token_t* new_view = nullptr;
+    if (views->remove_and_fix_current(scene, name_token, &new_view))
     {
         Console::getInstance().addLog("[API] Removed view from UI");
-        removed_from_ui = true;
-    }
-
-    // If current view was removed, switch to another view
-    if (removed_from_ui)
-    {
-        pnanovdb_editor_token_t* current_view_token = views->get_current_view(scene);
-        if (current_view_token && current_view_token->id == name_token->id)
+        if (new_view)
         {
-            // Save current scene, switch to target scene to modify its views
-            pnanovdb_editor_token_t* prev_scene = views->get_current_scene_token();
-            views->set_current_scene(scene);
-
-            // Try to find another view to switch to
-            const auto& nanovdbs = views->get_nanovdbs();
-            const auto& gaussians = views->get_gaussians();
-
-            if (!nanovdbs.empty())
-            {
-                pnanovdb_editor_token_t* new_view_token =
-                    EditorToken::getInstance().getTokenById(nanovdbs.begin()->first);
-                views->set_current_view(new_view_token);
-                Console::getInstance().addLog(
-                    "[API] Switched view to '%s'", new_view_token ? new_view_token->str : "unknown");
-            }
-            else if (!gaussians.empty())
-            {
-                pnanovdb_editor_token_t* new_view_token =
-                    EditorToken::getInstance().getTokenById(gaussians.begin()->first);
-                views->set_current_view(new_view_token);
-                Console::getInstance().addLog(
-                    "[API] Switched view to '%s'", new_view_token ? new_view_token->str : "unknown");
-            }
-            else
-            {
-                views->set_current_view(nullptr);
-                Console::getInstance().addLog("[API] No views remaining in scene");
-            }
-
-            // Restore previous scene
-            if (prev_scene)
-            {
-                views->set_current_scene(prev_scene);
-            }
+            Console::getInstance().addLog("[API] Switched view to '%s'", new_view->str);
+        }
+        else
+        {
+            Console::getInstance().addLog("[API] No views remaining in scene");
         }
     }
 
@@ -1354,7 +1327,7 @@ void execute_removal(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, 
                     Console::getInstance().addLog("[API] Cleared pending nanovdb data");
 
                     // Clear pending_shader_params if it points to this object's freed array data
-                    std::lock_guard<std::mutex> lock(editor->impl->editor_worker->shader_params_mutex);
+                    std::lock_guard<std::recursive_mutex> lock(editor->impl->editor_worker->shader_params_mutex);
                     void* pending_params =
                         editor->impl->editor_worker->pending_shader_params.pending_data.load(std::memory_order_acquire);
                     if (pending_params == obj_shader_params)
@@ -1388,7 +1361,7 @@ void execute_removal(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, 
                     Console::getInstance().addLog("[API] Cleared pending gaussian data");
 
                     // Clear pending_shader_params if it points to this object's freed array data
-                    std::lock_guard<std::mutex> lock(editor->impl->editor_worker->shader_params_mutex);
+                    std::lock_guard<std::recursive_mutex> lock(editor->impl->editor_worker->shader_params_mutex);
                     void* pending_params =
                         editor->impl->editor_worker->pending_shader_params.pending_data.load(std::memory_order_acquire);
                     if (pending_params == obj_shader_params)
@@ -1500,7 +1473,6 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
         return;
     }
 
-    // Log token information for debugging
     Console::getInstance().addLog("[API] remove: scene='%s' (id=%llu), name='%s' (id=%llu)", token_to_string(scene),
                                   (unsigned long long)scene->id, token_to_string(name), (unsigned long long)name->id);
 
