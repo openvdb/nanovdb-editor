@@ -89,7 +89,8 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
                                                       pnanovdb_compute_array_t* sh_0,
                                                       pnanovdb_compute_array_t* sh_n,
                                                       pnanovdb_compute_array_t* opacities,
-                                                      pnanovdb_compute_array_t** shader_params_arrays);
+                                                      pnanovdb_compute_array_t** shader_params_arrays,
+                                                      pnanovdb_raster_shader_params_t* raster_params);
 
 void upload_gaussian_data(const pnanovdb_compute_t* compute,
                           pnanovdb_compute_queue_t* queue,

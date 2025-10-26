@@ -414,6 +414,31 @@ pnanovdb_bool_t raster_to_nanovdb_from_arrays(pnanovdb_raster_t* raster,
                                                nullptr, nullptr, nullptr, nullptr, nullptr);
 }
 
+pnanovdb_bool_t(PNANOVDB_ABI* create_gaussian_data_from_arrays)(pnanovdb_raster_t* raster,
+                                                                const pnanovdb_compute_t* compute,
+                                                                pnanovdb_compute_queue_t* queue,
+                                                                pnanovdb_compute_array_t** arrays_gaussian, // means,
+                                                                                                            // opacities,
+                                                                                                            // quats,
+                                                                                                            // scales,
+                                                                                                            // sh
+                                                                pnanovdb_uint32_t array_count,
+                                                                pnanovdb_raster_gaussian_data_t** gaussian_data,
+                                                                pnanovdb_raster_shader_params_t* raster_params,
+                                                                pnanovdb_raster_context_t** raster_context)
+{
+    pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
+    pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
+
+    auto log_print = compute_interface->get_log_print(context);
+    if (log_print)
+    {
+        log_print(PNANOVDB_COMPUTE_LOG_LEVEL_WARNING,
+                  "pnanovdb_raster::create_gaussian_data_from_arrays is deprecated and will be removed in version 0.2.0. "
+                  "Please use pnanovdb_raster::create_gaussian_data_from_desc instead.");
+    }
+}
+
 // Convenience wrapper: create reusable Gaussian raster data from descriptor struct.
 // - Uses descriptor struct for clearer channel naming
 // - Delegates to process_arrays_to_create_gaussian_data
