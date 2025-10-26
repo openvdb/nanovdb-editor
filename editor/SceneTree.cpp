@@ -21,11 +21,14 @@ namespace pnanovdb_editor
 {
 using namespace imgui_instance_user;
 
+// TODO: revisit
 // Helper function to check if an item is selected in the current scene
 static bool isSelectedInCurrentScene(const std::string& name, imgui_instance_user::Instance* ptr, ViewType expected_type)
 {
     if (!ptr || !ptr->editor_scene)
+    {
         return false;
+    }
 
     SceneSelection sel = ptr->editor_scene->get_properties_selection();
 
@@ -34,7 +37,9 @@ static bool isSelectedInCurrentScene(const std::string& name, imgui_instance_use
 
     // Name and type must match
     if (name != selected_name || sel.type != expected_type)
+    {
         return false;
+    }
 
     // Get current scene
     pnanovdb_editor_token_t* current_scene = ptr->editor_scene->get_current_scene_token();
@@ -43,12 +48,14 @@ static bool isSelectedInCurrentScene(const std::string& name, imgui_instance_use
     if (!sel.scene_token)
     {
         // Selection without scene token is valid in default scene or when no scene is set
-        return !current_scene || strcmp(current_scene->str, "default_scene") == 0;
+        return !current_scene || strcmp(current_scene->str, pnanovdb_editor::DEFAULT_SCENE_NAME) == 0;
     }
 
     // If no current scene, selection can't be valid
     if (!current_scene)
+    {
         return false;
+    }
 
     // Scene IDs must match
     return sel.scene_token->id == current_scene->id;
@@ -218,7 +225,7 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
 
         // Scene root node - use scene name instead of "Viewer"
         pnanovdb_editor_token_t* current_scene = ptr->editor_scene->get_current_scene_token();
-        const char* scene_name = (current_scene && current_scene->str) ? current_scene->str : "default_scene";
+        const char* scene_name = (current_scene && current_scene->str) ? current_scene->str : pnanovdb_editor::DEFAULT_SCENE_NAME;
 
         bool isRootSelected = isSelectedInCurrentScene(SCENE_ROOT_NODE, ptr, ViewType::Root);
         if (renderTreeNodeHeader(scene_name, nullptr, isRootSelected, true))

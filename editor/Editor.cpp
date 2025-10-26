@@ -370,16 +370,17 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         editor->impl->raster_ctx = editor->impl->raster->create_context(editor->impl->raster->compute, device_queue);
     }
 
-    // Create and set default scene with proper is_y_up setting from render settings
-    if (SceneView* views = editor->impl->scene_view)
+    // Skip default scene creation on viewer profile
+    bool is_viewer_profile = imgui_user_settings && imgui_user_settings->ui_profile_name &&
+                             strcmp(imgui_user_settings->ui_profile_name, imgui_instance_user::s_viewer_profile_name) == 0;
+    if (!is_viewer_profile && editor->impl->scene_view)
     {
         pnanovdb_editor_token_t* default_scene = EditorToken::getInstance().getToken(pnanovdb_editor::DEFAULT_SCENE_NAME);
-        views->get_or_create_scene(default_scene);
-
-        // Set current scene if no current scene is set
-        if (!views->get_current_scene_token())
+        editor->impl->scene_view->get_or_create_scene(default_scene);
+        if (!editor->impl->scene_view->get_current_scene_token())
         {
-            views->set_current_scene(default_scene);
+            // Set current scene if no current scene is set
+            editor->impl->scene_view->set_current_scene(default_scene);
         }
     }
 

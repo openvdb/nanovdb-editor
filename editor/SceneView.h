@@ -25,7 +25,7 @@ namespace pnanovdb_editor
 {
 
 // Default scene name used when no scene is specified
-static constexpr const char* DEFAULT_SCENE_NAME = "<default>";
+static constexpr const char* DEFAULT_SCENE_NAME = "Viewer";
 
 // Context data for a NanoVDB view
 struct NanoVDBContext
