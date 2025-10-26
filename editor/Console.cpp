@@ -10,6 +10,7 @@
 */
 
 #include "Console.h"
+
 #include <chrono>
 #include <iomanip>
 #include <sstream>

@@ -1,4 +1,6 @@
 @echo off
+REM Copyright Contributors to the OpenVDB Project
+REM SPDX-License-Identifier: Apache-2.0
 
 setlocal
 

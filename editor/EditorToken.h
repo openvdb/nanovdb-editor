@@ -4,7 +4,7 @@
 /*!
     \file   nanovdb_editor/editor/EditorToken.h
 
-    \author Andrew Reidmeyer
+    \author Andrew Reidmeyer, Petra Hapalova
 
     \brief  Token management system for efficient string lookups in the editor.
 */

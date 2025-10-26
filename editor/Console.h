@@ -35,6 +35,7 @@ public:
         Warning,
         Error
     };
+
     static Console& getInstance()
     {
         static Console instance;
