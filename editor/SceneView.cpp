@@ -36,6 +36,13 @@ SceneViewData* SceneView::get_or_create_scene(pnanovdb_editor_token_t* scene_tok
 {
     if (!scene_token)
     {
+        // When in viewer profile, do not auto-create a default scene
+        if (m_imgui_settings && m_imgui_settings->ui_profile_name &&
+            strcmp(m_imgui_settings->ui_profile_name, imgui_instance_user::s_viewer_profile_name) == 0)
+        {
+            return nullptr;
+        }
+
         // Use default scene if no token provided
         if (!m_default_scene_token)
         {
