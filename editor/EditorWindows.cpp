@@ -1057,7 +1057,7 @@ void showConsoleWindow(imgui_instance_user::Instance* ptr)
         return;
     }
 
-    if (ImGui::Begin(CONSOLE, &ptr->window.show_console))
+    if (ImGui::Begin(CONSOLE, &ptr->window.show_console, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
     {
         if (!pnanovdb_editor::Console::getInstance().render())
         {
