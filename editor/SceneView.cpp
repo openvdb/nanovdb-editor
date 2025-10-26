@@ -53,21 +53,25 @@ SceneViewData* SceneView::get_or_create_scene(pnanovdb_editor_token_t* scene_tok
     // New scene being created - initialize it with a default camera
     SceneViewData& new_scene = m_scene_view_data[scene_token->id];
 
-    // Initialize default camera config and state with is_y_up derived from render settings if available
+    // Heap-allocate config, state, and view to ensure stable addresses when map reallocates
     const pnanovdb_bool_t is_y_up = (m_imgui_settings ? m_imgui_settings->is_y_up : PNANOVDB_TRUE);
-    pnanovdb_camera_config_default(&new_scene.default_camera_config);
-    pnanovdb_camera_state_default(&new_scene.default_camera_state, is_y_up);
 
-    // Create viewport camera view pointing to this scene's camera
-    pnanovdb_camera_view_default(&new_scene.default_camera_view);
-    new_scene.default_camera_view.name = m_viewport_camera_token;
-    new_scene.default_camera_view.configs = &new_scene.default_camera_config;
-    new_scene.default_camera_view.states = &new_scene.default_camera_state;
-    new_scene.default_camera_view.num_cameras = 1;
-    new_scene.default_camera_view.is_visible = PNANOVDB_FALSE;
+    new_scene.default_camera_config = std::make_shared<pnanovdb_camera_config_t>();
+    pnanovdb_camera_config_default(new_scene.default_camera_config.get());
+
+    new_scene.default_camera_state = std::make_shared<pnanovdb_camera_state_t>();
+    pnanovdb_camera_state_default(new_scene.default_camera_state.get(), is_y_up);
+
+    new_scene.default_camera_view.camera_view = std::make_shared<pnanovdb_camera_view_t>();
+    pnanovdb_camera_view_default(new_scene.default_camera_view.camera_view.get());
+    new_scene.default_camera_view.camera_view->name = m_viewport_camera_token;
+    new_scene.default_camera_view.camera_view->configs = new_scene.default_camera_config.get();
+    new_scene.default_camera_view.camera_view->states = new_scene.default_camera_state.get();
+    new_scene.default_camera_view.camera_view->num_cameras = 1;
+    new_scene.default_camera_view.camera_view->is_visible = PNANOVDB_TRUE;
 
     // Add the default viewport camera to this scene
-    new_scene.cameras[m_viewport_camera_token->id] = &new_scene.default_camera_view;
+    new_scene.cameras[m_viewport_camera_token->id] = new_scene.default_camera_view;
 
     return &new_scene;
 }
@@ -122,7 +126,7 @@ std::vector<pnanovdb_editor_token_t*> SceneView::get_all_scene_tokens() const
 }
 
 // Cameras
-void SceneView::add_camera(pnanovdb_editor_token_t* name_token, pnanovdb_camera_view_t* camera)
+void SceneView::add_camera(pnanovdb_editor_token_t* name_token, const CameraViewContext& camera)
 {
     if (!name_token)
         return;
@@ -135,7 +139,7 @@ void SceneView::add_camera(pnanovdb_editor_token_t* name_token, pnanovdb_camera_
 
 void SceneView::add_camera(pnanovdb_editor_token_t* scene_token,
                            pnanovdb_editor_token_t* name_token,
-                           pnanovdb_camera_view_t* camera)
+                           const CameraViewContext& camera)
 {
     if (!name_token)
         return;
@@ -155,7 +159,7 @@ pnanovdb_camera_view_t* SceneView::get_camera(pnanovdb_editor_token_t* name_toke
     if (!scene)
         return nullptr;
     auto it = scene->cameras.find(name_token->id);
-    return (it != scene->cameras.end()) ? it->second : nullptr;
+    return (it != scene->cameras.end()) ? it->second.camera_view.get() : nullptr;
 }
 
 pnanovdb_camera_view_t* SceneView::get_camera(pnanovdb_editor_token_t* scene_token,
@@ -167,20 +171,13 @@ pnanovdb_camera_view_t* SceneView::get_camera(pnanovdb_editor_token_t* scene_tok
     if (!scene)
         return nullptr;
     auto it = scene->cameras.find(name_token->id);
-    return (it != scene->cameras.end()) ? it->second : nullptr;
+    return (it != scene->cameras.end()) ? it->second.camera_view.get() : nullptr;
 }
 
-std::map<uint64_t, pnanovdb_camera_view_t*>& SceneView::get_cameras()
-{
-    SceneViewData* scene = get_current_scene();
-    static std::map<uint64_t, pnanovdb_camera_view_t*> empty_map;
-    return scene ? scene->cameras : empty_map;
-}
-
-const std::map<uint64_t, pnanovdb_camera_view_t*>& SceneView::get_cameras() const
+const std::map<uint64_t, CameraViewContext>& SceneView::get_cameras() const
 {
     const SceneViewData* scene = get_current_scene();
-    static const std::map<uint64_t, pnanovdb_camera_view_t*> empty_map;
+    static const std::map<uint64_t, CameraViewContext> empty_map;
     return scene ? scene->cameras : empty_map;
 }
 
@@ -402,8 +399,12 @@ std::string SceneView::add_nanovdb_view(pnanovdb_compute_array_t* nanovdb_array,
     if (!scene)
         return "";
 
+    // Note: This function shouldn't be called with raw pointers - needs refactoring
+    // For now, wrap in shared_ptr with no-op deleter since we don't own it
     view_name = add_view(
-        scene->nanovdbs, "nanovdb_", view_name, NanoVDBContext{ nanovdb_array, shader_params },
+        scene->nanovdbs, "nanovdb_", view_name,
+        NanoVDBContext{ std::shared_ptr<pnanovdb_compute_array_t>(nanovdb_array, [](pnanovdb_compute_array_t*) {}),
+                        shader_params, nullptr },
         [this](pnanovdb_editor_token_t* name_token, NanoVDBContext&& ctx) { add_nanovdb(name_token, ctx); },
         scene->unnamed_counter);
 
@@ -426,8 +427,10 @@ void SceneView::add_nanovdb_to_scene(pnanovdb_editor_token_t* scene_token,
         return;
     }
 
+    // Note: This function takes raw pointers but context needs shared_ptr
+    // Wrap with no-op deleter since we don't own these
     NanoVDBContext context;
-    context.nanovdb_array = nanovdb_array;
+    context.nanovdb_array = std::shared_ptr<pnanovdb_compute_array_t>(nanovdb_array, [](pnanovdb_compute_array_t*) {});
     context.shader_params = shader_params;
 
     add_nanovdb(scene_token, name_token, context);
@@ -444,8 +447,11 @@ void SceneView::add_gaussian_to_scene(pnanovdb_editor_token_t* scene_token,
         return;
     }
 
+    // Note: This function takes raw pointers but context needs shared_ptr
+    // Wrap with no-op deleter since we don't own these
     GaussianDataContext context;
-    context.gaussian_data = gaussian_data;
+    context.gaussian_data =
+        std::shared_ptr<pnanovdb_raster_gaussian_data_t>(gaussian_data, [](pnanovdb_raster_gaussian_data_t*) {});
     context.shader_params = shader_params;
 
     add_gaussian(scene_token, name_token, context);

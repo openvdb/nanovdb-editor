@@ -75,6 +75,10 @@ struct pnanovdb_editor_impl_t
     std::string config_ui_profile_name;
 
     pnanovdb_int32_t resolved_port;
+
+    // Temporary buffer for get_camera() to return scene-specific camera
+    pnanovdb_camera_t* scene_camera;
+    std::mutex scene_camera_mutex;
 };
 
 namespace pnanovdb_editor

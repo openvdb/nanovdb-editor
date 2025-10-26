@@ -225,7 +225,8 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
 
         // Scene root node - use scene name instead of "Viewer"
         pnanovdb_editor_token_t* current_scene = ptr->editor_scene->get_current_scene_token();
-        const char* scene_name = (current_scene && current_scene->str) ? current_scene->str : pnanovdb_editor::DEFAULT_SCENE_NAME;
+        const char* scene_name =
+            (current_scene && current_scene->str) ? current_scene->str : pnanovdb_editor::DEFAULT_SCENE_NAME;
 
         bool isRootSelected = isSelectedInCurrentScene(SCENE_ROOT_NODE, ptr, ViewType::Root);
         if (renderTreeNodeHeader(scene_name, nullptr, isRootSelected, true))
@@ -233,6 +234,8 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
             // Show viewport camera as child of scene root
             if (ptr->editor_scene)
             {
+                ptr->editor_scene->get_or_create_scene(current_scene);
+
                 bool hasViewportCamera = false;
                 pnanovdb_editor_token_t* viewport_token = ptr->editor_scene->get_viewport_camera_token();
                 ptr->editor_scene->for_each_view(
@@ -240,9 +243,9 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                     [&](uint64_t name_id, const auto& view_data)
                     {
                         using ViewT = std::decay_t<decltype(view_data)>;
-                        if constexpr (std::is_same_v<ViewT, pnanovdb_camera_view_t*>)
+                        if constexpr (std::is_same_v<ViewT, CameraViewContext>)
                         {
-                            if (viewport_token && name_id == viewport_token->id && view_data)
+                            if (viewport_token && name_id == viewport_token->id && view_data.camera_view)
                             {
                                 hasViewportCamera = true;
                                 // Add partial indentation to distinguish from tree nodes
@@ -273,13 +276,13 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                     [&](uint64_t name_id, const auto& view_data)
                     {
                         using ViewT = std::decay_t<decltype(view_data)>;
-                        if constexpr (std::is_same_v<ViewT, pnanovdb_camera_view_t*>)
+                        if constexpr (std::is_same_v<ViewT, CameraViewContext>)
                         {
-                            if ((viewport_token && name_id == viewport_token->id) || !view_data)
+                            if ((viewport_token && name_id == viewport_token->id) || !view_data.camera_view)
                             {
                                 return;
                             }
-                            if (!view_data->is_visible)
+                            if (!view_data.camera_view->is_visible)
                             {
                                 allVisible = false;
                             }

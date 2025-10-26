@@ -126,6 +126,7 @@ static pnanovdb_bool_t init_impl(pnanovdb_editor_t* editor,
     editor->impl->nanovdb_array = NULL;
     editor->impl->data_array = NULL;
     editor->impl->camera = NULL;
+    editor->impl->scene_camera = NULL;
     editor->impl->camera_view = NULL;
     editor->impl->raster_ctx = NULL;
     editor->impl->shader_params = NULL;
@@ -147,6 +148,17 @@ void init(pnanovdb_editor_t* editor)
 
     editor->impl->raster = new pnanovdb_raster_t();
     pnanovdb_raster_load(editor->impl->raster, editor->impl->compute);
+
+    editor->impl->camera = new pnanovdb_camera_t();
+    pnanovdb_camera_init(editor->impl->camera);
+    pnanovdb_camera_state_default(&editor->impl->camera->state, PNANOVDB_TRUE);
+    pnanovdb_camera_config_default(&editor->impl->camera->config);
+
+    // TODO: use map/unmap for cameras
+    editor->impl->scene_camera = new pnanovdb_camera_t();
+    pnanovdb_camera_init(editor->impl->scene_camera);
+    pnanovdb_camera_state_default(&editor->impl->scene_camera->state, PNANOVDB_TRUE);
+    pnanovdb_camera_config_default(&editor->impl->scene_camera->config);
 }
 
 void shutdown(pnanovdb_editor_t* editor)
@@ -175,6 +187,11 @@ void shutdown(pnanovdb_editor_t* editor)
     {
         delete editor->impl->camera;
         editor->impl->camera = nullptr;
+    }
+    if (editor->impl->scene_camera)
+    {
+        delete editor->impl->scene_camera;
+        editor->impl->scene_camera = nullptr;
     }
     if (editor->impl)
     {
@@ -371,8 +388,9 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     }
 
     // Skip default scene creation on viewer profile
-    bool is_viewer_profile = imgui_user_settings && imgui_user_settings->ui_profile_name &&
-                             strcmp(imgui_user_settings->ui_profile_name, imgui_instance_user::s_viewer_profile_name) == 0;
+    bool is_viewer_profile =
+        imgui_user_settings && imgui_user_settings->ui_profile_name &&
+        strcmp(imgui_user_settings->ui_profile_name, imgui_instance_user::s_viewer_profile_name) == 0;
     if (!is_viewer_profile && editor->impl->scene_view)
     {
         pnanovdb_editor_token_t* default_scene = EditorToken::getInstance().getToken(pnanovdb_editor::DEFAULT_SCENE_NAME);
@@ -894,6 +912,7 @@ void reset(pnanovdb_editor_t* editor)
     start(editor, device, &config);
 }
 
+// TODO: use map/unmap for cameras
 pnanovdb_camera_t* get_camera(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene)
 {
     if (!editor || !scene)
@@ -901,22 +920,23 @@ pnanovdb_camera_t* get_camera(pnanovdb_editor_t* editor, pnanovdb_editor_token_t
         return nullptr;
     }
 
-    // Otherwise, try to get the viewport camera from the scene
+    // Get or create the scene if it doesn't exist
     if (editor->impl->scene_view)
     {
+        // Ensure scene exists (creates with default camera if needed)
+        editor->impl->scene_view->get_or_create_scene(scene);
+
         pnanovdb_editor_token_t* viewport_token = editor->impl->scene_view->get_viewport_camera_token();
         pnanovdb_camera_view_t* viewport_view = editor->impl->scene_view->get_camera(scene, viewport_token);
         if (viewport_view && viewport_view->configs && viewport_view->states && viewport_view->num_cameras > 0)
         {
-            // Create a temporary camera object from the viewport camera
-            if (!editor->impl->camera)
-            {
-                editor->impl->camera = new pnanovdb_camera_t();
-                pnanovdb_camera_init(editor->impl->camera);
-            }
-            editor->impl->camera->config = viewport_view->configs[0];
-            editor->impl->camera->state = viewport_view->states[0];
-            return editor->impl->camera;
+            // Lock mutex before modifying scene_camera
+            std::lock_guard<std::mutex> lock(editor->impl->scene_camera_mutex);
+
+            // Copy viewport camera to scene_camera buffer (separate from main camera)
+            editor->impl->scene_camera->config = viewport_view->configs[0];
+            editor->impl->scene_camera->state = viewport_view->states[0];
+            return editor->impl->scene_camera;
         }
     }
 
@@ -1142,7 +1162,16 @@ void add_camera_view_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene
         {
             if (SceneView* views = editor->impl->scene_view)
             {
-                views->add_camera(scene, camera->name, camera);
+                // Get the shared_ptr from scene_manager for shared ownership
+                editor->impl->scene_manager->with_object(scene, camera->name,
+                                                         [&](SceneObject* obj)
+                                                         {
+                                                             if (obj && obj->camera_view_owner)
+                                                             {
+                                                                 CameraViewContext ctx{ obj->camera_view_owner };
+                                                                 views->add_camera(scene, camera->name, ctx);
+                                                             }
+                                                         });
             }
         });
 }
@@ -1158,6 +1187,9 @@ void update_camera_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, 
     SceneView* views = editor->impl->scene_view;
     if (views)
     {
+        // Create the scene if it doesn't exist
+        views->get_or_create_scene(scene);
+
         pnanovdb_editor_token_t* viewport_token = views->get_viewport_camera_token();
         pnanovdb_camera_view_t* viewport_view = views->get_camera(scene, viewport_token);
         if (viewport_view && viewport_view->configs && viewport_view->states)
@@ -1197,11 +1229,6 @@ void update_camera_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, 
             // Non-worker mode: execute immediately (ensure internal ownership)
             [&]()
             {
-                if (!editor->impl->camera)
-                {
-                    editor->impl->camera = new pnanovdb_camera_t();
-                    pnanovdb_camera_init(editor->impl->camera);
-                }
                 editor->impl->camera->config = camera->config;
                 editor->impl->camera->state = camera->state;
             });

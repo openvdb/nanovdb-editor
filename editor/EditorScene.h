@@ -133,6 +133,13 @@ public:
     {
         return m_scene_view.get_viewport_camera_token();
     }
+
+    // Ensure scene exists (creates with default viewport camera if needed)
+    SceneViewData* get_or_create_scene(pnanovdb_editor_token_t* scene_token)
+    {
+        return m_scene_view.get_or_create_scene(scene_token);
+    }
+
     std::vector<pnanovdb_editor_token_t*> get_all_scene_tokens() const;
 
     // Scene selection management
@@ -186,13 +193,13 @@ public:
         return m_editor;
     }
 
-    const std::map<uint64_t, pnanovdb_camera_view_t*>& get_camera_views() const;
+    const std::map<uint64_t, CameraViewContext>& get_camera_views() const;
     const std::map<uint64_t, NanoVDBContext>& get_nanovdb_views() const;
     const std::map<uint64_t, GaussianDataContext>& get_gaussian_views() const;
 
     // Generic map access by type (returns variant of possible map types)
     using ViewMapVariant = std::variant<std::monostate,
-                                        const std::map<uint64_t, pnanovdb_camera_view_t*>*,
+                                        const std::map<uint64_t, CameraViewContext>*,
                                         const std::map<uint64_t, NanoVDBContext>*,
                                         const std::map<uint64_t, GaussianDataContext>*>;
     ViewMapVariant get_views(ViewType type) const;

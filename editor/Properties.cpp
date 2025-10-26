@@ -41,11 +41,11 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
                                      [&](uint64_t name_id, const auto& view_data)
                                      {
                                          using ViewT = std::decay_t<decltype(view_data)>;
-                                         if constexpr (std::is_same_v<ViewT, pnanovdb_camera_view_t*>)
+                                         if constexpr (std::is_same_v<ViewT, CameraViewContext>)
                                          {
                                              if (!camera && selection.name_token && selection.name_token->id == name_id)
                                              {
-                                                 camera = view_data;
+                                                 camera = view_data.camera_view.get();
                                              }
                                          }
                                      });

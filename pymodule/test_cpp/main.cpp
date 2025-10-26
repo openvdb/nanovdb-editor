@@ -137,6 +137,7 @@ int main(int argc, char* argv[])
     config.streaming = PNANOVDB_TRUE;
     config.ip_address = "192.168.0.6";
     config.port = 8080;
+    // config.ui_profile_name = "viewer";
     editor.start(&editor, device, &config);
 
     pnanovdb_int32_t port = editor.get_resolved_port(&editor, PNANOVDB_TRUE);

@@ -193,21 +193,28 @@ void Console::addLog(LogLevel level, const char* fmt, ...)
 std::string Console::makeTimestampPrefix()
 {
     auto now = std::chrono::system_clock::now();
-    auto time = std::chrono::system_clock::to_time_t(now);
+    auto t = std::chrono::system_clock::to_time_t(now);
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
 
     std::tm tm = {};
 #ifdef _WIN32
-    localtime_s(&tm, &time);
+    localtime_s(&tm, &t);
 #else
-    localtime_r(&time, &tm);
+    localtime_r(&t, &tm);
 #endif
 
+    std::ostringstream date;
+    date << std::setfill('0') << std::setw(4) << (tm.tm_year + 1900) << "-" << std::setfill('0') << std::setw(2)
+         << (tm.tm_mon + 1) << "-" << std::setfill('0') << std::setw(2) << tm.tm_mday;
+
+    std::ostringstream time;
+    time << std::setfill('0') << std::setw(2) << tm.tm_hour << ":" << std::setfill('0') << std::setw(2) << tm.tm_min
+         << ":" << std::setfill('0') << std::setw(2) << tm.tm_sec << "." << std::setfill('0') << std::setw(3)
+         << ms.count();
+
     std::ostringstream ts;
-    ts << "[" << std::setfill('0') << std::setw(4) << (tm.tm_year + 1900) << "-" << std::setfill('0') << std::setw(2)
-       << (tm.tm_mon + 1) << "-" << std::setfill('0') << std::setw(2) << tm.tm_mday << " " << std::setfill('0')
-       << std::setw(2) << tm.tm_hour << ":" << std::setfill('0') << std::setw(2) << tm.tm_min << ":" << std::setfill('0')
-       << std::setw(2) << tm.tm_sec << "." << std::setfill('0') << std::setw(3) << ms.count() << "] ";
+    // ts << "[" << date.str() << " " << time.str() << "] ";  // Full timestamp with date
+    ts << "[" << time.str() << "] ";
     return ts.str();
 }
 

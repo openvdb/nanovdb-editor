@@ -998,7 +998,7 @@ void showFileHeaderWindow(imgui_instance_user::Instance* ptr)
                 {
                     if (selected_name && selection.name_token && selection.name_token->id == name_id)
                     {
-                        current_array = ctx.nanovdb_array;
+                        current_array = ctx.nanovdb_array.get();
                     }
                 }
             });

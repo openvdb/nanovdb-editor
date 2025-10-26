@@ -358,14 +358,14 @@ void CameraFrustum::render(imgui_instance_user::Instance* ptr)
             [&](uint64_t name_id, const auto& view_data)
             {
                 using ViewT = std::decay_t<decltype(view_data)>;
-                if constexpr (std::is_same_v<ViewT, pnanovdb_camera_view_t*>)
+                if constexpr (std::is_same_v<ViewT, CameraViewContext>)
                 {
-                    pnanovdb_camera_view_t* camera = view_data;
-                    if (!camera)
+                    if (!view_data.camera_view)
                     {
                         return;
                     }
 
+                    pnanovdb_camera_view_t* camera = view_data.camera_view.get();
                     if (camera->is_visible)
                     {
                         auto selection = ptr->editor_scene->get_properties_selection();

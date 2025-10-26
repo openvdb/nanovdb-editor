@@ -612,25 +612,27 @@ void EditorScene::sync_views_from_scene_manager()
             switch (obj->type)
             {
             case SceneObjectType::NanoVDB:
-                if (obj->nanovdb_array)
+                if (obj->nanovdb_array && obj->nanovdb_array_owner)
                 {
-                    NanoVDBContext ctx{ obj->nanovdb_array, obj->shader_params };
+                    NanoVDBContext ctx{ obj->nanovdb_array_owner, obj->shader_params, obj->shader_params_array_owner };
                     m_scene_view.add_nanovdb(obj->scene_token, obj->name_token, ctx);
                 }
                 break;
 
             case SceneObjectType::GaussianData:
-                if (obj->gaussian_data && obj->shader_params)
+                if (obj->gaussian_data && obj->gaussian_data_owner)
                 {
-                    GaussianDataContext ctx{ obj->gaussian_data, (pnanovdb_raster_shader_params_t*)obj->shader_params };
+                    GaussianDataContext ctx{ obj->gaussian_data_owner,
+                                             (pnanovdb_raster_shader_params_t*)obj->shader_params };
                     m_scene_view.add_gaussian(obj->scene_token, obj->name_token, ctx);
                 }
                 break;
 
             case SceneObjectType::Camera:
-                if (obj->camera_view)
+                if (obj->camera_view && obj->camera_view_owner)
                 {
-                    m_scene_view.add_camera(obj->scene_token, obj->name_token, obj->camera_view);
+                    CameraViewContext ctx{ obj->camera_view_owner };
+                    m_scene_view.add_camera(obj->scene_token, obj->name_token, ctx);
                 }
                 break;
 
@@ -753,6 +755,9 @@ void EditorScene::sync_editor_camera_from_scene()
         return;
     }
 
+    // Ensure the scene exists (creates with default camera if needed)
+    m_scene_view.get_or_create_scene(current_scene);
+
     pnanovdb_editor_token_t* viewport_token = m_scene_view.get_viewport_camera_token();
     pnanovdb_camera_view_t* viewport_view = m_scene_view.get_camera(current_scene, viewport_token);
     if (viewport_view && viewport_view->num_cameras > 0)
@@ -765,12 +770,6 @@ void EditorScene::sync_editor_camera_from_scene()
         }
 
         // Update the global camera from the viewport camera
-        if (!m_editor->impl->camera)
-        {
-            m_editor->impl->camera = new pnanovdb_camera_t();
-            pnanovdb_camera_init(m_editor->impl->camera);
-        }
-
         // Copy the values directly instead of accessing through potentially-invalid pointers
         // This ensures we get the actual camera values regardless of map rehashing
         m_editor->impl->camera->config = viewport_view->configs[0];
@@ -791,6 +790,9 @@ void EditorScene::sync_scene_camera_from_editor()
     {
         return;
     }
+
+    // Ensure the scene exists (creates with default camera if needed)
+    m_scene_view.get_or_create_scene(current_scene);
 
     pnanovdb_editor_token_t* viewport_token = m_scene_view.get_viewport_camera_token();
     pnanovdb_camera_view_t* viewport_view = m_scene_view.get_camera(current_scene, viewport_token);
@@ -958,7 +960,7 @@ bool EditorScene::remove_object(pnanovdb_editor_token_t* scene_token, const char
 }
 
 
-const std::map<uint64_t, pnanovdb_camera_view_t*>& EditorScene::get_camera_views() const
+const std::map<uint64_t, CameraViewContext>& EditorScene::get_camera_views() const
 {
     return m_scene_view.get_cameras();
 }

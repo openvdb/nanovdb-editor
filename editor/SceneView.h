@@ -18,6 +18,7 @@
 #include <map>
 #include <atomic>
 #include <vector>
+#include <memory>
 
 struct pnanovdb_imgui_settings_render_t;
 
@@ -27,24 +28,31 @@ namespace pnanovdb_editor
 // Default scene name used when no scene is specified
 static constexpr const char* DEFAULT_SCENE_NAME = "Viewer";
 
+// Context data for a Camera view
+struct CameraViewContext
+{
+    std::shared_ptr<pnanovdb_camera_view_t> camera_view;
+};
+
 // Context data for a NanoVDB view
 struct NanoVDBContext
 {
-    pnanovdb_compute_array_t* nanovdb_array = nullptr;
-    void* shader_params = nullptr;
+    std::shared_ptr<pnanovdb_compute_array_t> nanovdb_array;
+    void* shader_params = nullptr; // Note: shader_params points into nanovdb_array or shader_params_array
+    std::shared_ptr<pnanovdb_compute_array_t> shader_params_array; // Optional separate params array
 };
 
 // Context data for a Gaussian splatting view
 struct GaussianDataContext
 {
-    pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr;
-    pnanovdb_raster_shader_params_t* shader_params = nullptr;
+    std::shared_ptr<pnanovdb_raster_gaussian_data_t> gaussian_data;
+    pnanovdb_raster_shader_params_t* shader_params = nullptr; // Points into gaussian_data
 };
 
 // Scene view data for a specific scene ID - holds all views in that scene
 struct SceneViewData
 {
-    std::map<uint64_t, pnanovdb_camera_view_t*> cameras; // Key = token ID
+    std::map<uint64_t, CameraViewContext> cameras; // Key = token ID
     std::map<uint64_t, GaussianDataContext> gaussians; // Key = token ID
     std::map<uint64_t, NanoVDBContext> nanovdbs; // Key = token ID
     uint64_t last_added_view_token_id = 0; // Track last added view for auto-selection on scene switch
@@ -52,10 +60,10 @@ struct SceneViewData
     std::atomic<uint64_t> current_view_epoch{ 0 };
     int unnamed_counter = 0;
 
-    // Per-scene default camera config and state (initialized on creation)
-    pnanovdb_camera_config_t default_camera_config;
-    pnanovdb_camera_state_t default_camera_state;
-    pnanovdb_camera_view_t default_camera_view;
+    // Per-scene default camera config, state, and view (heap-allocated to ensure stable addresses)
+    std::shared_ptr<pnanovdb_camera_config_t> default_camera_config;
+    std::shared_ptr<pnanovdb_camera_state_t> default_camera_state;
+    CameraViewContext default_camera_view;
 };
 
 // Views representing loaded scenes via editor's API, does not own the data
@@ -96,14 +104,13 @@ public:
     }
 
     // Cameras (in current scene)
-    void add_camera(pnanovdb_editor_token_t* name_token, pnanovdb_camera_view_t* camera);
+    void add_camera(pnanovdb_editor_token_t* name_token, const CameraViewContext& camera);
     void add_camera(pnanovdb_editor_token_t* scene_token,
                     pnanovdb_editor_token_t* name_token,
-                    pnanovdb_camera_view_t* camera);
+                    const CameraViewContext& camera);
     pnanovdb_camera_view_t* get_camera(pnanovdb_editor_token_t* name_token) const;
     pnanovdb_camera_view_t* get_camera(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token) const;
-    std::map<uint64_t, pnanovdb_camera_view_t*>& get_cameras();
-    const std::map<uint64_t, pnanovdb_camera_view_t*>& get_cameras() const;
+    const std::map<uint64_t, CameraViewContext>& get_cameras() const;
 
     // Current view selection (in current scene)
     void set_current_view(pnanovdb_editor_token_t* view_token);
