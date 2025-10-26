@@ -68,7 +68,7 @@ SceneViewData* SceneView::get_or_create_scene(pnanovdb_editor_token_t* scene_tok
     new_scene.default_camera_view.camera_view->configs = new_scene.default_camera_config.get();
     new_scene.default_camera_view.camera_view->states = new_scene.default_camera_state.get();
     new_scene.default_camera_view.camera_view->num_cameras = 1;
-    new_scene.default_camera_view.camera_view->is_visible = PNANOVDB_TRUE;
+    new_scene.default_camera_view.camera_view->is_visible = PNANOVDB_FALSE;
 
     // Add the default viewport camera to this scene
     new_scene.cameras[m_viewport_camera_token->id] = new_scene.default_camera_view;

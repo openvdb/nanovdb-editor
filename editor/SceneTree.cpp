@@ -301,13 +301,13 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                         [&](uint64_t name_id, const auto& view_data)
                         {
                             using ViewT = std::decay_t<decltype(view_data)>;
-                            if constexpr (std::is_same_v<ViewT, pnanovdb_camera_view_t*>)
+                            if constexpr (std::is_same_v<ViewT, CameraViewContext>)
                             {
-                                if ((viewport_token && name_id == viewport_token->id) || !view_data)
+                                if ((viewport_token && name_id == viewport_token->id) || !view_data.camera_view)
                                 {
                                     return;
                                 }
-                                view_data->is_visible = commonVisible ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+                                view_data.camera_view->is_visible = commonVisible ? PNANOVDB_TRUE : PNANOVDB_FALSE;
                             }
                         });
                 }
@@ -323,9 +323,9 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                         [&](uint64_t name_id, const auto& view_data)
                         {
                             using ViewT = std::decay_t<decltype(view_data)>;
-                            if constexpr (std::is_same_v<ViewT, pnanovdb_camera_view_t*>)
+                            if constexpr (std::is_same_v<ViewT, CameraViewContext>)
                             {
-                                pnanovdb_camera_view_t* camera = view_data;
+                                pnanovdb_camera_view_t* camera = view_data.camera_view.get();
                                 pnanovdb_editor_token_t* camera_token = EditorToken::getInstance().getTokenById(name_id);
                                 if (!camera || !camera_token || !camera_token->str ||
                                     (viewport_token && name_id == viewport_token->id))
