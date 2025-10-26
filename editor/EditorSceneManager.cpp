@@ -14,6 +14,12 @@
 #include <cstring>
 #include <cstdio>
 
+#ifdef _DEBUG
+#    define SCENEMANAGER_LOG(...) printf(__VA_ARGS__)
+#else
+#    define SCENEMANAGER_LOG(...) (void)0
+#endif
+
 namespace pnanovdb_editor
 {
 
@@ -171,7 +177,8 @@ void EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
                 if (pair.first != key && pair.second.nanovdb_array_owner && pair.second.nanovdb_array_owner.get() == array)
                 {
                     existing_owner = pair.second.nanovdb_array_owner;
-                    printf("[SceneManager] Found existing owner for array %p, sharing ownership\n", (void*)array);
+                    SCENEMANAGER_LOG(
+                        "[SceneManager] Found existing owner for array %p, sharing ownership\n", (void*)array);
                     break;
                 }
             }
@@ -180,8 +187,8 @@ void EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
             {
                 // Share the existing ownership
                 obj.nanovdb_array_owner = existing_owner;
-                printf("[SceneManager] Shared owner for array %p, ref_count now %ld\n", (void*)array,
-                       existing_owner.use_count());
+                SCENEMANAGER_LOG("[SceneManager] Shared owner for array %p, ref_count now %ld\n", (void*)array,
+                                 existing_owner.use_count());
             }
             else
             {
@@ -192,13 +199,13 @@ void EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
                     {
                         if (ptr)
                         {
-                            printf("[SceneManager] Destroying nanovdb array %p (data=%p)\n", (void*)ptr,
-                                   (void*)(ptr->data));
+                            SCENEMANAGER_LOG("[SceneManager] Destroying nanovdb array %p (data=%p)\n", (void*)ptr,
+                                             (void*)(ptr->data));
                             destroy_fn(ptr);
                         }
                     });
-                printf("[SceneManager] Created new owner for array %p, ref_count %ld\n", (void*)array,
-                       obj.nanovdb_array_owner.use_count());
+                SCENEMANAGER_LOG("[SceneManager] Created new owner for array %p, ref_count %ld\n", (void*)array,
+                                 obj.nanovdb_array_owner.use_count());
             }
         }
     }
@@ -224,8 +231,8 @@ void EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
                     pair.second.shader_params_array_owner.get() == params_array)
                 {
                     existing_owner = pair.second.shader_params_array_owner;
-                    printf("[SceneManager] Found existing owner for params array %p, sharing ownership\n",
-                           (void*)params_array);
+                    SCENEMANAGER_LOG("[SceneManager] Found existing owner for params array %p, sharing ownership\n",
+                                     (void*)params_array);
                     break;
                 }
             }
@@ -234,8 +241,8 @@ void EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
             {
                 // Share the existing ownership
                 obj.shader_params_array_owner = existing_owner;
-                printf("[SceneManager] Shared owner for params array %p, ref_count now %ld\n", (void*)params_array,
-                       existing_owner.use_count());
+                SCENEMANAGER_LOG("[SceneManager] Shared owner for params array %p, ref_count now %ld\n",
+                                 (void*)params_array, existing_owner.use_count());
             }
             else
             {
@@ -246,13 +253,13 @@ void EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
                     {
                         if (ptr)
                         {
-                            printf("[SceneManager] Destroying params array %p (data=%p)\n", (void*)ptr,
-                                   (void*)(ptr->data));
+                            SCENEMANAGER_LOG("[SceneManager] Destroying params array %p (data=%p)\n", (void*)ptr,
+                                             (void*)(ptr->data));
                             destroy_fn(ptr);
                         }
                     });
-                printf("[SceneManager] Created new owner for params array %p, ref_count %ld\n", (void*)params_array,
-                       obj.shader_params_array_owner.use_count());
+                SCENEMANAGER_LOG("[SceneManager] Created new owner for params array %p, ref_count %ld\n",
+                                 (void*)params_array, obj.shader_params_array_owner.use_count());
             }
         }
     }
@@ -317,8 +324,8 @@ void EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,
                 pair.second.gaussian_data_owner.get() == gaussian_data)
             {
                 existing_owner = pair.second.gaussian_data_owner;
-                printf("[SceneManager] Found existing owner for gaussian data %p, sharing ownership\n",
-                       (void*)gaussian_data);
+                SCENEMANAGER_LOG("[SceneManager] Found existing owner for gaussian data %p, sharing ownership\n",
+                                 (void*)gaussian_data);
                 break;
             }
         }
@@ -326,8 +333,8 @@ void EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,
         if (existing_owner)
         {
             obj.gaussian_data_owner = existing_owner;
-            printf("[SceneManager] Shared owner for gaussian data %p, ref_count now %ld\n", (void*)gaussian_data,
-                   existing_owner.use_count());
+            SCENEMANAGER_LOG("[SceneManager] Shared owner for gaussian data %p, ref_count now %ld\n",
+                             (void*)gaussian_data, existing_owner.use_count());
         }
         else
         {
@@ -338,12 +345,12 @@ void EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,
                 {
                     if (ptr)
                     {
-                        printf("[SceneManager] Destroying gaussian data %p\n", (void*)ptr);
+                        SCENEMANAGER_LOG("[SceneManager] Destroying gaussian data %p\n", (void*)ptr);
                         destroy_fn(compute_ptr, queue_ptr, ptr);
                     }
                 });
-            printf("[SceneManager] Created new owner for gaussian data %p, ref_count %ld\n", (void*)gaussian_data,
-                   obj.gaussian_data_owner.use_count());
+            SCENEMANAGER_LOG("[SceneManager] Created new owner for gaussian data %p, ref_count %ld\n",
+                             (void*)gaussian_data, obj.gaussian_data_owner.use_count());
         }
     }
 
@@ -359,8 +366,8 @@ void EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,
                 pair.second.shader_params_array_owner.get() == params_array)
             {
                 existing_owner = pair.second.shader_params_array_owner;
-                printf("[SceneManager] Found existing owner for params array %p (gaussian), sharing ownership\n",
-                       (void*)params_array);
+                SCENEMANAGER_LOG("[SceneManager] Found existing owner for params array %p (gaussian), sharing ownership\n",
+                                 (void*)params_array);
                 break;
             }
         }
@@ -368,8 +375,8 @@ void EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,
         if (existing_owner)
         {
             obj.shader_params_array_owner = existing_owner;
-            printf("[SceneManager] Shared owner for params array %p (gaussian), ref_count now %ld\n",
-                   (void*)params_array, existing_owner.use_count());
+            SCENEMANAGER_LOG("[SceneManager] Shared owner for params array %p (gaussian), ref_count now %ld\n",
+                             (void*)params_array, existing_owner.use_count());
         }
         else
         {
@@ -379,12 +386,12 @@ void EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,
                 {
                     if (ptr)
                     {
-                        printf("[SceneManager] Destroying params array %p (gaussian)\n", (void*)ptr);
+                        SCENEMANAGER_LOG("[SceneManager] Destroying params array %p (gaussian)\n", (void*)ptr);
                         destroy_fn(ptr);
                     }
                 });
-            printf("[SceneManager] Created new owner for params array %p (gaussian), ref_count %ld\n",
-                   (void*)params_array, obj.shader_params_array_owner.use_count());
+            SCENEMANAGER_LOG("[SceneManager] Created new owner for params array %p (gaussian), ref_count %ld\n",
+                             (void*)params_array, obj.shader_params_array_owner.use_count());
         }
     }
 }
@@ -471,23 +478,24 @@ bool EditorSceneManager::remove(pnanovdb_editor_token_t* scene, pnanovdb_editor_
     auto it = m_objects.find(key);
     if (it != m_objects.end())
     {
-        printf("[SceneManager] Removing object scene='%s', name='%s' (key=%llu) from manager\n",
-               scene ? scene->str : "null", name ? name->str : "null", (unsigned long long)key);
+        SCENEMANAGER_LOG("[SceneManager] Removing object scene='%s', name='%s' (key=%llu) from manager\n",
+                         scene ? scene->str : "null", name ? name->str : "null", (unsigned long long)key);
 
         // Log what shared_ptrs will be destroyed
         if (it->second.nanovdb_array_owner)
-            printf("[SceneManager]   - nanovdb_array %p, ref_count %ld\n", (void*)it->second.nanovdb_array_owner.get(),
-                   it->second.nanovdb_array_owner.use_count());
+            SCENEMANAGER_LOG("[SceneManager]   - nanovdb_array %p, ref_count %ld\n",
+                             (void*)it->second.nanovdb_array_owner.get(), it->second.nanovdb_array_owner.use_count());
         if (it->second.shader_params_array_owner)
-            printf("[SceneManager]   - params_array %p, ref_count %ld\n",
-                   (void*)it->second.shader_params_array_owner.get(), it->second.shader_params_array_owner.use_count());
+            SCENEMANAGER_LOG("[SceneManager]   - params_array %p, ref_count %ld\n",
+                             (void*)it->second.shader_params_array_owner.get(),
+                             it->second.shader_params_array_owner.use_count());
         if (it->second.gaussian_data_owner)
-            printf("[SceneManager]   - gaussian_data %p, ref_count %ld\n", (void*)it->second.gaussian_data_owner.get(),
-                   it->second.gaussian_data_owner.use_count());
+            SCENEMANAGER_LOG("[SceneManager]   - gaussian_data %p, ref_count %ld\n",
+                             (void*)it->second.gaussian_data_owner.get(), it->second.gaussian_data_owner.use_count());
     }
 
     bool result = m_objects.erase(key) > 0;
-    printf("[SceneManager] Remove result: %s\n", result ? "success" : "not found");
+    SCENEMANAGER_LOG("[SceneManager] Remove result: %s\n", result ? "success" : "not found");
     return result;
 }
 
