@@ -9,7 +9,7 @@ struct constants_t
     uint counter_count;
     uint key_bits_count;
     uint key_count;
-    uint pad1;
+    uint grid_dim_x;
 };
 
 StructuredBuffer<uint4> key_in;
@@ -42,7 +42,12 @@ uint4 split4(uint thread_idx, uint4 pred)
 [shader("compute")][numthreads(256, 1, 1)]
 void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
-    uint idx = 256u * group_idx.x + thread_idx.x;
+    uint group_idx_1d = group_idx.y * constants.grid_dim_x + group_idx.x;
+    if (group_idx_1d >= constants.workgroup_count)
+    {
+        return;
+    }
+    uint idx = 256u * group_idx_1d + thread_idx.x;
 
     uint skey_addr = 512u;
     uint sval_addr = 512u + 1024u;
@@ -53,9 +58,9 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     if (thread_idx.x < 16)
     {
         write_smem_idx(
-            global_counters_addr, thread_idx.x, counters_in[thread_idx.x * constants.workgroup_count + group_idx.x]);
+            global_counters_addr, thread_idx.x, counters_in[thread_idx.x * constants.workgroup_count + group_idx_1d]);
         write_smem_idx(local_counters_addr, thread_idx.x,
-                       counters_in[thread_idx.x + 16 * (constants.workgroup_count + group_idx.x)]);
+                       counters_in[thread_idx.x + 16 * (constants.workgroup_count + group_idx_1d)]);
     }
 
     uint4 key_local = uint4(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);

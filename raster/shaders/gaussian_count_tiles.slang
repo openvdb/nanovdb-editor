@@ -13,7 +13,8 @@ RWStructuredBuffer<uint> num_tiles_per_gaussian_out;
 [shader("compute")][numthreads(256, 1)]
 void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
-    uint idx = group_idx.x * 256u + thread_idx.x;
+    uint group_idx_1d = group_idx.y * constants.points_grid_dim_x + group_idx.x;
+    uint idx = group_idx_1d * 256u + thread_idx.x;
 
     if (idx >= constants.prim_count)
     {

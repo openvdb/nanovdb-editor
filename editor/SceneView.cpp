@@ -449,7 +449,7 @@ void SceneView::add_gaussian_to_scene(pnanovdb_editor_token_t* scene_token,
                                       pnanovdb_raster_gaussian_data_t* gaussian_data,
                                       pnanovdb_raster_shader_params_t* shader_params)
 {
-    if (!scene_token || !gaussian_data || !shader_params)
+    if (!scene_token || !name_token || !gaussian_data)
     {
         return;
     }

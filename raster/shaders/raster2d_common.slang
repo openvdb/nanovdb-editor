@@ -37,8 +37,8 @@ struct constants_t
 
     uint is_orthographic;
     uint sh_stride;
-    uint pad4;
-    uint pad5;
+    uint points_grid_dim_x;
+    uint isects_grid_dim_x;
 };
 
 struct shader_params_t

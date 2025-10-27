@@ -9,7 +9,7 @@ struct constants_t
     uint counter_count;
     uint key_bits_count;
     uint key_count;
-    uint pad1;
+    uint grid_dim_x;
 };
 
 StructuredBuffer<uint4> key_in;
@@ -88,7 +88,12 @@ uint4 expand8to16h(uint4 counter)
 [shader("compute")][numthreads(256, 1, 1)]
 void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
-    uint idx = 256u * group_idx.x + thread_idx.x;
+    uint group_idx_1d = group_idx.y * constants.grid_dim_x + group_idx.x;
+    if (group_idx_1d >= constants.workgroup_count)
+    {
+        return;
+    }
+    uint idx = 256u * group_idx_1d + thread_idx.x;
 
     uint scount0_addr = 0;
     uint scount1_addr = 256u;
@@ -180,31 +185,31 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         uint bucketOffset = 8 * set_id;
 
         // output counter values for global scan
-        counters_out[(bucketOffset + 0) * constants.workgroup_count + group_idx.x] = (local_count.x & 0x0000FFFF) >> 0;
-        counters_out[(bucketOffset + 1) * constants.workgroup_count + group_idx.x] = (local_count.x & 0xFFFF0000) >> 16;
-        counters_out[(bucketOffset + 2) * constants.workgroup_count + group_idx.x] = (local_count.y & 0x0000FFFF) >> 0;
-        counters_out[(bucketOffset + 3) * constants.workgroup_count + group_idx.x] = (local_count.y & 0xFFFF0000) >> 16;
-        counters_out[(bucketOffset + 4) * constants.workgroup_count + group_idx.x] = (local_count.z & 0x0000FFFF) >> 0;
-        counters_out[(bucketOffset + 5) * constants.workgroup_count + group_idx.x] = (local_count.z & 0xFFFF0000) >> 16;
-        counters_out[(bucketOffset + 6) * constants.workgroup_count + group_idx.x] = (local_count.w & 0x0000FFFF) >> 0;
-        counters_out[(bucketOffset + 7) * constants.workgroup_count + group_idx.x] = (local_count.w & 0xFFFF0000) >> 16;
+        counters_out[(bucketOffset + 0) * constants.workgroup_count + group_idx_1d] = (local_count.x & 0x0000FFFF) >> 0;
+        counters_out[(bucketOffset + 1) * constants.workgroup_count + group_idx_1d] = (local_count.x & 0xFFFF0000) >> 16;
+        counters_out[(bucketOffset + 2) * constants.workgroup_count + group_idx_1d] = (local_count.y & 0x0000FFFF) >> 0;
+        counters_out[(bucketOffset + 3) * constants.workgroup_count + group_idx_1d] = (local_count.y & 0xFFFF0000) >> 16;
+        counters_out[(bucketOffset + 4) * constants.workgroup_count + group_idx_1d] = (local_count.z & 0x0000FFFF) >> 0;
+        counters_out[(bucketOffset + 5) * constants.workgroup_count + group_idx_1d] = (local_count.z & 0xFFFF0000) >> 16;
+        counters_out[(bucketOffset + 6) * constants.workgroup_count + group_idx_1d] = (local_count.w & 0x0000FFFF) >> 0;
+        counters_out[(bucketOffset + 7) * constants.workgroup_count + group_idx_1d] = (local_count.w & 0xFFFF0000) >> 16;
 
         // output counter values for local scan
-        counters_out[(bucketOffset + 0) + 16 * (constants.workgroup_count + group_idx.x)] =
+        counters_out[(bucketOffset + 0) + 16 * (constants.workgroup_count + group_idx_1d)] =
             (local_count.x & 0x0000FFFF) >> 0;
-        counters_out[(bucketOffset + 1) + 16 * (constants.workgroup_count + group_idx.x)] =
+        counters_out[(bucketOffset + 1) + 16 * (constants.workgroup_count + group_idx_1d)] =
             (local_count.x & 0xFFFF0000) >> 16;
-        counters_out[(bucketOffset + 2) + 16 * (constants.workgroup_count + group_idx.x)] =
+        counters_out[(bucketOffset + 2) + 16 * (constants.workgroup_count + group_idx_1d)] =
             (local_count.y & 0x0000FFFF) >> 0;
-        counters_out[(bucketOffset + 3) + 16 * (constants.workgroup_count + group_idx.x)] =
+        counters_out[(bucketOffset + 3) + 16 * (constants.workgroup_count + group_idx_1d)] =
             (local_count.y & 0xFFFF0000) >> 16;
-        counters_out[(bucketOffset + 4) + 16 * (constants.workgroup_count + group_idx.x)] =
+        counters_out[(bucketOffset + 4) + 16 * (constants.workgroup_count + group_idx_1d)] =
             (local_count.z & 0x0000FFFF) >> 0;
-        counters_out[(bucketOffset + 5) + 16 * (constants.workgroup_count + group_idx.x)] =
+        counters_out[(bucketOffset + 5) + 16 * (constants.workgroup_count + group_idx_1d)] =
             (local_count.z & 0xFFFF0000) >> 16;
-        counters_out[(bucketOffset + 6) + 16 * (constants.workgroup_count + group_idx.x)] =
+        counters_out[(bucketOffset + 6) + 16 * (constants.workgroup_count + group_idx_1d)] =
             (local_count.w & 0x0000FFFF) >> 0;
-        counters_out[(bucketOffset + 7) + 16 * (constants.workgroup_count + group_idx.x)] =
+        counters_out[(bucketOffset + 7) + 16 * (constants.workgroup_count + group_idx_1d)] =
             (local_count.w & 0xFFFF0000) >> 16;
     }
 }

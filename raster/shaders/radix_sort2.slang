@@ -9,7 +9,7 @@ struct constants_t
     uint counter_count;
     uint key_bits_count;
     uint key_count;
-    uint pad1;
+    uint grid_dim_x;
 };
 
 StructuredBuffer<uint4> counters_in;
