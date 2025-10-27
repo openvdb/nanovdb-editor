@@ -23,6 +23,34 @@
 namespace
 {
 
+struct grid_dim_t
+{
+    uint32_t x, y, z;
+};
+
+grid_dim_t compute_dispatch_grid_dim(uint32_t grid_dim_1d)
+{
+    grid_dim_t grid_dim = {grid_dim_1d, 1u, 1u};
+    if (grid_dim_1d > 32768u)
+    {
+        uint32_t best_size = ~0u;
+        uint32_t best_dim = 32768u;
+        for (uint32_t dim = 1024u; dim <= 32768u; dim *= 2u)
+        {
+            uint32_t y = (grid_dim_1d + dim - 1u) / dim;
+            uint32_t total_size = y * dim;
+            if (total_size < best_size && y <= 32768u)
+            {
+                best_size = total_size;
+                best_dim = dim;
+            }
+        }
+        grid_dim.x = best_dim;
+        grid_dim.y = (grid_dim_1d + best_dim - 1u) / best_dim;
+    }
+    return grid_dim;
+}
+
 enum shader
 {
     scan1_max_slang,
@@ -327,6 +355,8 @@ static void radix_sort(const pnanovdb_compute_t* compute,
 
     pnanovdb_compute_buffer_desc_t buf_desc = {};
 
+    grid_dim_t grid_dim = compute_dispatch_grid_dim((key_count + 1023u) / 1024u);
+
     struct constants_t
     {
         pnanovdb_uint32_t workgroup_count;
@@ -336,7 +366,7 @@ static void radix_sort(const pnanovdb_compute_t* compute,
         pnanovdb_uint32_t counter_count;
         pnanovdb_uint32_t key_bits_count;
         pnanovdb_uint32_t key_count;
-        pnanovdb_uint32_t pad1;
+        pnanovdb_uint32_t grid_dim_x;
     };
     constants_t constants = {};
     constants.workgroup_count = (key_count + 1023u) / 1024u;
@@ -346,6 +376,7 @@ static void radix_sort(const pnanovdb_compute_t* compute,
     constants.counter_count = 16u * constants.workgroup_count;
     constants.key_bits_count = key_bit_count;
     constants.key_count = key_count;
+    constants.grid_dim_x = grid_dim.x;
 
     // counter buffers
     buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED;
@@ -446,7 +477,7 @@ static void radix_sort(const pnanovdb_compute_t* compute,
             resources[2u].buffer_transient = counters_a_transient;
 
             compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[radix_sort1_slang], resources,
-                                     constants.workgroup_count, 1u, 1u, "radix_sort1");
+                                     grid_dim.x, grid_dim.y, grid_dim.z, "radix_sort1");
         }
         // radix sort 2
         {
@@ -469,7 +500,7 @@ static void radix_sort(const pnanovdb_compute_t* compute,
             resources[5u].buffer_transient = (pass_id & 1) == 0u ? val_tmp_transient : val_transient;
 
             compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[radix_sort3_slang], resources,
-                                     constants.workgroup_count, 1u, 1u, "radix_sort3");
+                                     grid_dim.x, grid_dim.y, grid_dim.z, "radix_sort3");
         }
 
         compute_interface->destroy_buffer(context, constant_buffer);
@@ -503,14 +534,18 @@ static void radix_sort_dual_key(const pnanovdb_compute_t* compute,
 
     pnanovdb_compute_buffer_desc_t buf_desc = {};
 
+    grid_dim_t grid_dim = compute_dispatch_grid_dim((key_count + 1023u) / 1024u);
+
     struct constants_t
     {
         pnanovdb_uint32_t workgroup_count;
         pnanovdb_uint32_t key_count;
+        pnanovdb_uint32_t grid_dim_x;
     };
     constants_t constants = {};
     constants.workgroup_count = (key_count + 1023u) / 1024u;
     constants.key_count = key_count;
+    constants.grid_dim_x = grid_dim.x;
 
     // constants
     buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT;
@@ -573,7 +608,7 @@ static void radix_sort_dual_key(const pnanovdb_compute_t* compute,
         resources[3u].buffer_transient = val_tmp_transient;
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[radix_sort_dual1_slang], resources,
-                                 constants.workgroup_count, 1u, 1u, "radix_sort_dual1");
+                                 grid_dim.x, grid_dim.y, grid_dim.z, "radix_sort_dual1");
     }
 
     radix_sort(compute, queue, context_in, key_tmp_buffer, val_tmp_buffer, key_count, key_low_bit_count);
@@ -587,7 +622,7 @@ static void radix_sort_dual_key(const pnanovdb_compute_t* compute,
         resources[3u].buffer_transient = key_tmp_transient;
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[radix_sort_dual2_slang], resources,
-                                 constants.workgroup_count, 1u, 1u, "radix_sort_dual2");
+                                 grid_dim.x, grid_dim.y, grid_dim.z, "radix_sort_dual2");
     }
 
     radix_sort(compute, queue, context_in, key_tmp_buffer, val_tmp_buffer, key_count, key_high_bit_count);
@@ -605,7 +640,7 @@ static void radix_sort_dual_key(const pnanovdb_compute_t* compute,
         resources[7u].buffer_transient = val_copy_transient;
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[radix_sort_dual3_slang], resources,
-                                 constants.workgroup_count, 1u, 1u, "radix_sort_dual3");
+                                 grid_dim.x, grid_dim.y, grid_dim.z, "radix_sort_dual3");
     }
 
     // copy values
@@ -620,7 +655,7 @@ static void radix_sort_dual_key(const pnanovdb_compute_t* compute,
         resources[6u].buffer_transient = val_transient;
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[radix_sort_dual4_slang], resources,
-                                 constants.workgroup_count, 1u, 1u, "radix_sort_dual4");
+                                 grid_dim.x, grid_dim.y, grid_dim.z, "radix_sort_dual4");
     }
 
     compute_interface->destroy_buffer(context, key_tmp_buffer);
