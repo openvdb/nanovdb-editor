@@ -97,9 +97,9 @@ static pnanovdb_compute_array_t* process_gaussian_arrays_common(const pnanovdb_c
     for (pnanovdb_uint64_t point_idx = 0u; point_idx < point_count; point_idx++)
     {
         const float c0 = 0.28209479177387814f;
-        mapped_color[3u * point_idx + 0u] = c0 * mapped_sh_0[3u * point_idx] + 0.5f;
-        mapped_color[3u * point_idx + 1u] = c0 * mapped_sh_0[3u * point_idx] + 0.5f;
-        mapped_color[3u * point_idx + 2u] = c0 * mapped_sh_0[3u * point_idx] + 0.5f;
+        mapped_color[3u * point_idx + 0u] = c0 * mapped_sh_0[3u * point_idx + 0u] + 0.5f;
+        mapped_color[3u * point_idx + 1u] = c0 * mapped_sh_0[3u * point_idx + 1u] + 0.5f;
+        mapped_color[3u * point_idx + 2u] = c0 * mapped_sh_0[3u * point_idx + 2u] + 0.5f;
     }
     compute->unmap_array(sh_0_arr);
     compute->unmap_array(color_arr);
