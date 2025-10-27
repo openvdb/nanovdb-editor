@@ -23,10 +23,14 @@
 namespace
 {
 
-pnanovdb_coord_t compute_dispatch_grid_dim(uint32_t grid_dim_1d)
+struct grid_dim_t
 {
-    pnanovdb_coord_t grid_dim = {grid_dim_1d, 1u, 1u};
-#if 1
+    uint32_t x, y, z;
+};
+
+grid_dim_t compute_dispatch_grid_dim(uint32_t grid_dim_1d)
+{
+    grid_dim_t grid_dim = {grid_dim_1d, 1u, 1u};
     if (grid_dim_1d > 32768u)
     {
         uint32_t best_size = ~0u;
@@ -44,8 +48,6 @@ pnanovdb_coord_t compute_dispatch_grid_dim(uint32_t grid_dim_1d)
         grid_dim.x = best_dim;
         grid_dim.y = (grid_dim_1d + best_dim - 1u) / best_dim;
     }
-#endif
-    //printf("grid_dim(%d,%d,%d) grid_dim_1d(%d)\n", grid_dim.x, grid_dim.y, grid_dim.z, grid_dim_1d);
     return grid_dim;
 }
 
@@ -353,7 +355,7 @@ static void radix_sort(const pnanovdb_compute_t* compute,
 
     pnanovdb_compute_buffer_desc_t buf_desc = {};
 
-    pnanovdb_coord_t grid_dim = compute_dispatch_grid_dim((key_count + 1023u) / 1024u);
+    grid_dim_t grid_dim = compute_dispatch_grid_dim((key_count + 1023u) / 1024u);
 
     struct constants_t
     {
@@ -532,7 +534,7 @@ static void radix_sort_dual_key(const pnanovdb_compute_t* compute,
 
     pnanovdb_compute_buffer_desc_t buf_desc = {};
 
-    pnanovdb_coord_t grid_dim = compute_dispatch_grid_dim((key_count + 1023u) / 1024u);
+    grid_dim_t grid_dim = compute_dispatch_grid_dim((key_count + 1023u) / 1024u);
 
     struct constants_t
     {
