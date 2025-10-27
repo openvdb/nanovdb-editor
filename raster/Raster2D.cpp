@@ -18,9 +18,34 @@
 #include <stdlib.h>
 #include <math.h>
 #include <vector>
+#include <stdio.h>
 
 namespace pnanovdb_raster
 {
+
+pnanovdb_coord_t compute_dispatch_grid_dim(uint32_t grid_dim_1d)
+{
+    pnanovdb_coord_t grid_dim = {grid_dim_1d, 1u, 1u};
+    if (grid_dim_1d > 32768u)
+    {
+        uint32_t best_size = ~0u;
+        uint32_t best_dim = 32768u;
+        for (uint32_t dim = 1024u; dim <= 32768u; dim *= 2u)
+        {
+            uint32_t y = (grid_dim_1d + dim - 1u) / dim;
+            uint32_t total_size = y * dim;
+            if (total_size < best_size && y <= 32768u)
+            {
+                best_size = total_size;
+                best_dim = dim;
+            }
+        }
+        grid_dim.x = best_dim;
+        grid_dim.y = (grid_dim_1d + best_dim - 1u) / best_dim;
+    }
+    //printf("grid_dim(%d,%d,%d) grid_dim_1d(%d)\n", grid_dim.x, grid_dim.y, grid_dim.z, grid_dim_1d);
+    return grid_dim;
+}
 
 static void extract_camera_info(pnanovdb_camera_mat_t view,
                                 pnanovdb_camera_mat_t proj,
@@ -138,8 +163,8 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
 
         pnanovdb_uint32_t is_orthographic;
         pnanovdb_uint32_t sh_stride;
-        pnanovdb_uint32_t pad4;
-        pnanovdb_uint32_t pad5;
+        pnanovdb_uint32_t points_grid_dim_x;
+        pnanovdb_uint32_t isects_grid_dim_x;
     };
     constants_t constants = {};
 
@@ -147,6 +172,8 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
     float near_plane = 0.f;
     float far_plane = 0.f;
     extract_camera_info(*view, *projection, &view_dir, &near_plane, &far_plane);
+
+    pnanovdb_coord_t points_grid_dim = compute_dispatch_grid_dim((data->point_count + 255u) / 256u);
 
     constants.view = pnanovdb_camera_mat_transpose(*view);
     constants.view_rot0 = view->x;
@@ -174,6 +201,8 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
     constants.num_tiles = constants.num_tiles_w * constants.num_tiles_h;
     constants.is_orthographic = projection->z.w == 0.f ? 1u : 0u;
     constants.sh_stride = data->sh_stride;
+    constants.points_grid_dim_x = points_grid_dim.x;
+    constants.isects_grid_dim_x = 32768u;
 
     // printf("fx(%f) fy(%f) cx(%f) cy(%f)\n", constants.fx, constants.fy, constants.cx, constants.cy);
 
@@ -290,8 +319,10 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
         resources[8u].buffer_transient = conics_transient;
         resources[9u].buffer_transient = compensations_transient;
 
+        pnanovdb_coord_t grid_dim = points_grid_dim;
+
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_projection_slang], resources,
-                                 (constants.prim_count + 255u) / 256u, 1u, 1u, "gaussian_projection");
+                                 grid_dim.x, grid_dim.y, grid_dim.z, "gaussian_projection");
     }
 
     // spherical harmonics
@@ -303,8 +334,10 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
         resources[3u].buffer_transient = sh_n_transient;
         resources[4u].buffer_transient = resolved_color_transient;
 
+        pnanovdb_coord_t grid_dim = points_grid_dim;
+
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_spherical_harmonics_slang],
-                                 resources, (constants.prim_count + 255u) / 256u, 1u, 1u, "gaussian_spherical_harmonics");
+                                 resources, grid_dim.x, grid_dim.y, grid_dim.z, "gaussian_spherical_harmonics");
     }
 
     // counts tiles
@@ -316,8 +349,10 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
         resources[3u].buffer_transient = radii_transient;
         resources[4u].buffer_transient = num_tiles_per_gaussian_transient;
 
+        pnanovdb_coord_t grid_dim = points_grid_dim;
+
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_count_tiles_slang], resources,
-                                 (constants.prim_count + 255u) / 256u, 1u, 1u, "gaussian_count_tiles");
+                                 grid_dim.x, grid_dim.y, grid_dim.z, "gaussian_count_tiles");
     }
 
     // prefix sum tile counts
@@ -360,7 +395,9 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
     }
 
     // update constants with total count
+    pnanovdb_coord_t isect_grid_dim = compute_dispatch_grid_dim((total_count + 255u) / 256u);
     constants.n_isects = total_count;
+    constants.isects_grid_dim_x = isect_grid_dim.x;
 
     // printf("raster_2d total_intersections(%u)\n", total_count);
 
@@ -437,8 +474,10 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
             resources[7u].buffer_transient = intersection_keys_high_transient;
             resources[8u].buffer_transient = intersection_vals_transient;
 
+            pnanovdb_coord_t grid_dim = points_grid_dim;
+
             compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_tile_intersections_slang],
-                                     resources, (constants.prim_count + 255u) / 256u, 1u, 1u,
+                                     resources, grid_dim.x, grid_dim.y, grid_dim.z,
                                      "gaussian_tile_intersections");
         }
 
@@ -477,8 +516,10 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
             resources[2u].buffer_transient = intersection_keys_high_transient;
             resources[3u].buffer_transient = tile_offsets_transient;
 
+            pnanovdb_coord_t grid_dim = isect_grid_dim;
+
             compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_tile_offsets_slang],
-                                     resources, (constants.n_isects + 255u) / 256u, 1u, 1u, "gaussian_tile_offsets");
+                                     resources, grid_dim.x, grid_dim.y, grid_dim.z, "gaussian_tile_offsets");
         }
 
         pnanovdb_compute_texture_transient_t* color_2d_transient =
