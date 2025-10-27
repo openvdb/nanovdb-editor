@@ -47,7 +47,6 @@ static const char* s_viewer_profile_name = "viewer";
 
 // UI labels
 static const char* VIEWPORT_CAMERA = "Viewport Camera";
-static const char* SCENE_ROOT_NODE = "Viewer";
 
 static const char* VIEWPORT_SETTINGS = "Viewport";
 static const char* RENDER_SETTINGS = "Settings";

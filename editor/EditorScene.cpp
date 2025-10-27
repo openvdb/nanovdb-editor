@@ -852,12 +852,6 @@ void EditorScene::handle_nanovdb_data_load(pnanovdb_compute_array_t* nanovdb_arr
         return;
     }
 
-    nanovdb_array = m_editor->impl->compute->load_nanovdb(filename);
-    if (!nanovdb_array)
-    {
-        return;
-    }
-
     std::filesystem::path fsPath(filename);
     std::string view_name = fsPath.stem().string();
 

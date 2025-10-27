@@ -26,7 +26,7 @@ namespace pnanovdb_editor
 {
 
 // Default scene name used when no scene is specified
-static constexpr const char* DEFAULT_SCENE_NAME = "Viewer";
+static constexpr const char* DEFAULT_SCENE_NAME = "default";
 
 // Context data for a Camera view
 struct CameraViewContext

@@ -228,7 +228,7 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
         const char* scene_name =
             (current_scene && current_scene->str) ? current_scene->str : pnanovdb_editor::DEFAULT_SCENE_NAME;
 
-        bool isRootSelected = isSelectedInCurrentScene(SCENE_ROOT_NODE, ptr, ViewType::Root);
+        bool isRootSelected = isSelectedInCurrentScene(scene_name, ptr, ViewType::Root);
         if (renderTreeNodeHeader(scene_name, nullptr, isRootSelected, true))
         {
             // Show viewport camera as child of scene root
