@@ -17,6 +17,7 @@
 #include <cstring>
 #include <filesystem>
 #include <string.h>
+#include <cstdio>
 
 #ifdef _WIN32
 #    include <Windows.h>
@@ -31,6 +32,12 @@
 
 #if defined(USE_SLANG_DEBUG_OUTPUT)
 #    define ASM_DEBUG_OUTPUT // Compiles and saves the assembly code, won't be possible to create a compute pipeline
+#endif
+
+#ifdef _DEBUG
+#    define SLANG_COMPILER_LOG(...) printf(__VA_ARGS__)
+#else
+#    define SLANG_COMPILER_LOG(...) (void)0
 #endif
 
 namespace pnanovdb_compiler
@@ -185,7 +192,7 @@ bool SlangCompiler::compileFile(const char* sourceFile,
     std::filesystem::path fsPath(sourceFile);
     if (!compile(settings, fsPath.filename().string().c_str(), code.c_str(), numIncludePaths, includePaths) && !shader_)
     {
-        printf("Error: Slang shader compilation of '%s' failed\n", variableName);
+        SLANG_COMPILER_LOG("Error: Slang shader compilation of '%s' failed\n", variableName);
         return false;
     }
 
@@ -223,7 +230,7 @@ bool SlangCompiler::compileFile(const char* sourceFile,
     }
     else
     {
-        printf("Error: Saving bytecode for '%s' failed\n", variableName);
+        SLANG_COMPILER_LOG("Error: Saving bytecode for '%s' failed\n", variableName);
         return false;
     }
 
@@ -335,7 +342,7 @@ bool SlangCompiler::compile(const pnanovdb_compiler_settings_t* settings,
 
     if (!slangSession)
     {
-        printf("Error: Creating Slang session failed\n");
+        SLANG_COMPILER_LOG("Error: Creating Slang session failed\n");
         return false;
     }
 
@@ -354,7 +361,7 @@ bool SlangCompiler::compile(const pnanovdb_compiler_settings_t* settings,
     {
         if (!hasSlangLlvm_)
         {
-            printf("Error: Slang LLVM not found\n");
+            SLANG_COMPILER_LOG("Error: Slang LLVM not found\n");
             return false;
         }
         targetIndex = request->addCodeGenTarget(SLANG_SHADER_HOST_CALLABLE);
@@ -382,7 +389,7 @@ bool SlangCompiler::compile(const pnanovdb_compiler_settings_t* settings,
         }
         else
         {
-            printf("%s", diagnostics);
+            SLANG_COMPILER_LOG("%s", diagnostics);
         }
     }
 
@@ -480,7 +487,7 @@ bool SlangCompiler::compile(const pnanovdb_compiler_settings_t* settings,
 
         if (SLANG_FAILED(sharedLibResult) || !sharedLibrary)
         {
-            printf("Error: Failed to get target host callable\n");
+            SLANG_COMPILER_LOG("Error: Failed to get target host callable\n");
             request->Release();
             slangSession->Release();
             return false;
@@ -489,7 +496,7 @@ bool SlangCompiler::compile(const pnanovdb_compiler_settings_t* settings,
         auto func = (CPPPrelude::ComputeFunc)sharedLibrary->findFuncByName(entryPointName.c_str());
         if (!func)
         {
-            printf("Error: Failed to find entry point function '%s'\n", entryPointName.c_str());
+            SLANG_COMPILER_LOG("Error: Failed to find entry point function '%s'\n", entryPointName.c_str());
             request->Release();
             slangSession->Release();
             return false;
@@ -545,7 +552,7 @@ void SlangCompiler::readIntermediateFiles(const std::filesystem::path& directory
             std::ifstream file(entry.path(), std::ios::binary);
             if (!file.is_open())
             {
-                printf("Error: Failed to open intermediate file '%s'\n", entry.path().string().c_str());
+                SLANG_COMPILER_LOG("Error: Failed to open intermediate file '%s'\n", entry.path().string().c_str());
                 continue;
             }
 
@@ -579,13 +586,13 @@ ShaderDataPtr compileShader(SlangCompiler& compiler,
 
             if (code.empty())
             {
-                printf("Error: Shader source is empty: '%s'\n", source->source_filename);
+                SLANG_COMPILER_LOG("Error: Shader source is empty: '%s'\n", source->source_filename);
                 return nullptr;
             }
         }
         else
         {
-            printf("Error: Failed to open file with shader source: '%s'\n", shaderPath.c_str());
+            SLANG_COMPILER_LOG("Error: Failed to open file with shader source: '%s'\n", shaderPath.c_str());
         }
     }
 
@@ -603,7 +610,7 @@ ShaderDataPtr compileShader(SlangCompiler& compiler,
     }
     else
     {
-        printf("Error: Failed to open file with includes: '%s'\n", includesPath.c_str());
+        SLANG_COMPILER_LOG("Error: Failed to open file with includes: '%s'\n", includesPath.c_str());
     }
 
     std::vector<const char*> includePaths;
@@ -632,7 +639,7 @@ ShaderDataPtr compileShader(SlangCompiler& compiler,
 
     if (!result)
     {
-        printf("Error: Slang shader compilation failed\n");
+        SLANG_COMPILER_LOG("Error: Slang shader compilation failed\n");
         return nullptr;
     }
 
@@ -640,11 +647,11 @@ ShaderDataPtr compileShader(SlangCompiler& compiler,
     auto shaderData = compiler.getShaderData();
     if (!shaderData)
     {
-        printf("Error: Slang shader was not compiled\n");
+        SLANG_COMPILER_LOG("Error: Slang shader was not compiled\n");
         return nullptr;
     }
 
-    // printf("Info: Slang shader '%s' was compiled\n", source->source_filename);
+    SLANG_COMPILER_LOG("Info: Slang shader '%s' was compiled\n", source->source_filename);
 
     return shaderData;
 }
@@ -660,7 +667,7 @@ bool executeCpu(const SlangCompiler& compiler,
     CPPPrelude::ComputeFunc func = compiler.getComputeFunc(shader);
     if (!func)
     {
-        printf("Error: Failed to get compute function for '%s'\n", shader.filePath.c_str());
+        SLANG_COMPILER_LOG("Error: Failed to get compute function for '%s'\n", shader.filePath.c_str());
         return false;
     }
 

@@ -553,13 +553,20 @@ pnanovdb_compute_array_t* create_array(size_t element_size, pnanovdb_uint64_t el
 
 void destroy_array(pnanovdb_compute_array_t* array)
 {
-    if (array && array->data)
+    if (!array)
     {
-        delete[] (char*)array->data;
-        array->data = nullptr;
-        delete array;
-        array = nullptr;
+        return;
     }
+
+    if (!array->data)
+    {
+        delete array;
+        return;
+    }
+
+    delete[] (char*)array->data;
+    array->data = nullptr;
+    delete array;
 }
 
 void* map_array(pnanovdb_compute_array_t* array)

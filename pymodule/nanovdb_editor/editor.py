@@ -14,7 +14,6 @@ from ctypes import (
     c_float,
     byref,
     pointer,
-    cast,
 )
 
 from .compute import Compute, pnanovdb_Compute, pnanovdb_ComputeArray
@@ -48,7 +47,6 @@ class EditorConfig(Structure):
         ("streaming", c_int32),  # pnanovdb_bool_t is int32_t in C
         ("stream_to_file", c_int32),  # pnanovdb_bool_t is int32_t in C
         ("ui_profile_name", c_char_p),
-        ("device_index", c_int32),
     ]
 
 
@@ -176,6 +174,7 @@ class pnanovdb_Editor(Structure):
             ),
         ),
         ("stop", CFUNCTYPE(None, c_void_p)),
+        ("reset", CFUNCTYPE(None, c_void_p)),
         (
             "add_nanovdb",
             CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_ComputeArray)),
@@ -341,8 +340,13 @@ class Editor:
         if result != 0:
             self._editor.contents.init(self._editor)
 
+        # Cache for last added arrays (avoid relying on impl layout)
+        self._last_nanovdb_array = None
+        self._last_data_array = None
+
     def _get_or_default_config(
-        self, config: EditorConfig | None
+        self,
+        config: EditorConfig | None,
     ) -> EditorConfig:
         if config is not None:
             return config
@@ -352,9 +356,10 @@ class Editor:
         cfg.headless = 0
         cfg.streaming = 0
         cfg.stream_to_file = 0
+        cfg.ui_profile_name = None
         return cfg
 
-    def _ensure_device(self, config: EditorConfig) -> None:
+    def _ensure_device(self, _config: EditorConfig) -> None:
         di = self._compute.device_interface()
         has_device = False
         try:
@@ -373,6 +378,11 @@ class Editor:
         shutdown_func = self._editor.contents.shutdown
         shutdown_func(self._editor)
 
+    def reset(self) -> None:
+        reset_func = getattr(self._editor.contents, "reset", None)
+        if reset_func:
+            reset_func(self._editor)
+
     def update_camera(self, camera: Camera) -> None:
         udpate_camera_func = self._editor.contents.update_camera
         udpate_camera_func(self._editor, pointer(camera))
@@ -380,10 +390,12 @@ class Editor:
     def add_nanovdb(self, array: pnanovdb_ComputeArray) -> None:
         add_nanovdb_func = self._editor.contents.add_nanovdb
         add_nanovdb_func(self._editor, pointer(array))
+        self._last_nanovdb_array = array
 
     def add_array(self, array: pnanovdb_ComputeArray) -> None:
         add_array_func = self._editor.contents.add_array
         add_array_func(self._editor, pointer(array))
+        self._last_data_array = array
 
     def add_gaussian_data(self, raster, queue, data) -> None:
         """Add gaussian data to the editor."""
@@ -439,22 +451,14 @@ class Editor:
         stop_func(self._editor)
 
     def get_nanovdb(self) -> pnanovdb_ComputeArray:
-        impl_ptr = cast(
-            self._editor.contents.impl,
-            POINTER(pnanovdb_EditorImpl),
-        )
-        if not impl_ptr or not impl_ptr.contents.nanovdb_array:
+        if self._last_nanovdb_array is None:
             raise RuntimeError("No NanoVDB array available")
-        return impl_ptr.contents.nanovdb_array.contents
+        return self._last_nanovdb_array
 
     def get_array(self) -> pnanovdb_ComputeArray:
-        impl_ptr = cast(
-            self._editor.contents.impl,
-            POINTER(pnanovdb_EditorImpl),
-        )
-        if not impl_ptr or not impl_ptr.contents.data_array:
+        if self._last_data_array is None:
             raise RuntimeError("No data array available")
-        return impl_ptr.contents.data_array.contents
+        return self._last_data_array
 
     def add_callable(self, name: str, func) -> None:
         """Compatibility stub for older API; no-op in current interface."""
