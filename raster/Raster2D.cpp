@@ -330,7 +330,7 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
 
     // spherical harmonics
     {
-        pnanovdb_compute_resource_t resources[4u] = {};
+        pnanovdb_compute_resource_t resources[5u] = {};
         resources[0u].buffer_transient = constant_transient;
         resources[1u].buffer_transient = shader_params_transient;
         resources[2u].buffer_transient = sh_0_transient;

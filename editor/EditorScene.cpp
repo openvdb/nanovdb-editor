@@ -911,6 +911,16 @@ void EditorScene::handle_gaussian_data_load(pnanovdb_raster_gaussian_data_t* gau
     m_scene_view.add_gaussian_to_scene(
         scene_token, name_token, gaussian_data,
         static_cast<pnanovdb_raster_shader_params_t*>(params_array ? params_array->data : nullptr));
+
+    m_scene_manager.with_object(
+        scene_token, name_token,
+        [&](SceneObject* scene_obj)
+        {
+            if (scene_obj && scene_obj->type == SceneObjectType::GaussianData)
+            {
+                load_view_into_editor_and_ui(scene_obj);
+            }
+        });
 }
 
 bool EditorScene::remove_object(pnanovdb_editor_token_t* scene_token, const char* name)
