@@ -55,6 +55,14 @@ pnanovdb_compute_swapchain_t* windowGlfwGetSwapchain(WindowGlfw* ptr)
 {
     return nullptr;
 }
+void windowGlfwSetClipboard(WindowGlfw* ptr, const char* text)
+{
+    // NOP
+}
+const char* windowGlfwGetClipboard(WindowGlfw* ptr)
+{
+    return nullptr;
+}
 }
 
 #else // PNANOVDB_USE_GLFW
