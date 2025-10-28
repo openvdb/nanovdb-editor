@@ -827,7 +827,7 @@ void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
 
         // Show params which are parsed from the shader used in current vieweport
         if (ImGui::RadioButton(
-                "Viewport Shader", ptr->pending.shader_selection_mode == ShaderSelectionMode::UseViewportShader))
+                "Viewport Shader: ", ptr->pending.shader_selection_mode == ShaderSelectionMode::UseViewportShader))
         {
             ptr->pending.shader_selection_mode = ShaderSelectionMode::UseViewportShader;
         }
@@ -841,7 +841,7 @@ void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
         }
 
         // Show params which are parsed from the shader opened in the code editor
-        if (ImGui::RadioButton("Shader Editor Selected:",
+        if (ImGui::RadioButton("Shader Editor Selected: ",
                                ptr->pending.shader_selection_mode == ShaderSelectionMode::UseCodeEditorShader))
         {
             ptr->pending.shader_selection_mode = ShaderSelectionMode::UseCodeEditorShader;
