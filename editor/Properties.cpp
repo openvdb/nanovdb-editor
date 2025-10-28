@@ -400,17 +400,15 @@ void Properties::render(imgui_instance_user::Instance* ptr)
                                                }
                                            });
 
-                // Avoid overriding the active viewport shader when Shader Params follows the viewport
-                if (ptr->pending.shader_selection_mode != imgui_instance_user::ShaderSelectionMode::UseViewportShader &&
-                    !properties_shader_name.empty())
+                if (!properties_shader_name.empty())
                 {
-                    ptr->shader_name = properties_shader_name;
+                    ImGui::Separator();
+                    scene_manager->shader_params.render(properties_shader_name.c_str());
                 }
-
-                const std::string& name_to_show =
-                    !properties_shader_name.empty() ? properties_shader_name : ptr->shader_name;
-                ImGui::SeparatorText(name_to_show.c_str());
-                scene_manager->shader_params.render(name_to_show.c_str());
+                else
+                {
+                    ImGui::TextDisabled("No shader assigned");
+                }
             }
         }
         else if (selection.type == pnanovdb_editor::ViewType::NanoVDBs)
@@ -430,17 +428,27 @@ void Properties::render(imgui_instance_user::Instance* ptr)
                                                }
                                            });
 
-                // Avoid overriding the active viewport shader when Shader Params follows the viewport
-                if (ptr->pending.shader_selection_mode != imgui_instance_user::ShaderSelectionMode::UseViewportShader &&
-                    !properties_shader_name.empty())
+                // Shader name (editable)
+                char shader_buf[256];
+                strncpy(shader_buf, properties_shader_name.c_str(), sizeof(shader_buf) - 1);
+                shader_buf[sizeof(shader_buf) - 1] = '\0';
+                if (ImGui::InputText("##shader", shader_buf, sizeof(shader_buf), ImGuiInputTextFlags_EnterReturnsTrue))
                 {
-                    ptr->shader_name = properties_shader_name;
+                    std::string new_shader = shader_buf;
+                    ptr->editor_scene->set_selected_object_shader_name(new_shader);
+                    properties_shader_name = new_shader;
+                    ptr->pending.update_shader = true;
                 }
 
-                const std::string& name_to_show =
-                    !properties_shader_name.empty() ? properties_shader_name : ptr->shader_name;
-                ImGui::SeparatorText(name_to_show.c_str());
-                scene_manager->shader_params.render(name_to_show.c_str());
+                if (!properties_shader_name.empty())
+                {
+                    ImGui::Separator();
+                    scene_manager->shader_params.render(properties_shader_name.c_str());
+                }
+                else
+                {
+                    ImGui::TextDisabled("No shader assigned");
+                }
             }
         }
         else if (selection.type == pnanovdb_editor::ViewType::Cameras)
