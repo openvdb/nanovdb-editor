@@ -172,7 +172,7 @@ struct Instance
 
     // shader params window selection
     std::string shader_group = "";
-    std::string shader_name = "";
+    std::string editor_shader_name = ""; // Temporary storage for Code Editor's "Show" button
 
     ImVec2 dialog_size{ 768.f, 512.f };
 

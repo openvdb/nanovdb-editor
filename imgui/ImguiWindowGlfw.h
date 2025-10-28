@@ -45,4 +45,8 @@ pnanovdb_bool_t windowGlfwShouldClose(WindowGlfw* ptr);
 void windowGlfwResize(WindowGlfw* ptr, pnanovdb_uint32_t width, pnanovdb_uint32_t height);
 float windowGlfwGetScale(WindowGlfw* ptr);
 pnanovdb_compute_swapchain_t* windowGlfwGetSwapchain(WindowGlfw* ptr);
+
+// Clipboard functions
+void windowGlfwSetClipboard(WindowGlfw* ptr, const char* text);
+const char* windowGlfwGetClipboard(WindowGlfw* ptr);
 }

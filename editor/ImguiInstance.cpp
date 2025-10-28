@@ -14,6 +14,7 @@
 
 #include "imgui.h"
 #include "imgui/ImguiRenderer.h"
+#include "imgui/ImguiWindow.h"
 #include "compute/ComputeShader.h"
 #include "CameraFrustum.h"
 #include "EditorWindows.h"
@@ -87,6 +88,11 @@ pnanovdb_imgui_instance_t* create(void* userdata,
 
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
+    // Set up clipboard callbacks to use GLFW/system clipboard
+    io.ClipboardUserData = nullptr;
+    io.SetClipboardTextFn = [](void*, const char* text) { pnanovdb_imgui_set_system_clipboard(text); };
+    io.GetClipboardTextFn = [](void*) -> const char* { return pnanovdb_imgui_get_system_clipboard(); };
 
     ptr->update_ini_filename_for_profile(ptr->render_settings->ui_profile_name);
 

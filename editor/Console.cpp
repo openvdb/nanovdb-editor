@@ -10,6 +10,7 @@
 */
 
 #include "Console.h"
+#include "imgui/ImguiWindow.h"
 
 #include <chrono>
 #include <iomanip>
@@ -18,19 +19,24 @@
 
 namespace pnanovdb_editor
 {
-// Deduplicated labels and tooltips (file-scope for reuse)
+static const char* LABEL_TRACE = "T";
 static const char* LABEL_DEBUG = "D";
 static const char* LABEL_INFO = "I";
 static const char* LABEL_WARNING = "W";
 static const char* LABEL_ERROR = "E";
 static const char* LABEL_ALL = "All";
 static const char* LABEL_NONE = "None";
+static const char* LABEL_PAUSE = "Pause";
+static const char* LABEL_COPY = "Copy";
 static const char* LABEL_CLEAR = "Clear";
 
+static const char* TIP_TRACE = "Show Trace";
 static const char* TIP_DEBUG = "Show Debug";
 static const char* TIP_INFO = "Show Info";
 static const char* TIP_WARNING = "Show Warnings";
 static const char* TIP_ERROR = "Show Errors";
+static const char* TIP_PAUSE = "Pause updates";
+static const char* TIP_COPY = "Copy all visible logs to clipboard";
 static const char* TIP_CLEAR = "Clear Log";
 
 Console::Console()
@@ -41,12 +47,24 @@ Console::Console()
     editor_.SetShowScrollbarMiniMapEnabled(false);
     editor_.SetShowPanScrollIndicatorEnabled(false);
 
-    // Hide cursor by making it the same color as the background
-    TextEditor::Palette palette = editor_.GetPalette();
-    palette[static_cast<size_t>(TextEditor::Color::cursor)] = palette[static_cast<size_t>(TextEditor::Color::background)];
-    editor_.SetPalette(palette);
+    normalPalette_ = editor_.GetPalette();
+    // Hide cursor by making it the same color as the background (but allow selection)
+    normalPalette_[static_cast<size_t>(TextEditor::Color::cursor)] =
+        normalPalette_[static_cast<size_t>(TextEditor::Color::background)];
 
-    editor_.ClearCursors();
+    pausedPalette_ = normalPalette_;
+    // Make all text grey when paused (apply to entire palette)
+    for (size_t i = 0; i < pausedPalette_.size(); ++i)
+    {
+        if (i == static_cast<size_t>(TextEditor::Color::background) ||
+            i == static_cast<size_t>(TextEditor::Color::cursor))
+        {
+            continue;
+        }
+        pausedPalette_[i] = 0xff808080;
+    }
+
+    editor_.SetPalette(normalPalette_);
 }
 
 bool Console::render()
@@ -88,22 +106,25 @@ bool Console::render()
     ImGui::SameLine();
     drawToggle(LABEL_DEBUG, showDebug_, ImVec4(0.20f, 0.50f, 0.90f, 0.80f), TIP_DEBUG);
     ImGui::SameLine();
+    drawToggle(LABEL_TRACE, showTrace_, ImVec4(0.40f, 0.40f, 0.40f, 0.70f), TIP_TRACE);
+    ImGui::SameLine();
     if (ImGui::SmallButton(LABEL_ALL))
     {
-        showDebug_ = showInfo_ = showWarning_ = showError_ = true;
+        showTrace_ = showDebug_ = showInfo_ = showWarning_ = showError_ = true;
         toggled = true;
     }
     ImGui::SameLine();
     if (ImGui::SmallButton(LABEL_NONE))
     {
-        showDebug_ = showInfo_ = showWarning_ = showError_ = false;
+        showTrace_ = showDebug_ = showInfo_ = showWarning_ = showError_ = false;
         toggled = true;
     }
 
-    // Right-align Clear button
+    // Right-align Pause, Copy and Clear buttons
     const ImGuiStyle& style = ImGui::GetStyle();
     auto buttonWidth = [&](const char* label) { return ImGui::CalcTextSize(label).x + style.FramePadding.x * 2.0f; };
-    float groupWidth = buttonWidth(LABEL_CLEAR);
+    float groupWidth = buttonWidth(LABEL_PAUSE) + style.ItemSpacing.x + buttonWidth(LABEL_COPY) + style.ItemSpacing.x +
+                       buttonWidth(LABEL_CLEAR);
 
     float startX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - groupWidth;
     float minX = ImGui::GetCursorPosX() + style.ItemSpacing.x;
@@ -111,6 +132,51 @@ bool Console::render()
         startX = minX;
     ImGui::SameLine(startX);
 
+    // Pause button with color to indicate state
+    ImVec4 pauseColor = isPaused_ ? ImVec4(0.85f, 0.70f, 0.20f, 0.85f) : ImGui::GetStyleColorVec4(ImGuiCol_Button);
+    ImGui::PushStyleColor(ImGuiCol_Button, pauseColor);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, pauseColor);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, pauseColor);
+    if (ImGui::SmallButton(LABEL_PAUSE))
+    {
+        isPaused_ = !isPaused_;
+        if (!isPaused_)
+        {
+            // Resume - force rebuild to show accumulated logs
+            needsRebuild_ = true;
+            editor_.SetPalette(normalPalette_);
+        }
+        else
+        {
+            // Paused - use grey palette
+            editor_.SetPalette(pausedPalette_);
+        }
+    }
+    ImGui::PopStyleColor(3);
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip("%s", TIP_PAUSE);
+    }
+
+    ImGui::SameLine();
+    if (ImGui::SmallButton(LABEL_COPY))
+    {
+        std::string text = editor_.GetText();
+        if (!text.empty())
+        {
+            pnanovdb_imgui_set_system_clipboard(text.c_str());
+        }
+        else
+        {
+            addLog(LogLevel::Warning, "Console is empty, nothing to copy");
+        }
+    }
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip("%s", TIP_COPY);
+    }
+
+    ImGui::SameLine();
     if (ImGui::SmallButton(LABEL_CLEAR))
     {
         std::lock_guard<std::mutex> lock(logMutex_);
@@ -132,14 +198,15 @@ bool Console::render()
         needsRebuild_ = true;
     }
 
-    if (needsRebuild_)
+    // Only rebuild display if not paused (logs still accumulate in background)
+    if (needsRebuild_ && !isPaused_)
     {
         std::lock_guard<std::mutex> lock(logMutex_);
         rebuildVisibleTextLocked();
         needsRebuild_ = false;
     }
 
-    editor_.Render("##console_log", ImVec2(-1, -toolbarHeight), false);
+    editor_.Render("##console_log", ImVec2(-1, -toolbarHeight), true);
 
     return true;
 }
@@ -223,6 +290,8 @@ bool Console::isLevelVisible(LogLevel level) const
 {
     switch (level)
     {
+    case LogLevel::Trace:
+        return showTrace_;
     case LogLevel::Debug:
         return showDebug_;
     case LogLevel::Info:
@@ -257,7 +326,7 @@ void Console::rebuildVisibleTextLocked()
     int lineCount = editor_.GetLineCount();
     if (lineCount > 0)
     {
-        editor_.ScrollToLine(lineCount - 1, TextEditor::Scroll::alignBottom);
+        editor_.ScrollToLine(lineCount, TextEditor::Scroll::alignBottom);
     }
 }
 

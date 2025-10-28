@@ -221,35 +221,35 @@ bool ShaderParams::load(const std::string& shader_name, bool reload, bool load_g
         }
     }
 
+    // Load user JSON file if it exists (contains customizations like defaults, min/max, hidden flags)
+    // If it doesn't exist, we'll still use the parameters from the compiled shader
     auto json_optional = loadAndParseJsonFile(shader_name);
-    if (!json_optional)
+    if (json_optional)
     {
-        return false;
-    }
+        nlohmann::ordered_json json = *json_optional;
+        auto& json_shader_params = json.at(pnanovdb_shader::SHADER_PARAM_JSON);
+        for (auto& shader_param : params_map_[shader_name])
+        {
+            if (!json_shader_params.contains(shader_param.name))
+            {
+                continue;
+            }
 
-    nlohmann::ordered_json json = *json_optional;
-    auto& json_shader_params = json.at(pnanovdb_shader::SHADER_PARAM_JSON);
-    for (auto& shader_param : params_map_[shader_name])
-    {
-        if (!json_shader_params.contains(shader_param.name))
-        {
-            continue;
-        }
+            auto& value = json_shader_params.at(shader_param.name);
+            if (shader_param.type == ImGuiDataType_Bool)
+            {
+                addToBoolParam(shader_param.name, value, params_map_[shader_name]);
+            }
+            else
+            {
+                addToScalarNParam(shader_param.name, value, params_map_[shader_name]);
+            }
 
-        auto& value = json_shader_params.at(shader_param.name);
-        if (shader_param.type == ImGuiDataType_Bool)
-        {
-            addToBoolParam(shader_param.name, value, params_map_[shader_name]);
-        }
-        else
-        {
-            addToScalarNParam(shader_param.name, value, params_map_[shader_name]);
-        }
-
-        // Allocate pool array now that pending values are set (for group loading)
-        if (load_group)
-        {
-            getAllocatedPoolArray(shader_param);
+            // Allocate pool array now that pending values are set (for group loading)
+            if (load_group)
+            {
+                getAllocatedPoolArray(shader_param);
+            }
         }
     }
 
@@ -825,10 +825,18 @@ void ShaderParams::render(const std::string& shader_name)
     bool hasParams = load(shader_name, false);
     if (!hasParams)
     {
+        pnanovdb_editor::Console::getInstance().addLog(Console::LogLevel::Debug,
+                                                       "ShaderParams::render() - Failed to load params for shader '%s'",
+                                                       shader_name.c_str());
+        ImGui::TextDisabled("Shader parameters not available");
         return;
     }
 
     std::vector<ShaderParam>& shader_params = *get(shader_name);
+    pnanovdb_editor::Console::getInstance().addLog(Console::LogLevel::Trace,
+                                                   "ShaderParams::render() - Rendering %zu params for shader '%s'",
+                                                   shader_params.size(), shader_name.c_str());
+
     for (auto& shader_param : shader_params)
     {
         renderParams(shader_name, shader_param);

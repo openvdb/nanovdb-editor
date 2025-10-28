@@ -29,7 +29,7 @@ struct grid_dim_t
 
 grid_dim_t compute_dispatch_grid_dim(uint32_t grid_dim_1d)
 {
-    grid_dim_t grid_dim = {grid_dim_1d, 1u, 1u};
+    grid_dim_t grid_dim = { grid_dim_1d, 1u, 1u };
     if (grid_dim_1d > 32768u)
     {
         uint32_t best_size = ~0u;
@@ -480,8 +480,7 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
             grid_dim_t grid_dim = points_grid_dim;
 
             compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[gaussian_tile_intersections_slang],
-                                     resources, grid_dim.x, grid_dim.y, grid_dim.z,
-                                     "gaussian_tile_intersections");
+                                     resources, grid_dim.x, grid_dim.y, grid_dim.z, "gaussian_tile_intersections");
         }
 
         // radix sort

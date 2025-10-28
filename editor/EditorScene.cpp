@@ -498,9 +498,8 @@ ViewType EditorScene::determine_view_type(pnanovdb_editor_token_t* view_token, p
 void EditorScene::sync_selected_view_with_current()
 {
     pnanovdb_editor_token_t* prev_view_token = m_scene_view.get_current_view();
-    const uint64_t prev_epoch = get_current_view_epoch();
+    const uint64_t current_epoch = get_current_view_epoch();
     bool has_pending_request = handle_pending_view_changes();
-
 
     pnanovdb_editor_token_t* view_token = m_scene_view.get_current_view();
 
@@ -510,7 +509,7 @@ void EditorScene::sync_selected_view_with_current()
     uint64_t prev_id = prev_view_token ? prev_view_token->id : 0;
     uint64_t curr_id = view_token ? view_token->id : 0;
     if (!has_pending_request && m_view_selection.type == ViewType::Cameras && prev_id == curr_id &&
-        prev_epoch == get_current_view_epoch())
+        m_last_synced_epoch == current_epoch)
     {
         return;
     }
@@ -520,6 +519,7 @@ void EditorScene::sync_selected_view_with_current()
     {
         // No views in scene - clear the display
         clear_selection();
+        m_last_synced_epoch = current_epoch;
         return;
     }
 
@@ -536,13 +536,15 @@ void EditorScene::sync_selected_view_with_current()
     // (including scene_token and type) AND the epoch hasn't changed. Only skip update if both
     // match completely and content hasn't changed (epoch check ensures new content triggers update).
     if (m_view_selection == new_selection && m_render_view_selection == new_selection &&
-        prev_epoch == get_current_view_epoch())
+        m_last_synced_epoch == current_epoch)
     {
         return;
     }
 
+    Console::getInstance().addLog(Console::LogLevel::Debug, "sync_selected_view_with_current: Updating selection");
     set_properties_selection(new_view_type, view_token, current_scene_token);
     set_render_view(new_view_type, view_token, current_scene_token);
+    m_last_synced_epoch = current_epoch;
 }
 
 void EditorScene::sync_shader_params_from_editor()
@@ -733,9 +735,8 @@ void EditorScene::reload_shader_params_for_current_view()
     else if (m_render_view_selection.type == ViewType::NanoVDBs)
     {
         destroy_default_array(m_nanovdb_params);
-        // Use the already-synced UI/editor shader name to avoid nested locks
-        m_nanovdb_params.shader_name =
-            !m_imgui_instance->shader_name.empty() ? m_imgui_instance->shader_name : m_editor->impl->shader_name;
+        // Use the already-synced editor shader name to avoid nested locks
+        m_nanovdb_params.shader_name = m_editor->impl->shader_name;
         m_nanovdb_params.default_array = m_scene_manager.create_initialized_shader_params(
             m_compute, m_nanovdb_params.shader_name.c_str(), nullptr, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
     }
@@ -861,6 +862,7 @@ void EditorScene::handle_nanovdb_data_load(pnanovdb_compute_array_t* nanovdb_arr
 
     // Do not create per-object params now; use shared defaults until user edits (copy-on-write)
     pnanovdb_compute_array_t* params_array = nullptr;
+
     m_scene_manager.add_nanovdb(
         scene_token, name_token, nanovdb_array, params_array, m_compute, m_nanovdb_params.shader_name.c_str());
 
@@ -912,15 +914,14 @@ void EditorScene::handle_gaussian_data_load(pnanovdb_raster_gaussian_data_t* gau
         scene_token, name_token, gaussian_data,
         static_cast<pnanovdb_raster_shader_params_t*>(params_array ? params_array->data : nullptr));
 
-    m_scene_manager.with_object(
-        scene_token, name_token,
-        [&](SceneObject* scene_obj)
-        {
-            if (scene_obj && scene_obj->type == SceneObjectType::GaussianData)
-            {
-                load_view_into_editor_and_ui(scene_obj);
-            }
-        });
+    m_scene_manager.with_object(scene_token, name_token,
+                                [&](SceneObject* scene_obj)
+                                {
+                                    if (scene_obj && scene_obj->type == SceneObjectType::GaussianData)
+                                    {
+                                        load_view_into_editor_and_ui(scene_obj);
+                                    }
+                                });
 }
 
 bool EditorScene::remove_object(pnanovdb_editor_token_t* scene_token, const char* name)
@@ -1204,14 +1205,25 @@ void EditorScene::set_properties_selection(ViewType type,
         m_view_selection = candidate;
 
         // Update shader_name to reflect the selected object's shader
-        m_scene_manager.with_object(scene_token, name_token,
-                                    [&](SceneObject* obj)
-                                    {
-                                        if (obj && !obj->shader_name.empty())
-                                        {
-                                            m_editor->impl->shader_name = obj->shader_name;
-                                        }
-                                    });
+        m_scene_manager.with_object(
+            scene_token, name_token,
+            [&](SceneObject* obj)
+            {
+                if (obj)
+                {
+                    Console::getInstance().addLog(Console::LogLevel::Debug,
+                                                  "set_properties_selection: object found, shader_name='%s'",
+                                                  obj->shader_name.c_str());
+                    if (!obj->shader_name.empty())
+                    {
+                        m_editor->impl->shader_name = obj->shader_name;
+                    }
+                }
+                else
+                {
+                    Console::getInstance().addLog(Console::LogLevel::Debug, "set_properties_selection: object is null!");
+                }
+            });
     }
     else
     {
@@ -1448,6 +1460,39 @@ void EditorScene::save_editor_nanovdb()
     {
         pnanovdb_editor::Console::getInstance().addLog("Failed to save NanoVDB to '%s'", filepath);
     }
+}
+
+std::string EditorScene::get_selected_object_shader_name() const
+{
+    std::string shader_name;
+    auto* scene_token = get_current_scene_token();
+    m_scene_manager.with_object(scene_token, m_view_selection.name_token,
+                                [&](SceneObject* scene_obj)
+                                {
+                                    if (scene_obj)
+                                    {
+                                        shader_name = scene_obj->shader_name;
+                                    }
+                                });
+    return shader_name;
+}
+
+void EditorScene::set_selected_object_shader_name(const std::string& shader_name)
+{
+    auto* scene_token = get_current_scene_token();
+    m_scene_manager.with_object(scene_token, m_view_selection.name_token,
+                                [&](SceneObject* scene_obj)
+                                {
+                                    if (scene_obj)
+                                    {
+                                        scene_obj->shader_name = shader_name;
+                                        // Also update the editor->impl->shader_name to mirror it
+                                        if (m_editor && m_editor->impl)
+                                        {
+                                            m_editor->impl->shader_name = shader_name;
+                                        }
+                                    }
+                                });
 }
 
 } // namespace pnanovdb_editor

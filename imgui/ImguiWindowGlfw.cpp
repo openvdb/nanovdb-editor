@@ -83,6 +83,8 @@ pnanovdb_compute_swapchain_t* windowGlfwGetSwapchain(WindowGlfw* ptr)
 namespace pnanovdb_imgui_window_default
 {
 GLFW_PTR(glfwGetWindowUserPointer);
+GLFW_PTR(glfwSetClipboardString);
+GLFW_PTR(glfwGetClipboardString);
 
 void windowSizeCallback(GLFWwindow* win, int width, int height);
 void keyboardCallback(GLFWwindow* win, int key, int scanCode, int action, int modifiers);
@@ -132,6 +134,8 @@ struct WindowGlfw
     GLFW_PTR(glfwGetFramebufferSize);
     GLFW_PTR(glfwGetKey);
     GLFW_PTR(glfwGetWindowContentScale);
+    GLFW_PTR(glfwSetClipboardString);
+    GLFW_PTR(glfwGetClipboardString);
 };
 
 WindowGlfw* createWindowGlfw(Window* window_parent,
@@ -238,9 +242,13 @@ WindowGlfw* createWindowGlfw(Window* window_parent,
     GLFW_PTR_LOAD(glfwGetFramebufferSize);
     GLFW_PTR_LOAD(glfwGetKey);
     GLFW_PTR_LOAD(glfwGetWindowContentScale);
+    GLFW_PTR_LOAD(glfwSetClipboardString);
+    GLFW_PTR_LOAD(glfwGetClipboardString);
 
-    // need global access on this one
+    // need global access on these
     p_glfwGetWindowUserPointer = ptr->p_glfwGetWindowUserPointer;
+    p_glfwSetClipboardString = ptr->p_glfwSetClipboardString;
+    p_glfwGetClipboardString = ptr->p_glfwGetClipboardString;
 
     if (!ptr->p_glfwInit() && log_print)
     {
@@ -381,6 +389,23 @@ float windowGlfwGetScale(WindowGlfw* ptr)
 pnanovdb_compute_swapchain_t* windowGlfwGetSwapchain(WindowGlfw* ptr)
 {
     return ptr->swapchain;
+}
+
+void windowGlfwSetClipboard(WindowGlfw* ptr, const char* text)
+{
+    if (ptr && ptr->window && p_glfwSetClipboardString)
+    {
+        p_glfwSetClipboardString(ptr->window, text);
+    }
+}
+
+const char* windowGlfwGetClipboard(WindowGlfw* ptr)
+{
+    if (ptr && ptr->window && p_glfwGetClipboardString)
+    {
+        return p_glfwGetClipboardString(ptr->window);
+    }
+    return nullptr;
 }
 
 void windowSizeCallback(GLFWwindow* win, int width, int height)

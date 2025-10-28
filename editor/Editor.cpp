@@ -467,7 +467,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
     pnanovdb_editor::EditorSceneConfig scene_config{ imgui_user_instance, editor,
                                                      imgui_user_settings, device_queue,
-                                                     compiler_inst,       imgui_user_instance->shader_name.c_str() };
+                                                     compiler_inst,       pnanovdb_editor::s_default_editor_shader };
     EditorScene editor_scene(scene_config);
 
     auto create_background = [&]()
@@ -668,6 +668,14 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                 std::lock_guard<std::mutex> lock(imgui_user_instance->compiler_settings_mutex);
 
                 imgui_user_instance->pending.update_shader = false;
+
+                // Sync shader name from Code Editor to the selected scene object
+                if (!imgui_user_instance->editor_shader_name.empty())
+                {
+                    imgui_user_instance->editor_scene->set_selected_object_shader_name(
+                        imgui_user_instance->editor_shader_name);
+                    imgui_user_instance->editor_shader_name = "";
+                }
                 editor->impl->compute->destroy_shader_context(editor->impl->compute, device_queue, shader_context);
                 shader_context = editor->impl->compute->create_shader_context(editor->impl->shader_name.c_str());
                 if (editor->impl->compute->init_shader(editor->impl->compute, device_queue, shader_context,

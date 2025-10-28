@@ -30,7 +30,7 @@ struct grid_dim_t
 
 grid_dim_t compute_dispatch_grid_dim(uint32_t grid_dim_1d)
 {
-    grid_dim_t grid_dim = {grid_dim_1d, 1u, 1u};
+    grid_dim_t grid_dim = { grid_dim_1d, 1u, 1u };
     if (grid_dim_1d > 32768u)
     {
         uint32_t best_size = ~0u;
