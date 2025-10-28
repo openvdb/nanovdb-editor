@@ -1422,6 +1422,10 @@ void* EditorScene::get_view_params_with_fallback(SceneShaderParams& params, void
 
 void EditorScene::load_nanovdb_to_editor()
 {
+    const char* filepath = m_imgui_instance->nanovdb_filepath.c_str();
+
+    m_editor->impl->nanovdb_array = m_compute->load_nanovdb(filepath);
+
     handle_nanovdb_data_load(m_editor->impl->nanovdb_array, m_imgui_instance->nanovdb_filepath.c_str());
 }
 
