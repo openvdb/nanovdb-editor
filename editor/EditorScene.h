@@ -134,6 +134,12 @@ public:
         return m_scene_view.get_viewport_camera_token();
     }
 
+    // Get the shader name from the currently selected object (for Properties window)
+    std::string get_selected_object_shader_name() const;
+
+    // Set the shader name for the currently selected object
+    void set_selected_object_shader_name(const std::string& shader_name);
+
     // Ensure scene exists (creates with default viewport camera if needed)
     SceneViewData* get_or_create_scene(pnanovdb_editor_token_t* scene_token)
     {
@@ -277,6 +283,8 @@ private:
 
     std::map<uint64_t, pnanovdb_camera_state_t> m_saved_camera_states; // Indexed by token ID
     std::map<uint64_t, pnanovdb_camera_state_t> m_scene_view_camera_state; // Indexed by token ID
+
+    uint64_t m_last_synced_epoch = 0; // Track last processed epoch to detect changes
     std::map<uint64_t, int> m_camera_frustum_index; // Indexed by token ID
 
     const pnanovdb_reflect_data_type_t* m_raster_shader_params_data_type;

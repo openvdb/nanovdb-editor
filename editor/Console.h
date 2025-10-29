@@ -30,6 +30,7 @@ class Console
 public:
     enum class LogLevel
     {
+        Trace, // Very detailed per-frame/per-update logs
         Debug,
         Info,
         Warning,
@@ -67,6 +68,7 @@ private:
     std::vector<LogEntry> logs_;
 
     // visibility toggles
+    bool showTrace_ = false;
     bool showDebug_ = false;
     bool showInfo_ = true;
     bool showWarning_ = true;
@@ -74,6 +76,13 @@ private:
 
     // flag to rebuild editor text from logs_
     bool needsRebuild_ = true;
+
+    // when paused, logs still accumulate but display doesn't update
+    bool isPaused_ = false;
+
+    // palettes for normal and paused states
+    TextEditor::Palette normalPalette_;
+    TextEditor::Palette pausedPalette_;
 
     // helpers
     static std::string makeTimestampPrefix();

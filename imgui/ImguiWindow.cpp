@@ -26,7 +26,20 @@
 namespace pnanovdb_imgui_window_default
 {
 
-// neeeds to be called after camer.config is set
+static WindowGlfw* g_window_glfw = nullptr;
+static std::string g_clipboard_buffer;
+
+static void imgui_clipboard_set_callback(void*, const char* text)
+{
+    pnanovdb_imgui_set_system_clipboard(text);
+}
+
+static const char* imgui_clipboard_get_callback(void*)
+{
+    return pnanovdb_imgui_get_system_clipboard();
+}
+
+// neeeds to be called after camera.config is set
 static inline void applyReverseZFarPlane(pnanovdb_camera_config_t* config)
 {
     if (config->is_reverse_z && !config->is_orthographic)
@@ -158,6 +171,8 @@ pnanovdb_imgui_window_t* create(const pnanovdb_compute_t* compute,
     ptr->window_glfw = window_glfw;
     ptr->log_print = log_print;
 
+    g_window_glfw = window_glfw;
+
     pnanovdb_compute_device_interface_t_duplicate(&ptr->device_interface, &compute->device_interface);
     pnanovdb_compute_interface_t_duplicate(&ptr->compute_interface, compute_interface);
 
@@ -271,6 +286,7 @@ void destroy(const pnanovdb_compute_t* compute,
     {
         destroyWindowGlfw(ptr->window_glfw);
         ptr->window_glfw = nullptr;
+        g_window_glfw = nullptr;
     }
 
     delete ptr;
@@ -756,6 +772,12 @@ pnanovdb_imgui_instance_t* imgui_create(void* userdata,
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
 
+    // Set up clipboard callbacks (note: user context in ImguiInstance.cpp is the one actually used)
+    ImGuiIO& io = ImGui::GetIO();
+    io.ClipboardUserData = nullptr;
+    io.SetClipboardTextFn = imgui_clipboard_set_callback;
+    io.GetClipboardTextFn = imgui_clipboard_get_callback;
+
     return cast(ptr);
 }
 
@@ -1156,4 +1178,25 @@ pnanovdb_imgui_window_interface_t* pnanovdb_imgui_get_window_interface()
     iface.get_camera = get_camera;
     iface.update_camera = update_camera;
     return &iface;
+}
+
+void pnanovdb_imgui_set_system_clipboard(const char* text)
+{
+    using namespace pnanovdb_imgui_window_default;
+    if (g_window_glfw && text)
+    {
+        // Store in static buffer to ensure it persists
+        g_clipboard_buffer = text;
+        windowGlfwSetClipboard(g_window_glfw, g_clipboard_buffer.c_str());
+    }
+}
+
+const char* pnanovdb_imgui_get_system_clipboard()
+{
+    using namespace pnanovdb_imgui_window_default;
+    if (g_window_glfw)
+    {
+        return windowGlfwGetClipboard(g_window_glfw);
+    }
+    return nullptr;
 }

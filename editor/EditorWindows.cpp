@@ -821,26 +821,27 @@ void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
     if (ImGui::Begin(SHADER_PARAMS, &ptr->window.show_shader_params))
     {
         std::string shader_name;
+        const std::string viewport_shader = ptr->editor_scene->get_selected_object_shader_name();
 
         ImGui::BeginGroup();
 
         // Show params which are parsed from the shader used in current vieweport
         if (ImGui::RadioButton(
-                "Viewport Shader", ptr->pending.shader_selection_mode == ShaderSelectionMode::UseViewportShader))
+                "Viewport Shader: ", ptr->pending.shader_selection_mode == ShaderSelectionMode::UseViewportShader))
         {
             ptr->pending.shader_selection_mode = ShaderSelectionMode::UseViewportShader;
         }
 
         // Display the currently active viewport shader filename (if any)
-        if (!ptr->shader_name.empty())
+        if (!viewport_shader.empty())
         {
             ImGui::SameLine();
-            std::filesystem::path vpPath(ptr->shader_name);
+            std::filesystem::path vpPath(viewport_shader);
             ImGui::Text("%s", vpPath.filename().string().c_str());
         }
 
         // Show params which are parsed from the shader opened in the code editor
-        if (ImGui::RadioButton("Shader Editor Selected:",
+        if (ImGui::RadioButton("Shader Editor Selected: ",
                                ptr->pending.shader_selection_mode == ShaderSelectionMode::UseCodeEditorShader))
         {
             ptr->pending.shader_selection_mode = ShaderSelectionMode::UseCodeEditorShader;
@@ -867,7 +868,7 @@ void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
 
         const bool is_viewport_mode = ptr->pending.shader_selection_mode == ShaderSelectionMode::UseViewportShader;
         const std::string& target_name =
-            is_group_mode ? ptr->shader_group : (is_viewport_mode ? ptr->shader_name : shader_name);
+            is_group_mode ? ptr->shader_group : (is_viewport_mode ? viewport_shader : shader_name);
         if (!target_name.empty())
         {
             if (shader_params.isJsonLoaded(target_name, is_group_mode))
@@ -1015,7 +1016,7 @@ void showCodeEditorWindow(imgui_instance_user::Instance* ptr)
     }
 
     pnanovdb_editor::CodeEditor::getInstance().setup(
-        &ptr->shader_name, &ptr->pending.update_shader, ptr->dialog_size, ptr->run_shader, ptr->is_viewer());
+        &ptr->editor_shader_name, &ptr->pending.update_shader, ptr->dialog_size, ptr->run_shader, ptr->is_viewer());
 
     if (ImGui::Begin(CODE_EDITOR, &ptr->window.show_code_editor, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_MenuBar))
     {
