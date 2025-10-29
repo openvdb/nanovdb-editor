@@ -193,6 +193,21 @@ void shutdown(pnanovdb_editor_t* editor)
         delete editor->impl->scene_camera;
         editor->impl->scene_camera = nullptr;
     }
+
+    // invalidate, passed in at start()
+    if (editor->impl->device_queue)
+    {
+        editor->impl->device_queue = nullptr;
+    }
+    if (editor->impl->compute_queue)
+    {
+        editor->impl->compute_queue = nullptr;
+    }
+    if (editor->impl->device)
+    {
+        editor->impl->device = nullptr;
+    }
+
     if (editor->impl)
     {
         delete editor->impl;
@@ -810,22 +825,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         editor->impl->raster->destroy_context(editor->impl->compute, device_queue, editor->impl->raster_ctx);
         editor->impl->raster_ctx = nullptr;
     }
-    if (editor->impl->raster)
-    {
-        editor->impl->raster = nullptr;
-    }
-    if (editor->impl->device_queue)
-    {
-        editor->impl->device_queue = nullptr;
-    }
-    if (editor->impl->compute_queue)
-    {
-        editor->impl->compute_queue = nullptr;
-    }
-    if (editor->impl->device)
-    {
-        editor->impl->device = nullptr;
-    }
 }
 
 pnanovdb_int32_t get_resolved_port(pnanovdb_editor_t* editor, pnanovdb_bool_t should_wait)
@@ -907,7 +906,10 @@ void reset(pnanovdb_editor_t* editor)
 
     shutdown(editor);
 
-    init_impl(editor, compute, compiler);
+    if (init_impl(editor, compute, compiler))
+    {
+        init(editor);
+    }
 
     start(editor, device, &config);
 }
