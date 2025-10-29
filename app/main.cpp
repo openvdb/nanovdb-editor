@@ -190,7 +190,13 @@ int main(int argc, char* argv[])
 
                 inst.editor.reset(&inst.editor);
 
-                inst.editor.add_nanovdb_2(&inst.editor, inst.nanovdb_array);
+                // right now, add_nanovdb_2 takes ownership of compute array
+                const char* file = args.input_file.c_str();
+                inst.nanovdb_array = inst.compute.load_nanovdb(file);
+
+                pnanovdb_editor_token_t* scene_token = inst.editor.get_token("main");
+                pnanovdb_editor_token_t* volume_token = inst.editor.get_token("dragon");
+                inst.editor.add_nanovdb_2(&inst.editor, scene_token, volume_token, inst.nanovdb_array);
             }
         }
 #endif
