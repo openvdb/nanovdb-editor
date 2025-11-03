@@ -93,4 +93,4 @@ jobs:
 
       - name: Run GTests
         run: |
-          ctest --test-dir build/Release/gtests -C Release --output-on-failure --verbose
+          ctest --test-dir build/gtests -C Release --output-on-failure --verbose
