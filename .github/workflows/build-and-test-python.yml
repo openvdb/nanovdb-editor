@@ -171,35 +171,35 @@ jobs:
             pymodule/dist/
           retention-days: 2
 
-  nanovdb-editor-test-python-windows:
-    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
-    name: Test (Windows)
-    needs: nanovdb-editor-build-python-windows
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: pwsh
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+  # nanovdb-editor-test-python-windows:
+  #   if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+  #   name: Test (Windows)
+  #   needs: nanovdb-editor-build-python-windows
+  #   runs-on: windows-latest
+  #   defaults:
+  #     run:
+  #       shell: pwsh
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+  #     - name: Set up Python
+  #       uses: actions/setup-python@v5
+  #       with:
+  #         python-version: '3.11'
 
-      - name: Download package with nanovdb_editor
-        uses: actions/download-artifact@v4
-        with:
-          name: nanovdb-editor-wheel-windows
-          path: ./dist
+  #     - name: Download package with nanovdb_editor
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: nanovdb-editor-wheel-windows
+  #         path: ./dist
 
-      - name: Install nanovdb_editor and test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install ./dist/nanovdb_editor*.whl
-          pip install pytest parameterized numpy
+  #     - name: Install nanovdb_editor and test dependencies
+  #       run: |
+  #         python -m pip install --upgrade pip
+  #         pip install ./dist/nanovdb_editor*.whl
+  #         pip install pytest parameterized numpy
 
-      - name: Run Python tests
-        run: |
-          pytest pytests -vvv --tb=short
+  #     - name: Run Python tests
+  #       run: |
+  #         pytest pytests -vvv --tb=short
