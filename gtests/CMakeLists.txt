@@ -5,8 +5,6 @@ enable_testing()
 
 include(GoogleTest)
 
-set(TEST_BINARY_DIRECTORY "$<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/gtests>")
-
 function(ConfigureTest CMAKE_TEST_NAME)
   add_executable(${CMAKE_TEST_NAME} ${ARGN})
 
@@ -15,7 +13,6 @@ function(ConfigureTest CMAKE_TEST_NAME)
     PROPERTIES
       CXX_STANDARD 17
       CXX_STANDARD_REQUIRED ON
-      RUNTIME_OUTPUT_DIRECTORY ${TEST_BINARY_DIRECTORY}
   )
 
   target_include_directories(${CMAKE_TEST_NAME} PRIVATE
@@ -47,7 +44,7 @@ function(ConfigureTest CMAKE_TEST_NAME)
 
   add_test(NAME ${CMAKE_TEST_NAME}
            COMMAND $<TARGET_FILE:${CMAKE_TEST_NAME}>
-           WORKING_DIRECTORY ${TEST_BINARY_DIRECTORY})
+           WORKING_DIRECTORY $<TARGET_FILE_DIR:${CMAKE_TEST_NAME}>)
 endfunction()
 
 ConfigureTest(ShaderCompileTest ShaderCompileTest.cpp)

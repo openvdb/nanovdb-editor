@@ -302,7 +302,7 @@ if %verbose%==1 (
  )
 
 echo -- Running tests with ctest...
-ctest --test-dir build -C %CONFIG% --output-on-failure %CTEST_VERBOSE%
+ctest --test-dir build\gtests -C %CONFIG% --output-on-failure %CTEST_VERBOSE%
 
 if %errorlevel% neq 0 (
     echo Error: Tests failed

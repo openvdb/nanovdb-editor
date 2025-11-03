@@ -1,4 +1,4 @@
-name: Build and test Python
+name: NanoVDB Editor Python
 
 on:
   push:
@@ -30,9 +30,9 @@ permissions:
   issues: read
 
 jobs:
-  nanovdb-editor-build:
+  nanovdb-editor-build-python-linux:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
-    name: NanoVDB Editor Build
+    name: Build (Linux)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -56,7 +56,7 @@ jobs:
         run: |
           set -e
           chmod +x ./build.sh
-          ./build.sh -pfv
+          ./build.sh -pv
 
       - name: Upload python artifacts
         uses: actions/upload-artifact@v4
@@ -101,10 +101,10 @@ jobs:
           chmod +x ./build.sh
           ./build.sh
 
-  nanovdb-editor-test:
+  nanovdb-editor-test-python-linux:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
-    name: NanoVDB Editor Test
-    needs: nanovdb-editor-build
+    name: Test (Linux)
+    needs: nanovdb-editor-build-python-linux
     runs-on: ubuntu-latest
     defaults:
       run:
