@@ -89,7 +89,6 @@ jobs:
         run: |
           ./build.bat -rfv
 
-
       - name: Build NanoVDB Editor (GLFW enabled)
         run: |
           ./build.bat -rv
@@ -102,6 +101,7 @@ jobs:
             build/
           retention-days: 2
 
-      - name: Run GTests
-        run: |
-          ctest --test-dir build/gtests -C Release --output-on-failure --verbose
+# CI is missing Vulkan SDK
+      # - name: Run GTests
+      #   run: |
+      #     ctest --test-dir build/gtests -C Release --output-on-failure --verbose
