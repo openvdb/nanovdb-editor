@@ -92,7 +92,6 @@ jobs:
           $VulkanVersion = "1.3.290.0"
           $InstallerUrl = "https://sdk.lunarg.com/sdk/download/$VulkanVersion/windows/VulkanSDK-$VulkanVersion-Installer.exe"
           $InstallerPath = "$env:TEMP\VulkanSDK-Installer.exe"
-          $VulkanSDKPath = "C:\VulkanSDK\$VulkanVersion"
 
           try {
             Write-Host "Downloading Vulkan SDK $VulkanVersion..."
@@ -104,11 +103,37 @@ jobs:
 
             if ($process.WaitForExit($timeout * 1000)) {
               Write-Host "Vulkan SDK installation completed with exit code: $($process.ExitCode)"
-
-              # Wait a bit for files to settle
               Start-Sleep -Seconds 5
 
-              if (Test-Path $VulkanSDKPath) {
+              # Check multiple possible installation paths
+              $PossiblePaths = @(
+                "C:\VulkanSDK\$VulkanVersion",
+                "C:\VulkanSDK",
+                "$env:ProgramFiles\VulkanSDK\$VulkanVersion",
+                "$env:ProgramFiles\VulkanSDK",
+                "$env:LOCALAPPDATA\VulkanSDK\$VulkanVersion"
+              )
+
+              $VulkanSDKPath = $null
+              foreach ($Path in $PossiblePaths) {
+                if (Test-Path $Path) {
+                  # Find subdirectories if this is the base path
+                  $SubDirs = Get-ChildItem -Path $Path -Directory -ErrorAction SilentlyContinue
+                  if ($SubDirs -and (Test-Path "$Path\Bin\vulkan-1.dll")) {
+                    $VulkanSDKPath = $Path
+                    break
+                  }
+                  foreach ($SubDir in $SubDirs) {
+                    if (Test-Path "$($SubDir.FullName)\Bin\vulkan-1.dll") {
+                      $VulkanSDKPath = $SubDir.FullName
+                      break
+                    }
+                  }
+                  if ($VulkanSDKPath) { break }
+                }
+              }
+
+              if ($VulkanSDKPath) {
                 Write-Host "Vulkan SDK found at $VulkanSDKPath"
                 echo "VULKAN_SDK=$VulkanSDKPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
                 echo "$VulkanSDKPath\Bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
@@ -118,7 +143,15 @@ jobs:
                   & "$VulkanSDKPath\Bin\vulkaninfo.exe" --summary 2>&1 | Select-Object -First 20
                 }
               } else {
-                Write-Host "Warning: Vulkan SDK path not found at $VulkanSDKPath"
+                Write-Host "Warning: Vulkan SDK installation failed or path not found"
+                Write-Host "Checking if C:\VulkanSDK exists at all..."
+                if (Test-Path "C:\VulkanSDK") {
+                  Write-Host "Contents of C:\VulkanSDK:"
+                  Get-ChildItem "C:\VulkanSDK" -Recurse -Depth 2 | Select-Object -First 10 FullName
+                } else {
+                  Write-Host "C:\VulkanSDK does not exist"
+                }
+                Write-Host "Vulkan-dependent tests will be skipped"
               }
             } else {
               Write-Host "Warning: Vulkan SDK installation timed out after $timeout seconds"
@@ -126,7 +159,7 @@ jobs:
             }
           } catch {
             Write-Host "Error during Vulkan SDK setup: $_"
-            Write-Host "Vulkan-dependent tests may fail or be skipped"
+            Write-Host "Vulkan-dependent tests will be skipped"
           }
 
       - name: Build NanoVDB Editor (GLFW disabled)
