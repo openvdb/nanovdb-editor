@@ -10,9 +10,11 @@
 */
 
 #include "ImguiInstance.h"
+#include "EditorToken.h"
 
 #include "imgui.h"
 #include "imgui/ImguiRenderer.h"
+#include "imgui/ImguiWindow.h"
 #include "compute/ComputeShader.h"
 #include "CameraFrustum.h"
 #include "EditorWindows.h"
@@ -86,6 +88,11 @@ pnanovdb_imgui_instance_t* create(void* userdata,
 
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
+    // Set up clipboard callbacks to use GLFW/system clipboard
+    io.ClipboardUserData = nullptr;
+    io.SetClipboardTextFn = [](void*, const char* text) { pnanovdb_imgui_set_system_clipboard(text); };
+    io.GetClipboardTextFn = [](void*) -> const char* { return pnanovdb_imgui_get_system_clipboard(); };
 
     ptr->update_ini_filename_for_profile(ptr->render_settings->ui_profile_name);
 
@@ -371,8 +378,9 @@ void update(pnanovdb_imgui_instance_t* instance)
             // Apply loaded camera state from INI
             if (ptr->editor_scene)
             {
-                const pnanovdb_camera_state_t* state =
-                    ptr->editor_scene->get_saved_camera_state(ptr->render_settings_name);
+                pnanovdb_editor_token_t* name_token =
+                    pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
+                const pnanovdb_camera_state_t* state = ptr->editor_scene->get_saved_camera_state(name_token);
                 if (state)
                 {
                     ptr->render_settings->camera_state = *state;
@@ -425,13 +433,6 @@ void get_tex_data_as_rgba32(pnanovdb_imgui_instance_t* instance, unsigned char**
 ImDrawData* get_draw_data(pnanovdb_imgui_instance_t* instance)
 {
     return ImGui::GetDrawData();
-}
-
-void Instance::set_default_shader(const std::string& shaderName)
-{
-    shader_name = shaderName;
-    pending.viewport_shader_name = shaderName;
-    pnanovdb_editor::CodeEditor::getInstance().setSelectedShader(shaderName);
 }
 
 void Instance::update_ini_filename_for_profile(const char* profile_name)

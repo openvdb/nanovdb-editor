@@ -73,10 +73,8 @@ inline ShaderCallback get_shader_recompile_callback(imgui_instance_user::Instanc
             {
                 instance->pending.update_generated = true;
             }
-            if (pnanovdb_shader::getShaderFilePath(instance->shader_name.c_str()) == path)
-            {
-                instance->pending.update_shader = true;
-            }
+            // Always trigger shader update when a shader is recompiled
+            instance->pending.update_shader = true;
         }
 
         if (!sharedCompilerInstance)

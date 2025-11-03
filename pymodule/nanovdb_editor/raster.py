@@ -170,9 +170,7 @@ class pnanovdb_Raster(Structure):
 class Raster:
     """Python wrapper for pnanovdb_raster_t."""
 
-    def __init__(
-        self, compute: pnanovdb_Compute, device: pnanovdb_Device = None
-    ):
+    def __init__(self, compute: pnanovdb_Compute, device: pnanovdb_Device = None):
         lib = load_library(COMPUTE_LIB)
 
         get_raster_func = lib.pnanovdb_get_raster
@@ -185,9 +183,7 @@ class Raster:
 
         self._compute = compute
         self._device = device if device else compute.device_interface().get_device()
-        self._compute_queue = compute.device_interface().get_compute_queue(
-            self._device
-        )
+        self._compute_queue = compute.device_interface().get_compute_queue(self._device)
         self._raster.contents.compute = compute.get_compute()
 
     def raster_to_nanovdb(

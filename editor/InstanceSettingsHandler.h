@@ -15,6 +15,7 @@
 #include "Console.h"
 #include "ShaderMonitor.h"
 #include "ShaderCompileUtils.h"
+#include "EditorToken.h"
 
 namespace imgui_instance_user
 {
@@ -86,8 +87,9 @@ static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* ent
                 // Load camera state when profile is loaded from INI
                 if (instance->editor_scene)
                 {
-                    const pnanovdb_camera_state_t* state =
-                        instance->editor_scene->get_saved_camera_state(instance->render_settings_name);
+                    pnanovdb_editor_token_t* name_token =
+                        pnanovdb_editor::EditorToken::getInstance().getToken(instance->render_settings_name.c_str());
+                    const pnanovdb_camera_state_t* state = instance->editor_scene->get_saved_camera_state(name_token);
                     if (state)
                     {
                         instance->render_settings->camera_state = *state;

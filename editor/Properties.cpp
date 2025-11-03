@@ -12,6 +12,8 @@
 #include "Properties.h"
 #include "ImguiInstance.h"
 #include "EditorScene.h"
+#include "EditorSceneManager.h"
+#include "EditorToken.h"
 
 #include <cmath>
 
@@ -32,16 +34,18 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
         return;
     }
     auto selection = ptr->editor_scene->get_properties_selection();
+    const char* selected_name = (selection.name_token && selection.name_token->str) ? selection.name_token->str : "";
+
     pnanovdb_camera_view_t* camera = nullptr;
     ptr->editor_scene->for_each_view(ViewType::Cameras,
-                                     [&](const std::string& name, const auto& view_data)
+                                     [&](uint64_t name_id, const auto& view_data)
                                      {
                                          using ViewT = std::decay_t<decltype(view_data)>;
-                                         if constexpr (std::is_same_v<ViewT, pnanovdb_camera_view_t*>)
+                                         if constexpr (std::is_same_v<ViewT, CameraViewContext>)
                                          {
-                                             if (!camera && name == selection.name)
+                                             if (!camera && selection.name_token && selection.name_token->id == name_id)
                                              {
-                                                 camera = view_data;
+                                                 camera = view_data.camera_view.get();
                                              }
                                          }
                                      });
@@ -50,10 +54,10 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
         return;
     }
 
-    int cameraIdx = ptr->editor_scene->get_camera_frustum_index(selection.name);
+    int cameraIdx = ptr->editor_scene->get_camera_frustum_index(selection.name_token);
     pnanovdb_camera_state_t& state = camera->states[cameraIdx];
 
-    bool isViewportCamera = (selection.name == VIEWPORT_CAMERA);
+    bool isViewportCamera = (strcmp(selected_name, VIEWPORT_CAMERA) == 0);
     if (isViewportCamera)
     {
         // Projection mode: Perspective vs Orthographic
@@ -142,8 +146,9 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
         {
             if (ptr->editor_scene)
             {
-                const pnanovdb_camera_state_t* saved_state =
-                    ptr->editor_scene->get_saved_camera_state(s_render_settings_default);
+                pnanovdb_editor_token_t* name_token =
+                    pnanovdb_editor::EditorToken::getInstance().getToken(s_render_settings_default);
+                const pnanovdb_camera_state_t* saved_state = ptr->editor_scene->get_saved_camera_state(name_token);
                 if (saved_state)
                 {
                     ptr->render_settings->camera_state = *saved_state;
@@ -184,10 +189,10 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
         size_t maxIndex = (camera->num_cameras > 0) ? ((int)camera->num_cameras - 1) : 0;
         if (maxIndex > 0)
         {
-            int current_index = ptr->editor_scene->get_camera_frustum_index(selection.name);
+            int current_index = ptr->editor_scene->get_camera_frustum_index(selection.name_token);
             if (ImGui::SliderInt("Camera Index", &current_index, 0, maxIndex, "%d"))
             {
-                ptr->editor_scene->set_camera_frustum_index(selection.name, current_index);
+                ptr->editor_scene->set_camera_frustum_index(selection.name_token, current_index);
             }
         }
         else
@@ -368,24 +373,83 @@ void Properties::render(imgui_instance_user::Instance* ptr)
     {
 
         auto selection = ptr->editor_scene->get_properties_selection();
-        if (selection.name.empty() || selection.type == pnanovdb_editor::ViewType::None)
+        if (!selection.name_token || !selection.name_token->str || selection.type == pnanovdb_editor::ViewType::None)
         {
             ImGui::TextDisabled("Scene is empty");
             ImGui::End();
             return;
         }
-        ImGui::TextDisabled("%s", selection.name.c_str());
+        ImGui::TextDisabled("%s", selection.name_token->str);
 
         if (selection.type == pnanovdb_editor::ViewType::Root)
         {
         }
         else if (selection.type == pnanovdb_editor::ViewType::GaussianScenes)
         {
-            ptr->shader_params.renderGroup(imgui_instance_user::s_raster2d_shader_group);
+            auto* scene_manager = ptr->editor_scene->get_scene_manager();
+            if (scene_manager)
+            {
+                std::string properties_shader_name;
+                auto* scene_token = ptr->editor_scene->get_current_scene_token();
+                scene_manager->with_object(scene_token, selection.name_token,
+                                           [&](pnanovdb_editor::SceneObject* scene_obj)
+                                           {
+                                               if (scene_obj && !scene_obj->shader_name.empty())
+                                               {
+                                                   properties_shader_name = scene_obj->shader_name;
+                                               }
+                                           });
+
+                if (!properties_shader_name.empty())
+                {
+                    ImGui::Separator();
+                    scene_manager->shader_params.render(properties_shader_name.c_str());
+                }
+                else
+                {
+                    ImGui::TextDisabled("No shader assigned");
+                }
+            }
         }
         else if (selection.type == pnanovdb_editor::ViewType::NanoVDBs)
         {
-            ptr->shader_params.render(ptr->shader_name);
+            // Use with_object() to safely access shader_name while holding mutex
+            auto* scene_manager = ptr->editor_scene->get_scene_manager();
+            if (scene_manager)
+            {
+                std::string properties_shader_name;
+                auto* scene_token = ptr->editor_scene->get_current_scene_token();
+                scene_manager->with_object(scene_token, selection.name_token,
+                                           [&](pnanovdb_editor::SceneObject* scene_obj)
+                                           {
+                                               if (scene_obj && !scene_obj->shader_name.empty())
+                                               {
+                                                   properties_shader_name = scene_obj->shader_name;
+                                               }
+                                           });
+
+                // Shader name (editable)
+                char shader_buf[256];
+                strncpy(shader_buf, properties_shader_name.c_str(), sizeof(shader_buf) - 1);
+                shader_buf[sizeof(shader_buf) - 1] = '\0';
+                if (ImGui::InputText("##shader", shader_buf, sizeof(shader_buf), ImGuiInputTextFlags_EnterReturnsTrue))
+                {
+                    std::string new_shader = shader_buf;
+                    ptr->editor_scene->set_selected_object_shader_name(new_shader);
+                    properties_shader_name = new_shader;
+                    ptr->pending.update_shader = true;
+                }
+
+                if (!properties_shader_name.empty())
+                {
+                    ImGui::Separator();
+                    scene_manager->shader_params.render(properties_shader_name.c_str());
+                }
+                else
+                {
+                    ImGui::TextDisabled("No shader assigned");
+                }
+            }
         }
         else if (selection.type == pnanovdb_editor::ViewType::Cameras)
         {

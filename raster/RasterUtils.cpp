@@ -12,8 +12,9 @@
 #include <nanovdb_editor/putil/Raster.h>
 #include <nanovdb_editor/putil/WorkerThread.hpp>
 #include <nanovdb_editor/putil/FileFormat.h>
+#include <nanovdb_editor/putil/Editor.h>
 
-#define PNANOVDB_RASTER_TEST_CONVERT 1
+#define PNANOVDB_RASTER_TEST_CONVERT 0
 #if PNANOVDB_RASTER_TEST_CONVERT
 #    include <nanovdb_editor/putil/Convert.h>
 #endif
@@ -96,9 +97,9 @@ static pnanovdb_compute_array_t* process_gaussian_arrays_common(const pnanovdb_c
     for (pnanovdb_uint64_t point_idx = 0u; point_idx < point_count; point_idx++)
     {
         const float c0 = 0.28209479177387814f;
-        mapped_color[3u * point_idx + 0u] = c0 * mapped_sh_0[3u * point_idx] + 0.5f;
-        mapped_color[3u * point_idx + 1u] = c0 * mapped_sh_0[3u * point_idx] + 0.5f;
-        mapped_color[3u * point_idx + 2u] = c0 * mapped_sh_0[3u * point_idx] + 0.5f;
+        mapped_color[3u * point_idx + 0u] = c0 * mapped_sh_0[3u * point_idx + 0u] + 0.5f;
+        mapped_color[3u * point_idx + 1u] = c0 * mapped_sh_0[3u * point_idx + 1u] + 0.5f;
+        mapped_color[3u * point_idx + 2u] = c0 * mapped_sh_0[3u * point_idx + 2u] + 0.5f;
     }
     compute->unmap_array(sh_0_arr);
     compute->unmap_array(color_arr);
@@ -413,23 +414,91 @@ pnanovdb_bool_t raster_to_nanovdb_from_arrays(pnanovdb_raster_t* raster,
                                                nullptr, nullptr, nullptr, nullptr, nullptr);
 }
 
-// Convenience wrapper: create reusable Gaussian raster data from arrays.
-// - Delegates to process_arrays_to_create_gaussian_data with defaulted optional parameters
-// - Returns true on success
 pnanovdb_bool_t create_gaussian_data_from_arrays(pnanovdb_raster_t* raster,
                                                  const pnanovdb_compute_t* compute,
                                                  pnanovdb_compute_queue_t* queue,
-                                                 pnanovdb_compute_array_t** arrays_gaussian, // means, opacities, quats,
-                                                                                             // scales, sh
+                                                 pnanovdb_compute_array_t** arrays_gaussian, // means,
+                                                                                             // opacities,
+                                                                                             // quats,
+                                                                                             // scales,
+                                                                                             // sh
                                                  pnanovdb_uint32_t array_count,
                                                  pnanovdb_raster_gaussian_data_t** gaussian_data,
                                                  pnanovdb_raster_shader_params_t* raster_params,
                                                  pnanovdb_raster_context_t** raster_context)
 {
+    pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
+    pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
+
+    auto log_print = compute_interface->get_log_print(context);
+    if (log_print)
+    {
+        log_print(PNANOVDB_COMPUTE_LOG_LEVEL_WARNING,
+                  "pnanovdb_raster::create_gaussian_data_from_arrays is deprecated and will be removed in version 0.2.0. "
+                  "Please use pnanovdb_raster::create_gaussian_data_from_desc instead.");
+    }
+    return process_arrays_to_create_gaussian_data(raster, compute, queue, arrays_gaussian, gaussian_data,
+                                                  raster_context, nullptr, raster_params, nullptr, nullptr, nullptr);
+}
+
+// Convenience wrapper: create reusable Gaussian raster data from descriptor struct.
+// - Uses descriptor struct for clearer channel naming
+// - Delegates to process_arrays_to_create_gaussian_data
+// - Returns true on success
+pnanovdb_bool_t create_gaussian_data_from_desc(pnanovdb_raster_t* raster,
+                                               const pnanovdb_compute_t* compute,
+                                               pnanovdb_compute_queue_t* queue,
+                                               const pnanovdb_editor_gaussian_data_desc_t* desc,
+                                               const char* name,
+                                               pnanovdb_raster_gaussian_data_t** gaussian_data,
+                                               pnanovdb_raster_shader_params_t* raster_params,
+                                               pnanovdb_raster_context_t** raster_context)
+{
+    if (!desc)
+    {
+        return PNANOVDB_FALSE;
+    }
+
+    // Build array list from descriptor struct
+    pnanovdb_compute_array_t* arrays_gaussian[6] = { nullptr };
+    pnanovdb_uint32_t array_count = 0;
+
+    if (desc->means)
+    {
+        arrays_gaussian[array_count++] = desc->means;
+    }
+    if (desc->opacities)
+    {
+        arrays_gaussian[array_count++] = desc->opacities;
+    }
+    if (desc->quaternions)
+    {
+        arrays_gaussian[array_count++] = desc->quaternions;
+    }
+    if (desc->scales)
+    {
+        arrays_gaussian[array_count++] = desc->scales;
+    }
+    if (desc->sh_0)
+    {
+        arrays_gaussian[array_count++] = desc->sh_0;
+    }
+    if (desc->sh_n)
+    {
+        arrays_gaussian[array_count++] = desc->sh_n;
+    }
+
     if (array_count < 5u)
     {
         return PNANOVDB_FALSE;
     }
+
+    // Set the name in raster params if provided
+    if (raster_params && name)
+    {
+        raster_params->name = name;
+    }
+
     return process_arrays_to_create_gaussian_data(raster, compute, queue, arrays_gaussian, gaussian_data,
                                                   raster_context, nullptr, raster_params, nullptr, nullptr, nullptr);
 }
