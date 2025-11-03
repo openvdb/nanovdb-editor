@@ -1,4 +1,4 @@
-name: Build and test Python
+name: NanoVDB Editor Python
 
 on:
   push:
@@ -32,7 +32,7 @@ permissions:
 jobs:
   nanovdb-editor-build-python-linux:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
-    name: NanoVDB Editor Build Python (Linux)
+    name: Build (Linux)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -103,7 +103,7 @@ jobs:
 
   nanovdb-editor-test-python-linux:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
-    name: NanoVDB Editor Test Python (Linux)
+    name: Test (Linux)
     needs: nanovdb-editor-build-python-linux
     runs-on: ubuntu-latest
     defaults:

@@ -1,4 +1,4 @@
-name: Build and test
+name: NanoVDB Editor
 
 on:
   push:
@@ -32,7 +32,7 @@ permissions:
 jobs:
   nanovdb-editor-build-and-test-linux:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
-    name: NanoVDB Editor Build and Test (Linux)
+    name: Build and Test (Linux)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -76,7 +76,7 @@ jobs:
 
   nanovdb-editor-build-and-test-windows:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
-    name: NanoVDB Editor Build and Test (Windows)
+    name: Build and Test (Windows)
     runs-on: windows-latest
     defaults:
       run:
