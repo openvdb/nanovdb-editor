@@ -56,7 +56,7 @@ jobs:
         run: |
           set -e
           chmod +x ./build.sh
-          ./build.sh -pfv
+          ./build.sh -pv
 
       - name: Upload python artifacts
         uses: actions/upload-artifact@v4
