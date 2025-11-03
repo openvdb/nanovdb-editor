@@ -85,6 +85,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install Vulkan SDK
+        run: |
+          # Download and install Vulkan SDK
+          $VulkanVersion = "1.3.290.0"
+          $InstallerUrl = "https://sdk.lunarg.com/sdk/download/$VulkanVersion/windows/VulkanSDK-$VulkanVersion-Installer.exe"
+          $InstallerPath = "$env:TEMP\VulkanSDK-Installer.exe"
+
+          Write-Host "Downloading Vulkan SDK $VulkanVersion..."
+          Invoke-WebRequest -Uri $InstallerUrl -OutFile $InstallerPath
+
+          Write-Host "Installing Vulkan SDK..."
+          Start-Process -FilePath $InstallerPath -ArgumentList "/S" -Wait
+
+          Write-Host "Vulkan SDK installed"
+
       - name: Build NanoVDB Editor (GLFW disabled)
         run: |
           ./build.bat -rfv
