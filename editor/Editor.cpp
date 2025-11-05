@@ -860,6 +860,31 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         editor->impl->raster->destroy_context(editor->impl->compute, device_queue, editor->impl->raster_ctx);
         editor->impl->raster_ctx = nullptr;
     }
+
+    // unregister signal handler
+#if defined(_WIN32)
+// not implemented
+#else
+    //struct sigaction sa;
+    sa.sa_handler = NULL;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, NULL);
+#endif
+
+    // now that we cleaned up, if pass sigint along to the main thread
+    if (editor->impl->editor_worker)
+    {
+#if defined(_WIN32)
+// not implemented
+#else
+        if (!should_run_sigint.load())
+        {
+            printf("Exit of NanoVDB Editor main loop complete on worker thread. Raising SIGINT to main thread.\n");
+            raise(SIGINT);
+        }
+#endif
+    }
 }
 
 pnanovdb_int32_t get_resolved_port(pnanovdb_editor_t* editor, pnanovdb_bool_t should_wait)
