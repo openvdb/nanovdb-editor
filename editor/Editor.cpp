@@ -541,11 +541,11 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         }
     }
 
+    // signal handling
     static std::atomic<bool> should_run_sigint = true;
     should_run_sigint.store(true);
-// signal handling
 #if defined(_WIN32)
-// not implemented
+    // not implemented
 #else
     auto handle_sigint = [](int sig)
     {
@@ -553,10 +553,11 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         should_run_sigint.store(false);
     };
     struct sigaction sa;
+    struct sigaction sa_old;
     sa.sa_handler = handle_sigint;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
-    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGINT, &sa, &sa_old);
 #endif
 
     bool should_run = true;
@@ -861,22 +862,18 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         editor->impl->raster_ctx = nullptr;
     }
 
-    // unregister signal handler
+    // restore old signal handler
 #if defined(_WIN32)
-// not implemented
+    // not implemented
 #else
-    //struct sigaction sa;
-    sa.sa_handler = NULL;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGINT, &sa_old, NULL);
 #endif
 
     // now that we cleaned up, if pass sigint along to the main thread
     if (editor->impl->editor_worker)
     {
 #if defined(_WIN32)
-// not implemented
+        // not implemented
 #else
         if (!should_run_sigint.load())
         {
