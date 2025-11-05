@@ -11,9 +11,28 @@ on:
   workflow_dispatch:
 
 jobs:
+  validate_version:
+    name: Validate tag version matches VERSION.txt
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && endsWith(github.ref, '-dev')
+    outputs:
+      version_valid: ${{ steps.validate.outputs.version-valid }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Validate version
+      id: validate
+      uses: ./.github/actions/validate-version
+      with:
+        allow-dev-suffix: 'true'
+
   build_wheels:
     name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    needs: [validate_version]
+    if: ${{ !failure() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && endsWith(github.ref, '-dev') && needs.validate_version.outputs.version_valid == 'true')) }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
@@ -75,6 +94,8 @@ jobs:
   build_sdist:
     name: Build source distribution
     runs-on: ubuntu-latest
+    needs: [validate_version]
+    if: ${{ !failure() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && endsWith(github.ref, '-dev') && needs.validate_version.outputs.version_valid == 'true')) }}
     steps:
     - uses: actions/checkout@v4
       with:
@@ -103,9 +124,9 @@ jobs:
   # Dev package upload - publishes to production PyPI with -dev package name
   upload_pypi_dev:
     name: Upload wheel to PyPi (dev package)
-    needs: [build_wheels, build_sdist]
+    needs: [build_wheels, build_sdist, validate_version]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && endsWith(github.ref, '-dev')
+    if: github.event_name == 'push' && endsWith(github.ref, '-dev') && needs.validate_version.outputs.version_valid == 'true'
 
     steps:
     - uses: actions/download-artifact@v4

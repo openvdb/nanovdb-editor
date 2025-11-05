@@ -42,6 +42,7 @@ def create_default(device_id: int = 0):
 
     return editor, compute, compiler
 
+
 if sys.platform == "win32":
     lib_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib")
     if os.path.exists(lib_dir):
