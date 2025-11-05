@@ -542,6 +542,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     }
 
     static std::atomic<bool> should_run_sigint = true;
+    should_run_sigint.store(true);
 // signal handling
 #if defined(_WIN32)
 // not implemented
