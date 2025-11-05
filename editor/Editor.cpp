@@ -869,7 +869,12 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     // do not restore own handler
     if (sa_old.sa_handler != sa.sa_handler)
     {
-        sigaction(SIGINT, &sa_old, NULL);
+        struct sigaction sa_restore;
+        sigaction(SIGINT, &sa_old, &sa_restore);
+        if (sa.sa_handler != sa_restore.sa_handler)
+        {
+            printf("NanoVDB Editor SIGINT handler restore failed. Control-C may not behave as expected\n");
+        }
     }
 #endif
 }
