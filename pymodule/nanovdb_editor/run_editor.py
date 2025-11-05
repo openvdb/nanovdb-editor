@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import argparse
-import signal
 import sys
 import nanovdb_editor as nve
 from time import sleep
@@ -22,7 +21,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    editor, compute, compiler = nve.create_default(device_id = args.device)
+    try:
+        editor, compute, compiler = nve.create_default(device_id = args.device)
+    except Exception as e:
+        print(f"Error initializing editor: {e}")
+        sys.exit(1)
 
     config = nve.EditorConfig()
     config.ip_address = args.ip.encode('utf-8')
