@@ -39,11 +39,16 @@ echo $VULKAN_SDK
 
 #### Python
 ```
-pip install scikit-build wheel build
+pip install scikit-build wheel build numpy
 ```
 #### Linux
-By default, editor is built with enabled `NANOVDB_EDITOR_USE_GLFW` which requires in Conda environment:
-- mesalib
+By default, editor is built with enabled `NANOVDB_EDITOR_USE_GLFW` which requires:
+```sh
+sudo apt-get install libgl1-mesa-dev
+```
+In Conda environment:
+
+`- mesalib`
 
 The `NANOVDB_EDITOR_USE_GLFW` option can be disabled when using the editor in haedless and streaming mode only. In that case, `libvulkan.so.1` is built locally to ensure compatibility.
 
