@@ -866,22 +866,12 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 #if defined(_WIN32)
     // not implemented
 #else
-    sigaction(SIGINT, &sa_old, NULL);
-#endif
-
-    // now that we cleaned up, if pass sigint along to the main thread
-    if (editor->impl->editor_worker)
+    // do not restore own handler
+    if (sa_old.sa_handler != sa.sa_handler)
     {
-#if defined(_WIN32)
-        // not implemented
-#else
-        if (!should_run_sigint.load())
-        {
-            printf("Exit of NanoVDB Editor main loop complete on worker thread. Raising SIGINT to main thread.\n");
-            raise(SIGINT);
-        }
-#endif
+        sigaction(SIGINT, &sa_old, NULL);
     }
+#endif
 }
 
 pnanovdb_int32_t get_resolved_port(pnanovdb_editor_t* editor, pnanovdb_bool_t should_wait)
