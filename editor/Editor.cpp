@@ -31,6 +31,15 @@
 
 #include <filesystem>
 
+// signal handling
+#include <atomic>
+#if defined(_WIN32)
+// not implemented
+#else
+#include <signal.h>
+#include <unistd.h>
+#include <stdio.h>
+#endif
 
 static const pnanovdb_uint32_t s_default_width = 1440u;
 static const pnanovdb_uint32_t s_default_height = 720u;
@@ -532,8 +541,25 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         }
     }
 
+    static std::atomic<bool> should_run_sigint = true;
+// signal handling
+#if defined(_WIN32)
+// not implemented
+#else
+    auto handle_sigint = [](int sig)
+    {
+        printf("Control-C pressed. Exiting NanoVDB Editor main loop.\n");
+        should_run_sigint.store(false);
+    };
+    struct sigaction sa;
+    sa.sa_handler = handle_sigint;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, NULL);
+#endif
+
     bool should_run = true;
-    while (should_run)
+    while (should_run && should_run_sigint.load())
     {
         if (editor->impl->editor_worker && editor->impl->editor_worker->should_stop.load())
         {
