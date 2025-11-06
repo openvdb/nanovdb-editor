@@ -1,4 +1,4 @@
-name: Build and test
+name: NanoVDB Editor
 
 on:
   push:
@@ -30,9 +30,9 @@ permissions:
   issues: read
 
 jobs:
-  nanovdb-editor-build-and-test:
+  nanovdb-editor-build-and-test-linux:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
-    name: NanoVDB Editor Build
+    name: Build and Test (Linux)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -48,7 +48,13 @@ jobs:
           sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
           sudo apt-get install -y libxcb1-dev libxcb-keysyms1-dev libxcb-randr0-dev libxcb-xinerama0-dev libx11-xcb-dev libxrandr-dev libwayland-dev wayland-protocols libdirectfb-dev
 
-      - name: Build NanoVDB Editor
+      - name: Build NanoVDB Editor (GLFW disabled)
+        run: |
+          set -e
+          chmod +x ./build.sh
+          ./build.sh -rfv
+
+      - name: Build NanoVDB Editor (GLFW enabled)
         run: |
           set -e
           chmod +x ./build.sh
@@ -57,7 +63,7 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: nanovdb-editor-build
+          name: nanovdb-editor-build-linux
           path: |
             build/
           retention-days: 2
@@ -67,3 +73,35 @@ jobs:
           set -e
           export LD_LIBRARY_PATH=$PWD/build/Release/lib:$PWD/build/Release/bin:$LD_LIBRARY_PATH
           ctest --test-dir build/Release/gtests -C Release --output-on-failure --verbose
+
+  nanovdb-editor-build-and-test-windows:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    name: Build and Test (Windows)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build NanoVDB Editor (GLFW disabled)
+        run: |
+          ./build.bat -rfv
+
+      - name: Build NanoVDB Editor (GLFW enabled)
+        run: |
+          ./build.bat -rv
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanovdb-editor-build-windows
+          path: |
+            build/
+          retention-days: 2
+
+# CI is missing Vulkan SDK
+      # - name: Run GTests
+      #   run: |
+      #     ctest --test-dir build/gtests -C Release --output-on-failure --verbose

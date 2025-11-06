@@ -43,13 +43,10 @@
 namespace imgui_instance_user
 {
 static const char* s_render_settings_default = "default";
-static const char* s_raster2d_shader_group = "raster/raster2d_group";
-
 static const char* s_viewer_profile_name = "viewer";
 
-// TODO: make unique label and save scene items in a map with unique keys rather than strings
+// UI labels
 static const char* VIEWPORT_CAMERA = "Viewport Camera";
-static const char* SCENE_ROOT_NODE = "Viewer";
 
 static const char* VIEWPORT_SETTINGS = "Viewport";
 static const char* RENDER_SETTINGS = "Settings";
@@ -60,7 +57,7 @@ static const char* CONSOLE = "Log";
 static const char* SHADER_PARAMS = "Shader Params";
 static const char* BENCHMARK = "Benchmark";
 static const char* FILE_HEADER = "File Header";
-static const char* SCENE = "Scene";
+static const char* SCENE = "Scenes";
 static const char* PROPERTIES = "Properties";
 
 enum class ViewportOption : int
@@ -104,7 +101,6 @@ struct PendingState
     bool find_callable_file = false;
     bool open_file = false;
     bool save_file = false;
-    std::string viewport_shader_name = "";
     std::string viewport_gaussian_view = "";
     std::string viewport_nanovdb_array = "";
     bool update_memory_stats = false;
@@ -155,6 +151,9 @@ struct Instance
     PendingState pending;
     WindowState window;
 
+    // Scene management and selection (delegated to EditorScene)
+    pnanovdb_editor::EditorScene* editor_scene = nullptr;
+
     const pnanovdb_compiler_t* compiler;
     const pnanovdb_compute_t* compute;
 
@@ -167,31 +166,23 @@ struct Instance
     ViewportOption viewport_option = ViewportOption::Last;
     ViewportSettings viewport_settings[(int)ViewportOption::Last];
 
-    std::string shader_name = ""; // shader used for the viewport
     std::string nanovdb_filepath = ""; // filename selected in the ImGuiFileDialog
     std::string raster_filepath = "";
     float raster_voxels_per_unit = 128.f;
 
-    ShaderParams shader_params;
-    std::string shader_group = ""; // selected group in shader params window
+    // shader params window selection
+    std::string shader_group = "";
+    std::string editor_shader_name = ""; // Temporary storage for Code Editor's "Show" button
 
     ImVec2 dialog_size{ 768.f, 512.f };
 
     std::string render_settings_name = s_render_settings_default;
     std::map<std::string, pnanovdb_imgui_settings_render_t> saved_render_settings;
 
-    std::vector<std::string> viewport_shaders;
-
     std::vector<std::string> additional_shader_directories;
     std::string pending_shader_directory = "";
 
     ProgressBar progress;
-
-    // Scene management and selection (delegated to EditorScene)
-    pnanovdb_editor::EditorScene* editor_scene = nullptr;
-
-    std::string raster_shader_group = s_raster2d_shader_group;
-    pnanovdb_camera_view_t default_camera_view; // default camera view that syncs with viewport
 
     bool is_docking_setup = false;
     bool loaded_ini_once = false;
@@ -203,7 +194,6 @@ struct Instance
 
     pnanovdb_uint32_t device_index = 0;
 
-    void set_default_shader(const std::string& shaderName);
     void update_ini_filename_for_profile(const char* profile_name);
 
     bool is_viewer() const

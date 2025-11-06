@@ -1,4 +1,6 @@
 @echo off
+REM Copyright Contributors to the OpenVDB Project
+REM SPDX-License-Identifier: Apache-2.0
 
 setlocal
 
@@ -283,6 +285,7 @@ if %errorlevel% neq 0 (
 echo -- Installing python module...
 pip install --force-reinstall .
 cd ..
+exit /b 0
 
 :RunTests
 if %debug%==1 (
@@ -300,12 +303,31 @@ if %verbose%==1 (
  )
 
 echo -- Running tests with ctest...
-ctest --test-dir build -C %CONFIG% --output-on-failure %CTEST_VERBOSE%
+ctest --test-dir build\gtests -C %CONFIG% --output-on-failure %CTEST_VERBOSE%
 
 if %errorlevel% neq 0 (
     echo Error: Tests failed
     goto Error
-) else (
-    echo -- Tests completed successfully
 )
+
+echo -- Running Python tests with pytest...
+python --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo Warning: Python not found, skipping pytest
+) else (
+    python -c "import nanovdb_editor; import parameterized" >nul 2>&1
+    if %errorlevel% neq 0 (
+        echo Warning: nanovdb_editor Python module or test dependencies not installed
+        echo          Run 'build.bat -p' to build the Python module, then:
+        echo          pip install parameterized pytest numpy
+    ) else (
+        pytest pytests -vvv
+        if %errorlevel% neq 0 (
+            echo Error: Python tests failed
+            goto Error
+        )
+    )
+)
+
+echo -- Tests completed successfully
 exit /b 1

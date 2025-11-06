@@ -214,3 +214,6 @@ PNANOVDB_REFLECT_INTERFACE_IMPL()
 typedef pnanovdb_imgui_window_interface_t*(PNANOVDB_ABI* PFN_pnanovdb_imgui_get_window_interface)();
 
 PNANOVDB_API pnanovdb_imgui_window_interface_t* pnanovdb_imgui_get_window_interface();
+
+PNANOVDB_API void pnanovdb_imgui_set_system_clipboard(const char* text);
+PNANOVDB_API const char* pnanovdb_imgui_get_system_clipboard();

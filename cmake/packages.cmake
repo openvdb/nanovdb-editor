@@ -86,10 +86,86 @@ if(VulkanHeaders_ADDED)
     )
 
     if(NANOVDB_EDITOR_USE_GLFW)
+        # Auto-detect available window system libraries
+        set(WSI_XLIB_SUPPORT OFF)
+        set(WSI_XCB_SUPPORT OFF)
+        set(WSI_WAYLAND_SUPPORT OFF)
+
+        # Check for X11/Xlib and required extensions
+        find_package(X11 QUIET)
+        set(X11_EXTENSIONS_FOUND TRUE)
+
+        # Check for required X11 extension headers
+        if(X11_FOUND)
+            # Check for XRandR
+            find_path(X11_XRANDR_INCLUDE_PATH X11/extensions/Xrandr.h
+                HINTS ${X11_INCLUDE_DIR}
+                PATH_SUFFIXES X11/extensions
+            )
+            if(NOT X11_XRANDR_INCLUDE_PATH)
+                set(X11_EXTENSIONS_FOUND FALSE)
+                message(STATUS "Vulkan: XRandR headers not found (install libxrandr-dev)")
+            endif()
+        endif()
+
+        if(X11_FOUND AND X11_EXTENSIONS_FOUND)
+            set(WSI_XLIB_SUPPORT ON)
+            message(STATUS "Vulkan: X11/Xlib support enabled")
+        else()
+            set(WSI_XLIB_SUPPORT OFF)
+            if(NOT X11_FOUND)
+                message(STATUS "Vulkan: X11/Xlib not found, disabling support")
+            else()
+                message(STATUS "Vulkan: X11/Xlib extensions incomplete, disabling support")
+            endif()
+        endif()
+
+        # Check for XCB
+        find_package(PkgConfig QUIET)
+        set(WSI_XCB_SUPPORT OFF)
+        if(PKG_CONFIG_FOUND)
+            pkg_check_modules(XCB QUIET xcb)
+            if(XCB_FOUND)
+                # Check for XCB headers
+                find_path(XCB_INCLUDE_PATH xcb/xcb.h
+                    HINTS ${XCB_INCLUDE_DIRS}
+                    PATHS /usr/include /usr/local/include
+                )
+                if(XCB_INCLUDE_PATH)
+                    set(WSI_XCB_SUPPORT ON)
+                    message(STATUS "Vulkan: XCB support enabled")
+                    if(XCB_INCLUDE_DIRS)
+                        list(APPEND VULKAN_LOADER_OPTIONS "CMAKE_C_FLAGS=-I${XCB_INCLUDE_DIRS}")
+                        list(APPEND VULKAN_LOADER_OPTIONS "CMAKE_CXX_FLAGS=-I${XCB_INCLUDE_DIRS}")
+                    elseif(XCB_INCLUDE_PATH)
+                        list(APPEND VULKAN_LOADER_OPTIONS "CMAKE_C_FLAGS=-I${XCB_INCLUDE_PATH}")
+                        list(APPEND VULKAN_LOADER_OPTIONS "CMAKE_CXX_FLAGS=-I${XCB_INCLUDE_PATH}")
+                    endif()
+                else()
+                    message(STATUS "Vulkan: XCB headers not found (install libxcb1-dev), disabling support")
+                endif()
+            else()
+                message(STATUS "Vulkan: XCB not found via pkg-config, disabling support")
+            endif()
+        else()
+            message(STATUS "Vulkan: pkg-config not found, disabling XCB support")
+        endif()
+
+        # Check for Wayland
+        if(PKG_CONFIG_FOUND)
+            pkg_check_modules(WAYLAND_CLIENT QUIET wayland-client)
+            if(WAYLAND_CLIENT_FOUND)
+                set(WSI_WAYLAND_SUPPORT ON)
+                message(STATUS "Vulkan: Wayland support enabled")
+            else()
+                message(STATUS "Vulkan: Wayland not found, disabling support")
+            endif()
+        endif()
+
         list(APPEND VULKAN_LOADER_OPTIONS
-            "BUILD_WSI_XLIB_SUPPORT ON"
-            "BUILD_WSI_XCB_SUPPORT ON"
-            "BUILD_WSI_WAYLAND_SUPPORT ON"
+            "BUILD_WSI_XLIB_SUPPORT ${WSI_XLIB_SUPPORT}"
+            "BUILD_WSI_XCB_SUPPORT ${WSI_XCB_SUPPORT}"
+            "BUILD_WSI_WAYLAND_SUPPORT ${WSI_WAYLAND_SUPPORT}"
         )
     else()
         list(APPEND VULKAN_LOADER_OPTIONS

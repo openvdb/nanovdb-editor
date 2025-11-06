@@ -138,7 +138,9 @@ if __name__ == "__main__":
             opacities_array
         )
 
-        editor.add_nanovdb(nvdb_array)
+        scene_token = editor.get_token("main")
+        splats_token = editor.get_token("splats")
+        editor.add_nanovdb_2(scene_token, splats_token, nvdb_array)
 
         compute.destroy_array(means_array)
         compute.destroy_array(quaternions_array)

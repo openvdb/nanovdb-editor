@@ -1,0 +1,54 @@
+name: 'Validate Version'
+description: 'Validates that the git tag version matches the version in VERSION.txt'
+inputs:
+  version-file-path:
+    description: 'Path to the VERSION.txt file relative to repository root'
+    required: false
+    default: 'pymodule/VERSION.txt'
+  allow-dev-suffix:
+    description: 'Whether to allow -dev suffix in tags'
+    required: false
+    default: 'false'
+outputs:
+  version-valid:
+    description: 'Whether the version validation passed'
+    value: ${{ steps.check_version.outputs.version_valid }}
+  tag-version:
+    description: 'The version extracted from the git tag'
+    value: ${{ steps.check_version.outputs.tag_version }}
+  file-version:
+    description: 'The version read from the VERSION.txt file'
+    value: ${{ steps.check_version.outputs.file_version }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Check version match
+      id: check_version
+      shell: bash
+      run: |
+        # Extract version from tag (remove 'v' prefix)
+        TAG_VERSION=${GITHUB_REF#refs/tags/v}
+        echo "Tag version: $TAG_VERSION"
+        echo "tag_version=$TAG_VERSION" >> $GITHUB_OUTPUT
+
+        # Read version from VERSION.txt
+        FILE_VERSION=$(cat ${{ inputs.version-file-path }} | tr -d '\n\r ')
+        echo "File version: $FILE_VERSION"
+        echo "file_version=$FILE_VERSION" >> $GITHUB_OUTPUT
+
+        # Handle dev suffix if allowed
+        COMPARE_TAG_VERSION="$TAG_VERSION"
+        if [ "${{ inputs.allow-dev-suffix }}" = "true" ]; then
+          # Remove -dev suffix for comparison if present
+          COMPARE_TAG_VERSION=${TAG_VERSION%-dev}
+          echo "Comparing version (dev suffix removed): $COMPARE_TAG_VERSION"
+        fi
+
+        # Compare versions
+        if [ "$COMPARE_TAG_VERSION" = "$FILE_VERSION" ]; then
+          echo "version_valid=true" >> $GITHUB_OUTPUT
+        else
+          echo "version_valid=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi

@@ -19,7 +19,7 @@
 #include <algorithm>
 #include <filesystem>
 
-namespace imgui_instance_user
+namespace pnanovdb_editor
 {
 static std::optional<nlohmann::ordered_json> loadAndParseJsonFile(const std::string& relFilePath,
                                                                   bool is_group_file = false)
@@ -86,7 +86,7 @@ ShaderParams::~ShaderParams()
     shader_params_pool_.clear();
     params_map_.clear();
     group_params_.clear();
-    pending_arrays_.clear();
+    pending_arrays_data_.clear();
 }
 
 void ShaderParams::create(const std::string& shader_name)
@@ -221,35 +221,35 @@ bool ShaderParams::load(const std::string& shader_name, bool reload, bool load_g
         }
     }
 
+    // Load user JSON file if it exists (contains customizations like defaults, min/max, hidden flags)
+    // If it doesn't exist, we'll still use the parameters from the compiled shader
     auto json_optional = loadAndParseJsonFile(shader_name);
-    if (!json_optional)
+    if (json_optional)
     {
-        return false;
-    }
+        nlohmann::ordered_json json = *json_optional;
+        auto& json_shader_params = json.at(pnanovdb_shader::SHADER_PARAM_JSON);
+        for (auto& shader_param : params_map_[shader_name])
+        {
+            if (!json_shader_params.contains(shader_param.name))
+            {
+                continue;
+            }
 
-    nlohmann::ordered_json json = *json_optional;
-    auto& json_shader_params = json.at(pnanovdb_shader::SHADER_PARAM_JSON);
-    for (auto& shader_param : params_map_[shader_name])
-    {
-        if (!json_shader_params.contains(shader_param.name))
-        {
-            continue;
-        }
+            auto& value = json_shader_params.at(shader_param.name);
+            if (shader_param.type == ImGuiDataType_Bool)
+            {
+                addToBoolParam(shader_param.name, value, params_map_[shader_name]);
+            }
+            else
+            {
+                addToScalarNParam(shader_param.name, value, params_map_[shader_name]);
+            }
 
-        auto& value = json_shader_params.at(shader_param.name);
-        if (shader_param.type == ImGuiDataType_Bool)
-        {
-            addToBoolParam(shader_param.name, value, params_map_[shader_name]);
-        }
-        else
-        {
-            addToScalarNParam(shader_param.name, value, params_map_[shader_name]);
-        }
-
-        // Allocate pool array now that pending values are set (for group loading)
-        if (load_group)
-        {
-            getAllocatedPoolArray(shader_param);
+            // Allocate pool array now that pending values are set (for group loading)
+            if (load_group)
+            {
+                getAllocatedPoolArray(shader_param);
+            }
         }
     }
 
@@ -347,12 +347,13 @@ void ShaderParams::set_compute_array_for_shader(const std::string& shader_name, 
     bool hasParams = load(shader_name, false);
     if (!hasParams)
     {
-        pending_arrays_[shader_name] = array;
+        // Compiled layout not available yet; do not enqueue a pending blob of unknown layout.
+        // When the layout becomes available, JSON defaults (pending_value) will be applied on first allocation.
         return;
     }
     std::vector<ShaderParam>& shader_params = *get(shader_name);
 
-    pending_arrays_.erase(shader_name);
+    pending_arrays_data_.erase(shader_name);
 
     char* shader_param_ptr = reinterpret_cast<char*>(array->data);
     const size_t capacity = static_cast<size_t>(array->element_size * array->element_count);
@@ -390,6 +391,11 @@ void ShaderParams::set_compute_array_for_shader(const std::string& shader_name, 
         printf("Error: Shader params size %zu exceeds buffer capacity (cap=%zu, maxCB=%u)\n", total_size, capacity,
                PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
     }
+}
+
+void ShaderParams::clear_pending_array_for_shader(const std::string& shader_name)
+{
+    pending_arrays_data_.erase(shader_name);
 }
 
 pnanovdb_compute_array_t* ShaderParams::get_compute_array_for_shader(const std::string& shader_name,
@@ -819,10 +825,18 @@ void ShaderParams::render(const std::string& shader_name)
     bool hasParams = load(shader_name, false);
     if (!hasParams)
     {
+        pnanovdb_editor::Console::getInstance().addLog(Console::LogLevel::Debug,
+                                                       "ShaderParams::render() - Failed to load params for shader '%s'",
+                                                       shader_name.c_str());
+        ImGui::TextDisabled("Shader parameters not available");
         return;
     }
 
     std::vector<ShaderParam>& shader_params = *get(shader_name);
+    pnanovdb_editor::Console::getInstance().addLog(Console::LogLevel::Trace,
+                                                   "ShaderParams::render() - Rendering %zu params for shader '%s'",
+                                                   shader_params.size(), shader_name.c_str());
+
     for (auto& shader_param : shader_params)
     {
         renderParams(shader_name, shader_param);
@@ -932,15 +946,15 @@ void ShaderParams::renderParams(const std::string& shader_name, ShaderParam& sha
 
 void ShaderParams::processPendingArrays(const std::string& shader_name)
 {
-    auto it = pending_arrays_.find(shader_name);
-    if (it != pending_arrays_.end())
+    auto it = pending_arrays_data_.find(shader_name);
+    if (it != pending_arrays_data_.end())
     {
-        // Process the pending array now that parameters are loaded
-        pnanovdb_compute_array_t* array = it->second;
+        // Process the pending raw bytes now that parameters are loaded
+        std::vector<char>& blob = it->second;
         std::vector<ShaderParam>& shader_params = *get(shader_name);
 
-        char* shader_param_ptr = reinterpret_cast<char*>(array->data);
-        const size_t capacity = static_cast<size_t>(array->element_size * array->element_count);
+        const char* shader_param_ptr = blob.empty() ? nullptr : blob.data();
+        const size_t capacity = blob.size();
         size_t remaining = capacity;
         size_t total_size = 0;
 
@@ -957,9 +971,12 @@ void ShaderParams::processPendingArrays(const std::string& shader_name)
                 {
                     break;
                 }
-                size_t to_copy = shader_param_size <= remaining ? shader_param_size : remaining;
-                std::memcpy(pool_array.data(), shader_param_ptr, to_copy);
-                shader_param_ptr += to_copy;
+                const size_t to_copy = shader_param_size <= remaining ? shader_param_size : remaining;
+                if (shader_param_ptr)
+                {
+                    std::memcpy(pool_array.data(), shader_param_ptr, to_copy);
+                    shader_param_ptr += to_copy;
+                }
                 total_size += to_copy;
                 remaining -= to_copy;
                 if (to_copy < shader_param_size)
@@ -971,7 +988,7 @@ void ShaderParams::processPendingArrays(const std::string& shader_name)
         }
 
         // Remove from pending arrays since it's now processed
-        pending_arrays_.erase(it);
+        pending_arrays_data_.erase(it);
     }
 }
 }

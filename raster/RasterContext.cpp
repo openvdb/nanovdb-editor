@@ -101,7 +101,8 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
                                                       pnanovdb_compute_array_t* sh_n,
                                                       pnanovdb_compute_array_t* opacities,
                                                       pnanovdb_compute_array_t** shader_params_arrays,
-                                                      pnanovdb_raster_shader_params_t* raster_params)
+                                                      pnanovdb_raster_shader_params_t* raster_params) // TDO0: remove in
+                                                                                                      // 0.2.0
 {
     auto ptr = new gaussian_data_t();
 
@@ -109,11 +110,6 @@ pnanovdb_raster_gaussian_data_t* create_gaussian_data(const pnanovdb_compute_t* 
     ptr->sh_stride = !sh_n ? 0u : (pnanovdb_uint32_t)(sh_n->element_count / means->element_count);
 
     ptr->has_uploaded = PNANOVDB_FALSE;
-
-    if (raster_params)
-    {
-        ptr->shader_params = compute->create_array(raster_params->data_type->element_size, 1u, (void*)raster_params);
-    }
 
     ptr->means_cpu_array = compute->create_array(means->element_size, means->element_count, means->data);
     ptr->quaternions_cpu_array =
@@ -275,7 +271,6 @@ void destroy_gaussian_data(const pnanovdb_compute_t* compute,
 
     delete[] ptr->shader_params_gpu_arrays;
     delete[] ptr->shader_params_cpu_arrays;
-    compute->destroy_array(ptr->shader_params);
     delete ptr;
 
     compute->device_interface.wait_idle(queue);
