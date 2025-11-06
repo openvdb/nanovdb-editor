@@ -72,7 +72,6 @@ CPMAddPackage(
     NAME VulkanHeaders
     GITHUB_REPOSITORY KhronosGroup/Vulkan-Headers
     GIT_TAG v${VULKAN_VERSION}
-    GIT_SHALLOW TRUE
     VERSION ${VULKAN_VERSION}
 )
 
@@ -104,7 +103,6 @@ if(VulkanHeaders_ADDED)
         NAME VulkanLoader
         GITHUB_REPOSITORY KhronosGroup/Vulkan-Loader
         GIT_TAG v${VULKAN_VERSION}
-        GIT_SHALLOW TRUE
         VERSION ${VULKAN_VERSION}
         OPTIONS ${VULKAN_LOADER_OPTIONS}
     )
@@ -126,7 +124,6 @@ if(NANOVDB_EDITOR_USE_GLFW)
         set(GLFW_PLATFORM_OPTIONS
             GITHUB_REPOSITORY glfw/glfw
             GIT_TAG ${GLFW_RELEASE}
-            GIT_SHALLOW TRUE
         )
     endif()
 
@@ -164,7 +161,6 @@ CPMAddPackage(
     NAME imgui
     GITHUB_REPOSITORY ocornut/imgui
     GIT_TAG v1.92.0-docking
-    GIT_SHALLOW TRUE
     VERSION 1.92.0
     DOWNLOAD_ONLY YES
 )
@@ -173,7 +169,6 @@ CPMAddPackage(
     NAME ImGuiFileDialog
     GITHUB_REPOSITORY aiekick/ImGuiFileDialog
     GIT_TAG v0.6.7
-    GIT_SHALLOW TRUE
     VERSION 0.6.7
     DOWNLOAD_ONLY YES
 )
@@ -182,7 +177,6 @@ CPMAddPackage(
     NAME ImGuiColorTextEdit
     GITHUB_REPOSITORY goossens/ImGuiColorTextEdit
     GIT_TAG 1b3d30c04498deacd210b143a1d7aa21f006a514    # master
-    GIT_SHALLOW TRUE
     VERSION 1.0.0
     DOWNLOAD_ONLY YES
 )
@@ -236,7 +230,6 @@ CPMAddPackage(
     NAME FileWatch
     GITHUB_REPOSITORY ThomasMonkman/filewatch
     GIT_TAG a59891baf375b73ff28144973a6fafd3fe40aa21    # master
-    GIT_SHALLOW TRUE
     VERSION 1.0.0
     PATCH_COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_LIST_DIR}/patch_filewatch.cmake
     OPTIONS
@@ -255,7 +248,6 @@ CPMAddPackage(
     NAME cnpy
     GITHUB_REPOSITORY rogersce/cnpy
     GIT_TAG 4e8810b1a8637695171ed346ce68f6984e585ef4    # master
-    GIT_SHALLOW TRUE
     VERSION 1.0.0
     PATCH_COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_LIST_DIR}/patch_cnpy.cmake
     OPTIONS
@@ -280,7 +272,6 @@ CPMAddPackage(
     NAME zstr
     GITHUB_REPOSITORY mateidavid/zstr
     GIT_TAG v1.0.7
-    GIT_SHALLOW TRUE
     VERSION 1.0.7
     OPTIONS
         "CMAKE_POSITION_INDEPENDENT_CODE ON"
@@ -291,7 +282,6 @@ CPMAddPackage(
     NAME llhttp
     GITHUB_REPOSITORY nodejs/llhttp
     GIT_TAG release/v9.3.0
-    GIT_SHALLOW TRUE
     VERSION 9.3.0
     OPTIONS
         "CMAKE_POSITION_INDEPENDENT_CODE ON"
@@ -301,7 +291,6 @@ CPMAddPackage(
     NAME asio
     GITHUB_REPOSITORY chriskohlhoff/asio
     GIT_TAG asio-1-29-0
-    GIT_SHALLOW TRUE
     VERSION 1.29.0
     DOWNLOAD_ONLY YES
 )
@@ -310,7 +299,6 @@ CPMAddPackage(
     NAME restinio
     GITHUB_REPOSITORY Stiffstream/restinio
     GIT_TAG v0.7.7
-    GIT_SHALLOW TRUE
     VERSION 0.7.7
     DOWNLOAD_ONLY YES
 )
@@ -321,7 +309,6 @@ CPMAddPackage(
     NAME fmt
     GITHUB_REPOSITORY fmtlib/fmt
     GIT_TAG ${FMT_VERSION}
-    GIT_SHALLOW TRUE
     VERSION ${FMT_VERSION}
     OPTIONS
         "FMT_HEADER_ONLY OFF"
@@ -348,7 +335,6 @@ CPMAddPackage(
     NAME argparse
     GITHUB_REPOSITORY morrisfranken/argparse
     GIT_TAG 58fcb68a409c182163b4784070a8eb083d76a82b    # master
-    GIT_SHALLOW TRUE
     VERSION 1.0.0
     DOWNLOAD_ONLY YES
 )
@@ -365,7 +351,6 @@ if(NANOVDB_EDITOR_E57_FORMAT)
         NAME libE57Format
         GITHUB_REPOSITORY asmaloney/libE57Format
         GIT_TAG v3.2.0
-        GIT_SHALLOW TRUE
         VERSION 3.2.0
         OPTIONS
             "E57FORMAT_BUILD_EXAMPLES OFF"
@@ -378,7 +363,6 @@ if(NANOVDB_EDITOR_USE_H264)
         NAME openh264
         GITHUB_REPOSITORY cisco/openh264
         GIT_TAG 2.5.1
-        GIT_SHALLOW TRUE
         VERSION 2.5.1
         DOWNLOAD_ONLY YES
     )
