@@ -122,14 +122,33 @@ if(VulkanHeaders_ADDED)
 
         # Check for XCB
         find_package(PkgConfig QUIET)
+        set(WSI_XCB_SUPPORT OFF)
         if(PKG_CONFIG_FOUND)
             pkg_check_modules(XCB QUIET xcb)
             if(XCB_FOUND)
-                set(WSI_XCB_SUPPORT ON)
-                message(STATUS "Vulkan: XCB support enabled")
+                # Check for XCB headers
+                find_path(XCB_INCLUDE_PATH xcb/xcb.h
+                    HINTS ${XCB_INCLUDE_DIRS}
+                    PATHS /usr/include /usr/local/include
+                )
+                if(XCB_INCLUDE_PATH)
+                    set(WSI_XCB_SUPPORT ON)
+                    message(STATUS "Vulkan: XCB support enabled")
+                    if(XCB_INCLUDE_DIRS)
+                        list(APPEND VULKAN_LOADER_OPTIONS "CMAKE_C_FLAGS=-I${XCB_INCLUDE_DIRS}")
+                        list(APPEND VULKAN_LOADER_OPTIONS "CMAKE_CXX_FLAGS=-I${XCB_INCLUDE_DIRS}")
+                    elseif(XCB_INCLUDE_PATH)
+                        list(APPEND VULKAN_LOADER_OPTIONS "CMAKE_C_FLAGS=-I${XCB_INCLUDE_PATH}")
+                        list(APPEND VULKAN_LOADER_OPTIONS "CMAKE_CXX_FLAGS=-I${XCB_INCLUDE_PATH}")
+                    endif()
+                else()
+                    message(STATUS "Vulkan: XCB headers not found (install libxcb1-dev), disabling support")
+                endif()
             else()
-                message(STATUS "Vulkan: XCB not found, disabling support")
+                message(STATUS "Vulkan: XCB not found via pkg-config, disabling support")
             endif()
+        else()
+            message(STATUS "Vulkan: pkg-config not found, disabling XCB support")
         endif()
 
         # Check for Wayland
