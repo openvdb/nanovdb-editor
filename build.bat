@@ -285,6 +285,7 @@ if %errorlevel% neq 0 (
 echo -- Installing python module...
 pip install --force-reinstall .
 cd ..
+exit /b 0
 
 :RunTests
 if %debug%==1 (

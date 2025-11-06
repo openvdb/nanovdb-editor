@@ -149,6 +149,8 @@ pnanovdb_bool_t init_shader(const pnanovdb_compute_t* compute,
         return PNANOVDB_FALSE;
     }
 
+    // Can be enabled when debugging shader/resource binding problems
+#if 0
     if (log_print)
     {
         log_print(PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "shader(%s) descriptor_write_count(%d) byte_code_size(%d)",
@@ -160,6 +162,7 @@ pnanovdb_bool_t init_shader(const pnanovdb_compute_t* compute,
                       shader_ctx->shader_build->resource_names[idx]);
         }
     }
+#endif
 
     shader_ctx->pipeline = compute_interface->create_compute_pipeline(context, &shader_ctx->shader_build->pipeline_desc);
     return PNANOVDB_TRUE;
