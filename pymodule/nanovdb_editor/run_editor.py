@@ -29,15 +29,19 @@ if __name__ == "__main__":
     config.streaming = 1 if args.stream else 0
 
     try:
-        editor.start(config)
-        print("Editor running at {}:{}.. Ctrl+C to exit".format(args.ip, args.port))
-        while True:
-            sleep(1)
+        if args.headless:
+            editor.start(config)
+            print("Editor running at {}:{}.. Ctrl+C to exit".format(args.ip, args.port))
+            while True:
+                sleep(1)
+        else:
+            editor.show(config)
     except Exception as e:
         print(f"Error starting editor: {e}")
     finally:
         print("Shutting down editor...")
-        editor.stop()
+        if args.headless:
+            editor.stop()
         editor = None
         compute = None
         compiler = None
