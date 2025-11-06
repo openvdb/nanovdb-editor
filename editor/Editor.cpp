@@ -34,11 +34,12 @@
 // signal handling
 #include <atomic>
 #if defined(_WIN32)
-// not implemented
+#    define WIN32_LEAN_AND_MEAN
+#    include <windows.h>
 #else
-#include <signal.h>
-#include <unistd.h>
-#include <stdio.h>
+#    include <signal.h>
+#    include <unistd.h>
+#    include <stdio.h>
 #endif
 
 static const pnanovdb_uint32_t s_default_width = 1440u;
@@ -314,14 +315,30 @@ static std::atomic<bool> g_sigint_should_run = true;
 
 static std::mutex g_sigint_mutex;
 static int g_sigint_refcount = 0;
+
+#if defined(_WIN32)
+static bool g_sigint_handler_registered = false;
+
+BOOL WINAPI editor_sigint_handler_win32(DWORD dwCtrlType)
+{
+    if (dwCtrlType == CTRL_C_EVENT)
+    {
+        printf("Ctrl-C pressed. Exiting NanoVDB Editor main loop.\n");
+        g_sigint_should_run.store(false);
+        return TRUE;
+    }
+    return FALSE;
+}
+#else
 static struct sigaction g_sigint_sa;
 static struct sigaction g_sigint_sa_old;
 
 void editor_sigint_handler(int sig)
 {
-    printf("Control-C pressed. Exiting NanoVDB Editor main loop.\n");
+    printf("Ctrl-C pressed. Exiting NanoVDB Editor main loop.\n");
     g_sigint_should_run.store(false);
 }
+#endif
 
 void editor_sigint_register()
 {
@@ -329,19 +346,27 @@ void editor_sigint_register()
 
     int refcount = g_sigint_refcount;
     g_sigint_refcount++;
-    //printf("NanoVDB Editor: Initialized signal handler refcount(%d)\n", refcount);
+    // printf("NanoVDB Editor: Initialized signal handler refcount(%d)\n", refcount);
     if (refcount == 0)
     {
         // signal handling
         g_sigint_should_run.store(true);
-    #if defined(_WIN32)
-        // not implemented
-    #else
+#if defined(_WIN32)
+        if (SetConsoleCtrlHandler(editor_sigint_handler_win32, TRUE))
+        {
+            g_sigint_handler_registered = true;
+        }
+        else
+        {
+            printf("NanoVDB Editor: Warning - failed to register Ctrl-C handler\n");
+            g_sigint_handler_registered = false;
+        }
+#else
         g_sigint_sa.sa_handler = editor_sigint_handler;
         sigemptyset(&g_sigint_sa.sa_mask);
         g_sigint_sa.sa_flags = 0;
         sigaction(SIGINT, &g_sigint_sa, &g_sigint_sa_old);
-    #endif
+#endif
     }
 }
 
@@ -356,13 +381,20 @@ void editor_sigint_unregister()
 
     int refcount = g_sigint_refcount;
     g_sigint_refcount--;
-    //printf("NanoVDB Editor: Released signal handler refcount(%d)\n", refcount);
+    // printf("NanoVDB Editor: Released signal handler refcount(%d)\n", refcount);
     if (refcount == 1)
     {
         // restore old signal handler
-    #if defined(_WIN32)
-        // not implemented
-    #else
+#if defined(_WIN32)
+        if (g_sigint_handler_registered)
+        {
+            if (!SetConsoleCtrlHandler(editor_sigint_handler_win32, FALSE))
+            {
+                printf("NanoVDB Editor: Warning - failed to unregister Ctrl-C handler\n");
+            }
+            g_sigint_handler_registered = false;
+        }
+#else
         // do not restore own handler
         if (g_sigint_sa_old.sa_handler != g_sigint_sa.sa_handler)
         {
@@ -373,7 +405,7 @@ void editor_sigint_unregister()
                 printf("NanoVDB Editor SIGINT handler restore failed. Control-C may not behave as expected\n");
             }
         }
-    #endif
+#endif
     }
 }
 
