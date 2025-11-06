@@ -31,6 +31,16 @@
 
 #include <filesystem>
 
+// signal handling
+#include <atomic>
+#if defined(_WIN32)
+#    define WIN32_LEAN_AND_MEAN
+#    include <windows.h>
+#else
+#    include <signal.h>
+#    include <unistd.h>
+#    include <stdio.h>
+#endif
 
 static const pnanovdb_uint32_t s_default_width = 1440u;
 static const pnanovdb_uint32_t s_default_height = 720u;
@@ -301,9 +311,112 @@ void sync_shader_params(pnanovdb_editor_t* editor, void* shader_params, pnanovdb
     (void)set_data;
 }
 
+static std::atomic<bool> g_sigint_should_run = true;
+
+static std::mutex g_sigint_mutex;
+static int g_sigint_refcount = 0;
+
+#if defined(_WIN32)
+static bool g_sigint_handler_registered = false;
+
+BOOL WINAPI editor_sigint_handler_win32(DWORD dwCtrlType)
+{
+    if (dwCtrlType == CTRL_C_EVENT)
+    {
+        printf("Ctrl-C pressed. Exiting NanoVDB Editor main loop.\n");
+        g_sigint_should_run.store(false);
+        return TRUE;
+    }
+    return FALSE;
+}
+#else
+static struct sigaction g_sigint_sa;
+static struct sigaction g_sigint_sa_old;
+
+void editor_sigint_handler(int sig)
+{
+    printf("Ctrl-C pressed. Exiting NanoVDB Editor main loop.\n");
+    g_sigint_should_run.store(false);
+}
+#endif
+
+void editor_sigint_register()
+{
+    std::lock_guard<std::mutex> lock(g_sigint_mutex);
+
+    int refcount = g_sigint_refcount;
+    g_sigint_refcount++;
+    // printf("NanoVDB Editor: Initialized signal handler refcount(%d)\n", refcount);
+    if (refcount == 0)
+    {
+        // signal handling
+        g_sigint_should_run.store(true);
+#if defined(_WIN32)
+        if (SetConsoleCtrlHandler(editor_sigint_handler_win32, TRUE))
+        {
+            g_sigint_handler_registered = true;
+        }
+        else
+        {
+            printf("NanoVDB Editor: Warning - failed to register Ctrl-C handler\n");
+            g_sigint_handler_registered = false;
+        }
+#else
+        g_sigint_sa.sa_handler = editor_sigint_handler;
+        sigemptyset(&g_sigint_sa.sa_mask);
+        g_sigint_sa.sa_flags = 0;
+        sigaction(SIGINT, &g_sigint_sa, &g_sigint_sa_old);
+#endif
+    }
+}
+
+bool editor_sigint_should_run()
+{
+    return g_sigint_should_run.load();
+}
+
+void editor_sigint_unregister()
+{
+    std::lock_guard<std::mutex> lock(g_sigint_mutex);
+
+    int refcount = g_sigint_refcount;
+    g_sigint_refcount--;
+    // printf("NanoVDB Editor: Released signal handler refcount(%d)\n", refcount);
+    if (refcount == 1)
+    {
+        // restore old signal handler
+#if defined(_WIN32)
+        if (g_sigint_handler_registered)
+        {
+            if (!SetConsoleCtrlHandler(editor_sigint_handler_win32, FALSE))
+            {
+                printf("NanoVDB Editor: Warning - failed to unregister Ctrl-C handler\n");
+            }
+            g_sigint_handler_registered = false;
+        }
+#else
+        // do not restore own handler
+        if (g_sigint_sa_old.sa_handler != g_sigint_sa.sa_handler)
+        {
+            struct sigaction sa_restore;
+            sigaction(SIGINT, &g_sigint_sa_old, &sa_restore);
+            if (g_sigint_sa.sa_handler != sa_restore.sa_handler)
+            {
+                printf("NanoVDB Editor SIGINT handler restore failed. Control-C may not behave as expected\n");
+            }
+        }
+#endif
+    }
+}
+
 pnanovdb_int32_t editor_get_external_active_count(void* external_active_count)
 {
     auto editor = static_cast<pnanovdb_editor_t*>(external_active_count);
+    if (!editor_sigint_should_run())
+    {
+        return 1;
+    }
+
     if (!editor->impl || !editor->impl->editor_worker)
     {
         return 0;
@@ -532,8 +645,10 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         }
     }
 
+    editor_sigint_register();
+
     bool should_run = true;
-    while (should_run)
+    while (should_run && editor_sigint_should_run())
     {
         if (editor->impl->editor_worker && editor->impl->editor_worker->should_stop.load())
         {
@@ -833,6 +948,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         editor->impl->raster->destroy_context(editor->impl->compute, device_queue, editor->impl->raster_ctx);
         editor->impl->raster_ctx = nullptr;
     }
+
+    editor_sigint_unregister();
 }
 
 pnanovdb_int32_t get_resolved_port(pnanovdb_editor_t* editor, pnanovdb_bool_t should_wait)
