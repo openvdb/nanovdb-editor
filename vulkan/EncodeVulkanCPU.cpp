@@ -217,7 +217,7 @@ int present_encoder_cpu(pnanovdb_compute_encoder_t* encoder, pnanovdb_uint64_t* 
         pnanovdb_compute_texture_transient_t* tex_plane1 = aliasTextureTransient(
             context, tex_transient, PNANOVDB_COMPUTE_FORMAT_R8G8_UNORM, PNANOVDB_COMPUTE_TEXTURE_ASPECT_PLANE_1);
 
-        pnanovdb_compute_resource_t resources[3u] = {};
+        pnanovdb_compute_resource_t resources[4u] = {};
         resources[0u].buffer_transient = registerBufferAsTransient(context, ptr->encoderCPU->constant_buffer);
         resources[1u].texture_transient = tex_plane0;
         resources[2u].texture_transient = tex_plane1;
@@ -233,7 +233,7 @@ int present_encoder_cpu(pnanovdb_compute_encoder_t* encoder, pnanovdb_uint64_t* 
 
         pnanovdb_compute_copy_buffer_params_t copy_params = {};
         copy_params.num_bytes = ptr->width * ptr->height + 2u * (ptr->width / 2u) * (ptr->height / 2u);
-        copy_params.src = resources[2u].buffer_transient;
+        copy_params.src = resources[3u].buffer_transient;
         copy_params.dst = registerBufferAsTransient(context, ptr->encoderCPU->readback_buffer);
         copy_params.debug_label = "copy_cpu_encoder_buffer";
 
