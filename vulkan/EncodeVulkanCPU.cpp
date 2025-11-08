@@ -123,16 +123,19 @@ pnanovdb_compute_encoder_t* create_encoder_cpu(pnanovdb_compute_queue_t* queue, 
     memcpy(mapped_constants, &constants, sizeof(constants_t));
     unmapBuffer(cast(ctx), ptr->encoderCPU->constant_buffer);
 
+    pnanovdb_uint64_t buf_size = ptr->width * ptr->height + 
+        2u * (ptr->width / 2u) * (ptr->height / 2u);
+
     buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_SRC;
     buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
     buf_desc.structure_stride = 4u;
-    buf_desc.size_in_bytes = constants.width * constants.height + 2u * (constants.width / 2u) * (constants.height / 2u);
+    buf_desc.size_in_bytes = buf_size;
     ptr->encoderCPU->device_buffer = createBuffer(cast(ctx), PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
 
     buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_DST;
     buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
     buf_desc.structure_stride = 4u;
-    buf_desc.size_in_bytes = constants.width * constants.height + 2u * (constants.width / 2u) * (constants.height / 2u);
+    buf_desc.size_in_bytes = buf_size;
     ptr->encoderCPU->readback_buffer = createBuffer(cast(ctx), PNANOVDB_COMPUTE_MEMORY_TYPE_READBACK, &buf_desc);
 
     // for now, load compiler and compute to do dynamic compilation
@@ -231,8 +234,11 @@ int present_encoder_cpu(pnanovdb_compute_encoder_t* encoder, pnanovdb_uint64_t* 
             ptr->encoderCPU->shader_context, resources,
             grid_dim_x, grid_dim_y, 1u, "copy_texture_to_buffer");
 
+        pnanovdb_uint64_t buf_size = ptr->width * ptr->height + 
+            2u * (ptr->width / 2u) * (ptr->height / 2u);
+
         pnanovdb_compute_copy_buffer_params_t copy_params = {};
-        copy_params.num_bytes = ptr->width * ptr->height + 2u * (ptr->width / 2u) * (ptr->height / 2u);
+        copy_params.num_bytes = buf_size;
         copy_params.src = resources[3u].buffer_transient;
         copy_params.dst = registerBufferAsTransient(context, ptr->encoderCPU->readback_buffer);
         copy_params.debug_label = "copy_cpu_encoder_buffer";
