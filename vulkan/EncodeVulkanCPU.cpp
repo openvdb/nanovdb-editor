@@ -123,7 +123,7 @@ pnanovdb_compute_encoder_t* create_encoder_cpu(pnanovdb_compute_queue_t* queue, 
     memcpy(mapped_constants, &constants, sizeof(constants_t));
     unmapBuffer(cast(ctx), ptr->encoderCPU->constant_buffer);
 
-    pnanovdb_uint64_t buf_size = ptr->width * ptr->height + 
+    pnanovdb_uint64_t buf_size = ptr->width * ptr->height +
         2u * (ptr->width / 2u) * (ptr->height / 2u);
 
     buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_SRC;
@@ -234,7 +234,7 @@ int present_encoder_cpu(pnanovdb_compute_encoder_t* encoder, pnanovdb_uint64_t* 
             ptr->encoderCPU->shader_context, resources,
             grid_dim_x, grid_dim_y, 1u, "copy_texture_to_buffer");
 
-        pnanovdb_uint64_t buf_size = ptr->width * ptr->height + 
+        pnanovdb_uint64_t buf_size = ptr->width * ptr->height +
             2u * (ptr->width / 2u) * (ptr->height / 2u);
 
         pnanovdb_compute_copy_buffer_params_t copy_params = {};
