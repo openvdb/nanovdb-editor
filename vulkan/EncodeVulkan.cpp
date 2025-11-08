@@ -951,6 +951,7 @@ void destroy_encoder(pnanovdb_compute_encoder_t* encoder)
     if (ptr->encoderCPU)
     {
         destroy_encoder_cpu(encoder);
+        return;
     }
 
     Device* device = ptr->deviceQueue->device;
@@ -1054,6 +1055,7 @@ void unmap_encoder_data(pnanovdb_compute_encoder_t* encoder)
     if (ptr->encoderCPU)
     {
         unmap_encoder_data_cpu(encoder);
+        return;
     }
 
     // nop
