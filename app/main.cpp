@@ -112,7 +112,7 @@ int main(int argc, char* argv[])
         pnanovdb_editor_token_t* scene_main = editor.get_token("main");
         pnanovdb_editor_token_t* volume_token = editor.get_token("dragon");
 
-        //editor.add_nanovdb_2(&editor, scene_main, volume_token, data_nanovdb);
+        editor.add_nanovdb_2(&editor, scene_main, volume_token, data_nanovdb);
 
         editor.show(&editor, device, &config);
 

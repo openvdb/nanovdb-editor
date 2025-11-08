@@ -119,9 +119,6 @@ pnanovdb_compute_device_manager_t* createDeviceManager(pnanovdb_bool_t enableVal
         }
     }
 
-    // HACK for test CPU encoder
-    ptr->instanceSupportsVulkanVideo = PNANOVDB_FALSE;
-
     // create instance
     uint32_t numLayers = 0u;
     const char** layers = nullptr;
