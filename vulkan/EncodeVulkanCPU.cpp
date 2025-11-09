@@ -157,6 +157,25 @@ pnanovdb_compute_encoder_t* create_encoder_cpu(pnanovdb_compute_queue_t* queue, 
         return nullptr;
     }
 
+    // scale bitrate with resolution
+    uint64_t pixel_count = ptr->width * ptr->height;
+
+    uint64_t ave_bits_per_pixel = 5; // 5 Mbps to 20 Mbps at 1440x720
+    if (pixel_count >= 3840 * 2160) // 25 Mbps to 83 Mbps
+    {
+        ave_bits_per_pixel = 3;
+    }
+    else if (pixel_count >= 2560 * 1440) // 15 Mbps to 52 Mbps
+    {
+        ave_bits_per_pixel = 4;
+    }
+    else if (pixel_count >= 1920 * 1080) // 10 Mbps to 35 Mbps
+    {
+        ave_bits_per_pixel = 5;
+    }
+
+    uint64_t ave_bitrate = ave_bits_per_pixel * pixel_count;
+
     // Set encoding parameters
     SEncParamExt param;
     memset(&param, 0, sizeof(SEncParamExt));
@@ -166,7 +185,7 @@ pnanovdb_compute_encoder_t* create_encoder_cpu(pnanovdb_compute_queue_t* queue, 
     param.fMaxFrameRate = 30.0f;
     param.iPicWidth = ptr->width;
     param.iPicHeight = ptr->height;
-    param.iTargetBitrate = 5000000;
+    param.iTargetBitrate = ave_bitrate;
     param.iRCMode = RC_QUALITY_MODE;
     param.iTemporalLayerNum = 1;
     param.iSpatialLayerNum = 1;
