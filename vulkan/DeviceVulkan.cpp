@@ -98,6 +98,16 @@ pnanovdb_compute_device_manager_t* createDeviceManager(pnanovdb_bool_t enableVal
     auto getInstanceProcAddr =
         (PFN_vkGetInstanceProcAddr)pnanovdb_get_proc_address(ptr->vulkan_module, "vkGetInstanceProcAddr");
 
+    if (!getInstanceProcAddr)
+    {
+        printf("Error: Failed to load vkGetInstanceProcAddr from Vulkan library. This may indicate:\n");
+        printf("  - The Vulkan loader is incompatible with the current system\n");
+        printf("  - Graphics drivers are missing or incompatible\n");
+        pnanovdb_free_library(ptr->vulkan_module);
+        delete ptr;
+        return nullptr;
+    }
+
     pnanovdb_vulkan_loader_global(&ptr->loader, getInstanceProcAddr);
 
     auto loader = &ptr->loader;
@@ -160,10 +170,31 @@ pnanovdb_compute_device_manager_t* createDeviceManager(pnanovdb_bool_t enableVal
         instanceCreateInfo.enabledLayerCount = 0u;
         instanceCreateInfo.ppEnabledLayerNames = nullptr;
 
-        loader->vkCreateInstance(&instanceCreateInfo, nullptr, &ptr->vulkanInstance);
+        res = loader->vkCreateInstance(&instanceCreateInfo, nullptr, &ptr->vulkanInstance);
+    }
+
+    if (!ptr->vulkanInstance)
+    {
+        printf("Error: Failed to create Vulkan instance. VkResult: %d\n", res);
+        printf("  This may indicate:\n");
+        printf("  - Vulkan drivers are not installed or are incompatible\n");
+        printf("  - Graphics hardware or drivers do not support required Vulkan version\n");
+        pnanovdb_free_library(ptr->vulkan_module);
+        delete ptr;
+        return nullptr;
     }
 
     pnanovdb_vulkan_loader_instance(&ptr->loader, ptr->vulkanInstance);
+
+    if (!loader->vkEnumeratePhysicalDevices || !loader->vkCreateDevice || !loader->vkDestroyInstance)
+    {
+        printf("Error: Failed to load Vulkan function pointers\n");
+        printf("  This indicates the Vulkan implementation is incomplete or corrupted\n");
+        loader->vkDestroyInstance(ptr->vulkanInstance, nullptr);
+        pnanovdb_free_library(ptr->vulkan_module);
+        delete ptr;
+        return nullptr;
+    }
 
     // enumerate devices
     {
