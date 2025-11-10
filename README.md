@@ -2,6 +2,23 @@
 
 WIP
 
+## Running in Docker
+To run the editor in the docker container, the Dockerfile needs to contain:
+```dockerfile
+EXPOSE 8080
+
+ENV NVIDIA_DRIVER_CAPABILITIES compute,graphics,utility
+
+RUN apt-get update \
+    && apt-get install -y \
+    libxext6 \
+    libegl1
+```
+Then run with the NVIDIA runtime selected (https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html):
+```sh
+docker run --runtime=nvidia --net=host --gpus=all ...
+```
+
 ## Building and executing NanoVDB Editor
 
 ### Prerequisites

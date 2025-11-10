@@ -101,6 +101,58 @@ jobs:
           chmod +x ./build.sh
           ./build.sh
 
+  nanovdb-editor-test-docker-linux:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    name: Test Docker (Headless)
+    needs: nanovdb-editor-build-python-linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download wheel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: nanovdb-editor-wheel
+          path: ./pymodule/dist
+
+      - name: Build Docker image with headless configuration
+        run: |
+          docker build \
+            --progress=plain \
+            . \
+            --network=host \
+            --build-arg USE_LOCAL_WHEEL=true \
+            --build-arg INSTALL_GRAPHICS_LIBS=false \
+            -t nanovdb-editor-headless-test
+
+      - name: Test Docker container - Import module
+        run: |
+          docker run --rm nanovdb-editor-headless-test \
+            python3 -c "import nanovdb_editor; print('SUCCESS: Module imported')"
+
+      - name: Test Docker container - Create editor instance
+        run: |
+          docker run --rm nanovdb-editor-headless-test \
+            python3 -c "
+          import nanovdb_editor
+          print('Creating editor instance...')
+          editor, compute, compiler = nanovdb_editor.create_default()
+          print('SUCCESS: Editor instance created in headless mode with lavapipe!')
+          "
+
+      - name: Test Docker container - Run editor script
+        run: |
+          docker run --rm nanovdb-editor-headless-test \
+            timeout 5 python3 ./run_editor.py --headless --stream || \
+            if [ $? -eq 124 ]; then \
+              echo "SUCCESS: Editor started and was terminated after timeout"; \
+              exit 0; \
+            else \
+              echo "FAILED: Editor failed to start"; \
+              exit 1; \
+            fi
+
   nanovdb-editor-test-python-linux:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Test (Linux)
