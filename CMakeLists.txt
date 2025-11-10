@@ -415,6 +415,16 @@ if(SKBUILD)
         COMPONENT python_shaders
     )
 
+    # Install Python module files
+    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/pymodule/nanovdb_editor/"
+        DESTINATION nanovdb_editor
+        COMPONENT python_files
+        FILES_MATCHING PATTERN "*.py"
+        PATTERN "lib" EXCLUDE
+        PATTERN "shaders" EXCLUDE
+        PATTERN "__pycache__" EXCLUDE
+    )
+
     # Install GLFW DLL files that were previously copied
     if(WIN32 AND TARGET glfw)
         install(FILES "${CMAKE_BINARY_DIR}/$<CONFIG>/glfw3.dll"

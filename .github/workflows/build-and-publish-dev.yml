@@ -82,7 +82,7 @@ jobs:
         CIBW_TEST_COMMAND: python -c "import nanovdb_editor; print('Import successful')"
 
         # Mark this as a PyPI build and disable GLFW
-        CMAKE_ARGS: "-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_USE_GLFW=OFF"
+        CIBW_ENVIRONMENT: CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_USE_GLFW=OFF"
       with:
         package-dir: pymodule
 
