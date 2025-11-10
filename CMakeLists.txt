@@ -142,6 +142,7 @@ create_nanovdb_library(pnanovdbcompute
         nlohmann_json::nlohmann_json
         blosc_static
         VulkanHeaders
+        $<$<BOOL:${NANOVDB_EDITOR_USE_H264}>:openh264>
     DEFINITIONS
         NOMINMAX
         NANOVDB_USE_BLOSC
@@ -161,6 +162,10 @@ if(NOT SKBUILD)
     if(TARGET copy_vulkan_loader)
         add_dependencies(pnanovdbcompute copy_vulkan_loader)
     endif()
+endif()
+
+if(NANOVDB_EDITOR_USE_H264 AND TARGET openh264_build)
+    add_dependencies(pnanovdbcompute openh264_build)
 endif()
 
 ### PNanoVDB FileFormat
