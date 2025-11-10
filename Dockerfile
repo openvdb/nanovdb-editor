@@ -55,9 +55,9 @@ RUN if [ "$INSTALL_GRAPHICS_LIBS" = "true" ]; then \
             libxext6 \
             libegl1 \
         && rm -rf /var/lib/apt/lists/*; \
-    else \
-        # Install lavapipe for headless CPU encoding \
-        apt-get update && apt-get install -y \
-            mesa-vulkan-drivers \
-        && rm -rf /var/lib/apt/lists/*; \
+    # else \
+    #     # Install lavapipe for headless CPU encoding \
+    #     apt-get update && apt-get install -y \
+    #         mesa-vulkan-drivers \
+    #     && rm -rf /var/lib/apt/lists/*; \
     fi
