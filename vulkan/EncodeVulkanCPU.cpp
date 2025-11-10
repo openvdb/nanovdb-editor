@@ -40,6 +40,7 @@ struct EncoderCPU
     pnanovdb_compute_t compute = {};
 
     pnanovdb_shader_context_t* shader_context = nullptr;
+    pnanovdb_bool_t shader_valid = PNANOVDB_FALSE;
 
     ISVCEncoder* openh264_encoder = nullptr;
 
@@ -102,14 +103,26 @@ pnanovdb_compute_encoder_t* create_encoder_cpu(pnanovdb_compute_queue_t* queue, 
 
     struct constants_t
     {
-        pnanovdb_uint32_t width;
-        pnanovdb_uint32_t height;
-        pnanovdb_uint32_t pad2;
-        pnanovdb_uint32_t pad1;
+        uint grid_dim_x;
+        uint y_width;
+        uint uv_width;
+        uint plane0_end;
+        uint plane1_end;
+        uint plane2_end;
+        uint pad1;
+        uint pad2;
     };
     constants_t constants = {};
-    constants.width = desc->width;
-    constants.height = desc->height;
+    constants.y_width = desc->width;
+    constants.uv_width = desc->width / 2u;
+    constants.plane0_end = desc->width * desc->height;
+    constants.plane1_end = constants.plane0_end + (ptr->width / 2u) * (ptr->height / 2u);
+    constants.plane2_end = constants.plane1_end + (ptr->width / 2u) * (ptr->height / 2u);
+    constants.grid_dim_x = (constants.plane2_end + 1023u) / 1024u;
+    if (constants.grid_dim_x > 32768u)
+    {
+        constants.grid_dim_x = 32768u;
+    }
 
     pnanovdb_compute_buffer_desc_t buf_desc = {};
 
@@ -145,8 +158,10 @@ pnanovdb_compute_encoder_t* create_encoder_cpu(pnanovdb_compute_queue_t* queue, 
     pnanovdb_compiler_settings_t compile_settings = {};
     pnanovdb_compiler_settings_init(&compile_settings);
 
-    ptr->encoderCPU->shader_context = ptr->encoderCPU->compute.create_shader_context("raster/copy_texture_to_buffer.slang");
-    ptr->encoderCPU->compute.init_shader(&ptr->encoderCPU->compute, queue, ptr->encoderCPU->shader_context, &compile_settings);
+    ptr->encoderCPU->shader_context = ptr->encoderCPU->compute.create_shader_context(
+        "raster/copy_texture_to_buffer.slang");
+    ptr->encoderCPU->shader_valid = ptr->encoderCPU->compute.init_shader(
+        &ptr->encoderCPU->compute, queue, ptr->encoderCPU->shader_context, &compile_settings);
 
     // Create encoder
     ISVCEncoder* openh264_encoder = nullptr;
@@ -229,6 +244,7 @@ int present_encoder_cpu(pnanovdb_compute_encoder_t* encoder, pnanovdb_uint64_t* 
 {
     auto ptr = cast(encoder);
 
+    if (ptr->encoderCPU->shader_valid)
     {
         pnanovdb_compute_context_t* context = cast(ptr->deviceQueue->context);
         pnanovdb_compute_interface_t* context_iface = getContextInterface(cast(ptr->deviceQueue));
@@ -245,16 +261,22 @@ int present_encoder_cpu(pnanovdb_compute_encoder_t* encoder, pnanovdb_uint64_t* 
         resources[2u].texture_transient = tex_plane1;
         resources[3u].buffer_transient = registerBufferAsTransient(context, ptr->encoderCPU->device_buffer);
 
-        pnanovdb_uint32_t grid_dim_x = (ptr->width + 15u) / 16u;
-        pnanovdb_uint32_t grid_dim_y = (ptr->height + 15u) / 16u;
+        pnanovdb_uint64_t buf_size = ptr->width * ptr->height +
+            2u * (ptr->width / 2u) * (ptr->height / 2u);
+
+        pnanovdb_uint32_t grid_dim_1d = (buf_size + 1023u) / 1024u;
+        pnanovdb_uint32_t grid_dim_x = grid_dim_1d;
+        pnanovdb_uint32_t grid_dim_y = 1u;
+        if (grid_dim_x > 32768u)
+        {
+            grid_dim_x = 32768u;
+            grid_dim_y = (grid_dim_1d + 32767u) / 32768u;
+        };
 
         ptr->encoderCPU->compute.dispatch_shader(
             context_iface, context,
             ptr->encoderCPU->shader_context, resources,
             grid_dim_x, grid_dim_y, 1u, "copy_texture_to_buffer");
-
-        pnanovdb_uint64_t buf_size = ptr->width * ptr->height +
-            2u * (ptr->width / 2u) * (ptr->height / 2u);
 
         pnanovdb_compute_copy_buffer_params_t copy_params = {};
         copy_params.num_bytes = buf_size;
