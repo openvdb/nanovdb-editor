@@ -190,7 +190,9 @@ pnanovdb_compute_device_manager_t* createDeviceManager(pnanovdb_bool_t enableVal
     {
         printf("Error: Failed to load Vulkan function pointers\n");
         printf("  This indicates the Vulkan implementation is incomplete or corrupted\n");
-        loader->vkDestroyInstance(ptr->vulkanInstance, nullptr);
+        if (loader->vkDestroyInstance) {
+            loader->vkDestroyInstance(ptr->vulkanInstance, nullptr);
+        }
         pnanovdb_free_library(ptr->vulkan_module);
         delete ptr;
         return nullptr;
