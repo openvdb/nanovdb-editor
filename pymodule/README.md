@@ -1,24 +1,33 @@
 ##  NanoVDB Editor
 
-
 Prerequisities:
 - `numpy`
+
+### Running in Docker
+To run the editor in the docker container, the Dockerfile needs to contain:
+```dockerfile
+EXPOSE 8080
+
+ENV NVIDIA_DRIVER_CAPABILITIES compute,graphics,utility
+
+RUN apt-get update \
+    && apt-get install -y \
+    libxext6 \
+    libegl1
+```
+Then run with the NVIDIA runtime selected (https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html):
+```sh
+docker run --runtime=nvidia --net=host --gpus=all ...
+```
 
 ### Hello World
 
 ```py
-from nanovdb_editor import Compiler, Compute, Editor, EditorConfig
+import nanovdb_editor as nve
 
-compiler = Compiler()
-compiler.create_instance()
+editor, compute, compiler = nve.create_default(device_id=args.device)
 
-compute = Compute(compiler)
-compute.device_interface().create_device_manager()
-compute.device_interface().create_device()
-
-editor = Editor(compute, compiler)
-
-config = EditorConfig()
+config = nve.EditorConfig()
 
 # Default values, set as needed
 config.ip_address = b"127.0.0.1"
@@ -28,7 +37,6 @@ config.streaming = 0
 
 editor.show(config)
 ```
-
 
 ### Shader Parameters
 Shaders can have defined struct with shader parameters which are intended to be shown in the editor's UI:

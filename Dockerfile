@@ -1,10 +1,10 @@
 FROM nvidia/cuda:12.8.1-base-ubuntu24.04
 
 ## Build examples:
-# docker build --progress=plain . --network=host -t nanovdb-editor                                          # Default: nanovdb-editor-dev from PyPI
-# docker build --progress=plain . --network=host --build-arg PYPI_PACKAGE=nanovdb-editor -t nanovdb-editor  # Use stable release of nanovdb-editor
-# docker build --progress=plain . --network=host --build-arg USE_LOCAL_WHEEL=true -t nanovdb-editor         # Use local wheel
-# docker build --progress=plain . --network=host --build-arg INSTALL_GRAPHICS_LIBS=false -t nanovdb-editor  # Minimal headless build for CPU encode
+# docker build --progress=plain . --network=host -t nanovdb-editor                                              # Default: nanovdb-editor-dev from PyPI
+# docker build --progress=plain . --network=host --build-arg PYPI_PACKAGE=nanovdb-editor-dev -t nanovdb-editor  # Use dev release of nanovdb-editor
+# docker build --progress=plain . --network=host --build-arg USE_LOCAL_WHEEL=true -t nanovdb-editor             # Use local wheel
+# docker build --progress=plain . --network=host --build-arg INSTALL_GRAPHICS_LIBS=false -t nanovdb-editor      # Minimal headless build for CPU encode
 
 ## Run NanoVDB Editor in docker:
 # docker run --runtime=nvidia --net=host --gpus=all -it nanovdb-editor bash
@@ -13,7 +13,7 @@ FROM nvidia/cuda:12.8.1-base-ubuntu24.04
 # Set environment variables to prevent interactive prompts during installation.
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN sed -i 's/archive.ubuntu.com/mirrors.ocf.berkeley.edu/g' /etc/apt/sources.list
+# RUN sed -i 's/archive.ubuntu.com/mirrors.ocf.berkeley.edu/g' /etc/apt/sources.list
 
 # Install Python
 # skipping python3-dev python3-venv python-is-python3
@@ -28,8 +28,8 @@ WORKDIR /workspace
 ## Build arguments:
 #  - installation mode (default: false = use PyPI)
 ARG USE_LOCAL_WHEEL=false
-#  - PyPI package (default: nanovdb-editor-dev)
-ARG PYPI_PACKAGE=nanovdb-editor-dev
+#  - PyPI package (default: nanovdb-editor)
+ARG PYPI_PACKAGE=nanovdb-editor
 #  - installation of graphics dependencies
 ARG INSTALL_GRAPHICS_LIBS=true
 
