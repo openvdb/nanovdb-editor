@@ -100,19 +100,22 @@ if not defined MSVS_VERSION (
 if %USE_VCPKG%==ON (
     if not defined VCPKG_ROOT (
         echo VCPKG_ROOT not set, please set path to vcpkg
+        set BUILD_ERROR=1
         goto Error
     )
     :: Install dependencies using vcpkg.json
     if exist %VCPKG_ROOT%\vcpkg.exe (
         echo -- Installing dependencies with vcpkg...
         call %VCPKG_ROOT%\vcpkg.exe install --triplet x64-windows
-        if errorlevel 1 (
+        set BUILD_ERROR=%errorlevel%
+        if %BUILD_ERROR% neq 0 (
             echo vcpkg install failed
             goto Error
         )
         set VCPKG_PREFIX_PATH=%VCPKG_ROOT%\installed\x64-windows
     ) else (
         echo vcpkg.exe not found in %VCPKG_ROOT%
+        set BUILD_ERROR=1
         goto Error
     )
     set VCPKG_CMAKE=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake
@@ -144,13 +147,15 @@ exit /b 1
 :Build
 if %python_only%==1 (
     call :BuildPython
-    if errorlevel 1 goto Error
+    set BUILD_ERROR=%errorlevel%
+    if %BUILD_ERROR% neq 0 goto Error
     goto Success
 )
 
 if %test_only%==1 (
     call :RunTests
-    if errorlevel 1 goto Error
+    set BUILD_ERROR=%errorlevel%
+    if %BUILD_ERROR% neq 0 goto Error
     goto Success
 )
 
@@ -175,11 +180,13 @@ if not exist %BUILD_DIR% mkdir %BUILD_DIR%
 
 if %release%==1 (
     call :CreateConfigDir Release
-    if errorlevel 1 goto Error
+    set BUILD_ERROR=%errorlevel%
+    if %BUILD_ERROR% neq 0 goto Error
 )
 if %debug%==1 (
     call :CreateConfigDir Debug
-    if errorlevel 1 goto Error
+    set BUILD_ERROR=%errorlevel%
+    if %BUILD_ERROR% neq 0 goto Error
 )
 
 echo -- Building %PROJECT_NAME%...
@@ -213,11 +220,13 @@ if %BUILD_ERROR% neq 0 (
 
 if %release%==1 (
     call :BuildConfig Release
-    if errorlevel 1 goto Error
+    set BUILD_ERROR=%errorlevel%
+    if %BUILD_ERROR% neq 0 goto Error
 )
 if %debug%==1 (
     call :BuildConfig Debug
-    if errorlevel 1 goto Error
+    set BUILD_ERROR=%errorlevel%
+    if %BUILD_ERROR% neq 0 goto Error
 )
 
 goto Success
