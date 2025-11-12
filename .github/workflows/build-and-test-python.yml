@@ -243,6 +243,32 @@ jobs:
           activate-environment: nanovdb_editor
           environment-file: pymodule/test_environment.yml
 
+      - name: Install Mesa3D lavapipe
+        run: |
+          # Download Mesa3D with lavapipe for Windows
+          Write-Host "Downloading Mesa3D lavapipe..."
+          $MesaUrl = "https://github.com/pal1000/mesa-dist-win/releases/download/24.2.7/mesa3d-24.2.7-release-msvc.7z"
+          $MesaArchive = "$env:TEMP\mesa3d.7z"
+          $MesaDir = "$env:TEMP\mesa3d"
+
+          Invoke-WebRequest -Uri $MesaUrl -OutFile $MesaArchive
+
+          # Extract Mesa3D
+          Write-Host "Extracting Mesa3D..."
+          7z x $MesaArchive -o"$MesaDir" -y
+
+          # Set environment variables for lavapipe
+          $VulkanICDPath = Join-Path $MesaDir "x64\lvp_icd.x86_64.json"
+          echo "VK_ICD_FILENAMES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "VK_DRIVER_FILES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          # Add Mesa to PATH
+          $MesaBinPath = Join-Path $MesaDir "x64"
+          echo "$MesaBinPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+          Write-Host "Lavapipe installed successfully"
+        shell: pwsh
+
       - name: Download package with nanovdb_editor
         uses: actions/download-artifact@v4
         with:
