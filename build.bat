@@ -87,9 +87,11 @@ if %release%==0 (
     )
 )
 
-::: set env vars from a config file
-for /f "tokens=1,2 delims==" %%i in (%PROJECT_DIR%%CONFIG_FILE%) do (
-  set %%i=%%j
+::: set env vars from a config file (optional)
+if exist %PROJECT_DIR%%CONFIG_FILE% (
+    for /f "tokens=1,2 delims==" %%i in (%PROJECT_DIR%%CONFIG_FILE%) do (
+      set %%i=%%j
+    )
 )
 
 if not defined MSVS_VERSION (
