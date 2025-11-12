@@ -152,6 +152,10 @@ if(NANOVDB_EDITOR_USE_GLFW)
     target_compile_definitions(pnanovdbcompute PRIVATE PNANOVDB_USE_GLFW)
 endif()
 
+if(NANOVDB_EDITOR_USE_H264)
+    target_compile_definitions(pnanovdbcompute PRIVATE PNANOVDB_USE_H264)
+endif()
+
 # if (UNIX AND NOT APPLE)
 #     # Make sure RPATH takes precedence over the system library directories
 #     set_target_properties(pnanovdbcompute PROPERTIES LINK_FLAGS "-Wl,--disable-new-dtags")

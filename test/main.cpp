@@ -29,14 +29,13 @@
 // #define TEST_CPU_COMPILER         // TODO: test needs to check if slang-llvm is in the slang package
 // #define TEST_EMPTY_COMPILER
 // #define TEST_COMPUTE
-// #define TEST_EDITOR
-#define TEST_EDITOR_START_STOP
+#define TEST_EDITOR
+// #define TEST_EDITOR_START_STOP
 // #define TEST_RASTER
 // #define TEST_RASTER_2D   // this does not work now, editor nees to be have queue and device first
 // #define TEST_SVRASTER
 // #define TEST_E57
 #define TEST_CAMERA
-// #define TEST_H264
 
 
 struct constants_t
@@ -46,141 +45,6 @@ struct constants_t
     int pad2;
     int pad3;
 };
-
-#ifdef TEST_H264
-#    include <wels/codec_api.h>
-#    include <wels/codec_app_def.h>
-#    include <wels/codec_def.h>
-
-void test_openh264()
-{
-    printf("Testing OpenH264 encoder...\n");
-
-    // Create encoder
-    ISVCEncoder* encoder = nullptr;
-    int rv = WelsCreateSVCEncoder(&encoder);
-    if (rv != 0 || !encoder)
-    {
-        printf("Error: Failed to create OpenH264 encoder\n");
-        return;
-    }
-
-    // Set encoding parameters
-    SEncParamExt param;
-    memset(&param, 0, sizeof(SEncParamExt));
-    encoder->GetDefaultParams(&param);
-
-    param.iUsageType = CAMERA_VIDEO_REAL_TIME;
-    param.fMaxFrameRate = 30.0f;
-    param.iPicWidth = 320;
-    param.iPicHeight = 240;
-    param.iTargetBitrate = 5000000;
-    param.iRCMode = RC_QUALITY_MODE;
-    param.iTemporalLayerNum = 1;
-    param.iSpatialLayerNum = 1;
-    param.bEnableDenoise = false;
-    param.bEnableBackgroundDetection = true;
-    param.bEnableAdaptiveQuant = true;
-    param.bEnableFrameSkip = true;
-    param.bEnableLongTermReference = false;
-    param.iLtrMarkPeriod = 30;
-    param.uiIntraPeriod = 320;
-    param.eSpsPpsIdStrategy = INCREASING_ID;
-    param.bPrefixNalAddingCtrl = false;
-    param.iComplexityMode = LOW_COMPLEXITY;
-    param.bSimulcastAVC = false;
-
-    param.sSpatialLayers[0].iVideoWidth = param.iPicWidth;
-    param.sSpatialLayers[0].iVideoHeight = param.iPicHeight;
-    param.sSpatialLayers[0].fFrameRate = param.fMaxFrameRate;
-    param.sSpatialLayers[0].iSpatialBitrate = param.iTargetBitrate;
-    param.sSpatialLayers[0].iMaxSpatialBitrate = param.iTargetBitrate;
-    param.sSpatialLayers[0].uiProfileIdc = PRO_BASELINE;
-    param.sSpatialLayers[0].uiLevelIdc = LEVEL_5_1;
-    param.sSpatialLayers[0].iDLayerQp = 24;
-    param.sSpatialLayers[0].sSliceArgument.uiSliceMode = SM_SINGLE_SLICE;
-
-    // Initialize encoder
-    rv = encoder->InitializeExt(&param);
-    if (rv != cmResultSuccess)
-    {
-        printf("Error: Failed to initialize OpenH264 encoder (code: %d)\n", rv);
-        WelsDestroySVCEncoder(encoder);
-        return;
-    }
-
-    // Create a simple test frame (solid color)
-    int frameSize = param.iPicWidth * param.iPicHeight * 3 / 2; // YUV420
-    unsigned char* yuvData = new unsigned char[frameSize];
-
-    // Fill with simple pattern
-    int ySize = param.iPicWidth * param.iPicHeight;
-    int uvSize = ySize / 4;
-
-    // Y plane (luminance) - gradient
-    for (int i = 0; i < ySize; i++)
-    {
-        yuvData[i] = (unsigned char)((i * 255) / ySize);
-    }
-
-    // U plane (blue chroma) - constant
-    for (int i = 0; i < uvSize; i++)
-    {
-        yuvData[ySize + i] = 128;
-    }
-
-    // V plane (red chroma) - constant
-    for (int i = 0; i < uvSize; i++)
-    {
-        yuvData[ySize + uvSize + i] = 128;
-    }
-
-    // Prepare source picture
-    SSourcePicture sourcePicture;
-    memset(&sourcePicture, 0, sizeof(SSourcePicture));
-    sourcePicture.iPicWidth = param.iPicWidth;
-    sourcePicture.iPicHeight = param.iPicHeight;
-    sourcePicture.iColorFormat = videoFormatI420;
-    sourcePicture.iStride[0] = param.iPicWidth;
-    sourcePicture.iStride[1] = param.iPicWidth / 2;
-    sourcePicture.iStride[2] = param.iPicWidth / 2;
-    sourcePicture.pData[0] = yuvData;
-    sourcePicture.pData[1] = yuvData + ySize;
-    sourcePicture.pData[2] = yuvData + ySize + uvSize;
-
-    // Encode frame
-    SFrameBSInfo frameInfo;
-    memset(&frameInfo, 0, sizeof(SFrameBSInfo));
-
-    rv = encoder->EncodeFrame(&sourcePicture, &frameInfo);
-    if (rv != cmResultSuccess)
-    {
-        printf("Error: Failed to encode frame (code: %d)\n", rv);
-    }
-    else
-    {
-        printf("Success: Encoded frame with %d layers\n", frameInfo.iLayerNum);
-
-        // Calculate total encoded size
-        int totalSize = 0;
-        for (int i = 0; i < frameInfo.iLayerNum; i++)
-        {
-            for (int j = 0; j < frameInfo.sLayerInfo[i].iNalCount; j++)
-            {
-                totalSize += frameInfo.sLayerInfo[i].pNalLengthInByte[j];
-            }
-        }
-        printf("Encoded size: %d bytes\n", totalSize);
-    }
-
-    // Cleanup
-    delete[] yuvData;
-    encoder->Uninitialize();
-    WelsDestroySVCEncoder(encoder);
-
-    printf("OpenH264 test completed\n");
-}
-#endif
 
 void pnanovdb_compute_log_print(pnanovdb_compute_log_level_t level, const char* format, ...)
 {
@@ -219,11 +83,6 @@ struct NanoVDBEditorArgs : public argparse::Args
 
 int main(int argc, char* argv[])
 {
-#ifdef TEST_H264
-    test_openh264();
-    return 0;
-#endif
-
     auto args = argparse::parse<NanoVDBEditorArgs>(argc, argv);
 
 #if TEST_NODE2
