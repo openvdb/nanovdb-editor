@@ -106,6 +106,10 @@ if %USE_VCPKG%==ON (
     if exist %VCPKG_ROOT%\vcpkg.exe (
         echo -- Installing dependencies with vcpkg...
         call %VCPKG_ROOT%\vcpkg.exe install --triplet x64-windows
+        if errorlevel 1 (
+            echo vcpkg install failed
+            goto Error
+        )
         set VCPKG_PREFIX_PATH=%VCPKG_ROOT%\installed\x64-windows
     ) else (
         echo vcpkg.exe not found in %VCPKG_ROOT%
@@ -121,8 +125,9 @@ echo -- Build of %PROJECT_NAME% completed
 exit /b 0
 
 :Error
+if not defined BUILD_ERROR set BUILD_ERROR=1
 echo Failure while building %PROJECT_NAME%
-exit /b %errorlevel%
+exit /b %BUILD_ERROR%
 
 :Usage
 echo Usage: build [-x] [-r] [-d] [-v] [-s] [-p] [-t] [-f]
@@ -139,11 +144,13 @@ exit /b 1
 :Build
 if %python_only%==1 (
     call :BuildPython
+    if errorlevel 1 goto Error
     goto Success
 )
 
 if %test_only%==1 (
     call :RunTests
+    if errorlevel 1 goto Error
     goto Success
 )
 
@@ -168,9 +175,11 @@ if not exist %BUILD_DIR% mkdir %BUILD_DIR%
 
 if %release%==1 (
     call :CreateConfigDir Release
+    if errorlevel 1 goto Error
 )
 if %debug%==1 (
     call :CreateConfigDir Debug
+    if errorlevel 1 goto Error
 )
 
 echo -- Building %PROJECT_NAME%...
@@ -196,16 +205,19 @@ if defined MSVS_VERSION (
     cmake %CMAKE_ARGS%
 )
 
-if %errorlevel% neq 0 (
+set BUILD_ERROR=%errorlevel%
+if %BUILD_ERROR% neq 0 (
     echo CMake configuration failed
     goto Error
 )
 
 if %release%==1 (
     call :BuildConfig Release
+    if errorlevel 1 goto Error
 )
 if %debug%==1 (
     call :BuildConfig Debug
+    if errorlevel 1 goto Error
 )
 
 goto Success
@@ -219,13 +231,11 @@ exit /b 0
 set CONFIG=%1
 echo -- Building config %CONFIG%...
 cmake --build %BUILD_DIR% --config %CONFIG% %CMAKE_VERBOSE%
-
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo Failure while building %CONFIG%
-    goto Error
-) else (
-    echo Built config %CONFIG%
+    exit /b 1
 )
+echo Built config %CONFIG%
 exit /b 0
 
 :BuildPython
@@ -238,35 +248,35 @@ if %debug%==1 (
 )
 
 python --version >nul 2>&1
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo Error: Python not found. Please install Python 3.8 or later.
-    goto Error
+    goto BuildPythonError
 )
 
 echo    -- Checking Python dependencies...
 
 echo    -- Installing scikit-build and wheel...
 python -m pip install --upgrade pip
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo Error: Failed to upgrade pip
-    goto Error
+    goto BuildPythonError
 )
 python -m pip install --upgrade scikit-build wheel build
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo Error: Failed to install required packages
-    goto Error
+    goto BuildPythonError
 )
 python -c "import skbuild" >nul 2>&1
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo Error: Failed to install scikit-build. Please install manually:
     echo   python -m pip install scikit-build
-    goto Error
+    goto BuildPythonError
 )
 python -c "import wheel" >nul 2>&1
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo Error: Failed to install wheel. Please install manually:
     echo   python -m pip install wheel
-    goto Error
+    goto BuildPythonError
 )
 echo    -- Python dependencies verified successfully
 
@@ -281,16 +291,22 @@ for /d %%i in (__pycache__) do if exist "%%i" rmdir /s /q "%%i" 2>nul
 del /q *.whl 2>nul
 
 python -m build --wheel
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo Error: Failed to build wheel
-    cd ..
-    goto Error
+    goto BuildPythonErrorInPymodule
 )
 
 echo -- Installing python module...
 pip install --force-reinstall .
+if errorlevel 1 goto BuildPythonErrorInPymodule
+
 cd ..
 exit /b 0
+
+:BuildPythonErrorInPymodule
+cd ..
+:BuildPythonError
+exit /b 1
 
 :RunTests
 if %debug%==1 (
@@ -309,30 +325,32 @@ if %verbose%==1 (
 
 echo -- Running tests with ctest...
 ctest --test-dir build\gtests -C %CONFIG% --output-on-failure %CTEST_VERBOSE%
-
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo Error: Tests failed
-    goto Error
+    goto RunTestsError
 )
 
 echo -- Running Python tests with pytest...
 python --version >nul 2>&1
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo Warning: Python not found, skipping pytest
 ) else (
     python -c "import nanovdb_editor; import parameterized" >nul 2>&1
-    if %errorlevel% neq 0 (
+    if errorlevel 1 (
         echo Warning: nanovdb_editor Python module or test dependencies not installed
         echo          Run 'build.bat -p' to build the Python module, then:
         echo          pip install parameterized pytest numpy
     ) else (
         pytest pytests -vvv
-        if %errorlevel% neq 0 (
+        if errorlevel 1 (
             echo Error: Python tests failed
-            goto Error
+            goto RunTestsError
         )
     )
 )
 
 echo -- Tests completed successfully
 exit /b 0
+
+:RunTestsError
+exit /b 1

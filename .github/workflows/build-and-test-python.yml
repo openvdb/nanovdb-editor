@@ -214,7 +214,6 @@ jobs:
       - name: Build NanoVDB Editor Python module
         run: |
           ./build.bat -pfv
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload python artifacts
         uses: actions/upload-artifact@v4

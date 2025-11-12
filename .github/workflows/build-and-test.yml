@@ -88,12 +88,10 @@ jobs:
       - name: Build NanoVDB Editor (GLFW disabled)
         run: |
           ./build.bat -rfv
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build NanoVDB Editor (GLFW enabled)
         run: |
           ./build.bat -rv
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
