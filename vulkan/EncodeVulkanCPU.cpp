@@ -23,9 +23,11 @@
 #include <vector>
 #include <stdio.h>
 
-#include <wels/codec_api.h>
-#include <wels/codec_app_def.h>
-#include <wels/codec_def.h>
+#ifdef PNANOVDB_USE_H264
+
+#    include <wels/codec_api.h>
+#    include <wels/codec_app_def.h>
+#    include <wels/codec_def.h>
 
 namespace pnanovdb_vulkan
 {
@@ -47,7 +49,8 @@ struct EncoderCPU
     std::vector<uint8_t> bitstream;
 };
 
-pnanovdb_compute_encoder_t* create_encoder_cpu(pnanovdb_compute_queue_t* queue, const pnanovdb_compute_encoder_desc_t* desc)
+pnanovdb_compute_encoder_t* create_encoder_cpu(pnanovdb_compute_queue_t* queue,
+                                               const pnanovdb_compute_encoder_desc_t* desc)
 {
     DeviceQueue* deviceQueue = cast(queue);
     Context* ctx = deviceQueue->context;
@@ -136,8 +139,7 @@ pnanovdb_compute_encoder_t* create_encoder_cpu(pnanovdb_compute_queue_t* queue, 
     memcpy(mapped_constants, &constants, sizeof(constants_t));
     unmapBuffer(cast(ctx), ptr->encoderCPU->constant_buffer);
 
-    pnanovdb_uint64_t buf_size = ptr->width * ptr->height +
-        2u * (ptr->width / 2u) * (ptr->height / 2u);
+    pnanovdb_uint64_t buf_size = ptr->width * ptr->height + 2u * (ptr->width / 2u) * (ptr->height / 2u);
 
     buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_SRC;
     buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
@@ -158,8 +160,8 @@ pnanovdb_compute_encoder_t* create_encoder_cpu(pnanovdb_compute_queue_t* queue, 
     pnanovdb_compiler_settings_t compile_settings = {};
     pnanovdb_compiler_settings_init(&compile_settings);
 
-    ptr->encoderCPU->shader_context = ptr->encoderCPU->compute.create_shader_context(
-        "raster/copy_texture_to_buffer.slang");
+    ptr->encoderCPU->shader_context =
+        ptr->encoderCPU->compute.create_shader_context("raster/copy_texture_to_buffer.slang");
     ptr->encoderCPU->shader_valid = ptr->encoderCPU->compute.init_shader(
         &ptr->encoderCPU->compute, queue, ptr->encoderCPU->shader_context, &compile_settings);
 
@@ -261,8 +263,7 @@ int present_encoder_cpu(pnanovdb_compute_encoder_t* encoder, pnanovdb_uint64_t* 
         resources[2u].texture_transient = tex_plane1;
         resources[3u].buffer_transient = registerBufferAsTransient(context, ptr->encoderCPU->device_buffer);
 
-        pnanovdb_uint64_t buf_size = ptr->width * ptr->height +
-            2u * (ptr->width / 2u) * (ptr->height / 2u);
+        pnanovdb_uint64_t buf_size = ptr->width * ptr->height + 2u * (ptr->width / 2u) * (ptr->height / 2u);
 
         pnanovdb_uint32_t grid_dim_1d = (buf_size + 1023u) / 1024u;
         pnanovdb_uint32_t grid_dim_x = grid_dim_1d;
@@ -273,10 +274,8 @@ int present_encoder_cpu(pnanovdb_compute_encoder_t* encoder, pnanovdb_uint64_t* 
             grid_dim_y = (grid_dim_1d + 32767u) / 32768u;
         };
 
-        ptr->encoderCPU->compute.dispatch_shader(
-            context_iface, context,
-            ptr->encoderCPU->shader_context, resources,
-            grid_dim_x, grid_dim_y, 1u, "copy_texture_to_buffer");
+        ptr->encoderCPU->compute.dispatch_shader(context_iface, context, ptr->encoderCPU->shader_context, resources,
+                                                 grid_dim_x, grid_dim_y, 1u, "copy_texture_to_buffer");
 
         pnanovdb_compute_copy_buffer_params_t copy_params = {};
         copy_params.num_bytes = buf_size;
@@ -354,7 +353,7 @@ void* map_encoder_data_cpu(pnanovdb_compute_encoder_t* encoder, pnanovdb_uint64_
     sourcePicture.iStride[2] = ptr->width / 2;
     sourcePicture.pData[0] = mapped_readback;
     sourcePicture.pData[1] = mapped_readback + (ptr->width * ptr->height);
-    sourcePicture.pData[2] = mapped_readback + (ptr->width * ptr->height) + ((ptr->width / 2u) * (ptr->height/ 2u));
+    sourcePicture.pData[2] = mapped_readback + (ptr->width * ptr->height) + ((ptr->width / 2u) * (ptr->height / 2u));
 
     // Encode frame
     SFrameBSInfo frameInfo;
@@ -393,3 +392,5 @@ void unmap_encoder_data_cpu(pnanovdb_compute_encoder_t* encoder)
 }
 
 } // end namespace
+
+#endif // PNANOVDB_USE_H264

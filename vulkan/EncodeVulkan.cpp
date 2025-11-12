@@ -33,9 +33,16 @@ pnanovdb_compute_encoder_t* create_encoder(pnanovdb_compute_queue_t* queue, cons
 
     if (!device->enabledExtensions.VK_KHR_VIDEO_QUEUE || !device->enabledExtensions.VK_KHR_VIDEO_ENCODE_QUEUE)
     {
-        device->logPrint(PNANOVDB_COMPUTE_LOG_LEVEL_WARNING, "Vulkan Video Encode is not supported, falling back to OpenH264");
+#ifdef PNANOVDB_USE_H264
+        device->logPrint(
+            PNANOVDB_COMPUTE_LOG_LEVEL_WARNING, "Vulkan Video Encode is not supported, falling back to OpenH264");
 
         return create_encoder_cpu(queue, desc);
+#else
+        device->logPrint(
+            PNANOVDB_COMPUTE_LOG_LEVEL_ERROR, "Vulkan Video Encode is not supported and H264 support is disabled");
+        return nullptr;
+#endif
     }
 
     auto ptr = new Encoder();
@@ -700,7 +707,11 @@ int present_encoder(pnanovdb_compute_encoder_t* encoder, pnanovdb_uint64_t* flus
     auto ptr = cast(encoder);
     if (ptr->encoderCPU)
     {
+#ifdef PNANOVDB_USE_H264
         return present_encoder_cpu(encoder, flushedFrameID);
+#else
+        return -1;
+#endif
     }
 
     Device* device = ptr->deviceQueue->device;
@@ -950,7 +961,9 @@ void destroy_encoder(pnanovdb_compute_encoder_t* encoder)
     auto ptr = cast(encoder);
     if (ptr->encoderCPU)
     {
+#ifdef PNANOVDB_USE_H264
         destroy_encoder_cpu(encoder);
+#endif
         return;
     }
 
@@ -995,7 +1008,11 @@ pnanovdb_compute_texture_t* get_encoder_front_texture(pnanovdb_compute_encoder_t
     auto ptr = cast(encoder);
     if (ptr->encoderCPU)
     {
+#ifdef PNANOVDB_USE_H264
         return get_encoder_front_texture_cpu(encoder);
+#else
+        return nullptr;
+#endif
     }
 
     return ptr->srcTexture;
@@ -1006,7 +1023,12 @@ void* map_encoder_data(pnanovdb_compute_encoder_t* encoder, pnanovdb_uint64_t* p
     auto ptr = cast(encoder);
     if (ptr->encoderCPU)
     {
+#ifdef PNANOVDB_USE_H264
         return map_encoder_data_cpu(encoder, p_mapped_byte_count);
+#else
+        *p_mapped_byte_count = 0;
+        return nullptr;
+#endif
     }
 
     Device* device = ptr->deviceQueue->device;
@@ -1054,7 +1076,9 @@ void unmap_encoder_data(pnanovdb_compute_encoder_t* encoder)
     auto ptr = cast(encoder);
     if (ptr->encoderCPU)
     {
+#ifdef PNANOVDB_USE_H264
         unmap_encoder_data_cpu(encoder);
+#endif
         return;
     }
 

@@ -171,7 +171,7 @@ jobs:
           miniforge-version: latest
           conda-remove-defaults: "true"
           activate-environment: nanovdb_editor
-          environment-file: pymodule/dev_environment.yml
+          environment-file: pymodule/test_environment.yml
 
       - name: Install Vulkan runtime (headless)
         run: |
@@ -223,35 +223,64 @@ jobs:
             pymodule/dist/
           retention-days: 2
 
-  # nanovdb-editor-test-python-windows:
-  #   if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
-  #   name: Test (Windows)
-  #   needs: nanovdb-editor-build-python-windows
-  #   runs-on: windows-latest
-  #   defaults:
-  #     run:
-  #       shell: pwsh
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v4
+  nanovdb-editor-test-python-windows:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    name: Test (Windows)
+    needs: nanovdb-editor-build-python-windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-  #     - name: Set up Python
-  #       uses: actions/setup-python@v5
-  #       with:
-  #         python-version: '3.11'
+      - name: Set up Conda env
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          conda-remove-defaults: "true"
+          activate-environment: nanovdb_editor
+          environment-file: pymodule/test_environment.yml
 
-  #     - name: Download package with nanovdb_editor
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         name: nanovdb-editor-wheel-windows
-  #         path: ./dist
+      - name: Install Mesa3D lavapipe
+        run: |
+          # Download Mesa3D with lavapipe for Windows
+          Write-Host "Downloading Mesa3D lavapipe..."
+          $MesaUrl = "https://github.com/pal1000/mesa-dist-win/releases/download/24.2.7/mesa3d-24.2.7-release-msvc.7z"
+          $MesaArchive = "$env:TEMP\mesa3d.7z"
+          $MesaDir = "$env:TEMP\mesa3d"
 
-  #     - name: Install nanovdb_editor and test dependencies
-  #       run: |
-  #         python -m pip install --upgrade pip
-  #         pip install ./dist/nanovdb_editor*.whl
-  #         pip install pytest parameterized numpy
+          Invoke-WebRequest -Uri $MesaUrl -OutFile $MesaArchive
 
-  #     - name: Run Python tests
-  #       run: |
-  #         pytest pytests -vvv --tb=short
+          # Extract Mesa3D
+          Write-Host "Extracting Mesa3D..."
+          7z x $MesaArchive -o"$MesaDir" -y
+
+          # Set environment variables for lavapipe
+          $VulkanICDPath = Join-Path $MesaDir "x64\lvp_icd.x86_64.json"
+          echo "VK_ICD_FILENAMES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "VK_DRIVER_FILES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          # Add Mesa to PATH
+          $MesaBinPath = Join-Path $MesaDir "x64"
+          echo "$MesaBinPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+          Write-Host "Lavapipe installed successfully"
+        shell: pwsh
+
+      - name: Download package with nanovdb_editor
+        uses: actions/download-artifact@v4
+        with:
+          name: nanovdb-editor-wheel-windows
+          path: ./dist
+
+      - name: Install nanovdb_editor
+        run: |
+          conda activate nanovdb_editor
+          pip install ./dist/nanovdb_editor*.whl
+
+      - name: Run Python tests
+        run: |
+          conda activate nanovdb_editor
+          pytest pytests -vvv --tb=short

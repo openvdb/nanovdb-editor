@@ -279,12 +279,15 @@ pnanovdb_compute_texture_t* get_encoder_front_texture(pnanovdb_compute_encoder_t
 void* map_encoder_data(pnanovdb_compute_encoder_t* encoder, pnanovdb_uint64_t* p_mapped_byte_count);
 void unmap_encoder_data(pnanovdb_compute_encoder_t* encoder);
 
-pnanovdb_compute_encoder_t* create_encoder_cpu(pnanovdb_compute_queue_t* queue, const pnanovdb_compute_encoder_desc_t* desc);
+#ifdef PNANOVDB_USE_H264
+pnanovdb_compute_encoder_t* create_encoder_cpu(pnanovdb_compute_queue_t* queue,
+                                               const pnanovdb_compute_encoder_desc_t* desc);
 void destroy_encoder_cpu(pnanovdb_compute_encoder_t* encoder);
 int present_encoder_cpu(pnanovdb_compute_encoder_t* encoder, pnanovdb_uint64_t* flushedFrameID);
 pnanovdb_compute_texture_t* get_encoder_front_texture_cpu(pnanovdb_compute_encoder_t* encoder);
 void* map_encoder_data_cpu(pnanovdb_compute_encoder_t* encoder, pnanovdb_uint64_t* p_mapped_byte_count);
 void unmap_encoder_data_cpu(pnanovdb_compute_encoder_t* encoder);
+#endif // PNANOVDB_USE_H264
 
 struct Context;
 

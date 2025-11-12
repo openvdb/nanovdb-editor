@@ -69,7 +69,7 @@ In Conda environment:
 
 The `NANOVDB_EDITOR_USE_GLFW` option can be disabled when using the editor in haedless and streaming mode only. In that case, `libvulkan.so.1` is built locally to ensure compatibility.
 
-For building openh264 enable `NANOVDB_EDITOR_USE_H264` and make sure you have:
+The `NANOVDB_EDITOR_USE_H264` is enabled by default, make sure you have:
 ```sh
 sudo apt-get install make
 ```
