@@ -96,7 +96,6 @@ if exist %PROJECT_DIR%%CONFIG_FILE% (
 
 if not defined MSVS_VERSION (
     echo MSVS_VERSION not set, using default CMake generator
-    set MSVS_VERSION=
 )
 
 if %USE_VCPKG%==ON (
