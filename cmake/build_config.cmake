@@ -15,7 +15,14 @@ option(NANOVDB_EDITOR_ENABLE_LTO "Enable Link Time Optimization" ON)
 option(NANOVDB_EDITOR_DIST_PACKAGE "Create distribution package" OFF)
 option(NANOVDB_EDITOR_FORCE_REBUILD_DEPS "Force rebuild all dependencies (clears dependencies cache)" OFF)
 option(NANOVDB_EDITOR_USE_GLFW "Use GLFW, not needed for streaming only, when OFF, Vulkan loadeer is built to ensure streaming compatibility" ON)
-option(NANOVDB_EDITOR_USE_H264 "Use H264 support" ON)
+
+# H264 support is disabled on Windows due to openh264 requiring Unix build tools (make, tr, etc.)
+if(WIN32)
+    option(NANOVDB_EDITOR_USE_H264 "Use H264 support" OFF)
+else()
+    option(NANOVDB_EDITOR_USE_H264 "Use H264 support" ON)
+endif()
+
 option(NANOVDB_EDITOR_BUILD_TESTS "Configure CMake to build gtests for NanoVDB Editor" ON)
 
 set(NANOVDB_EDITOR_COMMIT_HASH "" CACHE STRING "NanoVDB Editor commit hash for provenance")
