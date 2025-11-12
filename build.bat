@@ -81,15 +81,15 @@ goto parse_arg
 :end_parse_args
 
 ::: set defaults
-if %release%==0 (
-    if %debug%==0 (
+if "%release%"=="0" (
+    if "%debug%"=="0" (
         set release=1
     )
 )
 
 ::: set env vars from a config file (optional)
 if exist %PROJECT_DIR%%CONFIG_FILE% (
-    for /f "tokens=1,2 delims==" %%i in (%PROJECT_DIR%%CONFIG_FILE%) do (
+    for /f "tokens=1,2 delims== eol=#" %%i in (%PROJECT_DIR%%CONFIG_FILE%) do (
       set %%i=%%j
     )
 )
@@ -98,7 +98,7 @@ if not defined MSVS_VERSION (
     echo MSVS_VERSION not set, using default CMake generator
 )
 
-if %USE_VCPKG%==ON (
+if "%USE_VCPKG%"=="ON" (
     if not defined VCPKG_ROOT (
         echo VCPKG_ROOT not set, please set path to vcpkg
         set BUILD_ERROR=1
@@ -108,9 +108,9 @@ if %USE_VCPKG%==ON (
     if exist %VCPKG_ROOT%\vcpkg.exe (
         echo -- Installing dependencies with vcpkg...
         call %VCPKG_ROOT%\vcpkg.exe install --triplet x64-windows
-        set BUILD_ERROR=%errorlevel%
-        if %BUILD_ERROR% neq 0 (
+        if errorlevel 1 (
             echo vcpkg install failed
+            set BUILD_ERROR=1
             goto Error
         )
         set VCPKG_PREFIX_PATH=%VCPKG_ROOT%\installed\x64-windows
@@ -146,21 +146,25 @@ echo        -f  Disable GLFW (headless build)
 exit /b 1
 
 :Build
-if %python_only%==1 (
+if "%python_only%"=="1" (
     call :BuildPython
-    set BUILD_ERROR=%errorlevel%
-    if %BUILD_ERROR% neq 0 goto Error
+    if errorlevel 1 (
+        set BUILD_ERROR=1
+        goto Error
+    )
     goto Success
 )
 
-if %test_only%==1 (
+if "%test_only%"=="1" (
     call :RunTests
-    set BUILD_ERROR=%errorlevel%
-    if %BUILD_ERROR% neq 0 goto Error
+    if errorlevel 1 (
+        set BUILD_ERROR=1
+        goto Error
+    )
     goto Success
 )
 
-if %clean_build%==1 (
+if "%clean_build%"=="1" (
     echo -- Performing a clean build...
     if exist %BUILD_DIR% (
         rmdir /s /q %BUILD_DIR%
@@ -170,7 +174,7 @@ if %clean_build%==1 (
     set CLEAN_SHADERS=ON
 )
 
-if %verbose%==1 (
+if "%verbose%"=="1" (
     set CMAKE_VERBOSE=--verbose
  ) else (
     set CMAKE_VERBOSE=
@@ -179,15 +183,19 @@ if %verbose%==1 (
 ::: need to create config directories in advance
 if not exist %BUILD_DIR% mkdir %BUILD_DIR%
 
-if %release%==1 (
+if "%release%"=="1" (
     call :CreateConfigDir Release
-    set BUILD_ERROR=%errorlevel%
-    if %BUILD_ERROR% neq 0 goto Error
+    if errorlevel 1 (
+        set BUILD_ERROR=1
+        goto Error
+    )
 )
-if %debug%==1 (
+if "%debug%"=="1" (
     call :CreateConfigDir Debug
-    set BUILD_ERROR=%errorlevel%
-    if %BUILD_ERROR% neq 0 goto Error
+    if errorlevel 1 (
+        set BUILD_ERROR=1
+        goto Error
+    )
 )
 
 echo -- Building %PROJECT_NAME%...
@@ -214,20 +222,24 @@ if defined MSVS_VERSION (
 )
 
 set BUILD_ERROR=%errorlevel%
-if %BUILD_ERROR% neq 0 (
+if "%BUILD_ERROR%" neq "0" (
     echo CMake configuration failed
     goto Error
 )
 
-if %release%==1 (
+if "%release%"=="1" (
     call :BuildConfig Release
-    set BUILD_ERROR=%errorlevel%
-    if %BUILD_ERROR% neq 0 goto Error
+    if errorlevel 1 (
+        set BUILD_ERROR=1
+        goto Error
+    )
 )
-if %debug%==1 (
+if "%debug%"=="1" (
     call :BuildConfig Debug
-    set BUILD_ERROR=%errorlevel%
-    if %BUILD_ERROR% neq 0 goto Error
+    if errorlevel 1 (
+        set BUILD_ERROR=1
+        goto Error
+    )
 )
 
 goto Success
@@ -249,7 +261,7 @@ echo Built config %CONFIG%
 exit /b 0
 
 :BuildPython
-if %debug%==1 (
+if "%debug%"=="1" (
     echo -- Building python module in debug mode...
     set CMAKE_BUILD_TYPE=Debug
 ) else (
@@ -319,7 +331,7 @@ cd ..
 exit /b 1
 
 :RunTests
-if %debug%==1 (
+if "%debug%"=="1" (
     echo -- Running tests in debug mode...
     set CONFIG=Debug
 ) else (
@@ -327,7 +339,7 @@ if %debug%==1 (
     set CONFIG=Release
 )
 
-if %verbose%==1 (
+if "%verbose%"=="1" (
     set CTEST_VERBOSE=--verbose
  ) else (
     set CTEST_VERBOSE=
