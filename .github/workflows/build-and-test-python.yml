@@ -171,7 +171,7 @@ jobs:
           miniforge-version: latest
           conda-remove-defaults: "true"
           activate-environment: nanovdb_editor
-          environment-file: pymodule/dev_environment.yml
+          environment-file: pymodule/test_environment.yml
 
       - name: Install Vulkan runtime (headless)
         run: |
@@ -241,7 +241,7 @@ jobs:
           miniforge-version: latest
           conda-remove-defaults: "true"
           activate-environment: nanovdb_editor
-          environment-file: pymodule/dev_environment.yml
+          environment-file: pymodule/test_environment.yml
 
       - name: Download package with nanovdb_editor
         uses: actions/download-artifact@v4
