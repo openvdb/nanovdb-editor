@@ -196,6 +196,11 @@ if defined MSVS_VERSION (
     cmake %CMAKE_ARGS%
 )
 
+if %errorlevel% neq 0 (
+    echo CMake configuration failed
+    goto Error
+)
+
 if %release%==1 (
     call :BuildConfig Release
 )
@@ -208,7 +213,7 @@ goto Success
 :CreateConfigDir
 set BUILD_DIR_CONFIG=%BUILD_DIR%\%1
 if not exist %BUILD_DIR_CONFIG% mkdir %BUILD_DIR_CONFIG%
-exit /b 1
+exit /b 0
 
 :BuildConfig
 set CONFIG=%1
@@ -221,7 +226,7 @@ if %errorlevel% neq 0 (
 ) else (
     echo Built config %CONFIG%
 )
-exit /b 1
+exit /b 0
 
 :BuildPython
 if %debug%==1 (
@@ -330,4 +335,4 @@ if %errorlevel% neq 0 (
 )
 
 echo -- Tests completed successfully
-exit /b 1
+exit /b 0
