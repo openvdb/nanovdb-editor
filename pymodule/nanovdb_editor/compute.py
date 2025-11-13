@@ -134,6 +134,7 @@ class pnanovdb_Compute(Structure):
         ),  # readback_buffer
         ("create_array", CFUNCTYPE(POINTER(pnanovdb_ComputeArray), c_size_t, c_uint64, c_void_p)),
         ("destroy_array", CFUNCTYPE(None, POINTER(pnanovdb_ComputeArray))),
+        ("duplicate_array", CFUNCTYPE(POINTER(pnanovdb_ComputeArray), POINTER(pnanovdb_ComputeArray))),
         ("map_array", CFUNCTYPE(c_void_p, POINTER(pnanovdb_ComputeArray))),
         ("unmap_array", CFUNCTYPE(None, POINTER(pnanovdb_ComputeArray))),
         (
@@ -210,6 +211,13 @@ class Compute:
         if not array:
             raise RuntimeError("Failed to create compute array")
         return array.contents
+
+    def duplicate_array(self, array: pnanovdb_ComputeArray) -> pnanovdb_ComputeArray:
+        dup_func = self._compute.contents.duplicate_array
+        dup_array = dup_func(pointer(array))
+        if not dup_array:
+            raise RuntimeError("Failed to duplicate compute array")
+        return dup_array.contents
 
     def destroy_array(self, array: pnanovdb_ComputeArray) -> None:
         destroy_func = self._compute.contents.destroy_array

@@ -413,6 +413,9 @@ int main(int argc, char* argv[])
     editor.add_nanovdb_2(&editor, scene_token, volume_token, data_nanovdb);
     editor.add_nanovdb_2(&editor, main_token, volume_token, data_nanovdb);
 
+    compute.destroy_array(data_nanovdb);
+    compute.destroy_array(data_nanovdb2);
+
     runEditorLoop(100);
 
     editor.stop(&editor);
