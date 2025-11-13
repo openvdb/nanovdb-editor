@@ -674,19 +674,19 @@ void compute_array_print_range(const pnanovdb_compute_t* compute,
     }
 }
 
-pnanovdb_compute_array_t* nanovdb_from_image_rgba8(pnanovdb_compute_array_t* image_data, 
-                                                   pnanovdb_uint32_t width, 
+pnanovdb_compute_array_t* nanovdb_from_image_rgba8(pnanovdb_compute_array_t* image_data,
+                                                   pnanovdb_uint32_t width,
                                                    pnanovdb_uint32_t height)
 {
     // for now, make empty grid with blindmetadata
-    pnanovdb_uint64_t header_size = 
+    pnanovdb_uint64_t header_size =
         PNANOVDB_GRID_SIZE +
         PNANOVDB_TREE_SIZE +
         PNANOVDB_GRID_TYPE_GET(PNANOVDB_GRID_TYPE_ONINDEX, root_size) +
         PNANOVDB_GRIDBLINDMETADATA_SIZE;
     pnanovdb_uint64_t data_size = image_data->element_count * image_data->element_size;
     pnanovdb_uint64_t size = header_size + data_size;
-    
+
     pnanovdb_compute_array_t* nvdb_array = create_array(4u, size / 4u, nullptr);
 
     uint8_t* nvdb_data = (uint8_t*)nvdb_array->data;
@@ -713,7 +713,7 @@ pnanovdb_compute_array_t* nanovdb_from_image_rgba8(pnanovdb_compute_array_t* ima
     pnanovdb_grid_set_voxel_size(buf, grid, 1u, voxel_size);
     pnanovdb_grid_set_voxel_size(buf, grid, 2u, voxel_size);
     pnanovdb_grid_set_grid_class(buf, grid, PNANOVDB_GRID_CLASS_UNKNOWN);
-    pnanovdb_grid_set_grid_type(buf, grid, PNANOVDB_GRID_TYPE_NODE2);    
+    pnanovdb_grid_set_grid_type(buf, grid, PNANOVDB_GRID_TYPE_NODE2);
 
     pnanovdb_map_handle_t map = pnanovdb_grid_get_map(buf, grid);
     pnanovdb_map_set_matf(buf, map, 0u, voxel_size);
@@ -740,7 +740,7 @@ pnanovdb_compute_array_t* nanovdb_from_image_rgba8(pnanovdb_compute_array_t* ima
 
     pnanovdb_tree_set_first_root(buf, tree, root);
 
-    pnanovdb_gridblindmetadata_handle_t meta = {pnanovdb_address_offset(root.address, 
+    pnanovdb_gridblindmetadata_handle_t meta = {pnanovdb_address_offset(root.address,
         PNANOVDB_GRID_TYPE_GET(PNANOVDB_GRID_TYPE_ONINDEX, root_size))}
 
     pnanovdb_grid_set_first_gridblindmetadata(buf, grid, meta);

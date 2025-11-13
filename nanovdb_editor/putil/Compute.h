@@ -842,8 +842,8 @@ typedef struct pnanovdb_compute_t
                                                   const char* name,
                                                   pnanovdb_compute_array_t* arr,
                                                   pnanovdb_uint32_t channel_count);
-    pnanovdb_compute_array_t*(PNANOVDB_ABI* nanovdb_from_image_rgba8)(pnanovdb_compute_array_t* image_data, 
-                                                                      pnanovdb_uint32_t width, 
+    pnanovdb_compute_array_t*(PNANOVDB_ABI* nanovdb_from_image_rgba8)(pnanovdb_compute_array_t* image_data,
+                                                                      pnanovdb_uint32_t width,
                                                                       pnanovdb_uint32_t height);
 } pnanovdb_compute_t;
 
