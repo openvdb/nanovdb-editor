@@ -1098,12 +1098,15 @@ static inline const char* token_to_string(pnanovdb_editor_token_t* token)
 void add_nanovdb_2(pnanovdb_editor_t* editor,
                    pnanovdb_editor_token_t* scene,
                    pnanovdb_editor_token_t* name,
-                   pnanovdb_compute_array_t* array)
+                   pnanovdb_compute_array_t* array_in)
 {
-    if (!editor || !editor->impl || !scene || !name || !array)
+    if (!editor || !editor->impl || !scene || !name || !array_in)
     {
         return;
     }
+
+    // we need to duplicate array for now to take proper ownership
+    pnanovdb_compute_array_t* array = editor->impl->compute->duplicate_array(array_in);
 
     Console::getInstance().addLog(Console::LogLevel::Debug, "add_nanovdb_2: scene='%s' (id=%llu), name='%s' (id=%llu)",
                                   token_to_string(scene), (unsigned long long)scene->id, token_to_string(name),

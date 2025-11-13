@@ -229,6 +229,9 @@ int main(int argc, char* argv[])
         editor.add_nanovdb_2(&editor, scene_secondary, flow_token, data_nanovdb2);
     }
 
+    compute.destroy_array(data_nanovdb);
+    compute.destroy_array(data_nanovdb2);
+
     printf("Scene Summary:\n");
     printf("  main_scene: dragon\n");
     printf("  secondary_scene: dragon + flow_volume\n");
