@@ -718,7 +718,7 @@ pnanovdb_compute_array_t* nanovdb_from_image_rgba8(pnanovdb_compute_array_t* ima
     pnanovdb_grid_set_voxel_size(buf, grid, 1u, voxel_size);
     pnanovdb_grid_set_voxel_size(buf, grid, 2u, voxel_size);
     pnanovdb_grid_set_grid_class(buf, grid, PNANOVDB_GRID_CLASS_UNKNOWN);
-    pnanovdb_grid_set_grid_type(buf, grid, PNANOVDB_GRID_TYPE_NODE2);
+    pnanovdb_grid_set_grid_type(buf, grid, PNANOVDB_GRID_TYPE_ONINDEX);
 
     pnanovdb_map_handle_t map = pnanovdb_grid_get_map(buf, grid);
     pnanovdb_map_set_matf(buf, map, 0u, voxel_size);
@@ -746,7 +746,7 @@ pnanovdb_compute_array_t* nanovdb_from_image_rgba8(pnanovdb_compute_array_t* ima
     pnanovdb_tree_set_first_root(buf, tree, root);
 
     pnanovdb_gridblindmetadata_handle_t meta = {pnanovdb_address_offset(root.address,
-        PNANOVDB_GRID_TYPE_GET(PNANOVDB_GRID_TYPE_ONINDEX, root_size))}
+        PNANOVDB_GRID_TYPE_GET(PNANOVDB_GRID_TYPE_ONINDEX, root_size))};
 
     pnanovdb_grid_set_first_gridblindmetadata(buf, grid, meta);
     pnanovdb_grid_set_blind_metadata_count(buf, grid, 1u);
