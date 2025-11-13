@@ -26,6 +26,8 @@ if __name__ == "__main__":
     dragon_token = editor.get_token("dragon")
     editor.add_nanovdb_2(scene_token, dragon_token, nvdb_array)
 
+    compute.destroy_array(nvdb_array)
+
     config = EditorConfig()
     config.ip_address = b"127.0.0.1"
     config.port = 8080

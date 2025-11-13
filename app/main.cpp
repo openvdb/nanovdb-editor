@@ -114,6 +114,8 @@ int main(int argc, char* argv[])
 
         editor.add_nanovdb_2(&editor, scene_main, volume_token, data_nanovdb);
 
+        compute.destroy_array(data_nanovdb);
+
         editor.show(&editor, device, &config);
 
         pnanovdb_editor_free(&editor);
@@ -161,6 +163,9 @@ int main(int argc, char* argv[])
             pnanovdb_editor_token_t* volume_token = inst.editor.get_token("dragon");
             inst.editor.add_nanovdb_2(&inst.editor, scene_token, volume_token, inst.nanovdb_array);
 
+            inst.compute.destroy_array(inst.nanovdb_array);
+            inst.nanovdb_array = nullptr;
+
             pnanovdb_editor_config_t config = {};
             config.ip_address = args.ip_address.c_str();
             config.port = args.port + inst_idx;
@@ -197,6 +202,9 @@ int main(int argc, char* argv[])
                 pnanovdb_editor_token_t* scene_token = inst.editor.get_token("main");
                 pnanovdb_editor_token_t* volume_token = inst.editor.get_token("dragon");
                 inst.editor.add_nanovdb_2(&inst.editor, scene_token, volume_token, inst.nanovdb_array);
+
+                inst.compute.destroy_array(inst.nanovdb_array);
+                inst.nanovdb_array = nullptr;
             }
         }
 #endif

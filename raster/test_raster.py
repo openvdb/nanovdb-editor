@@ -149,6 +149,8 @@ if __name__ == "__main__":
         compute.destroy_array(sh_array)
         compute.destroy_array(opacities_array)
 
+        compute.destroy_array(nvdb_array)
+
     if TEST_RASTER_TO_NANOVDB:
         raster_func(TEST_NPZ)
         compute.save_nanovdb(editor.get_nanovdb(), TEST_NANOVDB)

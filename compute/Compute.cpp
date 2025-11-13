@@ -554,6 +554,11 @@ pnanovdb_compute_array_t* create_array(size_t element_size, pnanovdb_uint64_t el
     return array;
 }
 
+pnanovdb_compute_array_t* duplicate_array(pnanovdb_compute_array_t* array)
+{
+    return create_array(array->element_size, array->element_count, array->data);
+}
+
 void destroy_array(pnanovdb_compute_array_t* array)
 {
     if (!array)
@@ -771,6 +776,7 @@ PNANOVDB_API pnanovdb_compute_t* pnanovdb_get_compute()
     compute.dispatch_shader_on_nanovdb_array = dispatch_shader_on_nanovdb_array;
     compute.create_array = create_array;
     compute.destroy_array = destroy_array;
+    compute.duplicate_array = duplicate_array;
     compute.map_array = map_array;
     compute.unmap_array = unmap_array;
     compute.compute_array_print_range = compute_array_print_range;
