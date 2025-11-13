@@ -842,6 +842,9 @@ typedef struct pnanovdb_compute_t
                                                   const char* name,
                                                   pnanovdb_compute_array_t* arr,
                                                   pnanovdb_uint32_t channel_count);
+    pnanovdb_compute_array_t*(PNANOVDB_ABI* nanovdb_from_image_rgba8)(pnanovdb_compute_array_t* image_data, 
+                                                                      pnanovdb_uint32_t width, 
+                                                                      pnanovdb_uint32_t height);
 } pnanovdb_compute_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_compute_t
@@ -864,6 +867,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(destroy_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(map_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(unmap_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(compute_array_print_range, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_from_image_rgba8, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE
