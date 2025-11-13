@@ -745,6 +745,12 @@ pnanovdb_compute_array_t* nanovdb_from_image_rgba8(pnanovdb_compute_array_t* ima
 
     pnanovdb_tree_set_first_root(buf, tree, root);
 
+    pnanovdb_coord_t ijk_min = {0, 0, 0};
+    pnanovdb_coord_t ijk_max = {int(width) - 1, int(height) - 1, 0};
+
+    pnanovdb_root_set_bbox_min(buf, root, PNANOVDB_REF(ijk_min));
+    pnanovdb_root_set_bbox_max(buf, root, PNANOVDB_REF(ijk_max));
+
     pnanovdb_gridblindmetadata_handle_t meta = {pnanovdb_address_offset(root.address,
         PNANOVDB_GRID_TYPE_GET(PNANOVDB_GRID_TYPE_ONINDEX, root_size))};
 

@@ -36,7 +36,7 @@
 // #define TEST_SVRASTER
 // #define TEST_E57
 #define TEST_CAMERA
-
+#define TEST_IMAGE2D
 
 struct constants_t
 {
@@ -360,6 +360,32 @@ int main(int argc, char* argv[])
     }
 
 #    endif
+
+#ifdef TEST_IMAGE2D
+    pnanovdb_uint32_t width = 1440;
+    pnanovdb_uint32_t height = 720;
+    pnanovdb_compute_array_t* image_rgba = compute.create_array(4u, width * height, nullptr);
+    pnanovdb_uint32_t* mapped = (pnanovdb_uint32_t*)compute.map_array(image_rgba);
+    for (pnanovdb_uint32_t j = 0u; j < height; j++)
+    {
+        for (pnanovdb_uint32_t i = 0u; i < width; i++)
+        {
+            pnanovdb_uint32_t val = 0u;
+            val |= ((255 * i) / (width - 1));
+            val |= (((255 * j) / (height - 1)) << 8u);
+            val |= (255 << 24u);
+            mapped[j * width + i] = val;
+        }
+    }
+    compute.unmap_array(image_rgba);
+    pnanovdb_compute_array_t* image_nanovdb = compute.nanovdb_from_image_rgba8(image_rgba, width, height);
+    compute.destroy_array(image_rgba);
+
+    pnanovdb_editor_token_t* image_scene_main = editor.get_token("main");
+    pnanovdb_editor_token_t* image_token = editor.get_token("image2d");
+    editor.add_nanovdb_2(&editor, image_scene_main, image_token, image_nanovdb);
+    compute.destroy_array(image_nanovdb);
+#endif
 
     pnanovdb_editor_config_t config = {};
     config.headless = PNANOVDB_FALSE;
