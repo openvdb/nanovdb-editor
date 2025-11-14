@@ -394,10 +394,7 @@ void Properties::render(imgui_instance_user::Instance* ptr)
                 scene_manager->with_object(scene_token, selection.name_token,
                                            [&](pnanovdb_editor::SceneObject* scene_obj)
                                            {
-                                               if (scene_obj &&
-                                                   scene_obj->shader_name.shader_name &&
-                                                   scene_obj->shader_name.shader_name->str &&
-                                                   scene_obj->shader_name.shader_name->str[0] != '\0')
+                                               if (scene_obj && !token_is_empty(scene_obj->shader_name.shader_name))
                                                {
                                                    properties_shader_name = scene_obj->shader_name.shader_name->str;
                                                }
@@ -425,10 +422,7 @@ void Properties::render(imgui_instance_user::Instance* ptr)
                 scene_manager->with_object(scene_token, selection.name_token,
                                            [&](pnanovdb_editor::SceneObject* scene_obj)
                                            {
-                                               if (scene_obj &&
-                                                   scene_obj->shader_name.shader_name &&
-                                                   scene_obj->shader_name.shader_name->str &&
-                                                   scene_obj->shader_name.shader_name->str[0] != '\0')
+                                               if (scene_obj && !token_is_empty(scene_obj->shader_name.shader_name))
                                                {
                                                    properties_shader_name = scene_obj->shader_name.shader_name->str;
                                                }

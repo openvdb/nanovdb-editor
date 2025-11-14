@@ -1079,22 +1079,6 @@ pnanovdb_editor_token_t* get_token(const char* name)
     return EditorToken::getInstance().getToken(name);
 }
 
-// Helper function to check if two tokens are equal
-static inline bool tokens_equal(pnanovdb_editor_token_t* a, pnanovdb_editor_token_t* b)
-{
-    if (a == b)
-        return true;
-    if (!a || !b)
-        return false;
-    return a->id == b->id;
-}
-
-// Helper function to get string from token (safe)
-static inline const char* token_to_string(pnanovdb_editor_token_t* token)
-{
-    return token ? token->str : "<null>";
-}
-
 void add_nanovdb_2(pnanovdb_editor_t* editor,
                    pnanovdb_editor_token_t* scene,
                    pnanovdb_editor_token_t* name,

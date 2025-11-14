@@ -28,9 +28,6 @@
 namespace pnanovdb_editor
 {
 
-// make token conversion accessible here
-pnanovdb_editor_token_t* get_token(const char* name);
-
 bool SceneSelection::operator==(const SceneSelection& other) const
 {
     // Compare token IDs for efficiency
@@ -160,10 +157,7 @@ void EditorScene::sync_current_view_state(SyncDirection sync_direction)
                 // Found it - copy the fields we need
                 obj_type = scene_obj->type;
                 obj_shader_params = scene_obj->shader_params;
-                if (scene_obj->shader_name.shader_name)
-                {
-                    obj_shader_name = scene_obj->shader_name.shader_name->str;
-                }
+                obj_shader_name = token_to_string(scene_obj->shader_name.shader_name);
                 return false; // Stop iteration
             }
             return true; // Continue iteration
@@ -294,11 +288,7 @@ void EditorScene::load_view_into_editor_and_ui(SceneObject* scene_obj)
     // Load selected view's pointers into the editor state so rendering uses the active selection
     SceneObjectType obj_type = scene_obj->type;
     void* obj_shader_params = scene_obj->shader_params;
-    std::string obj_shader_name;
-    if (scene_obj->shader_name.shader_name)
-    {
-        obj_shader_name = scene_obj->shader_name.shader_name->str;
-    }
+    std::string obj_shader_name = token_to_string(scene_obj->shader_name.shader_name);
 
     if (obj_type == SceneObjectType::GaussianData)
     {
@@ -842,11 +832,7 @@ void EditorScene::get_shader_params_for_current_view(void* shader_params_data)
             // Copy fields while holding mutex to avoid UAF
             SceneObjectType obj_type = scene_obj->type;
             void* obj_shader_params = scene_obj->shader_params;
-            std::string obj_shader_name;
-            if (scene_obj->shader_name.shader_name)
-            {
-                obj_shader_name = scene_obj->shader_name.shader_name->str;
-            }
+            std::string obj_shader_name = token_to_string(scene_obj->shader_name.shader_name);
 
             void* view_params = nullptr;
             size_t copy_size =
@@ -877,8 +863,10 @@ void EditorScene::handle_nanovdb_data_load(pnanovdb_compute_array_t* nanovdb_arr
     // Do not create per-object params now; use shared defaults until user edits (copy-on-write)
     pnanovdb_compute_array_t* params_array = nullptr;
 
+    pnanovdb_editor_token_t* shader_name_token = EditorToken::getInstance().getToken(m_nanovdb_params.shader_name.c_str());
+
     m_scene_manager.add_nanovdb(
-        scene_token, name_token, nanovdb_array, params_array, m_compute, get_token(m_nanovdb_params.shader_name.c_str()));
+        scene_token, name_token, nanovdb_array, params_array, m_compute, shader_name_token);
 
     // Register in SceneView (for scene tree display)
     m_scene_view.add_nanovdb_to_scene(
@@ -1227,10 +1215,8 @@ void EditorScene::set_properties_selection(ViewType type,
                 {
                     Console::getInstance().addLog(Console::LogLevel::Debug,
                                                   "set_properties_selection: object found, shader_name='%s'",
-                                                  obj->shader_name.shader_name ? obj->shader_name.shader_name->str : "(null)");
-                    if (obj->shader_name.shader_name &&
-                        obj->shader_name.shader_name->str &&
-                        obj->shader_name.shader_name->str[0] != '\0')
+                                                  token_to_string(obj->shader_name.shader_name));
+                    if (!token_is_empty(obj->shader_name.shader_name))
                     {
                         m_editor->impl->shader_name = obj->shader_name.shader_name->str;
                     }
@@ -1487,10 +1473,7 @@ std::string EditorScene::get_selected_object_shader_name() const
                                 {
                                     if (scene_obj)
                                     {
-                                        if (scene_obj->shader_name.shader_name)
-                                        {
-                                            shader_name = scene_obj->shader_name.shader_name->str;
-                                        }
+                                        shader_name = token_to_string(scene_obj->shader_name.shader_name);
                                     }
                                 });
     return shader_name;
@@ -1504,7 +1487,7 @@ void EditorScene::set_selected_object_shader_name(const std::string& shader_name
                                 {
                                     if (scene_obj)
                                     {
-                                        scene_obj->shader_name.shader_name = m_editor->get_token(shader_name.c_str());
+                                        scene_obj->shader_name.shader_name = EditorToken::getInstance().getToken(shader_name.c_str());
                                         // Also update the editor->impl->shader_name to mirror it
                                         if (m_editor && m_editor->impl)
                                         {

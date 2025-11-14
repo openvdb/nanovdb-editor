@@ -40,6 +40,7 @@ struct NanoVDBEditorArgs : public argparse::Args
     int& port = kwarg("p,port", "Port for streaming").set_default(8080);
     int& instance_count = kwarg("instance-count", "Number of headless instances to launch").set_default(1);
     int& device_index = kwarg("d,device", "Vulkan device index").set_default(0);
+    std::string& shader_name = kwarg("shader", "Shader name to use").set_default("");
 };
 
 int main(int argc, char* argv[])
@@ -78,6 +79,7 @@ int main(int argc, char* argv[])
     printf("Port: %d\n", args.port);
     printf("Instance Count: %d\n", args.instance_count);
     printf("Vulkan device index: %d\n", args.device_index);
+    printf("Shader name: '%s'\n", args.shader_name.c_str());
 
     pnanovdb_editor_config_t config = {};
     config.ip_address = args.ip_address.c_str();
@@ -114,13 +116,16 @@ int main(int argc, char* argv[])
 
         editor.add_nanovdb_2(&editor, scene_main, volume_token, data_nanovdb);
 
-        pnanovdb_editor_shader_name_t* mapped = (pnanovdb_editor_shader_name_t*)editor.map_params(
-            &editor, scene_main, volume_token,
-            PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t));
-        if (mapped)
+        if (!args.shader_name.empty())
         {
-            mapped->shader_name = editor.get_token("editor/wireframe.slang");
-            editor.unmap_params(&editor, scene_main, volume_token);
+            pnanovdb_editor_shader_name_t* mapped = (pnanovdb_editor_shader_name_t*)editor.map_params(
+                &editor, scene_main, volume_token,
+                PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t));
+            if (mapped)
+            {
+                mapped->shader_name = editor.get_token(args.shader_name.c_str());
+                editor.unmap_params(&editor, scene_main, volume_token);
+            }
         }
 
         compute.destroy_array(data_nanovdb);
@@ -171,6 +176,18 @@ int main(int argc, char* argv[])
             pnanovdb_editor_token_t* scene_token = inst.editor.get_token("main");
             pnanovdb_editor_token_t* volume_token = inst.editor.get_token("dragon");
             inst.editor.add_nanovdb_2(&inst.editor, scene_token, volume_token, inst.nanovdb_array);
+
+            if (!args.shader_name.empty())
+            {
+                pnanovdb_editor_shader_name_t* mapped = (pnanovdb_editor_shader_name_t*)inst.editor.map_params(
+                    &inst.editor, scene_token, volume_token,
+                    PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t));
+                if (mapped)
+                {
+                    mapped->shader_name = inst.editor.get_token(args.shader_name.c_str());
+                    inst.editor.unmap_params(&inst.editor, scene_token, volume_token);
+                }
+            }
 
             inst.compute.destroy_array(inst.nanovdb_array);
             inst.nanovdb_array = nullptr;

@@ -23,9 +23,6 @@
 namespace pnanovdb_editor
 {
 
-// make token conversion accessible here
-pnanovdb_editor_token_t* get_token(const char* name);
-
 uint64_t EditorSceneManager::make_key(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
 {
     if (!scene || !name)
@@ -93,11 +90,12 @@ void EditorSceneManager::refresh_params_for_shader(const pnanovdb_compute_t* com
         return;
     }
 
+    pnanovdb_editor_token_t* shader_name_token = EditorToken::getInstance().getToken(shader_name);
+
     std::lock_guard<std::mutex> lock(m_mutex);
     for (auto& [key, obj] : m_objects)
     {
-        if (obj.type == SceneObjectType::NanoVDB && obj.shader_name.shader_name && obj.shader_name.shader_name->str &&
-            strcmp(obj.shader_name.shader_name->str, shader_name) == 0)
+        if (obj.type == SceneObjectType::NanoVDB && tokens_equal(obj.shader_name.shader_name, shader_name_token))
         {
             // Destroy old params array owner first (if different)
             if (obj.shader_params_array_owner)
@@ -314,7 +312,7 @@ void EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,
     obj.shader_params_array = params_array;
     obj.shader_params = params_array ? params_array->data : nullptr;
     obj.shader_params_data_type = shader_params_data_type;
-    obj.shader_name.shader_name = get_token(shader_name);
+    obj.shader_name.shader_name = EditorToken::getInstance().getToken(shader_name);
 
     // Set up ownership for gaussian_data
     // Only create new shared_ptr if this is a different object than what we already own
