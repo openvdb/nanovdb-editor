@@ -679,6 +679,94 @@ void compute_array_print_range(const pnanovdb_compute_t* compute,
     }
 }
 
+pnanovdb_compute_array_t* nanovdb_from_image_rgba8(pnanovdb_compute_array_t* image_data,
+                                                   pnanovdb_uint32_t width,
+                                                   pnanovdb_uint32_t height)
+{
+    // for now, make empty grid with blindmetadata
+    pnanovdb_uint64_t header_size =
+        PNANOVDB_GRID_SIZE +
+        PNANOVDB_TREE_SIZE +
+        PNANOVDB_GRID_TYPE_GET(PNANOVDB_GRID_TYPE_ONINDEX, root_size) +
+        PNANOVDB_GRIDBLINDMETADATA_SIZE;
+    pnanovdb_uint64_t data_size = image_data->element_count * image_data->element_size;
+    pnanovdb_uint64_t size = header_size + data_size;
+
+    pnanovdb_compute_array_t* nvdb_array = create_array(4u, size / 4u, nullptr);
+
+    uint8_t* nvdb_data = (uint8_t*)nvdb_array->data;
+
+    memcpy(nvdb_data + header_size, image_data->data, data_size);
+
+    pnanovdb_buf_t buf = pnanovdb_make_buf((pnanovdb_uint32_t*)nvdb_data, size / 4u);
+
+    float voxel_size = 1.f;
+    float voxel_size_inv = 1.f / voxel_size;
+
+    pnanovdb_grid_handle_t grid = { pnanovdb_address_null() };
+    pnanovdb_grid_set_magic(buf, grid, PNANOVDB_MAGIC_GRID);
+    pnanovdb_grid_set_version(buf, grid,
+                              pnanovdb_make_version(PNANOVDB_MAJOR_VERSION_NUMBER, PNANOVDB_MINOR_VERSION_NUMBER,
+                                                    PNANOVDB_PATCH_VERSION_NUMBER));
+    pnanovdb_grid_set_flags(buf, grid, 0u);
+    pnanovdb_grid_set_grid_index(buf, grid, 0u);
+    pnanovdb_grid_set_grid_count(buf, grid, 1u);
+    pnanovdb_grid_set_grid_size(buf, grid, size);
+    pnanovdb_grid_set_grid_name(buf, grid, 0u, 0x61626772); // "rgba"
+    pnanovdb_grid_set_grid_name(buf, grid, 1u, 0x00000000);
+    pnanovdb_grid_set_voxel_size(buf, grid, 0u, voxel_size);
+    pnanovdb_grid_set_voxel_size(buf, grid, 1u, voxel_size);
+    pnanovdb_grid_set_voxel_size(buf, grid, 2u, voxel_size);
+    pnanovdb_grid_set_grid_class(buf, grid, PNANOVDB_GRID_CLASS_UNKNOWN);
+    pnanovdb_grid_set_grid_type(buf, grid, PNANOVDB_GRID_TYPE_ONINDEX);
+
+    pnanovdb_map_handle_t map = pnanovdb_grid_get_map(buf, grid);
+    pnanovdb_map_set_matf(buf, map, 0u, voxel_size);
+    pnanovdb_map_set_matf(buf, map, 4u, voxel_size);
+    pnanovdb_map_set_matf(buf, map, 8u, voxel_size);
+    pnanovdb_map_set_invmatf(buf, map, 0u, voxel_size_inv);
+    pnanovdb_map_set_invmatf(buf, map, 4u, voxel_size_inv);
+    pnanovdb_map_set_invmatf(buf, map, 8u, voxel_size_inv);
+    pnanovdb_map_set_matd(buf, map, 0u, voxel_size);
+    pnanovdb_map_set_matd(buf, map, 4u, voxel_size);
+    pnanovdb_map_set_matd(buf, map, 8u, voxel_size);
+    pnanovdb_map_set_invmatd(buf, map, 0u, voxel_size_inv);
+    pnanovdb_map_set_invmatd(buf, map, 4u, voxel_size_inv);
+    pnanovdb_map_set_invmatd(buf, map, 8u, voxel_size_inv);
+    pnanovdb_map_set_vecf(buf, map, 0u, 0.f);
+    pnanovdb_map_set_vecf(buf, map, 1u, 0.f);
+    pnanovdb_map_set_vecf(buf, map, 2u, 0.f);
+    pnanovdb_map_set_vecd(buf, map, 0u, 0.0);
+    pnanovdb_map_set_vecd(buf, map, 1u, 0.0);
+    pnanovdb_map_set_vecd(buf, map, 2u, 0.0);
+
+    pnanovdb_tree_handle_t tree = pnanovdb_grid_get_tree(buf, grid);
+    pnanovdb_root_handle_t root = {pnanovdb_address_offset(tree.address, PNANOVDB_TREE_SIZE)};
+
+    pnanovdb_tree_set_first_root(buf, tree, root);
+
+    pnanovdb_coord_t ijk_min = {0, 0, 0};
+    pnanovdb_coord_t ijk_max = {int(width) - 1, int(height) - 1, 0};
+
+    pnanovdb_root_set_bbox_min(buf, root, PNANOVDB_REF(ijk_min));
+    pnanovdb_root_set_bbox_max(buf, root, PNANOVDB_REF(ijk_max));
+
+    pnanovdb_gridblindmetadata_handle_t meta = {pnanovdb_address_offset(root.address,
+        PNANOVDB_GRID_TYPE_GET(PNANOVDB_GRID_TYPE_ONINDEX, root_size))};
+
+    pnanovdb_grid_set_first_gridblindmetadata(buf, grid, meta);
+    pnanovdb_grid_set_blind_metadata_count(buf, grid, 1u);
+
+    pnanovdb_gridblindmetadata_set_data_offset(buf, meta, PNANOVDB_GRIDBLINDMETADATA_SIZE);
+    pnanovdb_gridblindmetadata_set_value_count(buf, meta, data_size / 4u);
+    pnanovdb_gridblindmetadata_set_value_size(buf, meta, 4u);
+    pnanovdb_gridblindmetadata_set_data_class(buf, meta, 0u);
+    pnanovdb_gridblindmetadata_set_data_type(buf, meta, PNANOVDB_GRID_TYPE_RGBA8);
+    pnanovdb_gridblindmetadata_set_name(buf, meta, 0u, 0u);
+
+    return nvdb_array;
+}
+
 PNANOVDB_API pnanovdb_compute_t* pnanovdb_get_compute()
 {
     static pnanovdb_compute_t compute = { PNANOVDB_REFLECT_INTERFACE_INIT(pnanovdb_compute_t) };
@@ -698,6 +786,7 @@ PNANOVDB_API pnanovdb_compute_t* pnanovdb_get_compute()
     compute.map_array = map_array;
     compute.unmap_array = unmap_array;
     compute.compute_array_print_range = compute_array_print_range;
+    compute.nanovdb_from_image_rgba8 = nanovdb_from_image_rgba8;
 
     return &compute;
 }
