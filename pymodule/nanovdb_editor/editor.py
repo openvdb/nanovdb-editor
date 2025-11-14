@@ -175,6 +175,7 @@ class pnanovdb_Editor(Structure):
         ),
         ("stop", CFUNCTYPE(None, c_void_p)),
         ("reset", CFUNCTYPE(None, c_void_p)),
+        ("wait", CFUNCTYPE(None, c_void_p)),
         (
             "add_nanovdb",
             CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_ComputeArray)),
@@ -382,6 +383,11 @@ class Editor:
         reset_func = getattr(self._editor.contents, "reset", None)
         if reset_func:
             reset_func(self._editor)
+
+    def wait(self) -> None:
+        wait_func = getattr(self._editor.contents, "wait", None)
+        if wait_func:
+            wait_func(self._editor)
 
     def update_camera(self, camera: Camera) -> None:
         udpate_camera_func = self._editor.contents.update_camera

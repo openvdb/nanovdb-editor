@@ -235,9 +235,14 @@ int main(int argc, char* argv[])
         }
 #endif
 
-        std::this_thread::sleep_for(std::chrono::seconds(3600));
+        for (size_t inst_idx = 0u; inst_idx < instances.size(); inst_idx++)
+        {
+            auto& inst = instances[inst_idx];
 
-        printf("Timed out. Cleaning up\n");
+            inst.editor.wait(&inst.editor);
+        }
+
+        printf("Editor wait completed. Cleaning up.\n");
 
         for (size_t inst_idx = 0u; inst_idx < instances.size(); inst_idx++)
         {
