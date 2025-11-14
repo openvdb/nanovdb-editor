@@ -119,8 +119,7 @@ int main(int argc, char* argv[])
         if (!args.shader_name.empty())
         {
             pnanovdb_editor_shader_name_t* mapped = (pnanovdb_editor_shader_name_t*)editor.map_params(
-                &editor, scene_main, volume_token,
-                PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t));
+                &editor, scene_main, volume_token, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t));
             if (mapped)
             {
                 mapped->shader_name = editor.get_token(args.shader_name.c_str());
@@ -180,8 +179,7 @@ int main(int argc, char* argv[])
             if (!args.shader_name.empty())
             {
                 pnanovdb_editor_shader_name_t* mapped = (pnanovdb_editor_shader_name_t*)inst.editor.map_params(
-                    &inst.editor, scene_token, volume_token,
-                    PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t));
+                    &inst.editor, scene_token, volume_token, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t));
                 if (mapped)
                 {
                     mapped->shader_name = inst.editor.get_token(args.shader_name.c_str());
@@ -239,7 +237,7 @@ int main(int argc, char* argv[])
         {
             auto& inst = instances[inst_idx];
 
-            inst.editor.wait(&inst.editor);
+            inst.editor.wait_for_interrupt(&inst.editor);
         }
 
         printf("Editor wait completed. Cleaning up.\n");

@@ -175,7 +175,7 @@ class pnanovdb_Editor(Structure):
         ),
         ("stop", CFUNCTYPE(None, c_void_p)),
         ("reset", CFUNCTYPE(None, c_void_p)),
-        ("wait", CFUNCTYPE(None, c_void_p)),
+        ("wait_for_interrupt", CFUNCTYPE(None, c_void_p)),
         (
             "add_nanovdb",
             CFUNCTYPE(None, c_void_p, POINTER(pnanovdb_ComputeArray)),
@@ -384,8 +384,8 @@ class Editor:
         if reset_func:
             reset_func(self._editor)
 
-    def wait(self) -> None:
-        wait_func = getattr(self._editor.contents, "wait", None)
+    def wait_for_interrupt(self) -> None:
+        wait_func = getattr(self._editor.contents, "wait_for_interrupt", None)
         if wait_func:
             wait_func(self._editor)
 

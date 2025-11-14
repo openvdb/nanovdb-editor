@@ -29,13 +29,13 @@
 // #define TEST_CPU_COMPILER         // TODO: test needs to check if slang-llvm is in the slang package
 // #define TEST_EMPTY_COMPILER
 // #define TEST_COMPUTE
-#define TEST_EDITOR
-// #define TEST_EDITOR_START_STOP
+// #define TEST_EDITOR
+#define TEST_EDITOR_START_STOP
 // #define TEST_RASTER
 // #define TEST_RASTER_2D   // this does not work now, editor nees to be have queue and device first
 // #define TEST_SVRASTER
 // #define TEST_E57
-#define TEST_CAMERA
+// #define TEST_CAMERA
 #define TEST_IMAGE2D
 
 struct constants_t
@@ -361,7 +361,7 @@ int main(int argc, char* argv[])
 
 #    endif
 
-#ifdef TEST_IMAGE2D
+#    ifdef TEST_IMAGE2D
     pnanovdb_uint32_t width = 1440;
     pnanovdb_uint32_t height = 720;
     pnanovdb_compute_array_t* image_rgba = compute.create_array(4u, width * height, nullptr);
@@ -385,7 +385,7 @@ int main(int argc, char* argv[])
     pnanovdb_editor_token_t* image_token = editor.get_token("image2d");
     editor.add_nanovdb_2(&editor, image_scene_main, image_token, image_nanovdb);
     compute.destroy_array(image_nanovdb);
-#endif
+#    endif
 
     pnanovdb_editor_config_t config = {};
     config.headless = PNANOVDB_FALSE;
@@ -437,17 +437,44 @@ int main(int argc, char* argv[])
     pnanovdb_editor_token_t* volume_token = editor.get_token("dragon");
 
     editor.add_nanovdb_2(&editor, scene_token, volume_token, data_nanovdb);
-    editor.add_nanovdb_2(&editor, main_token, volume_token, data_nanovdb);
 
     compute.destroy_array(data_nanovdb);
-    compute.destroy_array(data_nanovdb2);
 
-    runEditorLoop(100);
+#    ifdef TEST_IMAGE2D
+    pnanovdb_uint32_t width = 1440;
+    pnanovdb_uint32_t height = 720;
+    pnanovdb_compute_array_t* image_rgba = compute.create_array(4u, width * height, nullptr);
+    pnanovdb_uint32_t* mapped = (pnanovdb_uint32_t*)compute.map_array(image_rgba);
+    for (pnanovdb_uint32_t j = 0u; j < height; j++)
+    {
+        for (pnanovdb_uint32_t i = 0u; i < width; i++)
+        {
+            pnanovdb_uint32_t val = 0u;
+            val |= ((255 * i) / (width - 1));
+            val |= (((255 * j) / (height - 1)) << 8u);
+            val |= (255 << 24u);
+            mapped[j * width + i] = val;
+        }
+    }
+    compute.unmap_array(image_rgba);
+    pnanovdb_compute_array_t* image_nanovdb = compute.nanovdb_from_image_rgba8(image_rgba, width, height);
+    compute.destroy_array(image_rgba);
+
+    pnanovdb_editor_token_t* image_scene_main = editor.get_token("main");
+    pnanovdb_editor_token_t* image_token = editor.get_token("image2d");
+    editor.add_nanovdb_2(&editor, image_scene_main, image_token, image_nanovdb);
+#    endif
+
+    editor.wait_for_interrupt(&editor);
 
     editor.stop(&editor);
 
     pnanovdb_editor_free(&editor);
 #endif
+
+#    ifdef TEST_IMAGE2D
+     compute.destroy_array(image_nanovdb);
+     #endif
 
     compute.device_interface.destroy_device(device_manager, device);
     compute.device_interface.destroy_device_manager(device_manager);

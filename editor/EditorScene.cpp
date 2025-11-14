@@ -863,10 +863,10 @@ void EditorScene::handle_nanovdb_data_load(pnanovdb_compute_array_t* nanovdb_arr
     // Do not create per-object params now; use shared defaults until user edits (copy-on-write)
     pnanovdb_compute_array_t* params_array = nullptr;
 
-    pnanovdb_editor_token_t* shader_name_token = EditorToken::getInstance().getToken(m_nanovdb_params.shader_name.c_str());
+    pnanovdb_editor_token_t* shader_name_token =
+        EditorToken::getInstance().getToken(m_nanovdb_params.shader_name.c_str());
 
-    m_scene_manager.add_nanovdb(
-        scene_token, name_token, nanovdb_array, params_array, m_compute, shader_name_token);
+    m_scene_manager.add_nanovdb(scene_token, name_token, nanovdb_array, params_array, m_compute, shader_name_token);
 
     // Register in SceneView (for scene tree display)
     m_scene_view.add_nanovdb_to_scene(
@@ -1487,7 +1487,8 @@ void EditorScene::set_selected_object_shader_name(const std::string& shader_name
                                 {
                                     if (scene_obj)
                                     {
-                                        scene_obj->shader_name.shader_name = EditorToken::getInstance().getToken(shader_name.c_str());
+                                        scene_obj->shader_name.shader_name =
+                                            EditorToken::getInstance().getToken(shader_name.c_str());
                                         // Also update the editor->impl->shader_name to mirror it
                                         if (m_editor && m_editor->impl)
                                         {
