@@ -684,11 +684,9 @@ pnanovdb_compute_array_t* nanovdb_from_image_rgba8(pnanovdb_compute_array_t* ima
                                                    pnanovdb_uint32_t height)
 {
     // for now, make empty grid with blindmetadata
-    pnanovdb_uint64_t header_size =
-        PNANOVDB_GRID_SIZE +
-        PNANOVDB_TREE_SIZE +
-        PNANOVDB_GRID_TYPE_GET(PNANOVDB_GRID_TYPE_ONINDEX, root_size) +
-        PNANOVDB_GRIDBLINDMETADATA_SIZE;
+    pnanovdb_uint64_t header_size = PNANOVDB_GRID_SIZE + PNANOVDB_TREE_SIZE +
+                                    PNANOVDB_GRID_TYPE_GET(PNANOVDB_GRID_TYPE_ONINDEX, root_size) +
+                                    PNANOVDB_GRIDBLINDMETADATA_SIZE;
     pnanovdb_uint64_t data_size = image_data->element_count * image_data->element_size;
     pnanovdb_uint64_t size = header_size + data_size;
 
@@ -741,18 +739,18 @@ pnanovdb_compute_array_t* nanovdb_from_image_rgba8(pnanovdb_compute_array_t* ima
     pnanovdb_map_set_vecd(buf, map, 2u, 0.0);
 
     pnanovdb_tree_handle_t tree = pnanovdb_grid_get_tree(buf, grid);
-    pnanovdb_root_handle_t root = {pnanovdb_address_offset(tree.address, PNANOVDB_TREE_SIZE)};
+    pnanovdb_root_handle_t root = { pnanovdb_address_offset(tree.address, PNANOVDB_TREE_SIZE) };
 
     pnanovdb_tree_set_first_root(buf, tree, root);
 
-    pnanovdb_coord_t ijk_min = {0, 0, 0};
-    pnanovdb_coord_t ijk_max = {int(width) - 1, int(height) - 1, 0};
+    pnanovdb_coord_t ijk_min = { 0, 0, 0 };
+    pnanovdb_coord_t ijk_max = { int(width) - 1, int(height) - 1, 0 };
 
     pnanovdb_root_set_bbox_min(buf, root, PNANOVDB_REF(ijk_min));
     pnanovdb_root_set_bbox_max(buf, root, PNANOVDB_REF(ijk_max));
 
-    pnanovdb_gridblindmetadata_handle_t meta = {pnanovdb_address_offset(root.address,
-        PNANOVDB_GRID_TYPE_GET(PNANOVDB_GRID_TYPE_ONINDEX, root_size))};
+    pnanovdb_gridblindmetadata_handle_t meta = { pnanovdb_address_offset(
+        root.address, PNANOVDB_GRID_TYPE_GET(PNANOVDB_GRID_TYPE_ONINDEX, root_size)) };
 
     pnanovdb_grid_set_first_gridblindmetadata(buf, grid, meta);
     pnanovdb_grid_set_blind_metadata_count(buf, grid, 1u);

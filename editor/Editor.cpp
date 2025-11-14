@@ -651,7 +651,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     }
 
     // if on the main thread, we should enable sigint
-    // if on a worker thread, we defer any sigint enable to wait()
+    // if on a worker thread, we defer any sigint enable to wait_for_interrupt()
     bool enabled_sigint = !editor->impl->editor_worker;
     if (enabled_sigint)
     {
@@ -1056,7 +1056,9 @@ void reset(pnanovdb_editor_t* editor)
     start(editor, device, &config);
 }
 
-void wait(pnanovdb_editor_t* editor)
+/// Blocks the calling thread until the editor window is closed or an interrupt signal (SIGINT) is received.
+/// This function is typically called from the main thread to keep the application running while the editor is active.
+void wait_for_interrupt(pnanovdb_editor_t* editor)
 {
     if (editor && editor->impl && editor->impl->show_active.load())
     {
@@ -1131,8 +1133,7 @@ void add_nanovdb_2(pnanovdb_editor_t* editor,
         editor->impl->compute, editor->impl->shader_name.c_str(), nullptr, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
 
     pnanovdb_editor_token_t* shader_name_token = get_token(editor->impl->shader_name.c_str());
-    editor->impl->scene_manager->add_nanovdb(
-        scene, name, array, params_array, editor->impl->compute, shader_name_token);
+    editor->impl->scene_manager->add_nanovdb(scene, name, array, params_array, editor->impl->compute, shader_name_token);
 
     Console::getInstance().addLog(Console::LogLevel::Debug, "Added NanoVDB '%s' to scene '%s'", name->str, scene->str);
 
@@ -1180,9 +1181,10 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
         return;
     }
 
-    Console::getInstance().addLog(
-        Console::LogLevel::Debug, "add_gaussian_data_2: scene='%s' (id=%llu), name='%s' (id=%llu)",
-        token_to_string_log(scene), (unsigned long long)scene->id, token_to_string_log(name), (unsigned long long)name->id);
+    Console::getInstance().addLog(Console::LogLevel::Debug,
+                                  "add_gaussian_data_2: scene='%s' (id=%llu), name='%s' (id=%llu)",
+                                  token_to_string_log(scene), (unsigned long long)scene->id, token_to_string_log(name),
+                                  (unsigned long long)name->id);
 
     pnanovdb_compute_device_t* device = editor->impl->device;
     pnanovdb_compute_queue_t* device_queue = editor->impl->device_queue;
@@ -1703,11 +1705,13 @@ void* map_params(pnanovdb_editor_t* editor,
             scene, name,
             [&](SceneObject* obj)
             {
-                if (obj && obj->shader_params && obj->shader_params_data_type && pnanovdb_reflect_layout_compare(obj->shader_params_data_type, data_type))
+                if (obj && obj->shader_params && obj->shader_params_data_type &&
+                    pnanovdb_reflect_layout_compare(obj->shader_params_data_type, data_type))
                 {
                     result = obj->shader_params;
                 }
-                if (obj && pnanovdb_reflect_layout_compare(PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t), data_type))
+                if (obj && pnanovdb_reflect_layout_compare(
+                               PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t), data_type))
                 {
                     result = &obj->shader_name;
                 }
@@ -1734,12 +1738,14 @@ void* map_params(pnanovdb_editor_t* editor,
         scene, name,
         [&](SceneObject* obj)
         {
-            if (obj && obj->shader_params && obj->shader_params_data_type && pnanovdb_reflect_layout_compare(obj->shader_params_data_type, data_type))
+            if (obj && obj->shader_params && obj->shader_params_data_type &&
+                pnanovdb_reflect_layout_compare(obj->shader_params_data_type, data_type))
             {
                 Console::getInstance().addLog(Console::LogLevel::Debug, "map_params: Found params in scene manager");
                 result = obj->shader_params;
             }
-            if (obj && pnanovdb_reflect_layout_compare(PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t), data_type))
+            if (obj &&
+                pnanovdb_reflect_layout_compare(PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t), data_type))
             {
                 Console::getInstance().addLog(Console::LogLevel::Debug, "map_params: Found params in scene manager");
                 result = &obj->shader_name;
@@ -1780,9 +1786,9 @@ void unmap_params(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pna
     // Log token information for debugging
     if (scene && name)
     {
-        Console::getInstance().addLog(
-            Console::LogLevel::Debug, "unmap_params: scene='%s' (id=%llu), name='%s' (id=%llu)", token_to_string_log(scene),
-            (unsigned long long)scene->id, token_to_string_log(name), (unsigned long long)name->id);
+        Console::getInstance().addLog(Console::LogLevel::Debug, "unmap_params: scene='%s' (id=%llu), name='%s' (id=%llu)",
+                                      token_to_string_log(scene), (unsigned long long)scene->id,
+                                      token_to_string_log(name), (unsigned long long)name->id);
     }
 
     // Unlock mutex (was locked in map_params)
@@ -1807,7 +1813,7 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
     editor.start = start;
     editor.stop = stop;
     editor.reset = reset;
-    editor.wait = wait;
+    editor.wait_for_interrupt = wait_for_interrupt;
     editor.add_nanovdb = add_nanovdb;
     editor.add_array = add_array;
     editor.add_shader_params = add_shader_params;
