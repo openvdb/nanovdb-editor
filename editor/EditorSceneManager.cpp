@@ -90,10 +90,12 @@ void EditorSceneManager::refresh_params_for_shader(const pnanovdb_compute_t* com
         return;
     }
 
+    pnanovdb_editor_token_t* shader_name_token = EditorToken::getInstance().getToken(shader_name);
+
     std::lock_guard<std::mutex> lock(m_mutex);
     for (auto& [key, obj] : m_objects)
     {
-        if (obj.type == SceneObjectType::NanoVDB && obj.shader_name == shader_name)
+        if (obj.type == SceneObjectType::NanoVDB && tokens_equal(obj.shader_name.shader_name, shader_name_token))
         {
             // Destroy old params array owner first (if different)
             if (obj.shader_params_array_owner)
@@ -132,7 +134,7 @@ void EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
                                      pnanovdb_compute_array_t* array,
                                      pnanovdb_compute_array_t* params_array,
                                      const pnanovdb_compute_t* compute,
-                                     const char* shader_name)
+                                     pnanovdb_editor_token_t* shader_name)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     uint64_t key = make_key(scene, name);
@@ -160,7 +162,7 @@ void EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
     obj.shader_params_array = params_array;
     obj.shader_params = params_array ? params_array->data : nullptr;
     obj.shader_params_data_type = nullptr;
-    obj.shader_name = shader_name ? shader_name : "";
+    obj.shader_name.shader_name = shader_name;
 
     // Set up ownership for nanovdb_array
     if (compute && array)
@@ -310,7 +312,7 @@ void EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,
     obj.shader_params_array = params_array;
     obj.shader_params = params_array ? params_array->data : nullptr;
     obj.shader_params_data_type = shader_params_data_type;
-    obj.shader_name = shader_name ? shader_name : "";
+    obj.shader_name.shader_name = EditorToken::getInstance().getToken(shader_name);
 
     // Set up ownership for gaussian_data
     // Only create new shared_ptr if this is a different object than what we already own

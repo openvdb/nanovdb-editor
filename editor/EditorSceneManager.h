@@ -65,7 +65,7 @@ struct SceneObject
     // Parameters
     void* shader_params = nullptr; ///< Associated shader parameters
     const pnanovdb_reflect_data_type_t* shader_params_data_type = nullptr; ///< Parameter type info
-    std::string shader_name; ///< Shader name for this object (e.g., for NanoVDB rendering)
+    pnanovdb_editor_shader_name_t shader_name = {}; ///< Shader name for this object (e.g., for NanoVDB rendering)
 };
 
 /*!
@@ -153,7 +153,7 @@ public:
                      pnanovdb_compute_array_t* array,
                      pnanovdb_compute_array_t* params_array,
                      const pnanovdb_compute_t* compute,
-                     const char* shader_name = nullptr);
+                     pnanovdb_editor_token_t* shader_name = nullptr);
 
     /*!
         \brief Add or update Gaussian data

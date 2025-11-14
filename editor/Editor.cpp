@@ -1079,22 +1079,6 @@ pnanovdb_editor_token_t* get_token(const char* name)
     return EditorToken::getInstance().getToken(name);
 }
 
-// Helper function to check if two tokens are equal
-static inline bool tokens_equal(pnanovdb_editor_token_t* a, pnanovdb_editor_token_t* b)
-{
-    if (a == b)
-        return true;
-    if (!a || !b)
-        return false;
-    return a->id == b->id;
-}
-
-// Helper function to get string from token (safe)
-static inline const char* token_to_string(pnanovdb_editor_token_t* token)
-{
-    return token ? token->str : "<null>";
-}
-
 void add_nanovdb_2(pnanovdb_editor_t* editor,
                    pnanovdb_editor_token_t* scene,
                    pnanovdb_editor_token_t* name,
@@ -1109,15 +1093,16 @@ void add_nanovdb_2(pnanovdb_editor_t* editor,
     pnanovdb_compute_array_t* array = editor->impl->compute->duplicate_array(array_in);
 
     Console::getInstance().addLog(Console::LogLevel::Debug, "add_nanovdb_2: scene='%s' (id=%llu), name='%s' (id=%llu)",
-                                  token_to_string(scene), (unsigned long long)scene->id, token_to_string(name),
+                                  token_to_string_log(scene), (unsigned long long)scene->id, token_to_string_log(name),
                                   (unsigned long long)name->id);
 
     // Pre-create params array initialized from JSON
     pnanovdb_compute_array_t* params_array = editor->impl->scene_manager->create_initialized_shader_params(
         editor->impl->compute, editor->impl->shader_name.c_str(), nullptr, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
 
+    pnanovdb_editor_token_t* shader_name_token = get_token(editor->impl->shader_name.c_str());
     editor->impl->scene_manager->add_nanovdb(
-        scene, name, array, params_array, editor->impl->compute, editor->impl->shader_name.c_str());
+        scene, name, array, params_array, editor->impl->compute, shader_name_token);
 
     Console::getInstance().addLog(Console::LogLevel::Debug, "Added NanoVDB '%s' to scene '%s'", name->str, scene->str);
 
@@ -1167,7 +1152,7 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
 
     Console::getInstance().addLog(
         Console::LogLevel::Debug, "add_gaussian_data_2: scene='%s' (id=%llu), name='%s' (id=%llu)",
-        token_to_string(scene), (unsigned long long)scene->id, token_to_string(name), (unsigned long long)name->id);
+        token_to_string_log(scene), (unsigned long long)scene->id, token_to_string_log(name), (unsigned long long)name->id);
 
     pnanovdb_compute_device_t* device = editor->impl->device;
     pnanovdb_compute_queue_t* device_queue = editor->impl->device_queue;
@@ -1557,7 +1542,7 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
     {
         Console::getInstance().addLog(Console::LogLevel::Debug,
                                       "remove: Removing entire scene='%s' (id=%llu) and all its objects",
-                                      token_to_string(scene), (unsigned long long)scene->id);
+                                      token_to_string_log(scene), (unsigned long long)scene->id);
 
         // Collect all object names from the specified scene
         std::vector<pnanovdb_editor_token_t*> objects_to_remove;
@@ -1625,7 +1610,7 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
     }
 
     Console::getInstance().addLog(Console::LogLevel::Debug, "remove: scene='%s' (id=%llu), name='%s' (id=%llu)",
-                                  token_to_string(scene), (unsigned long long)scene->id, token_to_string(name),
+                                  token_to_string_log(scene), (unsigned long long)scene->id, token_to_string_log(name),
                                   (unsigned long long)name->id);
 
     dispatch_worker_or_immediate(
@@ -1688,9 +1673,13 @@ void* map_params(pnanovdb_editor_t* editor,
             scene, name,
             [&](SceneObject* obj)
             {
-                if (obj && obj->shader_params && pnanovdb_reflect_layout_compare(obj->shader_params_data_type, data_type))
+                if (obj && obj->shader_params && obj->shader_params_data_type && pnanovdb_reflect_layout_compare(obj->shader_params_data_type, data_type))
                 {
                     result = obj->shader_params;
+                }
+                if (obj && pnanovdb_reflect_layout_compare(PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t), data_type))
+                {
+                    result = &obj->shader_name;
                 }
             });
         return result;
@@ -1706,7 +1695,7 @@ void* map_params(pnanovdb_editor_t* editor,
     const char* type_name = data_type->struct_typename ? data_type->struct_typename : "<unknown>";
     Console::getInstance().addLog(Console::LogLevel::Debug,
                                   "map_params: scene='%s' (id=%llu), name='%s' (id=%llu), type='%s'",
-                                  token_to_string(scene), (unsigned long long)scene->id, token_to_string(name),
+                                  token_to_string_log(scene), (unsigned long long)scene->id, token_to_string_log(name),
                                   (unsigned long long)name->id, type_name);
 
     // Find params in scene manager
@@ -1715,10 +1704,15 @@ void* map_params(pnanovdb_editor_t* editor,
         scene, name,
         [&](SceneObject* obj)
         {
-            if (obj && obj->shader_params && pnanovdb_reflect_layout_compare(obj->shader_params_data_type, data_type))
+            if (obj && obj->shader_params && obj->shader_params_data_type && pnanovdb_reflect_layout_compare(obj->shader_params_data_type, data_type))
             {
                 Console::getInstance().addLog(Console::LogLevel::Debug, "map_params: Found params in scene manager");
                 result = obj->shader_params;
+            }
+            if (obj && pnanovdb_reflect_layout_compare(PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t), data_type))
+            {
+                Console::getInstance().addLog(Console::LogLevel::Debug, "map_params: Found params in scene manager");
+                result = &obj->shader_name;
             }
         });
 
@@ -1757,8 +1751,8 @@ void unmap_params(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pna
     if (scene && name)
     {
         Console::getInstance().addLog(
-            Console::LogLevel::Debug, "unmap_params: scene='%s' (id=%llu), name='%s' (id=%llu)", token_to_string(scene),
-            (unsigned long long)scene->id, token_to_string(name), (unsigned long long)name->id);
+            Console::LogLevel::Debug, "unmap_params: scene='%s' (id=%llu), name='%s' (id=%llu)", token_to_string_log(scene),
+            (unsigned long long)scene->id, token_to_string_log(name), (unsigned long long)name->id);
     }
 
     // Unlock mutex (was locked in map_params)

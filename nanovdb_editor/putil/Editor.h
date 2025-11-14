@@ -40,6 +40,13 @@ struct pnanovdb_editor_token_t
 };
 typedef struct pnanovdb_editor_token_t pnanovdb_editor_token_t;
 
+#define PNANOVDB_REFLECT_TYPE pnanovdb_editor_token_t
+PNANOVDB_REFLECT_BEGIN()
+PNANOVDB_REFLECT_VALUE(pnanovdb_uint64_t, id, 0, 0)
+PNANOVDB_REFLECT_POINTER(char, str, 0, 0)
+PNANOVDB_REFLECT_END(0)
+#undef PNANOVDB_REFLECT_TYPE
+
 typedef struct pnanovdb_editor_gaussian_data_desc_t
 {
     pnanovdb_compute_array_t* means;
@@ -49,6 +56,17 @@ typedef struct pnanovdb_editor_gaussian_data_desc_t
     pnanovdb_compute_array_t* sh_0;
     pnanovdb_compute_array_t* sh_n;
 } pnanovdb_editor_gaussian_data_desc_t;
+
+typedef struct pnanovdb_editor_shader_name_t
+{
+    pnanovdb_editor_token_t* shader_name;
+} pnanovdb_editor_shader_name_t;
+
+#define PNANOVDB_REFLECT_TYPE pnanovdb_editor_shader_name_t
+PNANOVDB_REFLECT_BEGIN()
+PNANOVDB_REFLECT_POINTER(pnanovdb_editor_token_t, shader_name, 0, 0)
+PNANOVDB_REFLECT_END(0)
+#undef PNANOVDB_REFLECT_TYPE
 
 struct pnanovdb_editor_impl_t;
 typedef struct pnanovdb_editor_impl_t pnanovdb_editor_impl_t;
