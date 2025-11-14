@@ -1058,7 +1058,7 @@ void wait(pnanovdb_editor_t* editor)
     if (editor && editor->impl && editor->impl->show_active.load())
     {
         editor_sigint_register();
-        while (editor_sigint_should_run())
+        while (editor->impl->show_active.load() && editor_sigint_should_run())
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
