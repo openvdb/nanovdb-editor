@@ -1093,7 +1093,7 @@ void add_nanovdb_2(pnanovdb_editor_t* editor,
     pnanovdb_compute_array_t* array = editor->impl->compute->duplicate_array(array_in);
 
     Console::getInstance().addLog(Console::LogLevel::Debug, "add_nanovdb_2: scene='%s' (id=%llu), name='%s' (id=%llu)",
-                                  token_to_string(scene), (unsigned long long)scene->id, token_to_string(name),
+                                  token_to_string_log(scene), (unsigned long long)scene->id, token_to_string_log(name),
                                   (unsigned long long)name->id);
 
     // Pre-create params array initialized from JSON
@@ -1152,7 +1152,7 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
 
     Console::getInstance().addLog(
         Console::LogLevel::Debug, "add_gaussian_data_2: scene='%s' (id=%llu), name='%s' (id=%llu)",
-        token_to_string(scene), (unsigned long long)scene->id, token_to_string(name), (unsigned long long)name->id);
+        token_to_string_log(scene), (unsigned long long)scene->id, token_to_string_log(name), (unsigned long long)name->id);
 
     pnanovdb_compute_device_t* device = editor->impl->device;
     pnanovdb_compute_queue_t* device_queue = editor->impl->device_queue;
@@ -1542,7 +1542,7 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
     {
         Console::getInstance().addLog(Console::LogLevel::Debug,
                                       "remove: Removing entire scene='%s' (id=%llu) and all its objects",
-                                      token_to_string(scene), (unsigned long long)scene->id);
+                                      token_to_string_log(scene), (unsigned long long)scene->id);
 
         // Collect all object names from the specified scene
         std::vector<pnanovdb_editor_token_t*> objects_to_remove;
@@ -1610,7 +1610,7 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
     }
 
     Console::getInstance().addLog(Console::LogLevel::Debug, "remove: scene='%s' (id=%llu), name='%s' (id=%llu)",
-                                  token_to_string(scene), (unsigned long long)scene->id, token_to_string(name),
+                                  token_to_string_log(scene), (unsigned long long)scene->id, token_to_string_log(name),
                                   (unsigned long long)name->id);
 
     dispatch_worker_or_immediate(
@@ -1695,7 +1695,7 @@ void* map_params(pnanovdb_editor_t* editor,
     const char* type_name = data_type->struct_typename ? data_type->struct_typename : "<unknown>";
     Console::getInstance().addLog(Console::LogLevel::Debug,
                                   "map_params: scene='%s' (id=%llu), name='%s' (id=%llu), type='%s'",
-                                  token_to_string(scene), (unsigned long long)scene->id, token_to_string(name),
+                                  token_to_string_log(scene), (unsigned long long)scene->id, token_to_string_log(name),
                                   (unsigned long long)name->id, type_name);
 
     // Find params in scene manager
@@ -1751,8 +1751,8 @@ void unmap_params(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pna
     if (scene && name)
     {
         Console::getInstance().addLog(
-            Console::LogLevel::Debug, "unmap_params: scene='%s' (id=%llu), name='%s' (id=%llu)", token_to_string(scene),
-            (unsigned long long)scene->id, token_to_string(name), (unsigned long long)name->id);
+            Console::LogLevel::Debug, "unmap_params: scene='%s' (id=%llu), name='%s' (id=%llu)", token_to_string_log(scene),
+            (unsigned long long)scene->id, token_to_string_log(name), (unsigned long long)name->id);
     }
 
     // Unlock mutex (was locked in map_params)

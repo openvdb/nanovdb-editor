@@ -198,8 +198,15 @@ static inline bool tokens_equal(pnanovdb_editor_token_t* a, pnanovdb_editor_toke
 // Helper function to get string from token (safe)
 static inline const char* token_to_string(pnanovdb_editor_token_t* token)
 {
+    return token ? token->str : "";
+}
+
+// Helper function to get string from token (safe)
+static inline const char* token_to_string_log(pnanovdb_editor_token_t* token)
+{
     return token ? token->str : "<null>";
 }
+
 
 // Helper function to check if token is empty
 static inline bool token_is_empty(pnanovdb_editor_token_t* token)
