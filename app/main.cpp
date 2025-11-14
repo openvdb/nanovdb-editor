@@ -114,6 +114,15 @@ int main(int argc, char* argv[])
 
         editor.add_nanovdb_2(&editor, scene_main, volume_token, data_nanovdb);
 
+        pnanovdb_editor_shader_name_t* mapped = (pnanovdb_editor_shader_name_t*)editor.map_params(
+            &editor, scene_main, volume_token,
+            PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t));
+        if (mapped)
+        {
+            mapped->shader_name = editor.get_token("editor/wireframe.slang");
+            editor.unmap_params(&editor, scene_main, volume_token);
+        }
+
         compute.destroy_array(data_nanovdb);
 
         editor.show(&editor, device, &config);

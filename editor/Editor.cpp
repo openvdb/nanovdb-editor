@@ -1116,8 +1116,9 @@ void add_nanovdb_2(pnanovdb_editor_t* editor,
     pnanovdb_compute_array_t* params_array = editor->impl->scene_manager->create_initialized_shader_params(
         editor->impl->compute, editor->impl->shader_name.c_str(), nullptr, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
 
+    pnanovdb_editor_token_t* shader_name_token = get_token(editor->impl->shader_name.c_str());
     editor->impl->scene_manager->add_nanovdb(
-        scene, name, array, params_array, editor->impl->compute, editor->impl->shader_name.c_str());
+        scene, name, array, params_array, editor->impl->compute, shader_name_token);
 
     Console::getInstance().addLog(Console::LogLevel::Debug, "Added NanoVDB '%s' to scene '%s'", name->str, scene->str);
 
@@ -1688,9 +1689,13 @@ void* map_params(pnanovdb_editor_t* editor,
             scene, name,
             [&](SceneObject* obj)
             {
-                if (obj && obj->shader_params && pnanovdb_reflect_layout_compare(obj->shader_params_data_type, data_type))
+                if (obj && obj->shader_params && obj->shader_params_data_type && pnanovdb_reflect_layout_compare(obj->shader_params_data_type, data_type))
                 {
                     result = obj->shader_params;
+                }
+                if (obj && pnanovdb_reflect_layout_compare(PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t), data_type))
+                {
+                    result = &obj->shader_name;
                 }
             });
         return result;
@@ -1715,10 +1720,15 @@ void* map_params(pnanovdb_editor_t* editor,
         scene, name,
         [&](SceneObject* obj)
         {
-            if (obj && obj->shader_params && pnanovdb_reflect_layout_compare(obj->shader_params_data_type, data_type))
+            if (obj && obj->shader_params && obj->shader_params_data_type && pnanovdb_reflect_layout_compare(obj->shader_params_data_type, data_type))
             {
                 Console::getInstance().addLog(Console::LogLevel::Debug, "map_params: Found params in scene manager");
                 result = obj->shader_params;
+            }
+            if (obj && pnanovdb_reflect_layout_compare(PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t), data_type))
+            {
+                Console::getInstance().addLog(Console::LogLevel::Debug, "map_params: Found params in scene manager");
+                result = &obj->shader_name;
             }
         });
 
