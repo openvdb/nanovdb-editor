@@ -40,15 +40,34 @@ runs:
         # Handle dev suffix if allowed
         COMPARE_TAG_VERSION="$TAG_VERSION"
         if [ "${{ inputs.allow-dev-suffix }}" = "true" ]; then
-          # Remove -dev suffix for comparison if present
-          COMPARE_TAG_VERSION=${TAG_VERSION%-dev}
-          echo "Comparing version (dev suffix removed): $COMPARE_TAG_VERSION"
+          # Check if tag has -dev suffix
+          if [[ "$TAG_VERSION" == *-dev ]]; then
+            # Remove -dev suffix for comparison
+            COMPARE_TAG_VERSION=${TAG_VERSION%-dev}
+            echo "Dev tag detected, comparing version (dev suffix removed): $COMPARE_TAG_VERSION"
+          else
+            # No -dev suffix when it's expected - this is an error
+            echo "version_valid=false" >> $GITHUB_OUTPUT
+            echo "Version validation failed: tag '$TAG_VERSION' is missing -dev suffix"
+            echo "::error::Dev workflow requires tag with -dev suffix (e.g., v1.0.0-dev)"
+            exit 0
+          fi
+        else
+          # Regular workflow - ensure no -dev suffix
+          if [[ "$TAG_VERSION" == *-dev ]]; then
+            echo "version_valid=false" >> $GITHUB_OUTPUT
+            echo "Version validation failed: tag '$TAG_VERSION' has -dev suffix but it's not allowed"
+            echo "::error::Regular workflow does not allow -dev suffix in tags"
+            exit 0
+          fi
         fi
 
         # Compare versions
         if [ "$COMPARE_TAG_VERSION" = "$FILE_VERSION" ]; then
           echo "version_valid=true" >> $GITHUB_OUTPUT
+          echo "Version validation passed"
         else
           echo "version_valid=false" >> $GITHUB_OUTPUT
-          exit 1
+          echo "Version validation failed: tag '$COMPARE_TAG_VERSION' does not match file '$FILE_VERSION'"
+          echo "::warning::Version mismatch - tag: $COMPARE_TAG_VERSION, file: $FILE_VERSION"
         fi
