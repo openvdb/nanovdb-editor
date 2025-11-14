@@ -438,6 +438,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         return;
     }
 
+    editor->impl->show_active.store(true);
+
     pnanovdb_int32_t image_width = s_default_width;
     pnanovdb_int32_t image_height = s_default_height;
 
@@ -645,7 +647,13 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         }
     }
 
-    editor_sigint_register();
+    // if on the main thread, we should enable sigint
+    // if on a worker thread, we defer any sigint enable to wait()
+    bool enabled_sigint = !editor->impl->editor_worker;
+    if (enabled_sigint)
+    {
+        editor_sigint_register();
+    }
 
     bool should_run = true;
     while (should_run && editor_sigint_should_run())
@@ -949,7 +957,11 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         editor->impl->raster_ctx = nullptr;
     }
 
-    editor_sigint_unregister();
+    if (enabled_sigint)
+    {
+        editor_sigint_unregister();
+    }
+    editor->impl->show_active.store(false);
 }
 
 pnanovdb_int32_t get_resolved_port(pnanovdb_editor_t* editor, pnanovdb_bool_t should_wait)
@@ -973,6 +985,8 @@ void start(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovd
             config->ui_profile_name ? std::string(config->ui_profile_name) : std::string();
         editor->impl->config.ip_address = editor->impl->config_ip_address.c_str();
         editor->impl->config.ui_profile_name = editor->impl->config_ui_profile_name.c_str();
+
+        editor->impl->show_active.store(true);
     }
 
     if (config->headless)
@@ -1037,6 +1051,19 @@ void reset(pnanovdb_editor_t* editor)
     }
 
     start(editor, device, &config);
+}
+
+void wait(pnanovdb_editor_t* editor)
+{
+    if (editor && editor->impl && editor->impl->show_active.load())
+    {
+        editor_sigint_register();
+        while (editor_sigint_should_run())
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        editor_sigint_unregister();
+    }
 }
 
 // TODO: use map/unmap for cameras
@@ -1777,6 +1804,7 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
     editor.start = start;
     editor.stop = stop;
     editor.reset = reset;
+    editor.wait = wait;
     editor.add_nanovdb = add_nanovdb;
     editor.add_array = add_array;
     editor.add_shader_params = add_shader_params;
