@@ -1228,8 +1228,8 @@ void EditorScene::set_properties_selection(ViewType type,
                     Console::getInstance().addLog(Console::LogLevel::Debug,
                                                   "set_properties_selection: object found, shader_name='%s'",
                                                   obj->shader_name.shader_name ? obj->shader_name.shader_name->str : "(null)");
-                    if (obj->shader_name.shader_name && 
-                        obj->shader_name.shader_name->str && 
+                    if (obj->shader_name.shader_name &&
+                        obj->shader_name.shader_name->str &&
                         obj->shader_name.shader_name->str[0] != '\0')
                     {
                         m_editor->impl->shader_name = obj->shader_name.shader_name->str;
