@@ -458,6 +458,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     pnanovdb_imgui_window_interface_t* imgui_window_iface = pnanovdb_imgui_get_window_interface();
     if (!imgui_window_iface)
     {
+        editor->impl->show_active.store(false);
         return;
     }
     pnanovdb_imgui_settings_render_t* imgui_user_settings = nullptr;
@@ -470,6 +471,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
     if (!imgui_window || !imgui_user_settings)
     {
+        editor->impl->show_active.store(false);
         return;
     }
 
@@ -492,6 +494,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
     if (!imgui_user_instance)
     {
+        editor->impl->show_active.store(false);
         return;
     }
 
