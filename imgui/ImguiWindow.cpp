@@ -435,15 +435,14 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         }
 #endif
     }
-    else // handle encoder disabled case
+
+    // If enabled, port should have been resolved by now, but report unresolved as needed
+    if (ptr->resolved_port == -2)
     {
-        if (ptr->resolved_port == -2)
+        ptr->resolved_port = -1;
+        if (report_resolved_port)
         {
-            ptr->resolved_port = -1;
-            if (report_resolved_port)
-            {
-                report_resolved_port(report_resolved_port_userdata, ptr->resolved_port);
-            }
+            report_resolved_port(report_resolved_port_userdata, ptr->resolved_port);
         }
     }
 
