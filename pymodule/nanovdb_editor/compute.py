@@ -148,6 +148,15 @@ class pnanovdb_Compute(Structure):
                 c_uint32,
             ),
         ),  # channel_count
+        (
+            "nanovdb_from_image_rgba8",
+            CFUNCTYPE(
+                POINTER(pnanovdb_ComputeArray),  # returns pnanovdb_compute_array_t*
+                POINTER(pnanovdb_ComputeArray),  # image_data
+                c_uint32,  # width
+                c_uint32,  # height
+            ),
+        ),
     ]
 
 
@@ -270,6 +279,16 @@ class Compute:
     def unmap_array(self, array: pnanovdb_ComputeArray) -> None:
         unmap_func = self._compute.contents.unmap_array
         unmap_func(pointer(array))
+
+    def nanovdb_from_image_rgba8(
+        self, image_data: pnanovdb_ComputeArray, width: int, height: int
+    ) -> pnanovdb_ComputeArray:
+        """Convert RGBA8 image data to NanoVDB format."""
+        convert_func = self._compute.contents.nanovdb_from_image_rgba8
+        array = convert_func(pointer(image_data), c_uint32(width), c_uint32(height))
+        if not array:
+            raise RuntimeError("Failed to convert image to NanoVDB format")
+        return array.contents
 
     def array_exists(self, array: pnanovdb_ComputeArray) -> bool:
         return array and array.data is not None

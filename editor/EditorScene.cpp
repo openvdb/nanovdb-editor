@@ -166,6 +166,13 @@ void EditorScene::sync_current_view_state(SyncDirection sync_direction)
     // Now process with the copied data (no longer holding mutex)
     if (obj_shader_params || !obj_shader_name.empty())
     {
+        // Check if shader name changed and trigger recompilation if needed
+        if (!obj_shader_name.empty() && m_editor->impl->shader_name != obj_shader_name)
+        {
+            m_editor->impl->shader_name = obj_shader_name;
+            m_imgui_instance->pending.update_shader = true;
+        }
+
         copy_shader_params(obj_type, obj_shader_params, obj_shader_name, sync_direction);
     }
 }
@@ -301,6 +308,13 @@ void EditorScene::load_view_into_editor_and_ui(SceneObject* scene_obj)
         m_editor->impl->nanovdb_array = scene_obj->nanovdb_array;
         m_editor->impl->shader_params = obj_shader_params;
         m_editor->impl->shader_params_data_type = nullptr;
+    }
+
+    // Update the shader name if it differs from current, and trigger shader recompilation
+    if (!obj_shader_name.empty() && m_editor->impl->shader_name != obj_shader_name)
+    {
+        m_editor->impl->shader_name = obj_shader_name;
+        m_imgui_instance->pending.update_shader = true;
     }
 
     copy_shader_params(obj_type, obj_shader_params, obj_shader_name, SyncDirection::EditorToUI);
@@ -863,10 +877,10 @@ void EditorScene::handle_nanovdb_data_load(pnanovdb_compute_array_t* nanovdb_arr
     // Do not create per-object params now; use shared defaults until user edits (copy-on-write)
     pnanovdb_compute_array_t* params_array = nullptr;
 
-    pnanovdb_editor_token_t* shader_name_token = EditorToken::getInstance().getToken(m_nanovdb_params.shader_name.c_str());
+    pnanovdb_editor_token_t* shader_name_token =
+        EditorToken::getInstance().getToken(m_nanovdb_params.shader_name.c_str());
 
-    m_scene_manager.add_nanovdb(
-        scene_token, name_token, nanovdb_array, params_array, m_compute, shader_name_token);
+    m_scene_manager.add_nanovdb(scene_token, name_token, nanovdb_array, params_array, m_compute, shader_name_token);
 
     // Register in SceneView (for scene tree display)
     m_scene_view.add_nanovdb_to_scene(
@@ -1206,7 +1220,6 @@ void EditorScene::set_properties_selection(ViewType type,
     {
         m_view_selection = candidate;
 
-        // Update shader_name to reflect the selected object's shader
         m_scene_manager.with_object(
             scene_token, name_token,
             [&](SceneObject* obj)
@@ -1216,10 +1229,6 @@ void EditorScene::set_properties_selection(ViewType type,
                     Console::getInstance().addLog(Console::LogLevel::Debug,
                                                   "set_properties_selection: object found, shader_name='%s'",
                                                   token_to_string_log(obj->shader_name.shader_name));
-                    if (!token_is_empty(obj->shader_name.shader_name))
-                    {
-                        m_editor->impl->shader_name = obj->shader_name.shader_name->str;
-                    }
                 }
                 else
                 {
@@ -1487,7 +1496,8 @@ void EditorScene::set_selected_object_shader_name(const std::string& shader_name
                                 {
                                     if (scene_obj)
                                     {
-                                        scene_obj->shader_name.shader_name = EditorToken::getInstance().getToken(shader_name.c_str());
+                                        scene_obj->shader_name.shader_name =
+                                            EditorToken::getInstance().getToken(shader_name.c_str());
                                         // Also update the editor->impl->shader_name to mirror it
                                         if (m_editor && m_editor->impl)
                                         {
