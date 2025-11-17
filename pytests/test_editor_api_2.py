@@ -4,7 +4,8 @@
 """
 Test suite for editor _2 token-based API functions.
 Tests: get_token, get_camera, add_nanovdb_2, add_gaussian_data_2,
-       update_camera_2, add_camera_view_2, remove, map_params, unmap_params
+       update_camera_2, add_camera_view_2, remove, map_params, unmap_params,
+       add_image2d
 """
 
 import nanovdb_editor as nve  # type: ignore
@@ -153,6 +154,7 @@ class TestEditorAPI2:
         # Create descriptor
         desc = nve.EditorGaussianDataDesc()
         from ctypes import pointer
+
         desc.means = pointer(means_array)
         desc.opacities = pointer(opacities_array)
         desc.quaternions = pointer(quaternions_array)
@@ -236,6 +238,7 @@ class TestEditorAPI2:
         camera_state.orthographic_scale = 1.0
 
         from ctypes import pointer
+
         camera_view.configs = pointer(camera_config)
         camera_view.states = pointer(camera_state)
 
@@ -341,3 +344,35 @@ class TestEditorAPI2:
         assert token1.contents.str == token2.contents.str
         assert token2.contents.str == token3.contents.str
 
+    def test_add_image2d(self):
+        """Test add_image2d API - adds 2D image data to scene."""
+        self.editor.start(self.config)
+        sleep(0.5)
+
+        # Get tokens
+        scene_token = self.editor.get_token("test_scene")
+        image_token = self.editor.get_token("test_image2d")
+
+        # Create RGBA8 image data (gradient pattern)
+        width, height = 320, 240
+        image_rgba = np.zeros((height, width), dtype=np.uint32)
+
+        for j in range(height):
+            for i in range(width):
+                # Create a color gradient (RGBA packed as uint32)
+                r = (255 * i) // (width - 1) if width > 1 else 0
+                g = (255 * j) // (height - 1) if height > 1 else 0
+                b = 0
+                a = 255
+                # Pack as RGBA in uint32
+                image_rgba[j, i] = r | (g << 8) | (b << 16) | (a << 24)
+
+        # Create compute array from image data
+        image_array = self.compute.create_array(image_rgba)
+
+        # Add image to editor - should not raise
+        self.editor.add_image2d(scene_token, image_token, image_array, width, height)
+        sleep(0.1)  # Give time to process
+
+        # Clean up
+        self.compute.destroy_array(image_array)

@@ -520,5 +520,53 @@ class Editor:
         get_resolved_port_func = self._editor.contents.get_resolved_port
         return get_resolved_port_func(self._editor, 1 if should_wait else 0)
 
+    def add_image2d(self, scene, name, image_data, width: int, height: int):
+        """Add a 2D image to the editor.
+
+        Converts RGBA8 image data to NanoVDB format and adds it to the specified scene.
+
+        Args:
+            scene: Scene token (from get_token)
+            name: Name token for the image (from get_token)
+            image_data: pnanovdb_ComputeArray with RGBA8 image data (uint32 per pixel, packed as RGBA)
+            width: Image width in pixels
+            height: Image height in pixels
+
+        Example:
+            # Create image data
+            import numpy as np
+            width, height = 1440, 720
+            image_rgba = np.zeros((height, width), dtype=np.uint32)
+            for j in range(height):
+                for i in range(width):
+                    r = (255 * i) // (width - 1)
+                    g = (255 * j) // (height - 1)
+                    b = 0
+                    a = 255
+                    image_rgba[j, i] = r | (g << 8) | (b << 16) | (a << 24)
+
+            # Create compute array and add to editor
+            image_array = compute.create_array(image_rgba)
+            scene_token = editor.get_token("main")
+            image_token = editor.get_token("my_image")
+            editor.add_image2d(scene_token, image_token, image_array, width, height)
+            compute.destroy_array(image_array)
+
+        Note:
+            To set a custom shader for the image, use map_params with the shader name after adding:
+                shader_type = ...  # get reflection type for pnanovdb_editor_shader_name_t
+                mapped = editor.map_params(scene_token, image_token, shader_type)
+                # Set mapped.shader_name to editor.get_token("editor/image2d.slang")
+                editor.unmap_params(scene_token, image_token)
+        """
+        # Convert image data to NanoVDB format
+        image_nanovdb = self._compute.nanovdb_from_image_rgba8(image_data, width, height)
+
+        # Add to the editor
+        self.add_nanovdb_2(scene, name, image_nanovdb)
+
+        # Clean up the converted array (the editor has made a copy)
+        self._compute.destroy_array(image_nanovdb)
+
     def __del__(self):
         self._editor = None
