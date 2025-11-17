@@ -930,12 +930,18 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
         imgui_window_iface->update_camera(imgui_window, imgui_user_settings);
 
+        auto report_resolved_port = [](void* userdata, pnanovdb_int32_t port)
+        {
+            auto editor = (pnanovdb_editor_t*)userdata;
+            editor->impl->resolved_port.store(port);
+        };
+
         // update viewport image
         should_run = imgui_window_iface->update(
             editor->impl->compute, device_queue,
             background_image ? compute_interface->register_texture_as_transient(compute_context, background_image) :
                                nullptr,
-            &image_width, &image_height, &editor->impl->resolved_port, imgui_window, imgui_user_settings,
+            &image_width, &image_height, report_resolved_port, editor, imgui_window, imgui_user_settings,
             editor_get_external_active_count, editor);
 
         if (background_image)
@@ -969,12 +975,11 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
 pnanovdb_int32_t get_resolved_port(pnanovdb_editor_t* editor, pnanovdb_bool_t should_wait)
 {
-    auto port_atomic = reinterpret_cast<std::atomic<pnanovdb_int32_t>*>(&editor->impl->resolved_port);
-    while (should_wait && port_atomic->load() == PNANOVDB_EDITOR_RESOLVED_PORT_PENDING)
+    while (should_wait && editor->impl->resolved_port.load() == PNANOVDB_EDITOR_RESOLVED_PORT_PENDING)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    return port_atomic->load();
+    return editor->impl->resolved_port.load();
 }
 
 void start(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb_editor_config_t* config)
