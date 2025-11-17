@@ -166,6 +166,13 @@ void EditorScene::sync_current_view_state(SyncDirection sync_direction)
     // Now process with the copied data (no longer holding mutex)
     if (obj_shader_params || !obj_shader_name.empty())
     {
+        // Check if shader name changed and trigger recompilation if needed
+        if (!obj_shader_name.empty() && m_editor->impl->shader_name != obj_shader_name)
+        {
+            m_editor->impl->shader_name = obj_shader_name;
+            m_imgui_instance->pending.update_shader = true;
+        }
+
         copy_shader_params(obj_type, obj_shader_params, obj_shader_name, sync_direction);
     }
 }
@@ -301,6 +308,13 @@ void EditorScene::load_view_into_editor_and_ui(SceneObject* scene_obj)
         m_editor->impl->nanovdb_array = scene_obj->nanovdb_array;
         m_editor->impl->shader_params = obj_shader_params;
         m_editor->impl->shader_params_data_type = nullptr;
+    }
+
+    // Update the shader name if it differs from current, and trigger shader recompilation
+    if (!obj_shader_name.empty() && m_editor->impl->shader_name != obj_shader_name)
+    {
+        m_editor->impl->shader_name = obj_shader_name;
+        m_imgui_instance->pending.update_shader = true;
     }
 
     copy_shader_params(obj_type, obj_shader_params, obj_shader_name, SyncDirection::EditorToUI);
@@ -1206,7 +1220,6 @@ void EditorScene::set_properties_selection(ViewType type,
     {
         m_view_selection = candidate;
 
-        // Update shader_name to reflect the selected object's shader
         m_scene_manager.with_object(
             scene_token, name_token,
             [&](SceneObject* obj)
@@ -1216,10 +1229,6 @@ void EditorScene::set_properties_selection(ViewType type,
                     Console::getInstance().addLog(Console::LogLevel::Debug,
                                                   "set_properties_selection: object found, shader_name='%s'",
                                                   token_to_string_log(obj->shader_name.shader_name));
-                    if (!token_is_empty(obj->shader_name.shader_name))
-                    {
-                        m_editor->impl->shader_name = obj->shader_name.shader_name->str;
-                    }
                 }
                 else
                 {

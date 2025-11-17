@@ -385,6 +385,14 @@ int main(int argc, char* argv[])
     pnanovdb_editor_token_t* image_token = editor.get_token("image2d");
     editor.add_nanovdb_2(&editor, image_scene_main, image_token, image_nanovdb);
     compute.destroy_array(image_nanovdb);
+
+    pnanovdb_editor_shader_name_t* mapped_shader = (pnanovdb_editor_shader_name_t*)editor.map_params(
+        &editor, image_scene_main, image_token, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t));
+    if (mapped_shader)
+    {
+        mapped_shader->shader_name = editor.get_token("editor/image2d.slang");
+        editor.unmap_params(&editor, image_scene_main, image_token);
+    }
 #    endif
 
     pnanovdb_editor_config_t config = {};
@@ -460,9 +468,17 @@ int main(int argc, char* argv[])
     pnanovdb_compute_array_t* image_nanovdb = compute.nanovdb_from_image_rgba8(image_rgba, width, height);
     compute.destroy_array(image_rgba);
 
-    pnanovdb_editor_token_t* image_scene_main = editor.get_token("main");
     pnanovdb_editor_token_t* image_token = editor.get_token("image2d");
-    editor.add_nanovdb_2(&editor, image_scene_main, image_token, image_nanovdb);
+    editor.add_nanovdb_2(&editor, scene_token, image_token, image_nanovdb);
+    compute.destroy_array(image_nanovdb);
+
+    pnanovdb_editor_shader_name_t* mapped_shader = (pnanovdb_editor_shader_name_t*)editor.map_params(
+        &editor, scene_token, image_token, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t));
+    if (mapped_shader)
+    {
+        mapped_shader->shader_name = editor.get_token("editor/image2d.slang");
+        editor.unmap_params(&editor, scene_token, image_token);
+    }
 #    endif
 
     editor.wait_for_interrupt(&editor);
@@ -471,10 +487,6 @@ int main(int argc, char* argv[])
 
     pnanovdb_editor_free(&editor);
 #endif
-
-#    ifdef TEST_IMAGE2D
-     compute.destroy_array(image_nanovdb);
-     #endif
 
     compute.device_interface.destroy_device(device_manager, device);
     compute.device_interface.destroy_device_manager(device_manager);
