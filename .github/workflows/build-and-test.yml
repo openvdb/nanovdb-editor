@@ -124,28 +124,28 @@ jobs:
 
           Write-Host "Lavapipe installed successfully"
 
-      - name: Run GTests
-        run: |
-          # Set lavapipe paths
-          $MesaDir = "$env:TEMP\mesa3d"
+          # Save paths for next step
           $VulkanICDPath = Join-Path $MesaDir "x64\lvp_icd.x86_64.json"
-          $MesaBinPath = Join-Path $MesaDir "x64"
+          echo "MESA_VK_ICD_PATH=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-          # Verify ICD file exists
-          if (Test-Path $VulkanICDPath) {
-              Write-Host "ICD file found: $VulkanICDPath"
-          } else {
-              Write-Host "ERROR: ICD file not found: $VulkanICDPath"
-              exit 1
-          }
-
-          # Set environment and run tests
-          $env:VK_ICD_FILENAMES = $VulkanICDPath
-          $env:VK_DRIVER_FILES = $VulkanICDPath
-          $env:PATH = "$MesaBinPath;$env:PATH"
-
+      - name: Run GTests
+        env:
+          VK_ICD_FILENAMES: ${{ env.MESA_VK_ICD_PATH }}
+          VK_DRIVER_FILES: ${{ env.MESA_VK_ICD_PATH }}
+        run: |
+          # Verify environment variables are set
           Write-Host "VK_ICD_FILENAMES: $env:VK_ICD_FILENAMES"
           Write-Host "VK_DRIVER_FILES: $env:VK_DRIVER_FILES"
+
+          # Verify ICD file exists
+          if (Test-Path $env:VK_ICD_FILENAMES) {
+              Write-Host "ICD file found: $env:VK_ICD_FILENAMES"
+          } else {
+              Write-Host "ERROR: ICD file not found: $env:VK_ICD_FILENAMES"
+              Write-Host "Listing Mesa directory:"
+              Get-ChildItem "$env:TEMP\mesa3d\x64\" -Filter "*.json" | Format-Table Name
+              exit 1
+          }
 
           ctest --test-dir build/gtests -C Release --output-on-failure --verbose
 
