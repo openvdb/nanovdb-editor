@@ -106,7 +106,7 @@ jobs:
 
   nanovdb-editor-build-and-test-linux-arm:
     name: Build and Test (Linux ARM64)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     defaults:
       run:
         shell: bash -el {0}
@@ -114,30 +114,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and Test on ARM64
+      - name: Install Vulkan dependencies
         run: |
-          docker run --rm --platform linux/arm64 \
-            -v ${{ github.workspace }}:/workspace \
-            -w /workspace \
-            arm64v8/ubuntu:22.04 \
-            bash -c "
-              apt-get update && \
-              apt-get install -y build-essential cmake git wget \
-                mesa-vulkan-drivers vulkan-tools \
-                # libxcb1-dev libxcb-keysyms1-dev libxcb-randr0-dev \
-                # libxcb-xinerama0-dev libx11-xcb-dev libxrandr-dev \
-                # libwayland-dev wayland-protocols libdirectfb-dev && \
-              chmod +x ./build.sh && \
-              ./build.sh -rfv
-            "
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
+          sudo apt-get install -y libxcb1-dev libxcb-keysyms1-dev libxcb-randr0-dev libxcb-xinerama0-dev libx11-xcb-dev libxrandr-dev libwayland-dev wayland-protocols libdirectfb-dev
+
+      - name: Build NanoVDB Editor (GLFW disabled)
+        run: |
+          set -e
+          chmod +x ./build.sh
+          ./build.sh -rfv
+
+      - name: Build NanoVDB Editor (GLFW enabled)
+        run: |
+          set -e
+          chmod +x ./build.sh
+          ./build.sh -rfv
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -146,3 +140,9 @@ jobs:
           path: |
             build/
           retention-days: 2
+
+      - name: Run GTests
+        run: |
+          set -e
+          export LD_LIBRARY_PATH=$PWD/build/Release/lib:$PWD/build/Release/bin:$LD_LIBRARY_PATH
+          ctest --test-dir build/Release/gtests -C Release --output-on-failure --verbose

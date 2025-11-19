@@ -91,66 +91,6 @@ jobs:
         name: wheels-${{ matrix.os }}
         path: ./wheelhouse/*.whl
 
-  build_wheels_arm:
-    name: Build (Linux ARM64)
-    runs-on: ubuntu-latest
-    needs: [validate_version]
-    if: ${{ !failure() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && endsWith(github.ref, '-dev') && needs.validate_version.outputs.version_valid == 'true')) }}
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
-
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-
-    # Rename package to nanovdb-editor-dev
-    - name: Rename package for dev release
-      shell: bash
-      run: |
-        sed -i 's/name = "nanovdb-editor"/name = "nanovdb-editor-dev"/' pymodule/pyproject.toml
-        cat pymodule/pyproject.toml | grep "name ="
-
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3
-      with:
-        platforms: arm64
-
-    - name: Build wheels
-      uses: pypa/cibuildwheel@v2.16.5
-      env:
-        CIBW_BUILD: "cp311-manylinux_aarch64"
-        CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
-        CIBW_BUILD_VERBOSITY: 1
-        CIBW_ARCHS_LINUX: aarch64
-
-        # Linux dependencies
-        CIBW_BEFORE_ALL_LINUX: |
-          dnf install -y cmake git
-          cmake --version
-          yum install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel wayland-protocols-devel
-
-        CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
-          auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs
-
-        # Install test dependencies before testing
-        CIBW_TEST_REQUIRES: numpy
-
-        # Test the wheels (import with original module name)
-        CIBW_TEST_COMMAND: python -c "import nanovdb_editor; print('Import successful')"
-
-        # Mark this as a PyPI build
-        CIBW_ENVIRONMENT: CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON"
-      with:
-        package-dir: pymodule
-
-    - uses: actions/upload-artifact@v4
-      with:
-        name: wheels-linux-arm64
-        path: ./wheelhouse/*.whl
-
   build_sdist:
     name: Build source distribution
     runs-on: ubuntu-latest
@@ -184,7 +124,7 @@ jobs:
   # Dev package upload - publishes to production PyPI with -dev package name
   upload_pypi_dev:
     name: Upload wheel to PyPi (dev package)
-    needs: [build_wheels, build_wheels_arm, build_sdist, validate_version]
+    needs: [build_wheels, build_sdist, validate_version]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && endsWith(github.ref, '-dev') && needs.validate_version.outputs.version_valid == 'true'
 
