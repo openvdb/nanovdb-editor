@@ -126,6 +126,14 @@ jobs:
 
       - name: Run GTests
         run: |
+          # Set lavapipe environment variables for this step
+          $MesaDir = "$env:TEMP\mesa3d"
+          $VulkanICDPath = Join-Path $MesaDir "x64\lvp_icd.x86_64.json"
+          $env:VK_ICD_FILENAMES = $VulkanICDPath
+          $env:VK_DRIVER_FILES = $VulkanICDPath
+
+          Write-Host "Using Vulkan ICD: $env:VK_ICD_FILENAMES"
+
           ctest --test-dir build/gtests -C Release --output-on-failure --verbose
 
   nanovdb-editor-build-and-test-linux-arm:
@@ -172,5 +180,6 @@ jobs:
         run: |
           set -e
           export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.aarch64.json
+          echo "Using Vulkan driver: $VK_DRIVER_FILES"
           export LD_LIBRARY_PATH=$PWD/build/Release/lib:$PWD/build/Release/bin:$LD_LIBRARY_PATH
           ctest --test-dir build/Release/gtests -C Release --output-on-failure --verbose
