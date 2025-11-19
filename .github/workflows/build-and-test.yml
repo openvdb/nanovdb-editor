@@ -129,39 +129,13 @@ jobs:
           echo "MESA_VK_ICD_PATH=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Run GTests
+        shell: cmd
         run: |
-          # Set lavapipe paths directly in PowerShell environment
-          $MesaDir = "$env:TEMP\mesa3d"
-          $VulkanICDPath = Join-Path $MesaDir "x64\lvp_icd.x86_64.json"
-          $MesaBinPath = Join-Path $MesaDir "x64"
-
-          # Verify ICD file exists
-          if (Test-Path $VulkanICDPath) {
-              Write-Host "ICD file found: $VulkanICDPath"
-          } else {
-              Write-Host "ERROR: ICD file not found: $VulkanICDPath"
-              Write-Host "Listing Mesa directory:"
-              Get-ChildItem "$env:TEMP\mesa3d\x64\" -Filter "*.json" | Format-Table Name
-              exit 1
-          }
-
-          # Set environment variables for current process
-          $env:VK_ICD_FILENAMES = $VulkanICDPath
-          $env:VK_DRIVER_FILES = $VulkanICDPath
-          $env:PATH = "$MesaBinPath;$env:PATH"
-
-          Write-Host "VK_ICD_FILENAMES: $env:VK_ICD_FILENAMES"
-          Write-Host "VK_DRIVER_FILES: $env:VK_DRIVER_FILES"
-          Write-Host "Mesa bin in PATH: $MesaBinPath"
-
-          # Run ctest with environment variables explicitly passed
-          # Use --test-env to pass environment variables to test processes
-          cd build/gtests
-          $env:CTEST_OUTPUT_ON_FAILURE = "1"
-          ctest -C Release --output-on-failure --verbose `
-            --test-env VK_ICD_FILENAMES="$VulkanICDPath" `
-            --test-env VK_DRIVER_FILES="$VulkanICDPath" `
-            --test-env PATH="$MesaBinPath;$env:PATH"
+          set VK_ICD_FILENAMES=%TEMP%\mesa3d\x64\lvp_icd.x86_64.json
+          set VK_DRIVER_FILES=%TEMP%\mesa3d\x64\lvp_icd.x86_64.json
+          set PATH=%TEMP%\mesa3d\x64;%PATH%
+          cd build\gtests
+          ctest -C Release --output-on-failure --verbose
 
   nanovdb-editor-build-and-test-linux-arm:
     name: Build and Test (Linux ARM64)
