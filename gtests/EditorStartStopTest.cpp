@@ -50,7 +50,7 @@ TEST(NanoVDBEditor, EditorStartStopHeadless)
     cfg.ip_address = "127.0.0.1";
     cfg.port = 8080;
     cfg.headless = PNANOVDB_TRUE;
-    cfg.streaming = PNANOVDB_FALSE;
+    cfg.streaming = PNANOVDB_TRUE;
 
     // Start, wait briefly, then stop
     editor.start(&editor, device, &cfg);
