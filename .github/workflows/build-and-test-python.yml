@@ -46,6 +46,12 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install CMake (system)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake
+          cmake --version
+
       - name: Install Vulkan Loader dependencies
         run: |
           set -e
