@@ -120,6 +120,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
           sudo apt-get install -y libxcb1-dev libxcb-keysyms1-dev libxcb-randr0-dev libxcb-xinerama0-dev libx11-xcb-dev libxrandr-dev libwayland-dev wayland-protocols libdirectfb-dev
+          # Ensure lavapipe is available
+          export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.aarch64.json
+          vulkaninfo --summary || true
 
       - name: Build NanoVDB Editor (GLFW disabled)
         run: |
@@ -144,5 +147,6 @@ jobs:
       - name: Run GTests
         run: |
           set -e
+          export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.aarch64.json
           export LD_LIBRARY_PATH=$PWD/build/Release/lib:$PWD/build/Release/bin:$LD_LIBRARY_PATH
           ctest --test-dir build/Release/gtests -C Release --output-on-failure --verbose
