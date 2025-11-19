@@ -105,3 +105,47 @@ jobs:
       # - name: Run GTests
       #   run: |
       #     ctest --test-dir build/gtests -C Release --output-on-failure --verbose
+
+  nanovdb-editor-build-and-test-linux-arm:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    name: Build and Test (Linux ARM64)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Test on ARM64
+        run: |
+          docker run --rm --platform linux/arm64 \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            arm64v8/ubuntu:22.04 \
+            bash -c "
+              apt-get update && \
+              apt-get install -y build-essential cmake git wget \
+                mesa-vulkan-drivers vulkan-tools \
+                # libxcb1-dev libxcb-keysyms1-dev libxcb-randr0-dev \
+                # libxcb-xinerama0-dev libx11-xcb-dev libxrandr-dev \
+                # libwayland-dev wayland-protocols libdirectfb-dev && \
+              chmod +x ./build.sh && \
+              ./build.sh -rfv
+            "
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanovdb-editor-build-linux-arm64
+          path: |
+            build/
+          retention-days: 2
