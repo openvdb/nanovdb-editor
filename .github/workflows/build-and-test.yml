@@ -125,14 +125,20 @@ jobs:
           Write-Host "Lavapipe installed successfully"
 
       - name: Run GTests
+        env:
+          VK_ICD_FILENAMES: ${{ env.VK_ICD_FILENAMES }}
+          VK_DRIVER_FILES: ${{ env.VK_DRIVER_FILES }}
         run: |
-          # Set lavapipe environment variables for this step
-          $MesaDir = "$env:TEMP\mesa3d"
-          $VulkanICDPath = Join-Path $MesaDir "x64\lvp_icd.x86_64.json"
-          $env:VK_ICD_FILENAMES = $VulkanICDPath
-          $env:VK_DRIVER_FILES = $VulkanICDPath
+          # Verify environment variables
+          Write-Host "VK_ICD_FILENAMES: $env:VK_ICD_FILENAMES"
+          Write-Host "VK_DRIVER_FILES: $env:VK_DRIVER_FILES"
 
-          Write-Host "Using Vulkan ICD: $env:VK_ICD_FILENAMES"
+          # Verify ICD file exists
+          if (Test-Path $env:VK_ICD_FILENAMES) {
+              Write-Host "ICD file found: $env:VK_ICD_FILENAMES"
+          } else {
+              Write-Host "ERROR: ICD file not found: $env:VK_ICD_FILENAMES"
+          }
 
           ctest --test-dir build/gtests -C Release --output-on-failure --verbose
 
