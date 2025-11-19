@@ -1006,15 +1006,6 @@ pnanovdb_compute_swapchain_t* createSwapchain(pnanovdb_compute_queue_t* queue,
         ptr->desc.create_surface(
             ptr->desc.window_userdata, device->deviceManager->vulkanInstance, (void**)&ptr->surfaceVulkan);
     }
-
-    if (!ptr->surfaceVulkan)
-    {
-        // Headless mode: no surface, no swapchain
-        ptr->swapchainFormat =
-            formatConverter_convertToVulkan(ptr->deviceQueue->device->formatConverter, ptr->desc.format);
-        return cast(ptr);
-    }
-
     VkBool32 supported = false;
     instanceLoader->vkGetPhysicalDeviceSurfaceSupportKHR(
         device->physicalDevice, ptr->deviceQueue->queueFamilyIdx, ptr->surfaceVulkan, &supported);
@@ -1053,13 +1044,6 @@ void destroySwapchain(pnanovdb_compute_swapchain_t* swapchain)
 
 void swapchain_getWindowSize(Swapchain* ptr, pnanovdb_uint32_t* width, pnanovdb_uint32_t* height)
 {
-    if (!ptr->desc.get_framebuffer_size)
-    {
-        *width = ptr->width > 0 ? ptr->width : 1920;
-        *height = ptr->height > 0 ? ptr->height : 1080;
-        return;
-    }
-
     int widthi, heighti;
     ptr->desc.get_framebuffer_size(ptr->desc.window_userdata, &widthi, &heighti);
     *width = widthi;
@@ -1071,12 +1055,6 @@ void swapchain_initSwapchain(Swapchain* ptr)
     auto device = ptr->deviceQueue->device;
     auto instanceLoader = &ptr->deviceQueue->device->deviceManager->loader;
     auto deviceLoader = &ptr->deviceQueue->device->loader;
-
-    if (!ptr->surfaceVulkan)
-    {
-        ptr->valid = PNANOVDB_TRUE;
-        return;
-    }
 
     pnanovdb_uint32_t width = 0u;
     pnanovdb_uint32_t height = 0u;
@@ -1246,7 +1224,7 @@ int presentSwapchain(pnanovdb_compute_swapchain_t* swapchain, pnanovdb_bool_t vs
 
     auto loader = &ptr->deviceQueue->device->loader;
 
-    if (!ptr->surfaceVulkan || ptr->valid == PNANOVDB_FALSE)
+    if (ptr->valid == PNANOVDB_FALSE)
     {
         return flush(cast(ptr->deviceQueue), flushedFrameID, nullptr, nullptr);
     }
@@ -1300,11 +1278,6 @@ pnanovdb_compute_texture_t* getSwapchainFrontTexture(pnanovdb_compute_swapchain_
 
     auto device = ptr->deviceQueue->device;
     auto loader = &ptr->deviceQueue->device->loader;
-
-    if (!ptr->surfaceVulkan)
-    {
-        return nullptr;
-    }
 
     if (ptr->valid == PNANOVDB_FALSE)
     {
