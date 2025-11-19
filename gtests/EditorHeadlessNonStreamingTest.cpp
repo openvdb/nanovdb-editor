@@ -10,7 +10,7 @@
 #include <chrono>
 #include <thread>
 
-TEST(NanoVDBEditor, EditorStartStopHeadlessStreaming)
+TEST(NanoVDBEditor, EditorHeadlessNonStreaming)
 {
     // Load compiler
     pnanovdb_compiler_t compiler = {};
@@ -45,12 +45,12 @@ TEST(NanoVDBEditor, EditorStartStopHeadlessStreaming)
     pnanovdb_editor_load(&editor, &compute, &compiler);
     ASSERT_NE(editor.module, nullptr) << "Editor module failed to load";
 
-    // Configure editor (headless, streaming mode)
+    // Configure editor (headless, non-streaming mode)
     pnanovdb_editor_config_t cfg = {};
     cfg.ip_address = "127.0.0.1";
-    cfg.port = 8080;
+    cfg.port = 8081; // Different port from streaming test
     cfg.headless = PNANOVDB_TRUE;
-    cfg.streaming = PNANOVDB_TRUE;
+    cfg.streaming = PNANOVDB_FALSE;
 
     // Start, wait briefly, then stop
     editor.start(&editor, device, &cfg);
