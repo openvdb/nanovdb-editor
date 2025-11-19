@@ -145,26 +145,23 @@ jobs:
               exit 1
           }
 
-          # Set environment variables for current process and children
+          # Set environment variables for current process
           $env:VK_ICD_FILENAMES = $VulkanICDPath
           $env:VK_DRIVER_FILES = $VulkanICDPath
           $env:PATH = "$MesaBinPath;$env:PATH"
-
-          # Also set them at machine level for ctest child processes
-          [System.Environment]::SetEnvironmentVariable("VK_ICD_FILENAMES", $VulkanICDPath, "Process")
-          [System.Environment]::SetEnvironmentVariable("VK_DRIVER_FILES", $VulkanICDPath, "Process")
 
           Write-Host "VK_ICD_FILENAMES: $env:VK_ICD_FILENAMES"
           Write-Host "VK_DRIVER_FILES: $env:VK_DRIVER_FILES"
           Write-Host "Mesa bin in PATH: $MesaBinPath"
 
-          # Verify vulkan-1.dll can be found
-          $vulkanDll = Join-Path $MesaBinPath "vulkan-1.dll"
-          if (Test-Path $vulkanDll) {
-              Write-Host "vulkan-1.dll found in Mesa directory"
-          }
-
-          ctest --test-dir build/gtests -C Release --output-on-failure --verbose
+          # Run ctest with environment variables explicitly passed
+          # Use --test-env to pass environment variables to test processes
+          cd build/gtests
+          $env:CTEST_OUTPUT_ON_FAILURE = "1"
+          ctest -C Release --output-on-failure --verbose `
+            --test-env VK_ICD_FILENAMES="$VulkanICDPath" `
+            --test-env VK_DRIVER_FILES="$VulkanICDPath" `
+            --test-env PATH="$MesaBinPath;$env:PATH"
 
   nanovdb-editor-build-and-test-linux-arm:
     name: Build and Test (Linux ARM64)
