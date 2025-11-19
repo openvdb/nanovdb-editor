@@ -31,7 +31,6 @@ permissions:
 
 jobs:
   nanovdb-editor-build-and-test-linux:
-    if: ${{ github.event_name != 'pull_request' }}
     name: Build and Test (Linux)
     runs-on: ubuntu-latest
     defaults:
@@ -75,7 +74,6 @@ jobs:
           ctest --test-dir build/Release/gtests -C Release --output-on-failure --verbose
 
   nanovdb-editor-build-and-test-windows:
-    if: ${{ github.event_name != 'pull_request' }}
     name: Build and Test (Windows)
     runs-on: windows-latest
     defaults:
@@ -107,7 +105,6 @@ jobs:
       #     ctest --test-dir build/gtests -C Release --output-on-failure --verbose
 
   nanovdb-editor-build-and-test-linux-arm:
-    if: ${{ github.event_name != 'pull_request' }}
     name: Build and Test (Linux ARM64)
     runs-on: ubuntu-latest
     defaults:
