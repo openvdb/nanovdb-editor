@@ -57,6 +57,9 @@ TEST(NanoVDBEditor, EditorStartStopHeadlessStreaming)
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     editor.stop(&editor);
 
+    // Give extra time for background thread cleanup
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
     // Cleanup
     pnanovdb_editor_free(&editor);
     compute.device_interface.destroy_device(device_manager, device);

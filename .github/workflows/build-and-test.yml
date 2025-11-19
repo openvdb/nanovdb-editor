@@ -129,22 +129,39 @@ jobs:
           echo "MESA_VK_ICD_PATH=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Run GTests
-        env:
-          VK_ICD_FILENAMES: ${{ env.MESA_VK_ICD_PATH }}
-          VK_DRIVER_FILES: ${{ env.MESA_VK_ICD_PATH }}
         run: |
-          # Verify environment variables are set
-          Write-Host "VK_ICD_FILENAMES: $env:VK_ICD_FILENAMES"
-          Write-Host "VK_DRIVER_FILES: $env:VK_DRIVER_FILES"
+          # Set lavapipe paths directly in PowerShell environment
+          $MesaDir = "$env:TEMP\mesa3d"
+          $VulkanICDPath = Join-Path $MesaDir "x64\lvp_icd.x86_64.json"
+          $MesaBinPath = Join-Path $MesaDir "x64"
 
           # Verify ICD file exists
-          if (Test-Path $env:VK_ICD_FILENAMES) {
-              Write-Host "ICD file found: $env:VK_ICD_FILENAMES"
+          if (Test-Path $VulkanICDPath) {
+              Write-Host "ICD file found: $VulkanICDPath"
           } else {
-              Write-Host "ERROR: ICD file not found: $env:VK_ICD_FILENAMES"
+              Write-Host "ERROR: ICD file not found: $VulkanICDPath"
               Write-Host "Listing Mesa directory:"
               Get-ChildItem "$env:TEMP\mesa3d\x64\" -Filter "*.json" | Format-Table Name
               exit 1
+          }
+
+          # Set environment variables for current process and children
+          $env:VK_ICD_FILENAMES = $VulkanICDPath
+          $env:VK_DRIVER_FILES = $VulkanICDPath
+          $env:PATH = "$MesaBinPath;$env:PATH"
+
+          # Also set them at machine level for ctest child processes
+          [System.Environment]::SetEnvironmentVariable("VK_ICD_FILENAMES", $VulkanICDPath, "Process")
+          [System.Environment]::SetEnvironmentVariable("VK_DRIVER_FILES", $VulkanICDPath, "Process")
+
+          Write-Host "VK_ICD_FILENAMES: $env:VK_ICD_FILENAMES"
+          Write-Host "VK_DRIVER_FILES: $env:VK_DRIVER_FILES"
+          Write-Host "Mesa bin in PATH: $MesaBinPath"
+
+          # Verify vulkan-1.dll can be found
+          $vulkanDll = Join-Path $MesaBinPath "vulkan-1.dll"
+          if (Test-Path $vulkanDll) {
+              Write-Host "vulkan-1.dll found in Mesa directory"
           }
 
           ctest --test-dir build/gtests -C Release --output-on-failure --verbose
