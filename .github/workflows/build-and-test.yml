@@ -125,20 +125,27 @@ jobs:
           Write-Host "Lavapipe installed successfully"
 
       - name: Run GTests
-        env:
-          VK_ICD_FILENAMES: ${{ env.VK_ICD_FILENAMES }}
-          VK_DRIVER_FILES: ${{ env.VK_DRIVER_FILES }}
         run: |
-          # Verify environment variables
-          Write-Host "VK_ICD_FILENAMES: $env:VK_ICD_FILENAMES"
-          Write-Host "VK_DRIVER_FILES: $env:VK_DRIVER_FILES"
+          # Set lavapipe paths
+          $MesaDir = "$env:TEMP\mesa3d"
+          $VulkanICDPath = Join-Path $MesaDir "x64\lvp_icd.x86_64.json"
+          $MesaBinPath = Join-Path $MesaDir "x64"
 
           # Verify ICD file exists
-          if (Test-Path $env:VK_ICD_FILENAMES) {
-              Write-Host "ICD file found: $env:VK_ICD_FILENAMES"
+          if (Test-Path $VulkanICDPath) {
+              Write-Host "ICD file found: $VulkanICDPath"
           } else {
-              Write-Host "ERROR: ICD file not found: $env:VK_ICD_FILENAMES"
+              Write-Host "ERROR: ICD file not found: $VulkanICDPath"
+              exit 1
           }
+
+          # Set environment and run tests
+          $env:VK_ICD_FILENAMES = $VulkanICDPath
+          $env:VK_DRIVER_FILES = $VulkanICDPath
+          $env:PATH = "$MesaBinPath;$env:PATH"
+
+          Write-Host "VK_ICD_FILENAMES: $env:VK_ICD_FILENAMES"
+          Write-Host "VK_DRIVER_FILES: $env:VK_DRIVER_FILES"
 
           ctest --test-dir build/gtests -C Release --output-on-failure --verbose
 
@@ -185,7 +192,27 @@ jobs:
       - name: Run GTests
         run: |
           set -e
+
+          # Configure lavapipe for software rendering
+          export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.aarch64.json
           export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.aarch64.json
+
+          # Additional lavapipe configuration
+          export LP_NUM_THREADS=1
+          export LIBGL_ALWAYS_SOFTWARE=1
+          export GALLIUM_DRIVER=llvmpipe
+
+          # Verify ICD file exists
+          if [ -f "$VK_ICD_FILENAMES" ]; then
+              echo "ICD file found: $VK_ICD_FILENAMES"
+          else
+              echo "ERROR: ICD file not found: $VK_ICD_FILENAMES"
+              ls -la /usr/share/vulkan/icd.d/ || true
+              exit 1
+          fi
+
           echo "Using Vulkan driver: $VK_DRIVER_FILES"
+          echo "LP_NUM_THREADS: $LP_NUM_THREADS"
+
           export LD_LIBRARY_PATH=$PWD/build/Release/lib:$PWD/build/Release/bin:$LD_LIBRARY_PATH
           ctest --test-dir build/Release/gtests -C Release --output-on-failure --verbose
