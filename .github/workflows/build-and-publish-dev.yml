@@ -29,13 +29,25 @@ jobs:
         allow-dev-suffix: 'true'
 
   build_wheels:
-    name: Build (${{ matrix.os }})
+    name: Build (${{ matrix.os }}${{ matrix.arch && format(' {0}', matrix.arch) || '' }})
     runs-on: ${{ matrix.os }}
     needs: [validate_version]
     if: ${{ !failure() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && endsWith(github.ref, '-dev') && needs.validate_version.outputs.version_valid == 'true')) }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            arch: x86_64
+            cibw_build: "cp311-manylinux_x86_64"
+            cibw_archs: ""
+          - os: ubuntu-24.04-arm64
+            arch: ARM64
+            cibw_build: "cp311-manylinux_aarch64"
+            cibw_archs: "aarch64"
+          - os: windows-latest
+            arch: ""
+            cibw_build: "cp311-win_amd64"
+            cibw_archs: ""
 
     steps:
     - uses: actions/checkout@v4
@@ -57,9 +69,11 @@ jobs:
     - name: Build wheels
       uses: pypa/cibuildwheel@v2.16.5
       env:
-        CIBW_BUILD: "cp311-manylinux_x86_64 cp311-win_amd64"
+        CIBW_BUILD: ${{ matrix.cibw_build }}
         CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
+        CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
         CIBW_BUILD_VERBOSITY: 1
+        CIBW_ARCHS_LINUX: ${{ matrix.cibw_archs }}
 
         # Linux dependencies
         CIBW_BEFORE_ALL_LINUX: |
@@ -88,7 +102,7 @@ jobs:
 
     - uses: actions/upload-artifact@v4
       with:
-        name: wheels-${{ matrix.os }}
+        name: wheels-${{ matrix.os }}${{ matrix.arch && format('-{0}', matrix.arch) || '' }}
         path: ./wheelhouse/*.whl
 
   build_sdist:
