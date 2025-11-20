@@ -7,12 +7,10 @@
 #include <nanovdb_editor/putil/Compute.h>
 #include <nanovdb_editor/putil/Editor.h>
 
-#include <nanovdb/tools/CreatePrimitives.h>
-
 #include <chrono>
 #include <thread>
 
-TEST(NanoVDBEditor, EditorStartStopHeadlessStreaming)
+TEST(NanoVDBEditor, EditorHeadlessNonStreaming)
 {
     // Load compiler
     pnanovdb_compiler_t compiler = {};
@@ -47,45 +45,19 @@ TEST(NanoVDBEditor, EditorStartStopHeadlessStreaming)
     pnanovdb_editor_load(&editor, &compute, &compiler);
     ASSERT_NE(editor.module, nullptr) << "Editor module failed to load";
 
-    // Create a minimal NanoVDB sphere grid programmatically
-    auto sphere_grid = nanovdb::tools::createLevelSetSphere<float>(10.0f);
-
-    // Create compute array from the grid data
-    pnanovdb_compute_array_t* nanovdb_array = compute.create_array(4u, sphere_grid.size() / 4u, sphere_grid.data());
-    ASSERT_NE(nanovdb_array, nullptr) << "Failed to create nanovdb array";
-
-    // Configure editor (headless, streaming mode)
+    // Configure editor (headless, non-streaming mode)
     pnanovdb_editor_config_t cfg = {};
     cfg.ip_address = "127.0.0.1";
-    cfg.port = 8080;
+    cfg.port = 8081; // Different port from streaming test
     cfg.headless = PNANOVDB_TRUE;
-    cfg.streaming = PNANOVDB_TRUE;
+    cfg.streaming = PNANOVDB_FALSE;
 
     // Start, wait briefly, then stop
     editor.start(&editor, device, &cfg);
-
-    // Add nanovdb to a scene with a token
-    pnanovdb_editor_token_t* scene_token = editor.get_token("main");
-    pnanovdb_editor_token_t* object_token = editor.get_token("test_object");
-    editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
-    compute.destroy_array(nanovdb_array);
-
-    // Use map_params to set the shader to wireframe.slang
-    pnanovdb_editor_shader_name_t* mapped_shader = (pnanovdb_editor_shader_name_t*)editor.map_params(
-        &editor, scene_token, object_token, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t));
-    if (mapped_shader)
-    {
-        mapped_shader->shader_name = editor.get_token("editor/wireframe.slang");
-        editor.unmap_params(&editor, scene_token, object_token);
-    }
-
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     editor.stop(&editor);
 
-    // Give extra time for background thread cleanup
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-    // Cleanup - sphere_grid stays alive until here
+    // Cleanup
     pnanovdb_editor_free(&editor);
     compute.device_interface.destroy_device(device_manager, device);
     compute.device_interface.destroy_device_manager(device_manager);

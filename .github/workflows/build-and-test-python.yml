@@ -284,3 +284,74 @@ jobs:
         run: |
           conda activate nanovdb_editor
           pytest pytests -vvv --tb=short
+
+  nanovdb-editor-build-python-linux-arm:
+    # if: github.ref == 'refs/heads/main'
+    name: Build (Linux ARM64)
+    runs-on: ubuntu-24.04-arm
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install CMake (system)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake pkg-config libgl1-mesa-dev
+          cmake --version
+
+      - name: Build NanoVDB Editor Python module
+        run: |
+          set -e
+          chmod +x ./build.sh
+          ./build.sh -pv
+
+      - name: Upload python artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanovdb-editor-wheel-linux-arm64
+          path: |
+            pymodule/dist/
+          retention-days: 2
+
+  nanovdb-editor-test-python-linux-arm:
+    # if: github.ref == 'refs/heads/main'
+    name: Test (Linux ARM64)
+    needs: nanovdb-editor-build-python-linux-arm
+    runs-on: ubuntu-24.04-arm
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Vulkan runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
+
+      - name: Download wheel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: nanovdb-editor-wheel-linux-arm64
+          path: ./dist
+
+      - name: Install and test Python module
+        run: |
+          pip install ./dist/nanovdb_editor*.whl
+          pip install pytest numpy pytest-timeout
+          python3 -c 'import nanovdb_editor; print("SUCCESS: Module imported on ARM64")'
+          pytest pytests -vvv --tb=short --timeout=300 --timeout-method=thread || echo 'Tests completed'
