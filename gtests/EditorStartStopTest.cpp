@@ -49,11 +49,9 @@ TEST(NanoVDBEditor, EditorStartStopHeadlessStreaming)
 
     // Create a minimal NanoVDB sphere grid programmatically
     auto sphere_grid = nanovdb::tools::createLevelSetSphere<float>(10.0f);
-    const void* grid_data = sphere_grid.data();
-    uint64_t grid_size = sphere_grid.size();
 
     // Create compute array from the grid data
-    pnanovdb_compute_array_t* nanovdb_array = compute.create_array(4u, grid_size / 4u, grid_data);
+    pnanovdb_compute_array_t* nanovdb_array = compute.create_array(4u, sphere_grid.size() / 4u, sphere_grid.data());
     ASSERT_NE(nanovdb_array, nullptr) << "Failed to create nanovdb array";
 
     // Add nanovdb to a scene with a token
@@ -86,7 +84,7 @@ TEST(NanoVDBEditor, EditorStartStopHeadlessStreaming)
     // Give extra time for background thread cleanup
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    // Cleanup
+    // Cleanup - sphere_grid stays alive until here
     pnanovdb_editor_free(&editor);
     compute.device_interface.destroy_device(device_manager, device);
     compute.device_interface.destroy_device_manager(device_manager);
