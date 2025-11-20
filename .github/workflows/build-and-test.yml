@@ -31,7 +31,6 @@ permissions:
 
 jobs:
   nanovdb-editor-build-and-test-linux:
-    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Build and Test (Linux)
     runs-on: ubuntu-latest
     defaults:
@@ -75,7 +74,6 @@ jobs:
           ctest --test-dir build/Release/gtests -C Release --output-on-failure --verbose
 
   nanovdb-editor-build-and-test-windows:
-    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Build and Test (Windows)
     runs-on: windows-latest
     defaults:
@@ -101,7 +99,118 @@ jobs:
             build/
           retention-days: 2
 
-# CI is missing Vulkan SDK
-      # - name: Run GTests
-      #   run: |
-      #     ctest --test-dir build/gtests -C Release --output-on-failure --verbose
+      - name: Install Mesa3D lavapipe
+        run: |
+          # Download Mesa3D with lavapipe for Windows
+          Write-Host "Downloading Mesa3D lavapipe..."
+          $MesaUrl = "https://github.com/pal1000/mesa-dist-win/releases/download/24.2.7/mesa3d-24.2.7-release-msvc.7z"
+          $MesaArchive = "$env:TEMP\mesa3d.7z"
+          $MesaDir = "$env:TEMP\mesa3d"
+
+          Invoke-WebRequest -Uri $MesaUrl -OutFile $MesaArchive
+
+          # Extract Mesa3D
+          Write-Host "Extracting Mesa3D..."
+          7z x $MesaArchive -o"$MesaDir" -y
+
+          # Verify vulkan_lvp.dll exists
+          $VulkanLvpDll = Join-Path $MesaDir "x64\vulkan_lvp.dll"
+          if (Test-Path $VulkanLvpDll) {
+              Write-Host "Found vulkan_lvp.dll at: $VulkanLvpDll"
+          } else {
+              Write-Host "ERROR: vulkan_lvp.dll not found!"
+              Write-Host "Contents of x64 directory:"
+              Get-ChildItem (Join-Path $MesaDir "x64") | Format-Table Name
+              exit 1
+          }
+
+          # Register lavapipe ICD in Windows Registry
+          $VulkanICDPath = Join-Path $MesaDir "x64\lvp_icd.x86_64.json"
+          $RegistryPath = "HKLM:\SOFTWARE\Khronos\Vulkan\Drivers"
+
+          Write-Host "Registering lavapipe ICD in registry..."
+          if (-not (Test-Path $RegistryPath)) {
+              New-Item -Path $RegistryPath -Force | Out-Null
+          }
+          New-ItemProperty -Path $RegistryPath -Name $VulkanICDPath -Value 0 -PropertyType DWord -Force | Out-Null
+
+          Write-Host "Registry entry created: $VulkanICDPath"
+
+          # Add Mesa to PATH
+          $MesaBinPath = Join-Path $MesaDir "x64"
+          echo "$MesaBinPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+          Write-Host "Lavapipe installed successfully"
+
+      - name: Run GTests
+        run: |
+          cd build/gtests
+          ctest -C Release --output-on-failure --verbose
+
+  nanovdb-editor-build-and-test-linux-arm:
+    name: Build and Test (Linux ARM64)
+    runs-on: ubuntu-24.04-arm
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Vulkan dependencies
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
+          sudo apt-get install -y libxcb1-dev libxcb-keysyms1-dev libxcb-randr0-dev libxcb-xinerama0-dev libx11-xcb-dev libxrandr-dev libwayland-dev wayland-protocols libdirectfb-dev
+          # Ensure lavapipe is available
+          export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.aarch64.json
+          vulkaninfo --summary || true
+
+      - name: Build NanoVDB Editor (GLFW disabled)
+        run: |
+          set -e
+          chmod +x ./build.sh
+          ./build.sh -rfv
+
+      - name: Build NanoVDB Editor (GLFW enabled)
+        run: |
+          set -e
+          chmod +x ./build.sh
+          ./build.sh -rfv
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanovdb-editor-build-linux-arm64
+          path: |
+            build/
+          retention-days: 2
+
+      - name: Run GTests
+        run: |
+          set -e
+
+          # Configure lavapipe for software rendering
+          export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.aarch64.json
+          export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.aarch64.json
+
+          # Additional lavapipe configuration
+          export LP_NUM_THREADS=1
+          export LIBGL_ALWAYS_SOFTWARE=1
+          export GALLIUM_DRIVER=llvmpipe
+
+          # Verify ICD file exists
+          if [ -f "$VK_ICD_FILENAMES" ]; then
+              echo "ICD file found: $VK_ICD_FILENAMES"
+          else
+              echo "ERROR: ICD file not found: $VK_ICD_FILENAMES"
+              ls -la /usr/share/vulkan/icd.d/ || true
+              exit 1
+          fi
+
+          echo "Using Vulkan driver: $VK_DRIVER_FILES"
+          echo "LP_NUM_THREADS: $LP_NUM_THREADS"
+
+          export LD_LIBRARY_PATH=$PWD/build/Release/lib:$PWD/build/Release/bin:$LD_LIBRARY_PATH
+          ctest --test-dir build/Release/gtests -C Release --output-on-failure --verbose
