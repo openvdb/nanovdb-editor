@@ -28,18 +28,12 @@ def test_editor_headless_non_streaming():
     config.ip_address = b"127.0.0.1"
     config.port = 8080
     config.headless = 1
-    # Non-streaming mode - requires Vulkan swapchain/surface
     config.streaming = 0
 
     try:
         editor.start(config)
         # Give the editor a brief moment to initialize
         sleep(0.5)
-
-        # If we got here without crashing, test passed
-        print("SUCCESS: Editor started in headless non-streaming mode")
-        print("Vulkan surface creation works correctly")
-
     finally:
         editor.stop()
         # Prevent destructor from calling into native lib during shutdown
