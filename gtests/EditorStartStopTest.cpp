@@ -54,6 +54,16 @@ TEST(NanoVDBEditor, EditorStartStopHeadlessStreaming)
     pnanovdb_compute_array_t* nanovdb_array = compute.create_array(4u, sphere_grid.size() / 4u, sphere_grid.data());
     ASSERT_NE(nanovdb_array, nullptr) << "Failed to create nanovdb array";
 
+    // Configure editor (headless, streaming mode)
+    pnanovdb_editor_config_t cfg = {};
+    cfg.ip_address = "127.0.0.1";
+    cfg.port = 8080;
+    cfg.headless = PNANOVDB_TRUE;
+    cfg.streaming = PNANOVDB_TRUE;
+
+    // Start, wait briefly, then stop
+    editor.start(&editor, device, &cfg);
+
     // Add nanovdb to a scene with a token
     pnanovdb_editor_token_t* scene_token = editor.get_token("main");
     pnanovdb_editor_token_t* object_token = editor.get_token("test_object");
@@ -69,15 +79,6 @@ TEST(NanoVDBEditor, EditorStartStopHeadlessStreaming)
         editor.unmap_params(&editor, scene_token, object_token);
     }
 
-    // Configure editor (headless, streaming mode)
-    pnanovdb_editor_config_t cfg = {};
-    cfg.ip_address = "127.0.0.1";
-    cfg.port = 8080;
-    cfg.headless = PNANOVDB_TRUE;
-    cfg.streaming = PNANOVDB_TRUE;
-
-    // Start, wait briefly, then stop
-    editor.start(&editor, device, &cfg);
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     editor.stop(&editor);
 
