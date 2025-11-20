@@ -40,7 +40,7 @@ class TestEditorAPI2:
         self.config.ip_address = b"127.0.0.1"
         self.config.port = 8080
         self.config.headless = 1
-        self.config.streaming = 0
+        self.config.streaming = 1
 
         yield
 
