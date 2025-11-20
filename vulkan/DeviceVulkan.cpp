@@ -1006,14 +1006,6 @@ pnanovdb_compute_swapchain_t* createSwapchain(pnanovdb_compute_queue_t* queue,
         ptr->desc.create_surface(
             ptr->desc.window_userdata, device->deviceManager->vulkanInstance, (void**)&ptr->surfaceVulkan);
     }
-
-    if (!ptr->surfaceVulkan)
-    {
-        ptr->swapchainFormat =
-            formatConverter_convertToVulkan(ptr->deviceQueue->device->formatConverter, ptr->desc.format);
-        return cast(ptr);
-    }
-
     VkBool32 supported = false;
     instanceLoader->vkGetPhysicalDeviceSurfaceSupportKHR(
         device->physicalDevice, ptr->deviceQueue->queueFamilyIdx, ptr->surfaceVulkan, &supported);
