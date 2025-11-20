@@ -113,6 +113,17 @@ jobs:
           Write-Host "Extracting Mesa3D..."
           7z x $MesaArchive -o"$MesaDir" -y
 
+          # Verify vulkan_lvp.dll exists
+          $VulkanLvpDll = Join-Path $MesaDir "x64\vulkan_lvp.dll"
+          if (Test-Path $VulkanLvpDll) {
+              Write-Host "Found vulkan_lvp.dll at: $VulkanLvpDll"
+          } else {
+              Write-Host "ERROR: vulkan_lvp.dll not found!"
+              Write-Host "Contents of x64 directory:"
+              Get-ChildItem (Join-Path $MesaDir "x64") | Format-Table Name
+              exit 1
+          }
+
           # Set environment variables for lavapipe
           $VulkanICDPath = Join-Path $MesaDir "x64\lvp_icd.x86_64.json"
           echo "VK_ICD_FILENAMES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -145,6 +156,16 @@ jobs:
           type "%VK_ICD_FILENAMES%"
 
           echo.
+          echo Checking for vulkan_lvp.dll in Mesa directory...
+          if exist "%TEMP%\mesa3d\x64\vulkan_lvp.dll" (
+            echo Found vulkan_lvp.dll
+          ) else (
+            echo ERROR: vulkan_lvp.dll not found in Mesa directory!
+            dir "%TEMP%\mesa3d\x64\*.dll"
+            exit /b 1
+          )
+
+          echo.
           echo Checking for vulkan-1.dll in PATH...
           where vulkan-1.dll
 
@@ -152,9 +173,7 @@ jobs:
           set GALLIUM_DRIVER=llvmpipe
 
           cd build\gtests
-          ctest -C Release --output-on-failure --verbose
-
-  nanovdb-editor-build-and-test-linux-arm:
+          ctest -C Release --output-on-failure --verbose  nanovdb-editor-build-and-test-linux-arm:
     name: Build and Test (Linux ARM64)
     runs-on: ubuntu-24.04-arm
     defaults:
