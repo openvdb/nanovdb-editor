@@ -73,7 +73,7 @@ jobs:
         CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
         CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
         CIBW_BUILD_VERBOSITY: 1
-        CIBW_ARCHS_LINUX: ${{ matrix.cibw_archs }}
+        CIBW_ARCHS_LINUX: ${{ matrix.cibw_archs != '' && matrix.cibw_archs || null }}
 
         # Linux dependencies
         CIBW_BEFORE_ALL_LINUX: |
