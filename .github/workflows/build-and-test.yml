@@ -173,7 +173,9 @@ jobs:
           set GALLIUM_DRIVER=llvmpipe
 
           cd build\gtests
-          ctest -C Release --output-on-failure --verbose  nanovdb-editor-build-and-test-linux-arm:
+          ctest -C Release --output-on-failure --verbose
+
+  nanovdb-editor-build-and-test-linux-arm:
     name: Build and Test (Linux ARM64)
     runs-on: ubuntu-24.04-arm
     defaults:
