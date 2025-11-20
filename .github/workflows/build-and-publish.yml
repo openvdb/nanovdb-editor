@@ -44,15 +44,12 @@ jobs:
           - os: ubuntu-latest
             arch: x86_64
             cibw_build: "cp311-manylinux_x86_64"
-            cibw_archs: ""
           - os: ubuntu-24.04-arm64
             arch: ARM64
             cibw_build: "cp311-manylinux_aarch64"
-            cibw_archs: "aarch64"
           - os: windows-latest
             arch: ""
             cibw_build: "cp311-win_amd64"
-            cibw_archs: ""
 
     steps:
     - uses: actions/checkout@v4
@@ -71,7 +68,6 @@ jobs:
         CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
         CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
         CIBW_BUILD_VERBOSITY: 1
-        CIBW_ARCHS_LINUX: ${{ matrix.cibw_archs != '' && matrix.cibw_archs || null }}
 
         # Linux dependencies
         CIBW_BEFORE_ALL_LINUX: |
