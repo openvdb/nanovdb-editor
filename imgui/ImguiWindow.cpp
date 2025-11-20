@@ -100,7 +100,7 @@ struct Window
     pnanovdb_uint32_t height = 0;
     pnanovdb_uint32_t width_encode_resize = 0;
     pnanovdb_uint32_t height_encode_resize = 0;
-    pnanovdb_int32_t resolved_port = -1;
+    pnanovdb_int32_t resolved_port = -2;
 
     pnanovdb_camera_t camera = {};
 
@@ -298,7 +298,8 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
                        pnanovdb_compute_texture_transient_t* background,
                        pnanovdb_int32_t* out_width,
                        pnanovdb_int32_t* out_height,
-                       pnanovdb_int32_t* out_resolved_port,
+                       void(PNANOVDB_ABI* report_resolved_port)(void* userdata, pnanovdb_int32_t port),
+                       void* report_resolved_port_userdata,
                        pnanovdb_imgui_window_t* window,
                        pnanovdb_imgui_settings_render_t* user_settings,
                        pnanovdb_int32_t (*get_external_active_count)(void* external_active_count),
@@ -412,10 +413,9 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
                 user_settings->server_address, user_settings->server_port, user_settings->server_create_max_attempts,
                 &ptr->resolved_port, log_print);
             // make resolved port available ASAP
-            if (out_resolved_port)
+            if (report_resolved_port)
             {
-                auto port_atomic = reinterpret_cast<std::atomic<pnanovdb_int32_t>*>(out_resolved_port);
-                port_atomic->store(ptr->resolved_port);
+                report_resolved_port(report_resolved_port_userdata, ptr->resolved_port);
             }
             if (!ptr->server)
             {
@@ -434,6 +434,16 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
             }
         }
 #endif
+    }
+
+    // If enabled, port should have been resolved by now, but report unresolved as needed
+    if (ptr->resolved_port == -2)
+    {
+        ptr->resolved_port = -1;
+        if (report_resolved_port)
+        {
+            report_resolved_port(report_resolved_port_userdata, ptr->resolved_port);
+        }
     }
 
     pnanovdb_compute_texture_t* swapchain_texture = nullptr;
@@ -621,11 +631,6 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
     if (out_height)
     {
         *out_height = ptr->height;
-    }
-    if (out_resolved_port)
-    {
-        auto port_atomic = reinterpret_cast<std::atomic<pnanovdb_int32_t>*>(out_resolved_port);
-        port_atomic->store(ptr->resolved_port);
     }
 
     if (ptr->window_glfw && windowGlfwShouldClose(ptr->window_glfw))
