@@ -380,6 +380,7 @@ void Properties::render(imgui_instance_user::Instance* ptr)
             return;
         }
         ImGui::TextDisabled("%s", selection.name_token->str);
+        ImGui::Separator();
 
         if (selection.type == pnanovdb_editor::ViewType::Root)
         {
@@ -402,7 +403,6 @@ void Properties::render(imgui_instance_user::Instance* ptr)
 
                 if (!properties_shader_name.empty())
                 {
-                    ImGui::Separator();
                     scene_manager->shader_params.render(properties_shader_name.c_str());
                 }
                 else
@@ -428,7 +428,8 @@ void Properties::render(imgui_instance_user::Instance* ptr)
                                                }
                                            });
 
-                // Shader name (editable)
+                ImGui::TextDisabled("Shader:");
+                ImGui::SameLine();
                 char shader_buf[256];
                 strncpy(shader_buf, properties_shader_name.c_str(), sizeof(shader_buf) - 1);
                 shader_buf[sizeof(shader_buf) - 1] = '\0';

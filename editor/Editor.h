@@ -26,6 +26,8 @@ namespace pnanovdb_editor
 struct EditorWorker;
 class EditorSceneManager;
 class SceneView;
+class Renderer;
+class EditorScene;
 
 // Shader constants
 constexpr const char* s_default_editor_shader = "editor/editor.slang";
@@ -47,6 +49,8 @@ struct pnanovdb_editor_impl_t
     pnanovdb_editor::EditorWorker* editor_worker;
     pnanovdb_editor::EditorSceneManager* scene_manager;
     pnanovdb_editor::SceneView* scene_view;
+    pnanovdb_editor::Renderer* renderer;
+    pnanovdb_editor::EditorScene* editor_scene;
 
     // Currently used by the render thread in show()
     const pnanovdb_compiler_t* compiler;

@@ -87,6 +87,8 @@ struct Window
     pnanovdb_server_instance_t* server = nullptr;
     pnanovdb_bool_t encoder_was_enabled = PNANOVDB_FALSE;
     pnanovdb_bool_t encode_to_file_active = PNANOVDB_FALSE;
+    pnanovdb_int32_t encoder_width = 0;
+    pnanovdb_int32_t encoder_height = 0;
 
     std::vector<ImguiInstance> imgui_instances;
     bool enable_default_imgui = false;
@@ -162,6 +164,11 @@ pnanovdb_imgui_window_t* create(const pnanovdb_compute_t* compute,
     settings->data_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_imgui_settings_render_t);
     pnanovdb_camera_config_default(&settings->camera_config);
     pnanovdb_camera_state_default(&settings->camera_state, settings->is_y_up);
+
+    // Initialize window resolution to actual window size
+    settings->window_width = width;
+    settings->window_height = height;
+
     *imgui_user_settings = settings;
 
     // set to opposite to force refresh
@@ -310,13 +317,13 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
     auto log_print = ptr->compute_interface.get_log_print(context);
 
     // encoder resize
-    pnanovdb_int32_t target_encode_width =
-        user_settings->encode_resize ? ptr->width_encode_resize : user_settings->encode_width;
-    pnanovdb_int32_t target_encode_height =
-        user_settings->encode_resize ? ptr->height_encode_resize : user_settings->encode_height;
-    bool encode_size_changed = target_encode_width > 0 && target_encode_height > 0 &&
-                               (target_encode_width != ptr->width || target_encode_height != ptr->height);
+    pnanovdb_int32_t target_encode_width = user_settings->encode_resize ? ptr->width_encode_resize : ptr->width;
+    pnanovdb_int32_t target_encode_height = user_settings->encode_resize ? ptr->height_encode_resize : ptr->height;
+
+    bool encode_size_changed = (target_encode_width > 0 && target_encode_height > 0) &&
+                               (target_encode_width != ptr->encoder_width || target_encode_height != ptr->encoder_height);
     bool encode_to_file_changed = user_settings->encode_to_file != ptr->encode_to_file_active;
+
     if (ptr->encoder && (encode_size_changed || encode_to_file_changed))
     {
         compute->device_interface.wait_idle(compute_queue);
@@ -324,6 +331,22 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         // destroy encoder, close recording file as needed
         compute->device_interface.destroy_encoder(ptr->encoder);
         ptr->encoder = nullptr;
+        ptr->encoder_width = 0;
+        ptr->encoder_height = 0;
+
+        // If using Fit Resolution (encode_resize), update window dimensions to match client request
+        if (encode_size_changed && user_settings->encode_resize && target_encode_width > 0 && target_encode_height > 0)
+        {
+            if (ptr->window_glfw)
+            {
+                windowGlfwResize(ptr->window_glfw, target_encode_width, target_encode_height);
+            }
+            else
+            {
+                resizeWindow(ptr, target_encode_width, target_encode_height);
+            }
+        }
+
         if (ptr->encode_file)
         {
             // Log saved file when recording stops
@@ -341,19 +364,31 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
             ptr->encode_file = nullptr;
             ptr->encode_to_file_active = PNANOVDB_FALSE;
         }
+    }
 
-        // apply resize event if applicable
-        if (encode_size_changed)
+    if (user_settings->window_resize)
+    {
+        bool user_changed_size =
+            user_settings->window_width > 0 && user_settings->window_height > 0 &&
+            (user_settings->window_width != ptr->width || user_settings->window_height != ptr->height);
+
+        if (user_changed_size)
         {
             if (ptr->window_glfw)
             {
-                windowGlfwResize(ptr->window_glfw, target_encode_width, target_encode_height);
+                windowGlfwResize(ptr->window_glfw, user_settings->window_width, user_settings->window_height);
             }
             else
             {
-                resizeWindow(ptr, target_encode_width, target_encode_height);
+                resizeWindow(ptr, user_settings->window_width, user_settings->window_height);
             }
         }
+    }
+    else
+    {
+        // Free window resize mode (default) - keep settings in sync with actual window size
+        user_settings->window_width = ptr->width;
+        user_settings->window_height = ptr->height;
     }
 
     float delta_time = 1.f / 60.f;
@@ -387,12 +422,20 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
     {
         ptr->encoder_was_enabled = PNANOVDB_TRUE;
 
+        // Use encode dimensions (from encode_resize or current window dimensions)
+        pnanovdb_int32_t encode_width =
+            user_settings->encode_resize && ptr->width_encode_resize > 0 ? ptr->width_encode_resize : ptr->width;
+        pnanovdb_int32_t encode_height =
+            user_settings->encode_resize && ptr->height_encode_resize > 0 ? ptr->height_encode_resize : ptr->height;
+
         pnanovdb_compute_encoder_desc_t encoder_desc = {};
-        encoder_desc.width = ptr->width;
-        encoder_desc.height = ptr->height;
+        encoder_desc.width = encode_width;
+        encoder_desc.height = encode_height;
         encoder_desc.fps = 30;
 
         ptr->encoder = ptr->device_interface.create_encoder(compute_queue, &encoder_desc);
+        ptr->encoder_width = encode_width;
+        ptr->encoder_height = encode_height;
         if (user_settings->encode_to_file)
         {
             std::string base = user_settings->encode_filename[0] ? user_settings->encode_filename : "capture_stream";
@@ -528,7 +571,8 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         }
         if (ptr->server)
         {
-            pnanovdb_get_server()->push_h264(ptr->server, encoder_data, encoder_data_size, ptr->width, ptr->height);
+            pnanovdb_get_server()->push_h264(
+                ptr->server, encoder_data, encoder_data_size, ptr->encoder_width, ptr->encoder_height);
         }
         if (ptr->encode_file)
         {
@@ -648,13 +692,17 @@ void get_camera_view_proj(pnanovdb_imgui_window_t* window,
 {
     auto ptr = cast(window);
 
+    // When encoder is active, use encoder resolution for rendering, otherwise use window resolution
+    pnanovdb_int32_t render_width = ptr->encoder ? ptr->encoder_width : ptr->width;
+    pnanovdb_int32_t render_height = ptr->encoder ? ptr->encoder_height : ptr->height;
+
     if (out_width)
     {
-        *out_width = ptr->width;
+        *out_width = render_width;
     }
     if (out_height)
     {
-        *out_height = ptr->height;
+        *out_height = render_height;
     }
     if (out_view)
     {
@@ -662,7 +710,7 @@ void get_camera_view_proj(pnanovdb_imgui_window_t* window,
     }
     if (out_projection)
     {
-        pnanovdb_camera_get_projection(&ptr->camera, out_projection, (float)ptr->width, (float)ptr->height);
+        pnanovdb_camera_get_projection(&ptr->camera, out_projection, (float)render_width, (float)render_height);
     }
 }
 
