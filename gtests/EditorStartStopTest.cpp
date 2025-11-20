@@ -7,6 +7,8 @@
 #include <nanovdb_editor/putil/Compute.h>
 #include <nanovdb_editor/putil/Editor.h>
 
+#include <nanovdb/tools/CreatePrimitives.h>
+
 #include <chrono>
 #include <thread>
 
@@ -44,6 +46,30 @@ TEST(NanoVDBEditor, EditorStartStopHeadlessStreaming)
     pnanovdb_editor_t editor = {};
     pnanovdb_editor_load(&editor, &compute, &compiler);
     ASSERT_NE(editor.module, nullptr) << "Editor module failed to load";
+
+    // Create a minimal NanoVDB sphere grid programmatically
+    auto sphere_grid = nanovdb::tools::createLevelSetSphere<float>(10.0f);
+    const void* grid_data = sphere_grid.data();
+    uint64_t grid_size = sphere_grid.size();
+
+    // Create compute array from the grid data
+    pnanovdb_compute_array_t* nanovdb_array = compute.create_array(4u, grid_size / 4u, grid_data);
+    ASSERT_NE(nanovdb_array, nullptr) << "Failed to create nanovdb array";
+
+    // Add nanovdb to a scene with a token
+    pnanovdb_editor_token_t* scene_token = editor.get_token("main");
+    pnanovdb_editor_token_t* object_token = editor.get_token("test_object");
+    editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
+    compute.destroy_array(nanovdb_array);
+
+    // Use map_params to set the shader to wireframe.slang
+    pnanovdb_editor_shader_name_t* mapped_shader = (pnanovdb_editor_shader_name_t*)editor.map_params(
+        &editor, scene_token, object_token, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t));
+    if (mapped_shader)
+    {
+        mapped_shader->shader_name = editor.get_token("editor/wireframe.slang");
+        editor.unmap_params(&editor, scene_token, object_token);
+    }
 
     // Configure editor (headless, streaming mode)
     pnanovdb_editor_config_t cfg = {};
