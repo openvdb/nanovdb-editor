@@ -131,9 +131,26 @@ jobs:
       - name: Run GTests
         shell: cmd
         run: |
-          set VK_ICD_FILENAMES=%TEMP%\mesa3d\x64\lvp_icd.x86_64.json
-          set VK_DRIVER_FILES=%TEMP%\mesa3d\x64\lvp_icd.x86_64.json
-          set PATH=%TEMP%\mesa3d\x64;%PATH%
+          echo Checking Vulkan ICD configuration...
+          echo VK_ICD_FILENAMES=%VK_ICD_FILENAMES%
+          echo VK_DRIVER_FILES=%VK_DRIVER_FILES%
+
+          if not exist "%VK_ICD_FILENAMES%" (
+            echo ERROR: ICD file not found at %VK_ICD_FILENAMES%
+            dir "%TEMP%\mesa3d\x64\*.json"
+            exit /b 1
+          )
+
+          echo ICD file exists, checking contents:
+          type "%VK_ICD_FILENAMES%"
+
+          echo.
+          echo Checking for vulkan-1.dll in PATH...
+          where vulkan-1.dll
+
+          set LIBGL_ALWAYS_SOFTWARE=1
+          set GALLIUM_DRIVER=llvmpipe
+
           cd build\gtests
           ctest -C Release --output-on-failure --verbose
 
