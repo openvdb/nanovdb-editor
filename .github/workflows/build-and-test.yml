@@ -169,8 +169,17 @@ jobs:
           echo Checking for vulkan-1.dll in PATH...
           where vulkan-1.dll
 
+          echo.
+          echo Setting up Vulkan environment...
+          set VK_LOADER_DEBUG=all
           set LIBGL_ALWAYS_SOFTWARE=1
           set GALLIUM_DRIVER=llvmpipe
+
+          echo.
+          echo Environment variables:
+          echo VK_ICD_FILENAMES=%VK_ICD_FILENAMES%
+          echo VK_DRIVER_FILES=%VK_DRIVER_FILES%
+          echo VK_LOADER_DEBUG=%VK_LOADER_DEBUG%
 
           cd build\gtests
           ctest -C Release --output-on-failure --verbose
