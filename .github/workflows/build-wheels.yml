@@ -83,15 +83,20 @@ jobs:
       env:
         CIBW_BUILD: ${{ matrix.cibw_build }}
         CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
-        CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
+        CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
         CIBW_BUILD_VERBOSITY: 1
         CIBW_ARCHS: ${{ matrix.setup_qemu && 'aarch64' || 'auto' }}
 
         # Linux dependencies
         CIBW_BEFORE_ALL_LINUX: |
-          dnf install -y cmake git
+          if command -v dnf &> /dev/null; then
+            dnf install -y cmake git
+            dnf install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel wayland-protocols-devel
+          else
+            yum install -y cmake git
+            yum install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel
+          fi
           cmake --version
-          yum install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel wayland-protocols-devel
 
         # Windows dependencies
         CIBW_BEFORE_ALL_WINDOWS: |
@@ -99,7 +104,7 @@ jobs:
           cmake --version
 
         CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
-          auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs || cp {wheel} {dest_dir}
+          auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs
 
         # Install test dependencies before testing
         CIBW_TEST_REQUIRES: numpy
