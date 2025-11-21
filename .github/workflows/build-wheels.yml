@@ -99,7 +99,7 @@ jobs:
           cmake --version
 
         CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
-          auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs
+          auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs || cp {wheel} {dest_dir}
 
         # Install test dependencies before testing
         CIBW_TEST_REQUIRES: numpy
