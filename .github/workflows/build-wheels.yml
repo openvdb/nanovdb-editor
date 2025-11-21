@@ -104,7 +104,7 @@ jobs:
           cmake --version
 
         CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
-          auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs
+          auditwheel show {wheel} && (auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --exclude libstdc++.so.6 --exclude libgcc_s.so.1 --exclude libm.so.6 || auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_17_aarch64 --plat manylinux_2_17_x86_64)
 
         # Install test dependencies before testing
         CIBW_TEST_REQUIRES: numpy
