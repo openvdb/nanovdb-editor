@@ -57,6 +57,28 @@ static inline void logRecordingSavedOnStop(bool wasRecording, pnanovdb_imgui_set
     }
 }
 
+static inline bool showResolutionCombo(const char* label, pnanovdb_int32_t* width, pnanovdb_int32_t* height)
+{
+    bool changed = false;
+    if (ImGui::BeginCombo(label, "Select..."))
+    {
+        const char* labels[4] = { "1440x720", "1920x1080", "2560x1440", "3840x2160" };
+        const int widths[4] = { 1440, 1920, 2560, 3840 };
+        const int heights[4] = { 720, 1080, 1440, 2160 };
+        for (int i = 0; i < 4; i++)
+        {
+            if (ImGui::Selectable(labels[i]))
+            {
+                *width = widths[i];
+                *height = heights[i];
+                changed = true;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    return changed;
+}
+
 void saveIniSettings(imgui_instance_user::Instance* ptr)
 {
     if (!ptr || ptr->is_viewer())
@@ -86,8 +108,9 @@ void createMenu(imgui_instance_user::Instance* ptr)
     {
         if (!isViewerProfile && ImGui::BeginMenu("File"))
         {
-            ImGui::MenuItem("Open...", "", &ptr->pending.open_file);
-            ImGui::MenuItem("Save...", "", &ptr->pending.save_file);
+            ImGui::MenuItem("Load NanoVDB...", "", &ptr->pending.open_file);
+            ImGui::MenuItem("Import Gaussian...", "", &ptr->pending.find_raster_file);
+            ImGui::MenuItem("Save NanoVDB...", "", &ptr->pending.save_file);
             ImGui::Separator();
             if (ImGui::MenuItem("Save INI"))
             {
@@ -294,8 +317,6 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
                     if (ImGui::Selectable(pair.first.c_str(), is_selected))
                     {
                         ptr->render_settings_name = pair.first;
-                        ptr->viewport_settings[(int)ptr->viewport_option].render_settings_name =
-                            ptr->render_settings_name;
 
                         if (ptr->editor_scene)
                         {
@@ -370,96 +391,6 @@ void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
             ImGui::EndGroup();
         }
 
-        ImGui::SeparatorText("Viewport Options");
-        {
-            ImGui::BeginGroup();
-            ViewportOption selectedOption = ptr->viewport_option;
-            if (ImGui::RadioButton("NanoVDB", selectedOption == ViewportOption::NanoVDB))
-            {
-                ptr->viewport_option = ViewportOption::NanoVDB;
-                ptr->render_settings_name = ptr->viewport_settings[(int)ptr->viewport_option].render_settings_name;
-                if (!ptr->is_viewer())
-                {
-                    // Load camera state
-                    if (ptr->editor_scene)
-                    {
-                        pnanovdb_editor_token_t* name_token =
-                            pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
-                        const pnanovdb_camera_state_t* state = ptr->editor_scene->get_saved_camera_state(name_token);
-                        if (state)
-                        {
-                            ptr->render_settings->camera_state = *state;
-                            ptr->render_settings->sync_camera = PNANOVDB_TRUE;
-                        }
-                    }
-                }
-            }
-            ImGui::SameLine();
-            if (ImGui::RadioButton("Raster2D", selectedOption == ViewportOption::Raster2D))
-            {
-                ptr->viewport_option = ViewportOption::Raster2D;
-                ptr->render_settings_name = ptr->viewport_settings[(int)ptr->viewport_option].render_settings_name;
-                if (!ptr->is_viewer())
-                {
-                    // Load camera state
-                    if (ptr->editor_scene)
-                    {
-                        pnanovdb_editor_token_t* name_token =
-                            pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
-                        const pnanovdb_camera_state_t* state = ptr->editor_scene->get_saved_camera_state(name_token);
-                        if (state)
-                        {
-                            ptr->render_settings->camera_state = *state;
-                            ptr->render_settings->sync_camera = PNANOVDB_TRUE;
-                        }
-                    }
-                }
-            }
-            ImGui::EndGroup();
-        }
-
-        ImGui::SeparatorText("Gaussian File");
-        {
-            ImGui::BeginGroup();
-            ImGui::InputText("##viewport_raster_file", &ptr->raster_filepath);
-            ImGui::SameLine();
-            if (ImGui::Button("...##open_raster_file"))
-            {
-                ptr->pending.find_raster_file = true;
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Show##Gaussian"))
-            {
-                // runs rasterization on a worker thread first
-                ptr->pending.update_raster = true;
-            }
-            if (ptr->viewport_option == ViewportOption::NanoVDB)
-            {
-                ImGui::InputFloat("VoxelsPerUnit", &ptr->raster_voxels_per_unit);
-            }
-            ImGui::EndGroup();
-        }
-
-        if (ptr->viewport_option == ViewportOption::NanoVDB)
-        {
-            ImGui::SeparatorText("NanoVDB File");
-            {
-                ImGui::BeginGroup();
-                ImGui::InputText("##viewport_nanovdb_file", &ptr->nanovdb_filepath);
-                ImGui::SameLine();
-                if (ImGui::Button("...##open_nanovddb_file"))
-                {
-                    ptr->pending.open_file = true;
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Show##NanoVDB"))
-                {
-                    pnanovdb_editor::Console::getInstance().addLog("Opening file '%s'", ptr->nanovdb_filepath.c_str());
-                    ptr->pending.load_nvdb = true;
-                }
-                ImGui::EndGroup();
-            }
-        }
 
         ImGui::SeparatorText("UI Profile");
         {
@@ -532,22 +463,6 @@ void showRenderSettingsWindow(imgui_instance_user::Instance* ptr)
             ImGui::AlignTextToFramePadding();
             ImGui::Text("Streaming is running...");
 
-            if (ImGui::BeginCombo("Resolution", "Select..."))
-            {
-                const char* labels[4] = { "1440x720", "1920x1080", "2560x1440", "3840x2160" };
-                const int widths[4] = { 1440, 1920, 2560, 3840 };
-                const int heights[4] = { 720, 1080, 1440, 2160 };
-                for (int i = 0; i < 4; i++)
-                {
-                    if (ImGui::Selectable(labels[i]))
-                    {
-                        settings->encode_width = widths[i];
-                        settings->encode_height = heights[i];
-                    }
-                }
-                ImGui::EndCombo();
-            }
-            IMGUI_CHECKBOX_SYNC("Fit Resolution", settings->encode_resize);
             {
                 const bool wasRecording = (settings->encode_to_file != 0);
                 bool temp_bool = wasRecording;
@@ -621,6 +536,65 @@ void showRenderSettingsWindow(imgui_instance_user::Instance* ptr)
             if (ImGui::Button("Start Streaming"))
             {
                 settings->enable_encoder = PNANOVDB_TRUE;
+                if (!settings->window_resize && !settings->encode_resize)
+                {
+                    settings->window_resize = PNANOVDB_TRUE;
+                }
+            }
+        }
+
+        ImGui::SeparatorText("Resolution");
+        {
+            // Resolution mode selection
+            if (settings->enable_encoder)
+            {
+                // When streaming, show radio buttons for Fixed vs Fit Resolution
+                bool isFixedResolution = settings->window_resize && !settings->encode_resize;
+                bool isFitResolution = settings->encode_resize && !settings->window_resize;
+
+                if (ImGui::RadioButton("Fixed", isFixedResolution))
+                {
+                    settings->window_resize = PNANOVDB_TRUE;
+                    settings->encode_resize = PNANOVDB_FALSE;
+                }
+                ImGui::SameLine();
+                if (ImGui::RadioButton("Fit Client", isFitResolution))
+                {
+                    settings->window_resize = PNANOVDB_FALSE;
+                    settings->encode_resize = PNANOVDB_TRUE;
+                }
+
+                if (settings->window_resize)
+                {
+                    showResolutionCombo("Resolution", &settings->window_width, &settings->window_height);
+                    ImGui::InputInt("Width", &settings->window_width);
+                    ImGui::InputInt("Height", &settings->window_height);
+                }
+                else if (settings->encode_resize)
+                {
+                    ImGui::BeginDisabled();
+                    ImGui::Text("Width: %d", settings->window_width);
+                    ImGui::Text("Height: %d", settings->window_height);
+                    ImGui::EndDisabled();
+                }
+            }
+            else
+            {
+                // When not streaming, just show Fixed Resolution checkbox
+                IMGUI_CHECKBOX_SYNC("Fixed Resolution", settings->window_resize);
+                if (settings->window_resize)
+                {
+                    showResolutionCombo("Resolution", &settings->window_width, &settings->window_height);
+                    ImGui::InputInt("Width", &settings->window_width);
+                    ImGui::InputInt("Height", &settings->window_height);
+                }
+                else
+                {
+                    ImGui::BeginDisabled();
+                    ImGui::Text("Width: %d", settings->window_width);
+                    ImGui::Text("Height: %d", settings->window_height);
+                    ImGui::EndDisabled();
+                }
             }
         }
 
@@ -1078,6 +1052,37 @@ void showConsoleWindow(imgui_instance_user::Instance* ptr)
     ImGui::End();
 }
 
+// Custom side pane callback for Gaussian import dialog
+static bool gaussianImportSidePane(const char* /*vFilter*/, IGFDUserDatas vUserDatas, bool* /*cantContinue*/)
+{
+    auto* ptr = static_cast<imgui_instance_user::Instance*>(vUserDatas);
+    if (!ptr)
+        return false;
+
+    ImGui::Text("Import Options:");
+    ImGui::Separator();
+
+    int rasterMode = ptr->raster_to_nanovdb ? 1 : 0;
+    ImGui::RadioButton("Raster2D (Gaussian Splatting)", &rasterMode, 0);
+    ImGui::RadioButton("Raster3D (Convert to NanoVDB)", &rasterMode, 1);
+    ptr->raster_to_nanovdb = (rasterMode == 1);
+
+    ImGui::Spacing();
+
+    if (ptr->raster_to_nanovdb)
+    {
+        ImGui::Text("Voxel Size:");
+        ImGui::SetNextItemWidth(150.0f);
+        ImGui::InputFloat("##VoxelSizeRaster", &ptr->raster_voxels_per_unit, 1.0f, 10.0f, "%.2f");
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Voxels per unit (higher = finer resolution)");
+        }
+    }
+
+    return true;
+}
+
 void showFileDialogs(imgui_instance_user::Instance* ptr)
 {
     if (ptr->pending.open_file)
@@ -1116,6 +1121,10 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
 
         IGFD::FileDialogConfig config;
         config.path = ".";
+        config.sidePane = gaussianImportSidePane;
+        config.sidePaneWidth = 250.0f;
+        config.flags = ImGuiFileDialogFlags_None;
+        config.userDatas = ptr;
 
         ImGuiFileDialog::Instance()->OpenDialog(
             "OpenRasterFileDlgKey", "Open Gaussian File", "Gaussian Files (*.npy *.npz *.ply){.npy,.npz,.ply}", config);
@@ -1129,7 +1138,6 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
             if (ImGuiFileDialog::Instance()->IsOk())
             {
                 ptr->nanovdb_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
-                // ptr->nanovdb_path = ImGuiFileDialog::Instance()->GetCurrentPath();
                 pnanovdb_editor::Console::getInstance().addLog("Opening file '%s'", ptr->nanovdb_filepath.c_str());
                 ptr->pending.load_nvdb = true;
             }
@@ -1140,6 +1148,13 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
             if (ImGuiFileDialog::Instance()->IsOk())
             {
                 ptr->raster_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
+                pnanovdb_editor::Console::getInstance().addLog(
+                    "Importing Gaussian file '%s' as %s%s", ptr->raster_filepath.c_str(),
+                    ptr->raster_to_nanovdb ? "Raster3D" : "Raster2D",
+                    ptr->raster_to_nanovdb ?
+                        (" (voxel size: " + std::to_string(ptr->raster_voxels_per_unit) + ")").c_str() :
+                        "");
+                ptr->pending.update_raster = true;
                 ptr->pending.find_raster_file = false;
             }
             ImGuiFileDialog::Instance()->Close();

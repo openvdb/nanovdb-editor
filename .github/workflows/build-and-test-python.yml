@@ -286,6 +286,7 @@ jobs:
           pytest pytests -vvv --tb=short
 
   nanovdb-editor-build-python-linux-arm:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     # if: github.ref == 'refs/heads/main'
     name: Build (Linux ARM64)
     runs-on: ubuntu-24.04-arm
@@ -322,6 +323,7 @@ jobs:
           retention-days: 2
 
   nanovdb-editor-test-python-linux-arm:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     # if: github.ref == 'refs/heads/main'
     name: Test (Linux ARM64)
     needs: nanovdb-editor-build-python-linux-arm

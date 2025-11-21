@@ -28,6 +28,8 @@ function(create_nanovdb_library TARGET_NAME)
         target_compile_definitions(${TARGET_NAME} PRIVATE ${ARGS_DEFINITIONS})
     endif()
 
+    target_compile_definitions(${TARGET_NAME} PUBLIC "$<$<CONFIG:Debug>:_DEBUG>")
+
     if(NOT MSVC)
         target_compile_options(${TARGET_NAME} PRIVATE -fvisibility=hidden)
     endif()
@@ -78,6 +80,8 @@ function(create_nanovdb_executable TARGET_NAME)
     if(ARGS_DEFINITIONS)
         target_compile_definitions(${TARGET_NAME} PRIVATE ${ARGS_DEFINITIONS})
     endif()
+
+    target_compile_definitions(${TARGET_NAME} PUBLIC "$<$<CONFIG:Debug>:_DEBUG>")
 
     set_target_properties(${TARGET_NAME} PROPERTIES
         CXX_STANDARD 17

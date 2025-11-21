@@ -14,6 +14,7 @@
 
 #include "EditorToken.h"
 #include "ShaderParams.h"
+#include "Renderer.h"
 #include "nanovdb_editor/putil/Editor.h"
 #include "nanovdb_editor/putil/Raster.h"
 

@@ -29,14 +29,14 @@
 // #define TEST_CPU_COMPILER         // TODO: test needs to check if slang-llvm is in the slang package
 // #define TEST_EMPTY_COMPILER
 // #define TEST_COMPUTE
-// #define TEST_EDITOR
-#define TEST_EDITOR_START_STOP
-// #define TEST_RASTER
-// #define TEST_RASTER_2D   // this does not work now, editor nees to be have queue and device first
+#define TEST_EDITOR
+// #define TEST_EDITOR_START_STOP
+// #define TEST_RASTER_3D
+#define TEST_RASTER_2D // editor needs to be have queue and device first
 // #define TEST_SVRASTER
 // #define TEST_E57
 // #define TEST_CAMERA
-#define TEST_IMAGE2D
+// #define TEST_IMAGE2D
 
 struct constants_t
 {
@@ -81,6 +81,116 @@ struct NanoVDBEditorArgs : public argparse::Args
 {
 };
 
+void test_raster_3d(pnanovdb_editor_t* editor,
+                    pnanovdb_raster_t* raster,
+                    pnanovdb_compute_t* compute,
+                    pnanovdb_compute_queue_t* queue,
+                    pnanovdb_editor_token_t* scene_token,
+                    const char* npy_file,
+                    float voxel_size,
+                    const char* nanovdb_name,
+                    const char* output_file = nullptr)
+{
+    printf("Testing raster with file: %s\n", npy_file);
+
+    pnanovdb_compute_array_t* data_nanovdb = nullptr;
+
+    raster->raster_file(raster, compute, queue, npy_file, voxel_size, &data_nanovdb, nullptr, nullptr, nullptr, nullptr,
+                        nullptr, nullptr);
+
+    if (output_file)
+    {
+        compute->save_nanovdb(data_nanovdb, output_file);
+        printf("Raster result saved to: %s\n", output_file);
+    }
+
+    pnanovdb_editor_token_t* name_token = editor->get_token(nanovdb_name);
+    editor->add_nanovdb_2(editor, scene_token, name_token, data_nanovdb);
+}
+
+void test_raster_2d(pnanovdb_editor_t* editor,
+                    pnanovdb_fileformat_t* fileformat,
+                    pnanovdb_compute_t* compute,
+                    pnanovdb_editor_token_t* scene_token,
+                    const char* raster_file,
+                    const char* gaussian_name)
+{
+    printf("Testing raster2d with file: %s\n", raster_file);
+
+    const char* array_names_gaussian[] = { "means", "opacities", "quaternions", "scales", "sh_0", "sh_n" };
+    pnanovdb_compute_array_t* arrays[6] = {};
+
+    pnanovdb_bool_t loaded = fileformat->load_file(raster_file, 6, array_names_gaussian, arrays);
+    if (loaded == PNANOVDB_TRUE)
+    {
+        pnanovdb_editor_gaussian_data_desc_t desc = {};
+        desc.means = arrays[0];
+        desc.opacities = arrays[1];
+        desc.quaternions = arrays[2];
+        desc.scales = arrays[3];
+        desc.sh_0 = arrays[4];
+        desc.sh_n = arrays[5];
+
+        pnanovdb_editor_token_t* gaussian_token = editor->get_token(gaussian_name);
+        editor->add_gaussian_data_2(editor, scene_token, gaussian_token, &desc);
+
+        printf("Gaussian data '%s' added to scene\n", gaussian_name);
+
+        for (int ai = 0; ai < 6; ++ai)
+        {
+            if (arrays[ai])
+            {
+                compute->destroy_array(arrays[ai]);
+            }
+        }
+    }
+    else
+    {
+        printf("Warning: Failed to load Gaussian data from %s\n", raster_file);
+    }
+}
+
+void test_image_2d(pnanovdb_editor_t* editor,
+                   pnanovdb_compute_t* compute,
+                   pnanovdb_editor_token_t* scene_token,
+                   const char* image_name)
+{
+    printf("Testing image2d creation: %s\n", image_name);
+
+    pnanovdb_uint32_t width = 1440;
+    pnanovdb_uint32_t height = 720;
+    pnanovdb_compute_array_t* image_rgba = compute->create_array(4u, width * height, nullptr);
+    pnanovdb_uint32_t* mapped = (pnanovdb_uint32_t*)compute->map_array(image_rgba);
+    for (pnanovdb_uint32_t j = 0u; j < height; j++)
+    {
+        for (pnanovdb_uint32_t i = 0u; i < width; i++)
+        {
+            pnanovdb_uint32_t val = 0u;
+            val |= ((255 * i) / (width - 1));
+            val |= (((255 * j) / (height - 1)) << 8u);
+            val |= (255 << 24u);
+            mapped[j * width + i] = val;
+        }
+    }
+    compute->unmap_array(image_rgba);
+    pnanovdb_compute_array_t* image_nanovdb = compute->nanovdb_from_image_rgba8(image_rgba, width, height);
+    compute->destroy_array(image_rgba);
+
+    pnanovdb_editor_token_t* image_token = editor->get_token(image_name);
+    editor->add_nanovdb_2(editor, scene_token, image_token, image_nanovdb);
+    compute->destroy_array(image_nanovdb);
+
+    pnanovdb_editor_shader_name_t* mapped_shader = (pnanovdb_editor_shader_name_t*)editor->map_params(
+        editor, scene_token, image_token, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t));
+    if (mapped_shader)
+    {
+        mapped_shader->shader_name = editor->get_token("editor/image2d.slang");
+        editor->unmap_params(editor, scene_token, image_token);
+    }
+
+    printf("Image2d '%s' added to scene\n", image_name);
+}
+
 int main(int argc, char* argv[])
 {
     auto args = argparse::parse<NanoVDBEditorArgs>(argc, argv);
@@ -121,21 +231,6 @@ int main(int argc, char* argv[])
 #endif
 
     float voxel_size = 1.f / 128.f;
-
-#ifdef TEST_RASTER
-    const char* npy_file = "./data/splats.npz";
-    pnanovdb_raster_t raster = {};
-    pnanovdb_raster_load(&raster, &compute);
-
-    pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
-
-    raster.raster_file
-        &raster, &compute, queue, npy_file, voxel_size, &data_nanovdb, nullptr, nullptr, nullptr, nullptr, nullptr);
-
-    compute.save_nanovdb(data_nanovdb, "./data/splats.nvdb");
-
-    pnanovdb_raster_free(&raster);
-#endif
 
 #ifdef TEST_SVRASTER
     const char* npy_file = "./data/svraster.npz";
@@ -285,7 +380,7 @@ int main(int argc, char* argv[])
     editor.add_camera_view_2(&editor, scene_main, &default_camera);
 #    endif
 
-#    ifdef TEST_RASTER
+#    ifdef TEST_RASTER_3D
     pnanovdb_camera_t camera;
     pnanovdb_camera_init(&camera);
     // values are copy pasted from imgui.ini
@@ -294,105 +389,34 @@ int main(int argc, char* argv[])
     camera.state.eye_up = { 0.000000, 1.000000, 0.000000 };
     camera.state.eye_distance_from_position = -0.072589;
     editor.update_camera_2(&editor, &camera);
-#    endif
 
-#    ifdef TEST_RASTER_2D
     pnanovdb_camera_t camera;
     pnanovdb_camera_init(&camera);
 
     const char* raster_file = "./data/ficus.ply";
     const char* raster_file_garden = "./data/garden.ply";
 
-    // Load Gaussian arrays from file and add via token-based descriptor API
-    const char* array_names_gaussian[] = { "means", "opacities", "quaternions", "scales", "sh_0", "sh_n" };
-    pnanovdb_compute_array_t* arrays[6] = {};
+    // Test Ficus
+    test_raster_2d(&editor, &fileformat, &compute, scene_main, raster_file, "ficus");
 
-    // Ficus
-    {
-        pnanovdb_bool_t loaded = fileformat.load_file(raster_file, 6, array_names_gaussian, arrays);
-        if (loaded == PNANOVDB_TRUE)
-        {
-            pnanovdb_editor_gaussian_data_desc_t desc = {};
-            desc.means = arrays[0];
-            desc.opacities = arrays[1];
-            desc.quaternions = arrays[2];
-            desc.scales = arrays[3];
-            desc.sh_0 = arrays[4];
-            desc.sh_n = arrays[5];
+    // Test Garden
+    test_raster_2d(&editor, &fileformat, &compute, scene_secondary, raster_file_garden, "garden");
+#    endif
 
-            pnanovdb_editor_token_t* ficus_token = editor.get_token("ficus");
-            editor.add_gaussian_data_2(&editor, scene_main, ficus_token, &desc);
+#    ifdef TEST_RASTER_3D
+    const char* npy_file = "./data/splats.npz";
+    pnanovdb_raster_t raster = {};
+    pnanovdb_raster_load(&raster, &compute);
 
-            for (int ai = 0; ai < 6; ++ai)
-            {
-                if (arrays[ai])
-                {
-                    compute.destroy_array(arrays[ai]);
-                }
-            }
-        }
-    }
+    pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
 
-    // Garden
-    {
-        pnanovdb_bool_t loaded = fileformat.load_file(raster_file_garden, 6, array_names_gaussian, arrays);
-        if (loaded == PNANOVDB_TRUE)
-        {
-            pnanovdb_editor_gaussian_data_desc_t desc = {};
-            desc.means = arrays[0];
-            desc.opacities = arrays[1];
-            desc.quaternions = arrays[2];
-            desc.scales = arrays[3];
-            desc.sh_0 = arrays[4];
-            desc.sh_n = arrays[5];
+    test_raster_3d(&editor, &raster, &compute, queue, scene_token, npy_file, voxel_size, npy_file);
 
-            pnanovdb_editor_token_t* garden_token = editor.get_token("garden");
-            editor.add_gaussian_data_2(&editor, scene_secondary, garden_token, &desc);
-
-            for (int ai = 0; ai < 6; ++ai)
-            {
-                if (arrays[ai])
-                {
-                    compute.destroy_array(arrays[ai]);
-                }
-            }
-        }
-    }
-
+    pnanovdb_raster_free(&raster);
 #    endif
 
 #    ifdef TEST_IMAGE2D
-    pnanovdb_uint32_t width = 1440;
-    pnanovdb_uint32_t height = 720;
-    pnanovdb_compute_array_t* image_rgba = compute.create_array(4u, width * height, nullptr);
-    pnanovdb_uint32_t* mapped = (pnanovdb_uint32_t*)compute.map_array(image_rgba);
-    for (pnanovdb_uint32_t j = 0u; j < height; j++)
-    {
-        for (pnanovdb_uint32_t i = 0u; i < width; i++)
-        {
-            pnanovdb_uint32_t val = 0u;
-            val |= ((255 * i) / (width - 1));
-            val |= (((255 * j) / (height - 1)) << 8u);
-            val |= (255 << 24u);
-            mapped[j * width + i] = val;
-        }
-    }
-    compute.unmap_array(image_rgba);
-    pnanovdb_compute_array_t* image_nanovdb = compute.nanovdb_from_image_rgba8(image_rgba, width, height);
-    compute.destroy_array(image_rgba);
-
-    pnanovdb_editor_token_t* image_scene_main = editor.get_token("main");
-    pnanovdb_editor_token_t* image_token = editor.get_token("image2d");
-    editor.add_nanovdb_2(&editor, image_scene_main, image_token, image_nanovdb);
-    compute.destroy_array(image_nanovdb);
-
-    pnanovdb_editor_shader_name_t* mapped_shader = (pnanovdb_editor_shader_name_t*)editor.map_params(
-        &editor, image_scene_main, image_token, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t));
-    if (mapped_shader)
-    {
-        mapped_shader->shader_name = editor.get_token("editor/image2d.slang");
-        editor.unmap_params(&editor, image_scene_main, image_token);
-    }
+    test_image_2d(&editor, &compute, scene_main, "image2d");
 #    endif
 
     pnanovdb_editor_config_t config = {};
@@ -403,13 +427,11 @@ int main(int argc, char* argv[])
     // config.ui_profile_name = "viewer";
     editor.show(&editor, device, &config);
 
-
     // if (editor.camera)
     // {
     //     pnanovdb_vec3_t position = editor.camera->state.position;
     //     printf("Camera position: %f, %f, %f\n", position.x, position.y, position.z);
     // }
-
 
     pnanovdb_editor_free(&editor);
 #endif
@@ -444,41 +466,29 @@ int main(int argc, char* argv[])
     pnanovdb_editor_token_t* main_token = editor.get_token("main");
     pnanovdb_editor_token_t* volume_token = editor.get_token("dragon");
 
-    editor.add_nanovdb_2(&editor, scene_token, volume_token, data_nanovdb);
+    editor.add_nanovdb_2(&editor, main_token, volume_token, data_nanovdb);
 
     compute.destroy_array(data_nanovdb);
 
 #    ifdef TEST_IMAGE2D
-    pnanovdb_uint32_t width = 1440;
-    pnanovdb_uint32_t height = 720;
-    pnanovdb_compute_array_t* image_rgba = compute.create_array(4u, width * height, nullptr);
-    pnanovdb_uint32_t* mapped = (pnanovdb_uint32_t*)compute.map_array(image_rgba);
-    for (pnanovdb_uint32_t j = 0u; j < height; j++)
-    {
-        for (pnanovdb_uint32_t i = 0u; i < width; i++)
-        {
-            pnanovdb_uint32_t val = 0u;
-            val |= ((255 * i) / (width - 1));
-            val |= (((255 * j) / (height - 1)) << 8u);
-            val |= (255 << 24u);
-            mapped[j * width + i] = val;
-        }
-    }
-    compute.unmap_array(image_rgba);
-    pnanovdb_compute_array_t* image_nanovdb = compute.nanovdb_from_image_rgba8(image_rgba, width, height);
-    compute.destroy_array(image_rgba);
+    test_image_2d(&editor, &compute, scene_token, "image2d");
+#    endif
 
-    pnanovdb_editor_token_t* image_token = editor.get_token("image2d");
-    editor.add_nanovdb_2(&editor, scene_token, image_token, image_nanovdb);
-    compute.destroy_array(image_nanovdb);
+#    ifdef TEST_RASTER_2D
+    const char* raster_file = "./data/ficus.ply";
+    test_raster_2d(&editor, &fileformat, &compute, scene_token, raster_file, "ficus");
+#    endif
 
-    pnanovdb_editor_shader_name_t* mapped_shader = (pnanovdb_editor_shader_name_t*)editor.map_params(
-        &editor, scene_token, image_token, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t));
-    if (mapped_shader)
-    {
-        mapped_shader->shader_name = editor.get_token("editor/image2d.slang");
-        editor.unmap_params(&editor, scene_token, image_token);
-    }
+#    ifdef TEST_RASTER_3D
+    const char* npy_file = "./data/splats.npz";
+    pnanovdb_raster_t raster = {};
+    pnanovdb_raster_load(&raster, &compute);
+
+    pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
+
+    test_raster_3d(&editor, &raster, &compute, queue, scene_token, npy_file, voxel_size, npy_file, "splats");
+
+    pnanovdb_raster_free(&raster);
 #    endif
 
     editor.wait_for_interrupt(&editor);
