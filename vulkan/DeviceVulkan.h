@@ -305,6 +305,7 @@ struct Buffer
     std::vector<VkBufferView> aliasBufferViews;
     std::vector<pnanovdb_compute_format_t> aliasFormats;
     void* mappedData = nullptr;
+    pnanovdb_uint64_t bufferAddress = 0llu;
 
     VkBufferMemoryBarrier restoreBarrier = {};
     VkBufferMemoryBarrier currentBarrier = {};

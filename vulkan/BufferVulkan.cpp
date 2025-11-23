@@ -65,6 +65,14 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
     }
     bufCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
+    // enable device address on SSBO
+    if ( context->deviceQueue->device->enabledExtensions.VK_KHR_BUFFER_DEVICE_ADDRESS &&
+        (ptr->desc.usage & PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED) != 0u &&
+        (ptr->desc.usage & PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED) != 0u)
+    {
+        bufCreateInfo.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR;
+    }
+
     VkExternalMemoryBufferCreateInfoKHR externalMemoryBufferCreateInfo = {};
     if (context->deviceQueue->device->desc.enable_external_usage &&
         ptr->memory_type == PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE)
@@ -146,6 +154,15 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
     }
 #endif
 
+    VkMemoryAllocateFlagsInfoKHR flagsInfo = {};
+    flagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO_KHR;
+    flagsInfo.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR;
+    if (bufCreateInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR)
+    {
+        flagsInfo.pNext = bufMemAllocInfo.pNext;
+        bufMemAllocInfo.pNext = &flagsInfo;
+    }
+
     VkResult result = loader->vkAllocateMemory(vulkanDevice, &bufMemAllocInfo, nullptr, &ptr->memoryVk);
     if (result == VK_SUCCESS)
     {
@@ -179,6 +196,16 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
             ptr->memory_type == PNANOVDB_COMPUTE_MEMORY_TYPE_READBACK)
         {
             loader->vkMapMemory(vulkanDevice, ptr->memoryVk, 0u, VK_WHOLE_SIZE, 0u, &ptr->mappedData);
+        }
+
+        if (bufCreateInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR)
+        {
+            VkBufferDeviceAddressInfoKHR addressInfo = {};
+            addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO_KHR;
+            addressInfo.buffer = ptr->bufferVk;
+            ptr->bufferAddress = loader->vkGetBufferDeviceAddressKHR(vulkanDevice, &addressInfo);
+
+            printf("bufferAddress(%zu)\n", ptr->bufferAddress);
         }
     }
     else // free buffer and set null
