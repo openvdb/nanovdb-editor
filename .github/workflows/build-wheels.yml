@@ -114,7 +114,10 @@ jobs:
         CIBW_TEST_COMMAND: python -c "import nanovdb_editor; print('Import successful')"
 
         # Mark this as a PyPI build, disable gtests for published wheels
-        CIBW_ENVIRONMENT: CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF"
+        # Add retry and timeout settings for CMake downloads
+        CIBW_ENVIRONMENT: >
+          CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DFETCHCONTENT_QUIET=OFF"
+          CPM_SOURCE_CACHE=/tmp/cpm-cache
       with:
         package-dir: pymodule
 
