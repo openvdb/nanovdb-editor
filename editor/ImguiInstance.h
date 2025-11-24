@@ -60,23 +60,11 @@ static const char* FILE_HEADER = "File Header";
 static const char* SCENE = "Scenes";
 static const char* PROPERTIES = "Properties";
 
-enum class ViewportOption : int
-{
-    NanoVDB,
-    Raster2D,
-    Last,
-};
-
 enum class ShaderSelectionMode : int
 {
     UseViewportShader,
     UseCodeEditorShader,
     UseShaderGroup,
-};
-
-struct ViewportSettings
-{
-    std::string render_settings_name = s_render_settings_default;
 };
 
 } // namespace imgui_instance_user
@@ -163,12 +151,10 @@ struct Instance
 
     pnanovdb_uint64_t last_timestamp = 0llu;
 
-    ViewportOption viewport_option = ViewportOption::Last;
-    ViewportSettings viewport_settings[(int)ViewportOption::Last];
-
     std::string nanovdb_filepath = ""; // filename selected in the ImGuiFileDialog
     std::string raster_filepath = "";
     float raster_voxels_per_unit = 128.f;
+    bool raster_to_nanovdb = false; // User choice: false=raster2d, true=raster3d
 
     // shader params window selection
     std::string shader_group = "";

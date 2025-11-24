@@ -1275,14 +1275,6 @@ void EditorScene::set_render_view(ViewType type, pnanovdb_editor_token_t* name_t
                                     // Ensure default shader params for the selected view are ready even before
                                     // (re)compile.
                                     reload_shader_params_for_current_view();
-                                    if (type == ViewType::NanoVDBs)
-                                    {
-                                        m_imgui_instance->viewport_option = imgui_instance_user::ViewportOption::NanoVDB;
-                                    }
-                                    else if (type == ViewType::GaussianScenes)
-                                    {
-                                        m_imgui_instance->viewport_option = imgui_instance_user::ViewportOption::Raster2D;
-                                    }
                                 });
 }
 
