@@ -83,7 +83,7 @@ jobs:
       env:
         CIBW_BUILD: ${{ matrix.cibw_build }}
         CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
-        CIBW_MANYLINUX_AARCH64_IMAGE: quay.io/pypa/manylinux_2_31_aarch64:latest
+        CIBW_MANYLINUX_AARCH64_IMAGE: quay.io/pypa/manylinux_2_34_aarch64:latest
         CIBW_BUILD_VERBOSITY: 1
         CIBW_ARCHS: ${{ matrix.arch == 'ARM64' && 'aarch64' || 'auto' }}
 
@@ -106,7 +106,7 @@ jobs:
         CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
           set -e
           if [[ "{wheel}" == *"aarch64"* ]]; then
-            auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_31_aarch64
+            auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_34_aarch64
           else
             auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs
           fi
