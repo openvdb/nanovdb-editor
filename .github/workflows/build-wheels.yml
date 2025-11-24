@@ -83,7 +83,7 @@ jobs:
       env:
         CIBW_BUILD: ${{ matrix.cibw_build }}
         CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
-        CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
+        CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_31
         CIBW_BUILD_VERBOSITY: 1
         CIBW_ARCHS: ${{ matrix.setup_qemu && 'aarch64' || 'auto' }}
 
@@ -104,17 +104,8 @@ jobs:
           cmake --version
 
         CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
-          set -x
-          echo "=== Wheel info ==="
-          auditwheel show {wheel}
-          echo "=== Attempting repair with excludes ==="
-          if auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --exclude libstdc++.so.6 --exclude libgcc_s.so.1; then
-            echo "Repair succeeded with excludes"
-          else
-            echo "=== First repair failed, copying original wheel ==="
-            cp {wheel} {dest_dir}/
-          fi
-          ls -lh {dest_dir}/
+          set -e
+          auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs
 
         # Install test dependencies before testing
         CIBW_TEST_REQUIRES: numpy
