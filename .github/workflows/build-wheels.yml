@@ -45,15 +45,12 @@ jobs:
           - os: ubuntu-latest
             arch: x86_64
             cibw_build: "cp311-manylinux_x86_64"
-            setup_qemu: false
           - os: ubuntu-24.04-arm
             arch: ARM64
             cibw_build: "cp311-manylinux_aarch64"
-            setup_qemu: false
           - os: windows-latest
             arch: ""
             cibw_build: "cp311-win_amd64"
-            setup_qemu: false
 
     steps:
     - uses: actions/checkout@v4
@@ -71,12 +68,6 @@ jobs:
       run: |
         sed -i 's/name = "nanovdb-editor"/name = "nanovdb-editor-dev"/' pymodule/pyproject.toml
         cat pymodule/pyproject.toml | grep "name ="
-
-    - name: Set up QEMU
-      if: matrix.setup_qemu
-      uses: docker/setup-qemu-action@v3
-      with:
-        platforms: arm64
 
     - name: Build wheels
       uses: pypa/cibuildwheel@v2.21.3
