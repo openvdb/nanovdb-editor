@@ -105,7 +105,11 @@ jobs:
 
         CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
           set -e
-          auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs
+          if [[ "{wheel}" == *"aarch64"* ]]; then
+            auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_31_aarch64
+          else
+            auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs
+          fi
 
         # Install test dependencies before testing
         CIBW_TEST_REQUIRES: numpy
