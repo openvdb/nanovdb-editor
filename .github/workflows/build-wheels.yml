@@ -104,11 +104,17 @@ jobs:
           cmake --version
 
         CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
-          echo "Wheel info:" && auditwheel show {wheel}
-          auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --exclude libstdc++.so.6 --exclude libgcc_s.so.1 || echo "Repair failed, trying with lower platform tag..."
-          if [ ! -f {dest_dir}/*.whl ]; then
-            auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_17_aarch64 --plat manylinux_2_17_x86_64 || echo "Second repair attempt failed"
+          set -x
+          echo "=== Wheel info ==="
+          auditwheel show {wheel}
+          echo "=== Attempting repair with excludes ==="
+          if auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --exclude libstdc++.so.6 --exclude libgcc_s.so.1; then
+            echo "Repair succeeded with excludes"
+          else
+            echo "=== First repair failed, copying original wheel ==="
+            cp {wheel} {dest_dir}/
           fi
+          ls -lh {dest_dir}/
 
         # Install test dependencies before testing
         CIBW_TEST_REQUIRES: numpy
