@@ -45,15 +45,12 @@ jobs:
           - os: ubuntu-latest
             arch: x86_64
             cibw_build: "cp311-manylinux_x86_64"
-            setup_qemu: false
-          - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
             arch: ARM64
             cibw_build: "cp311-manylinux_aarch64"
-            setup_qemu: true
           - os: windows-latest
             arch: ""
             cibw_build: "cp311-win_amd64"
-            setup_qemu: false
 
     steps:
     - uses: actions/checkout@v4
@@ -72,20 +69,14 @@ jobs:
         sed -i 's/name = "nanovdb-editor"/name = "nanovdb-editor-dev"/' pymodule/pyproject.toml
         cat pymodule/pyproject.toml | grep "name ="
 
-    - name: Set up QEMU
-      if: matrix.setup_qemu
-      uses: docker/setup-qemu-action@v3
-      with:
-        platforms: arm64
-
     - name: Build wheels
-      uses: pypa/cibuildwheel@v2.16.5
+      uses: pypa/cibuildwheel@v2.21.3
       env:
         CIBW_BUILD: ${{ matrix.cibw_build }}
         CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
-        CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_31
+        CIBW_MANYLINUX_AARCH64_IMAGE: quay.io/pypa/manylinux_2_34_aarch64:latest
         CIBW_BUILD_VERBOSITY: 1
-        CIBW_ARCHS: ${{ matrix.setup_qemu && 'aarch64' || 'auto' }}
+        CIBW_ARCHS: ${{ matrix.arch == 'ARM64' && 'aarch64' || 'auto' }}
 
         # Linux dependencies
         CIBW_BEFORE_ALL_LINUX: |
@@ -105,7 +96,11 @@ jobs:
 
         CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
           set -e
-          auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs
+          if [[ "{wheel}" == *"aarch64"* ]]; then
+            auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_34_aarch64
+          else
+            auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs
+          fi
 
         # Install test dependencies before testing
         CIBW_TEST_REQUIRES: numpy
@@ -114,7 +109,10 @@ jobs:
         CIBW_TEST_COMMAND: python -c "import nanovdb_editor; print('Import successful')"
 
         # Mark this as a PyPI build, disable gtests for published wheels
-        CIBW_ENVIRONMENT: CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF"
+        # Add retry and timeout settings for CMake downloads
+        CIBW_ENVIRONMENT: >
+          CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DFETCHCONTENT_QUIET=OFF"
+          CPM_SOURCE_CACHE=/tmp/cpm-cache
       with:
         package-dir: pymodule
 
