@@ -46,10 +46,10 @@ jobs:
             arch: x86_64
             cibw_build: "cp311-manylinux_x86_64"
             setup_qemu: false
-          - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
             arch: ARM64
             cibw_build: "cp311-manylinux_aarch64"
-            setup_qemu: true
+            setup_qemu: false
           - os: windows-latest
             arch: ""
             cibw_build: "cp311-win_amd64"
@@ -83,9 +83,9 @@ jobs:
       env:
         CIBW_BUILD: ${{ matrix.cibw_build }}
         CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
-        CIBW_MANYLINUX_AARCH64_IMAGE: quay.io/pypa/manylinux_2_34_aarch64:latest
+        CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
         CIBW_BUILD_VERBOSITY: 1
-        CIBW_ARCHS: ${{ matrix.setup_qemu && 'aarch64' || 'auto' }}
+        CIBW_ARCHS: ${{ matrix.arch == 'ARM64' && 'aarch64' || 'auto' }}
 
         # Linux dependencies
         CIBW_BEFORE_ALL_LINUX: |
