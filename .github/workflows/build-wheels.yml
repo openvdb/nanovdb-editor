@@ -1,0 +1,154 @@
+name: Build Wheels
+
+on:
+  workflow_call:
+    inputs:
+      is_dev_package:
+        description: 'Whether to build as dev package (nanovdb-editor-dev)'
+        required: true
+        type: boolean
+      allow_dev_suffix:
+        description: 'Whether to allow -dev suffix in version validation'
+        required: true
+        type: boolean
+    outputs:
+      version_valid:
+        description: 'Whether version validation passed'
+        value: ${{ jobs.validate_version.outputs.version_valid }}
+
+jobs:
+  validate_version:
+    name: Validate tag version matches VERSION.txt
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    outputs:
+      version_valid: ${{ steps.validate.outputs.version-valid }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Validate version
+      id: validate
+      uses: ./.github/actions/validate-version
+      with:
+        allow-dev-suffix: ${{ inputs.allow_dev_suffix }}
+
+  build_wheels:
+    name: Build (${{ matrix.os }}${{ matrix.arch && format(' {0}', matrix.arch) || '' }})
+    runs-on: ${{ matrix.os }}
+    needs: [validate_version]
+    if: ${{ !failure() && (github.event_name == 'workflow_dispatch' || needs.validate_version.outputs.version_valid == 'true') }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: x86_64
+            cibw_build: "cp311-manylinux_x86_64"
+            setup_qemu: false
+          - os: ubuntu-latest
+            arch: ARM64
+            cibw_build: "cp311-manylinux_aarch64"
+            setup_qemu: true
+          - os: windows-latest
+            arch: ""
+            cibw_build: "cp311-win_amd64"
+            setup_qemu: false
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Rename package for dev release
+      if: inputs.is_dev_package
+      shell: bash
+      run: |
+        sed -i 's/name = "nanovdb-editor"/name = "nanovdb-editor-dev"/' pymodule/pyproject.toml
+        cat pymodule/pyproject.toml | grep "name ="
+
+    - name: Set up QEMU
+      if: matrix.setup_qemu
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: arm64
+
+    - name: Build wheels
+      uses: pypa/cibuildwheel@v2.16.5
+      env:
+        CIBW_BUILD: ${{ matrix.cibw_build }}
+        CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
+        CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_31
+        CIBW_BUILD_VERBOSITY: 1
+        CIBW_ARCHS: ${{ matrix.setup_qemu && 'aarch64' || 'auto' }}
+
+        # Linux dependencies
+        CIBW_BEFORE_ALL_LINUX: |
+          if command -v dnf &> /dev/null; then
+            dnf install -y cmake git
+            dnf install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel wayland-protocols-devel
+          else
+            yum install -y cmake git
+            yum install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel
+          fi
+          cmake --version
+
+        # Windows dependencies
+        CIBW_BEFORE_ALL_WINDOWS: |
+          python -m pip install cmake
+          cmake --version
+
+        CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
+          set -e
+          auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs
+
+        # Install test dependencies before testing
+        CIBW_TEST_REQUIRES: numpy
+
+        # Test the wheels
+        CIBW_TEST_COMMAND: python -c "import nanovdb_editor; print('Import successful')"
+
+        # Mark this as a PyPI build, disable gtests for published wheels
+        CIBW_ENVIRONMENT: CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF"
+      with:
+        package-dir: pymodule
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: wheels-${{ matrix.os }}${{ matrix.arch && format('-{0}', matrix.arch) || '' }}
+        path: ./wheelhouse/*.whl
+
+  build_sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    needs: [validate_version]
+    if: ${{ !failure() && (github.event_name == 'workflow_dispatch' || needs.validate_version.outputs.version_valid == 'true') }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Rename package for dev release
+      if: inputs.is_dev_package
+      run: |
+        sed -i 's/name = "nanovdb-editor"/name = "nanovdb-editor-dev"/' pymodule/pyproject.toml
+        cat pymodule/pyproject.toml | grep "name ="
+
+    - name: Build sdist
+      run: pipx run build --sdist
+      working-directory: pymodule
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: sdist
+        path: pymodule/dist/*.tar.gz
