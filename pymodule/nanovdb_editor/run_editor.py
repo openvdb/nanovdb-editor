@@ -32,8 +32,7 @@ if __name__ == "__main__":
         if args.headless:
             editor.start(config)
             print("Editor running at {}:{}.. Ctrl+C to exit".format(args.ip, args.port))
-            while True:
-                sleep(1)
+            editor.wait_for_interrupt()
         else:
             editor.show(config)
     except Exception as e:
