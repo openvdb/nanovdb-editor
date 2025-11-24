@@ -36,6 +36,7 @@ config.headless = 0
 config.streaming = 0
 
 editor.show(config)
+# editor.wait_for_interrupt()   # uncomment when streaming is enabled
 ```
 
 ### Shader Parameters

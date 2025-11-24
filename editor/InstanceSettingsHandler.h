@@ -80,8 +80,6 @@ static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* ent
                  sscanf(line, fmt, buffer) == 1)
         {
             instance->render_settings_name = buffer;
-            instance->viewport_settings[(int)instance->viewport_option].render_settings_name =
-                instance->render_settings_name;
             if (!instance->is_viewer())
             {
                 // Load camera state when profile is loaded from INI

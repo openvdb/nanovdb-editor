@@ -385,7 +385,8 @@ void windowGlfwResize(WindowGlfw* ptr, pnanovdb_uint32_t width, pnanovdb_uint32_
 {
     if (ptr->window)
     {
-        windowSizeCallback(ptr->window, width, height);
+        // resize the GLFW window, this will trigger the windowSizeCallback
+        ptr->p_glfwSetWindowSize(ptr->window, width, height);
     }
 }
 
