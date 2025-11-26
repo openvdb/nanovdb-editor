@@ -88,7 +88,7 @@ pnanovdb_compute_interface_t* pnanovdbGetContextInterface_vulkan()
     iface.get_buffer_external_handle = getBufferExternalHandle;
     iface.close_buffer_external_handle = closeBufferExternalHandle;
     iface.create_buffer_from_external_handle = createBufferFromExternalHandle;
-    iface.get_device_buffer_address = getDeviceBufferAddress;
+    iface.get_buffer_device_address = getBufferDeviceAddress;
 
     iface.create_texture = createTexture;
     iface.destroy_texture = destroyTexture;

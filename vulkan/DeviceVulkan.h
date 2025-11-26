@@ -372,7 +372,7 @@ Buffer* buffer_create(Context* context,
 void buffer_destroy(Context* context, Buffer* buffer);
 void context_destroyBuffers(Context* context);
 VkBufferView buffer_getBufferView(Context* context, Buffer* ptr, pnanovdb_compute_format_t aliasFormat);
-pnanovdb_uint64_t getDeviceBufferAddress(pnanovdb_compute_context_t* context, pnanovdb_compute_buffer_t* buffer);
+pnanovdb_uint64_t getBufferDeviceAddress(pnanovdb_compute_context_t* context, pnanovdb_compute_buffer_t* buffer);
 
 struct Texture
 {
