@@ -643,4 +643,10 @@ void closeBufferExternalHandle(pnanovdb_compute_context_t* context,
     device_closeBufferExternalHandle(context, buffer, &srcHandle->value, sizeof(srcHandle->value));
 }
 
+pnanovdb_uint64_t getDeviceBufferAddress(pnanovdb_compute_context_t* context, pnanovdb_compute_buffer_t* buffer)
+{
+    auto ptr = cast(buffer);
+    return ptr->bufferAddress;
+}
+
 } // end namespace
