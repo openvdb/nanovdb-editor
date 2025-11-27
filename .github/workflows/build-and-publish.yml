@@ -29,8 +29,7 @@ jobs:
     if: ${{ !inputs.skip_build }}
     uses: ./.github/workflows/build-wheels.yml
     with:
-      is_dev_package: false
-      allow_dev_suffix: false
+      is_dev: false
 
   # Test upload from develop branch
   upload_test_pypi:
