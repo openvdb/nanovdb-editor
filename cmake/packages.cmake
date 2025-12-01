@@ -559,6 +559,9 @@ if(Slang_ADDED)
         if(WIN32)
             add_custom_command(TARGET copy_slang_libs POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    ${Slang_SOURCE_DIR}/bin/slang${CMAKE_SHARED_LIBRARY_SUFFIX}
+                    ${CMAKE_BINARY_DIR}/$<CONFIG>/slang${CMAKE_SHARED_LIBRARY_SUFFIX}
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     ${Slang_SOURCE_DIR}/bin/slang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}
                     ${CMAKE_BINARY_DIR}/$<CONFIG>/slang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -577,6 +580,9 @@ if(Slang_ADDED)
             endif()
         else()
             add_custom_command(TARGET copy_slang_libs POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    ${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}
+                    ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     ${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}
                     ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}

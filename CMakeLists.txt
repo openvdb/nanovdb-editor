@@ -366,6 +366,7 @@ if(SKBUILD)
     if(Slang_ADDED)
         if(WIN32)
             install(FILES
+                "${Slang_SOURCE_DIR}/bin/slang${CMAKE_SHARED_LIBRARY_SUFFIX}"
                 "${Slang_SOURCE_DIR}/bin/slang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}"
                 "${Slang_SOURCE_DIR}/bin/slang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
                 DESTINATION nanovdb_editor/lib
@@ -380,6 +381,7 @@ if(SKBUILD)
             endif()
         else()
             install(FILES
+                "${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
                 "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}"
                 "${Slang_SOURCE_DIR}/lib/libslang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
                 DESTINATION nanovdb_editor/lib
