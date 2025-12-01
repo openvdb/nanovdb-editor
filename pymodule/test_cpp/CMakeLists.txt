@@ -79,6 +79,7 @@ if(WIN32)
         pnanovdbfileformat.dll
         pnanovdbeditor.dll
         glfw3.dll
+        slang.dll
         slang-compiler.dll
         slang-glslang.dll
         slang-llvm.dll

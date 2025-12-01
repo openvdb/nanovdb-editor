@@ -250,6 +250,98 @@ float4 ray_march_nanovdb_leaf_fetch_float(pnanovdb_grid_type_t grid_type,
     return color;
 }
 
+struct TrilinearWeights
+{
+    int3 ijk000;
+    float weights[8];
+};
+
+TrilinearWeights compute_trilinear_weights(float3 pos, int3 ijk_offset)
+{
+    TrilinearWeights result;
+    result.ijk000 = int3(floor(pos - 0.5f)) + ijk_offset;
+    float3 pw = (pos - 0.5f) - float3(result.ijk000 - ijk_offset);
+    float3 nw = float3(1.f, 1.f, 1.f) - pw;
+
+    result.weights[0] = nw.x * nw.y * nw.z;
+    result.weights[1] = pw.x * nw.y * nw.z;
+    result.weights[2] = nw.x * pw.y * nw.z;
+    result.weights[3] = pw.x * pw.y * nw.z;
+    result.weights[4] = nw.x * nw.y * pw.z;
+    result.weights[5] = pw.x * nw.y * pw.z;
+    result.weights[6] = nw.x * pw.y * pw.z;
+    result.weights[7] = pw.x * pw.y * pw.z;
+
+    return result;
+}
+
+float4 ray_march_nanovdb_leaf_fetch_float_trilinear(pnanovdb_grid_type_t grid_type,
+                                                    StructuredBuffer<uint2> buf,
+                                                    inout pnanovdb_readaccessor_t acc,
+                                                    float3 pos,
+                                                    int3 ijk_offset)
+{
+    TrilinearWeights tw = compute_trilinear_weights(pos, ijk_offset);
+
+    if (grid_type == PNANOVDB_GRID_TYPE_FLOAT)
+    {
+        pnanovdb_leaf_handle_t leaf = acc.leaf;
+        pnanovdb_uint64_t table_offset = PNANOVDB_GRID_TYPE_GET(grid_type, leaf_off_table);
+        float value = 0.f;
+
+        [unroll]
+        for (int i = 0; i < 8; i++)
+        {
+            int3 ijk = tw.ijk000 + int3(i & 1, (i >> 1) & 1, (i >> 2) & 1);
+            pnanovdb_uint32_t n = (pnanovdb_uint32_t(ijk.x) & 7u) +
+                                  ((pnanovdb_uint32_t(ijk.y) & 7u) << 3u) +
+                                  ((pnanovdb_uint32_t(ijk.z) & 7u) << 6u);
+            pnanovdb_address_t addr = pnanovdb_address_offset(
+                leaf.address,
+                pnanovdb_uint32_as_uint64_low(pnanovdb_uint64_low(table_offset) + n * 4u));
+            value += tw.weights[i] * pnanovdb_read_float(buf, addr);
+        }
+        return levelset_to_color(value);
+    }
+
+    float4 value = float4(0.f, 0.f, 0.f, 0.f);
+    [unroll]
+    for (int i = 0; i < 8; i++)
+    {
+        int3 offset = int3(i & 1, (i >> 1) & 1, (i >> 2) & 1);
+        value += tw.weights[i] * ray_march_nanovdb_leaf_fetch_float(grid_type, buf, acc, tw.ijk000 + offset);
+    }
+    return value;
+}
+
+float4 apply_slice_plane(float4 color, float3 pos)
+{
+    if (shader_params.slice_plane_thickness != 0.f)
+    {
+        float plane_dist = dot(float4(pos, 1.f), shader_params.slice_plane);
+        bool is_inside = abs(plane_dist) > abs(0.5f * shader_params.slice_plane_thickness);
+        if ((shader_params.slice_plane_thickness > 0.f && is_inside) ||
+            (shader_params.slice_plane_thickness < 0.f && !is_inside))
+        {
+            return float4(0.f, 0.f, 0.f, 0.f);
+        }
+    }
+    return color;
+}
+
+void accumulate_color(float4 value, float3 pos, float alphaScale, float currentT,
+                      inout float4 sum, inout float nominalT)
+{
+    float4 color = apply_slice_plane(value, pos);
+    color = max(float4(0.f, 0.f, 0.f, 0.f), color);
+    color.a = min(1.f, color.a);
+    color.a *= alphaScale;
+
+    nominalT = sum.a * (color.a * currentT) + nominalT;
+    sum.rgb = sum.a * (color.a * color.rgb) + sum.rgb;
+    sum.a = (1.f - color.a) * sum.a;
+}
+
 float4 ray_march_nanovdb_leaf_fetch_float_node2(pnanovdb_grid_type_t blind_type,
                                                 StructuredBuffer<uint2> buf,
                                                 inout pnanovdb_node2_accessor_t acc,
@@ -277,6 +369,26 @@ float4 ray_march_nanovdb_leaf_fetch_float_node2(pnanovdb_grid_type_t blind_type,
         color = levelset_to_color(value);
     }
     return color;
+}
+
+float4 ray_march_nanovdb_leaf_fetch_float_node2_trilinear(pnanovdb_grid_type_t blind_type,
+                                                          StructuredBuffer<uint2> buf,
+                                                          inout pnanovdb_node2_accessor_t acc,
+                                                          pnanovdb_node2_levelset_values_t values,
+                                                          float3 pos,
+                                                          int3 ijk_offset)
+{
+    TrilinearWeights tw = compute_trilinear_weights(pos, ijk_offset);
+    float4 value = float4(0.f, 0.f, 0.f, 0.f);
+
+    [unroll]
+    for (int i = 0; i < 8; i++)
+    {
+        int3 offset = int3(i & 1, (i >> 1) & 1, (i >> 2) & 1);
+        value += tw.weights[i] * ray_march_nanovdb_leaf_fetch_float_node2(blind_type, buf, acc, values, tw.ijk000 + offset);
+    }
+
+    return value;
 }
 
 bool ray_march_nanovdb_leaf(pnanovdb_grid_type_t grid_type,
@@ -341,54 +453,12 @@ bool ray_march_nanovdb_leaf(pnanovdb_grid_type_t grid_type,
         {
             // linear interpolation
 #if 1
-            int3 ijk000 = int3(floor(pos - 0.5f));
-            float3 pw = (pos - 0.5f) - float3(ijk000);
-            float3 nw = float3(1.f, 1.f, 1.f) - pw;
-
-            ijk000 += ijk_offset;
-
-            float4 value;
-            value = nw.x * nw.y * nw.z * ray_march_nanovdb_leaf_fetch_float(grid_type, buf, acc, ijk000 + int3(0, 0, 0));
-            value += pw.x * nw.y * nw.z * ray_march_nanovdb_leaf_fetch_float(grid_type, buf, acc, ijk000 + int3(1, 0, 0));
-            value += nw.x * pw.y * nw.z * ray_march_nanovdb_leaf_fetch_float(grid_type, buf, acc, ijk000 + int3(0, 1, 0));
-            value += pw.x * pw.y * nw.z * ray_march_nanovdb_leaf_fetch_float(grid_type, buf, acc, ijk000 + int3(1, 1, 0));
-            value += nw.x * nw.y * pw.z * ray_march_nanovdb_leaf_fetch_float(grid_type, buf, acc, ijk000 + int3(0, 0, 1));
-            value += pw.x * nw.y * pw.z * ray_march_nanovdb_leaf_fetch_float(grid_type, buf, acc, ijk000 + int3(1, 0, 1));
-            value += nw.x * pw.y * pw.z * ray_march_nanovdb_leaf_fetch_float(grid_type, buf, acc, ijk000 + int3(0, 1, 1));
-            value += pw.x * pw.y * pw.z * ray_march_nanovdb_leaf_fetch_float(grid_type, buf, acc, ijk000 + int3(1, 1, 1));
+            float4 value = ray_march_nanovdb_leaf_fetch_float_trilinear(grid_type, buf, acc, pos, ijk_offset);
 #else
             int3 ijk000 = int3(floor(pos)) + ijk_offset;
-
-            float4 value;
-            value = ray_march_nanovdb_leaf_fetch_float(grid_type, buf, acc, ijk000);
+            float4 value = ray_march_nanovdb_leaf_fetch_float(grid_type, buf, acc, ijk000);
 #endif
-
-            float4 color = value;
-
-            if (shader_params.slice_plane_thickness != 0.f)
-            {
-                float plane_dist = dot(float4(pos, 1.f), shader_params.slice_plane);
-                bool is_inside = abs(plane_dist) > abs(0.5f * shader_params.slice_plane_thickness);
-                if (shader_params.slice_plane_thickness > 0.f && is_inside)
-                {
-                    color = float4(0.f, 0.f, 0.f, 0.f);
-                }
-                else if (shader_params.slice_plane_thickness < 0.f && !is_inside)
-                {
-                    color = float4(0.f, 0.f, 0.f, 0.f);
-                }
-            }
-
-            color = max(float4(0.f, 0.f, 0.f, 0.f), color);
-            color.a = min(1.f, color.a);
-
-            color.a *= alphaScale;
-
-            nominalT = sum.a * (color.a * currentT) + nominalT;
-
-            sum.rgb = sum.a * (color.a * color.rgb) + sum.rgb;
-            sum.a = (1.f - color.a) * sum.a;
-
+            accumulate_color(value, pos, alphaScale, currentT, sum, nominalT);
             pos += posStep;
             currentT += stepSize;
         }
@@ -464,62 +534,12 @@ bool ray_march_nanovdb_leaf_node2(pnanovdb_grid_type_t blind_type,
         {
             // linear interpolation
 #if 1
-            int3 ijk000 = int3(floor(pos - 0.5f));
-            float3 pw = (pos - 0.5f) - float3(ijk000);
-            float3 nw = float3(1.f, 1.f, 1.f) - pw;
-
-            ijk000 += ijk_offset;
-
-            float4 value;
-            value = nw.x * nw.y * nw.z *
-                    ray_march_nanovdb_leaf_fetch_float_node2(blind_type, buf, acc, values, ijk000 + int3(0, 0, 0));
-            value += pw.x * nw.y * nw.z *
-                     ray_march_nanovdb_leaf_fetch_float_node2(blind_type, buf, acc, values, ijk000 + int3(1, 0, 0));
-            value += nw.x * pw.y * nw.z *
-                     ray_march_nanovdb_leaf_fetch_float_node2(blind_type, buf, acc, values, ijk000 + int3(0, 1, 0));
-            value += pw.x * pw.y * nw.z *
-                     ray_march_nanovdb_leaf_fetch_float_node2(blind_type, buf, acc, values, ijk000 + int3(1, 1, 0));
-            value += nw.x * nw.y * pw.z *
-                     ray_march_nanovdb_leaf_fetch_float_node2(blind_type, buf, acc, values, ijk000 + int3(0, 0, 1));
-            value += pw.x * nw.y * pw.z *
-                     ray_march_nanovdb_leaf_fetch_float_node2(blind_type, buf, acc, values, ijk000 + int3(1, 0, 1));
-            value += nw.x * pw.y * pw.z *
-                     ray_march_nanovdb_leaf_fetch_float_node2(blind_type, buf, acc, values, ijk000 + int3(0, 1, 1));
-            value += pw.x * pw.y * pw.z *
-                     ray_march_nanovdb_leaf_fetch_float_node2(blind_type, buf, acc, values, ijk000 + int3(1, 1, 1));
+            float4 value = ray_march_nanovdb_leaf_fetch_float_node2_trilinear(blind_type, buf, acc, values, pos, ijk_offset);
 #else
             int3 ijk000 = int3(floor(pos)) + ijk_offset;
-
-            float4 value;
-            value = ray_march_nanovdb_leaf_fetch_float_node2(blind_type, buf, acc, values, ijk000);
+            float4 value = ray_march_nanovdb_leaf_fetch_float_node2(blind_type, buf, acc, values, ijk000);
 #endif
-
-            float4 color = value;
-
-            if (shader_params.slice_plane_thickness != 0.f)
-            {
-                float plane_dist = dot(float4(pos, 1.f), shader_params.slice_plane);
-                bool is_inside = abs(plane_dist) > abs(0.5f * shader_params.slice_plane_thickness);
-                if (shader_params.slice_plane_thickness > 0.f && is_inside)
-                {
-                    color = float4(0.f, 0.f, 0.f, 0.f);
-                }
-                else if (shader_params.slice_plane_thickness < 0.f && !is_inside)
-                {
-                    color = float4(0.f, 0.f, 0.f, 0.f);
-                }
-            }
-
-            color = max(float4(0.f, 0.f, 0.f, 0.f), color);
-            color.a = min(1.f, color.a);
-
-            color.a *= alphaScale;
-
-            nominalT = sum.a * (color.a * currentT) + nominalT;
-
-            sum.rgb = sum.a * (color.a * color.rgb) + sum.rgb;
-            sum.a = (1.f - color.a) * sum.a;
-
+            accumulate_color(value, pos, alphaScale, currentT, sum, nominalT);
             pos += posStep;
             currentT += stepSize;
         }
@@ -591,37 +611,11 @@ bool ray_march_nanovdb_tile(pnanovdb_grid_type_t grid_type,
         float3 posStep = stepSize * rayDir;
 
         // capture value once and reuse many times
-        float4 value;
-        value = ray_march_nanovdb_leaf_fetch_float(grid_type, buf, acc, location.xyz * 8u + ijk_offset);
+        float4 value = ray_march_nanovdb_leaf_fetch_float(grid_type, buf, acc, location.xyz * 8u + ijk_offset);
 
         for (int stepIdx = 0; stepIdx < numSteps; stepIdx++)
         {
-            float4 color = value;
-
-            if (shader_params.slice_plane_thickness != 0.f)
-            {
-                float plane_dist = dot(float4(pos, 1.f), shader_params.slice_plane);
-                bool is_inside = abs(plane_dist) > abs(0.5f * shader_params.slice_plane_thickness);
-                if (shader_params.slice_plane_thickness > 0.f && is_inside)
-                {
-                    color = float4(0.f, 0.f, 0.f, 0.f);
-                }
-                else if (shader_params.slice_plane_thickness < 0.f && !is_inside)
-                {
-                    color = float4(0.f, 0.f, 0.f, 0.f);
-                }
-            }
-
-            color = max(float4(0.f, 0.f, 0.f, 0.f), color);
-            color.a = min(1.f, color.a);
-
-            color.a *= alphaScale;
-
-            nominalT = sum.a * (color.a * currentT) + nominalT;
-
-            sum.rgb = sum.a * (color.a * color.rgb) + sum.rgb;
-            sum.a = (1.f - color.a) * sum.a;
-
+            accumulate_color(value, pos, alphaScale, currentT, sum, nominalT);
             pos += posStep;
             currentT += stepSize;
         }
@@ -694,36 +688,13 @@ bool ray_march_nanovdb_tile_node2(pnanovdb_grid_type_t blind_type,
         float3 posStep = stepSize * rayDir;
 
         // capture value once and reuse many times
-        float4 value;
-        value = ray_march_nanovdb_leaf_fetch_float_node2(blind_type, buf, acc, values, location * 8u + ijk_offset);
+        float4 value = ray_march_nanovdb_leaf_fetch_float_node2(blind_type, buf, acc, values, location * 8u + ijk_offset);
 
         for (int stepIdx = 0; stepIdx < numSteps; stepIdx++)
         {
-            float4 color = value;
+            accumulate_color(value, pos, alphaScale, currentT, sum, nominalT);
 
-            if (shader_params.slice_plane_thickness != 0.f)
-            {
-                float plane_dist = dot(float4(pos, 1.f), shader_params.slice_plane);
-                bool is_inside = abs(plane_dist) > abs(0.5f * shader_params.slice_plane_thickness);
-                if (shader_params.slice_plane_thickness > 0.f && is_inside)
-                {
-                    color = float4(0.f, 0.f, 0.f, 0.f);
-                }
-                else if (shader_params.slice_plane_thickness < 0.f && !is_inside)
-                {
-                    color = float4(0.f, 0.f, 0.f, 0.f);
-                }
-            }
 
-            color = max(float4(0.f, 0.f, 0.f, 0.f), color);
-            color.a = min(1.f, color.a);
-
-            color.a *= alphaScale;
-
-            nominalT = sum.a * (color.a * currentT) + nominalT;
-
-            sum.rgb = sum.a * (color.a * color.rgb) + sum.rgb;
-            sum.a = (1.f - color.a) * sum.a;
 
             pos += posStep;
             currentT += stepSize;
