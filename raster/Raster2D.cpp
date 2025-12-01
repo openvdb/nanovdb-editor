@@ -168,6 +168,16 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
         pnanovdb_uint32_t sh_stride;
         pnanovdb_uint32_t points_grid_dim_x;
         pnanovdb_uint32_t isects_grid_dim_x;
+
+        pnanovdb_uint64_t ptr_means;
+        pnanovdb_uint64_t ptr_quats;
+        pnanovdb_uint64_t ptr_scales;
+        pnanovdb_uint64_t ptr_radii;
+        pnanovdb_uint64_t ptr_means2d;
+        pnanovdb_uint64_t ptr_depths;
+        pnanovdb_uint64_t ptr_conics;
+        pnanovdb_uint64_t ptr_compensations;
+        pnanovdb_uint64_t ptr_colors;
     };
     constants_t constants = {};
 
@@ -217,14 +227,6 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
     buf_desc.size_in_bytes = sizeof(constants_t);
     pnanovdb_compute_buffer_t* constant_buffer =
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &buf_desc);
-
-    // copy constants
-    void* mapped_constants = compute_interface->map_buffer(context, constant_buffer);
-    memcpy(mapped_constants, &constants, sizeof(constants_t));
-    compute_interface->unmap_buffer(context, constant_buffer);
-
-    pnanovdb_compute_buffer_transient_t* constant_transient =
-        compute_interface->register_buffer_as_transient(context, constant_buffer);
 
     // shader params
     buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT;
@@ -307,6 +309,25 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
         compute_interface->register_buffer_as_transient(context, num_tiles_per_gaussian_buffer);
     pnanovdb_compute_buffer_transient_t* scan_tiles_per_gaussian_transient =
         compute_interface->register_buffer_as_transient(context, scan_tiles_per_gaussian_buffer);
+
+    // set buffer device addresses
+    constants.ptr_means = compute_interface->get_buffer_device_address(context, data->means_gpu_array->device_buffer);
+    constants.ptr_quats = compute_interface->get_buffer_device_address(context, data->quaternions_gpu_array->device_buffer);
+    constants.ptr_scales = compute_interface->get_buffer_device_address(context, data->scales_gpu_array->device_buffer);
+    constants.ptr_radii = compute_interface->get_buffer_device_address(context, radii_buffer);
+    constants.ptr_means2d = compute_interface->get_buffer_device_address(context, means2d_buffer);
+    constants.ptr_depths = compute_interface->get_buffer_device_address(context, depths_buffer);
+    constants.ptr_conics = compute_interface->get_buffer_device_address(context, conics_buffer);
+    constants.ptr_compensations = compute_interface->get_buffer_device_address(context, compensations_buffer);
+    constants.ptr_colors = compute_interface->get_buffer_device_address(context, resolved_color_buffer);
+
+    // copy constants
+    void* mapped_constants = compute_interface->map_buffer(context, constant_buffer);
+    memcpy(mapped_constants, &constants, sizeof(constants_t));
+    compute_interface->unmap_buffer(context, constant_buffer);
+
+    pnanovdb_compute_buffer_transient_t* constant_transient =
+        compute_interface->register_buffer_as_transient(context, constant_buffer);
 
     // projection
     {

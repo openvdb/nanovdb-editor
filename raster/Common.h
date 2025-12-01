@@ -104,7 +104,10 @@ static void gpu_array_alloc_device(const pnanovdb_compute_t* compute,
     pnanovdb_compute_buffer_desc_t buf_desc = {};
     if (!ptr->device_buffer)
     {
-        buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_SRC;
+        buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED |
+                         PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED |
+                         PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_SRC |
+                         PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_DST;
         buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
         buf_desc.structure_stride = 4u;
         buf_desc.size_in_bytes = arr->element_count * arr->element_size;

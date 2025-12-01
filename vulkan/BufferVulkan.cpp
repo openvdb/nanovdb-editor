@@ -67,8 +67,8 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
 
     // enable device address on SSBO
     if ( context->deviceQueue->device->enabledExtensions.VK_KHR_BUFFER_DEVICE_ADDRESS &&
-        (ptr->desc.usage & PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED) != 0u &&
-        (ptr->desc.usage & PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED) != 0u)
+        ((ptr->desc.usage & PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED) != 0u ||
+        (ptr->desc.usage & PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED) != 0u))
     {
         bufCreateInfo.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR;
     }

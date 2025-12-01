@@ -39,6 +39,16 @@ struct constants_t
     uint sh_stride;
     uint points_grid_dim_x;
     uint isects_grid_dim_x;
+
+    float* ptr_means;
+    float* ptr_quats;
+    float* ptr_scales;
+    int* ptr_radii;
+    float2* ptr_means2d;
+    float* ptr_depths;
+    float* ptr_conics;
+    float* ptr_compensations;
+    float* ptr_colors;
 };
 
 struct shader_params_t

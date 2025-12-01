@@ -69,7 +69,11 @@ void volume_render_tile(uint3 group_idx,
             int g = tile_gaussians_ids_in[idx];
             float2 xy = means2d_in[g];
             float opac = opacities_in[g];
-            float3 conic = float3(conics_in[3u * g + 0u], conics_in[3u * g + 1u], conics_in[3u * g + 2u]);
+            //float3 conic = float3(conics_in[3u * g + 0u], conics_in[3u * g + 1u], conics_in[3u * g + 2u]);
+            float3 conic = float3(
+                constants.ptr_conics[3u * g + 0u],
+                constants.ptr_conics[3u * g + 1u],
+                constants.ptr_conics[3u * g + 2u]);
 
             smem[8u * tidx + 0] = uint(g);
             smem[8u * tidx + 1] = asuint(xy.x);
@@ -114,7 +118,11 @@ void volume_render_tile(uint3 group_idx,
             }
 
             float vis = alpha * accum_transmittance;
-            float3 color = float3(colors_in[3u * g + 0u], colors_in[3u * g + 1u], colors_in[3u * g + 2u]);
+            //float3 color = float3(colors_in[3u * g + 0u], colors_in[3u * g + 1u], colors_in[3u * g + 2u]);
+            float3 color = float3(
+                constants.ptr_colors[3u * g + 0u],
+                constants.ptr_colors[3u * g + 1u],
+                constants.ptr_colors[3u * g + 2u]);
             pix_out += color * vis;
 
             cur_idx = batch_start + t;
