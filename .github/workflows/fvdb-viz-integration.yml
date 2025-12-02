@@ -80,15 +80,16 @@ jobs:
         id: local_wheel
         run: |
           set -euo pipefail
-          wheel_path=$(python - <<'PY'
-import pathlib
-dist_dir = pathlib.Path("pymodule") / "dist"
-matches = sorted(dist_dir.glob("nanovdb_editor*.whl"))
-if not matches:
-    raise SystemExit("No nanovdb_editor*.whl found in pymodule/dist")
-print(matches[0])
-PY
-)
+          wheel_path=$(
+            python -c "import pathlib, sys; dist = pathlib.Path('pymodule') / 'dist'; matches = sorted(dist.glob('nanovdb_editor*.whl')); \
+import json; \
+sys.stdout.write(str(matches[0]) if matches else ''); \
+sys.exit(0 if matches else 1)"
+          )
+          if [[ -z "$wheel_path" ]]; then
+            echo 'No nanovdb_editor*.whl found in pymodule/dist' >&2
+            exit 1
+          fi
           echo "host_path=${wheel_path}" >> "$GITHUB_OUTPUT"
           echo "container_path=/workspace/${wheel_path}" >> "$GITHUB_OUTPUT"
 
