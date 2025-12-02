@@ -75,6 +75,23 @@ jobs:
           name: ${{ steps.config.outputs.artifact }}
           path: pymodule/dist
 
+      - name: Locate local wheel artifact
+        if: ${{ steps.config.outputs.use_local == 'true' }}
+        id: local_wheel
+        run: |
+          set -euo pipefail
+          wheel_path=$(python - <<'PY'
+import pathlib
+dist_dir = pathlib.Path("pymodule") / "dist"
+matches = sorted(dist_dir.glob("nanovdb_editor*.whl"))
+if not matches:
+    raise SystemExit("No nanovdb_editor*.whl found in pymodule/dist")
+print(matches[0])
+PY
+)
+          echo "host_path=${wheel_path}" >> "$GITHUB_OUTPUT"
+          echo "container_path=/workspace/${wheel_path}" >> "$GITHUB_OUTPUT"
+
       - name: Build headless test image
         run: |
           set -euo pipefail
@@ -96,10 +113,17 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ "${{ steps.config.outputs.package_stream }}" == "dev" ]]; then
+          if [[ "${{ steps.config.outputs.use_local }}" == "true" ]]; then
+            PYTEST_EXPR="test_fvdb_viz_with_local_package"
+          elif [[ "${{ steps.config.outputs.package_stream }}" == "dev" ]]; then
             PYTEST_EXPR="test_fvdb_viz_with_dev_package"
           else
             PYTEST_EXPR="test_fvdb_viz_with_release_package"
+          fi
+
+          LOCAL_ENV=()
+          if [[ "${{ steps.config.outputs.use_local }}" == "true" ]]; then
+            LOCAL_ENV+=(-e FVDB_VIZ_LOCAL_DIST="${{ steps.local_wheel.outputs.container_path }}")
           fi
 
           docker run --rm \
@@ -114,8 +138,17 @@ jobs:
             -e LP_NUM_THREADS=1 \
             -e LIBGL_ALWAYS_SOFTWARE=1 \
             -e GALLIUM_DRIVER=llvmpipe \
+            "${LOCAL_ENV[@]}" \
             -v "${GITHUB_WORKSPACE}":/workspace \
             -w /workspace \
             "fvdb-viz-${{ steps.config.outputs.package_stream }}" \
-            bash -lc "set -euo pipefail; pip install --break-system-packages pytest >/tmp/pip.log && pytest pytests/test_fvdb_viz_integration.py -k ${PYTEST_EXPR} -vv"
+            bash -lc "set -euo pipefail
+pip install --break-system-packages pytest >/tmp/pip.log
+python - <<'PY'
+import importlib
+mod = importlib.import_module('nanovdb_editor')
+version = getattr(mod, '__version__', 'unknown')
+print(f'nanovdb_editor version: {version}')
+PY
+pytest pytests/test_fvdb_viz_integration.py -k ${PYTEST_EXPR} -vv"
 

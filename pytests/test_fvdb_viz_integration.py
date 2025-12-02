@@ -11,6 +11,7 @@ import pytest
 
 
 RUNS_ON_FVDB_VIZ_ENV = os.environ.get("FVDB_VIZ_TESTS") == "1"
+LOCAL_DIST_SPEC = os.environ.get("FVDB_VIZ_LOCAL_DIST")
 
 pytestmark = pytest.mark.skipif(
     not RUNS_ON_FVDB_VIZ_ENV,
@@ -184,7 +185,7 @@ def _run_notebook_script(env_ctx: dict):
         check=False,
     )
     if proc.returncode != 0:
-        raise AssertionError("Viewer test failed:\\n" f"STDOUT:\\n{proc.stdout}\\nSTDERR:\\n{proc.stderr}")
+        raise AssertionError("Viewer test failed:\n" f"STDOUT:\n{proc.stdout}\n" f"STDERR:\n{proc.stderr}")
 
 
 @pytest.mark.slow
@@ -200,8 +201,30 @@ def test_fvdb_viz_with_release_package(fvdb_viz_env):
 @pytest.mark.slow
 def test_fvdb_viz_with_dev_package(fvdb_viz_env):
     """
-    The development-only nanovdb-editor-dev build is expected to regress viewer
-    support; fail loudly if that changes.
+    Ensure the fvdb.viz notebook workflow works with the latest pip release of
+    nanovdb-editor-dev.
     """
     _install_nanovdb_distribution(fvdb_viz_env, "nanovdb-editor-dev")
+    _run_notebook_script(fvdb_viz_env)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(
+    not LOCAL_DIST_SPEC,
+    reason=("Set FVDB_VIZ_LOCAL_DIST to the local wheel or source path " "to test it."),
+)
+def test_fvdb_viz_with_local_package(fvdb_viz_env):
+    """
+    Run the fvdb.viz workflow against a locally built nanovdb-editor artifact.
+    The FVDB_VIZ_LOCAL_DIST environment variable should point to a wheel
+    file (dist/*.whl) or a source directory (for example the repo root for
+    `pip install .`).
+    """
+    local_spec = Path(LOCAL_DIST_SPEC).expanduser()
+    if not local_spec.is_absolute():
+        local_spec = (Path.cwd() / local_spec).resolve()
+    if not local_spec.exists():
+        raise AssertionError(f"FVDB_VIZ_LOCAL_DIST target does not exist: {local_spec}")
+
+    _install_nanovdb_distribution(fvdb_viz_env, str(local_spec))
     _run_notebook_script(fvdb_viz_env)
