@@ -179,7 +179,14 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
         pnanovdb_uint64_t ptr_compensations;
         pnanovdb_uint64_t ptr_sh_0;
         pnanovdb_uint64_t ptr_sh_n;
+        pnanovdb_uint64_t ptr_opacities;
         pnanovdb_uint64_t ptr_colors;
+        pnanovdb_uint64_t ptr_num_tiles_per_gaussian;
+        pnanovdb_uint64_t ptr_scan_tiles_per_gaussian;
+        pnanovdb_uint64_t ptr_intersection_keys_low;
+        pnanovdb_uint64_t ptr_intersection_keys_high;
+        pnanovdb_uint64_t ptr_intersection_vals;
+        pnanovdb_uint64_t ptr_tile_offsets;
     };
     constants_t constants = {};
 
@@ -323,7 +330,10 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
     constants.ptr_compensations = compute_interface->get_buffer_device_address(context, compensations_buffer);
     constants.ptr_sh_0 = compute_interface->get_buffer_device_address(context, data->sh_0_gpu_array->device_buffer);
     constants.ptr_sh_n = compute_interface->get_buffer_device_address(context, data->sh_n_gpu_array->device_buffer);
+    constants.ptr_opacities = compute_interface->get_buffer_device_address(context, data->opacities_gpu_array->device_buffer);
     constants.ptr_colors = compute_interface->get_buffer_device_address(context, resolved_color_buffer);
+    constants.ptr_num_tiles_per_gaussian = compute_interface->get_buffer_device_address(context, num_tiles_per_gaussian_buffer);
+    constants.ptr_scan_tiles_per_gaussian = compute_interface->get_buffer_device_address(context, scan_tiles_per_gaussian_buffer);
 
     // copy constants
     void* mapped_constants = compute_interface->map_buffer(context, constant_buffer);
@@ -489,6 +499,15 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
         pnanovdb_compute_buffer_transient_t* intersection_vals_transient =
             compute_interface->register_buffer_as_transient(context, intersection_vals_buffer);
 
+        // update constants with buffer device address
+        constants.ptr_intersection_keys_low = compute_interface->get_buffer_device_address(context, intersection_keys_low_buffer);
+        constants.ptr_intersection_keys_high = compute_interface->get_buffer_device_address(context, intersection_keys_high_buffer);
+        constants.ptr_intersection_vals = compute_interface->get_buffer_device_address(context, intersection_vals_buffer);
+
+        mapped_constants = compute_interface->map_buffer(context, constant_buffer);
+        memcpy(mapped_constants, &constants, sizeof(constants_t));
+        compute_interface->unmap_buffer(context, constant_buffer);
+
         // tile intersections
         {
             pnanovdb_compute_resource_t resources[9u] = {};
@@ -534,6 +553,12 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
 
         pnanovdb_compute_buffer_transient_t* tile_offsets_transient =
             compute_interface->register_buffer_as_transient(context, tile_offsets_buffer);
+
+        constants.ptr_tile_offsets = compute_interface->get_buffer_device_address(context, tile_offsets_buffer);
+
+        mapped_constants = compute_interface->map_buffer(context, constant_buffer);
+        memcpy(mapped_constants, &constants, sizeof(constants_t));
+        compute_interface->unmap_buffer(context, constant_buffer);
 
         // compute tile offsets
         {

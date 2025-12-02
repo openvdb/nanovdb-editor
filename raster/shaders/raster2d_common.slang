@@ -50,7 +50,14 @@ struct constants_t
     float* ptr_compensations;
     float* ptr_sh_0;
     float* ptr_sh_n;
+    float* ptr_opacities;
     float* ptr_colors;
+    uint* ptr_num_tiles_per_gaussian;
+    uint* ptr_scan_tiles_per_gaussian;
+    uint* ptr_intersection_keys_low;
+    uint* ptr_intersection_keys_high;
+    uint* ptr_intersection_vals;
+    uint* ptr_tile_offsets;
 };
 
 struct shader_params_t

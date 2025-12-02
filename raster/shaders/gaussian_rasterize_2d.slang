@@ -66,9 +66,12 @@ void volume_render_tile(uint3 group_idx,
         uint idx = batch_start + tidx;
         if (idx < tile_end)
         {
-            int g = tile_gaussians_ids_in[idx];
-            float2 xy = means2d_in[g];
-            float opac = opacities_in[g];
+            //int g = tile_gaussians_ids_in[idx];
+            int g = constants.ptr_intersection_vals[idx];
+            //float2 xy = means2d_in[g];
+            float2 xy = constants.ptr_means2d[g];
+            //float opac = opacities_in[g];
+            float opac = constants.ptr_opacities[g];
             //float3 conic = float3(conics_in[3u * g + 0u], conics_in[3u * g + 1u], conics_in[3u * g + 2u]);
             float3 conic = float3(
                 constants.ptr_conics[3u * g + 0u],
@@ -154,9 +157,13 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 
     bool pixel_in_image = (i < constants.image_height && j < constants.image_width);
 
-    int range_start = tile_offsets_in[tile_id];
+    //int range_start = tile_offsets_in[tile_id];
+    //int range_end = (tile_id == constants.tile_width * constants.tile_height - 1u) ? constants.n_isects :
+    //                                                                                 tile_offsets_in[tile_id + 1];
+
+    int range_start = constants.ptr_tile_offsets[tile_id];
     int range_end = (tile_id == constants.tile_width * constants.tile_height - 1u) ? constants.n_isects :
-                                                                                     tile_offsets_in[tile_id + 1];
+                                                                                     constants.ptr_tile_offsets[tile_id + 1];
 
     const uint block_size = 16 * 16;
 
