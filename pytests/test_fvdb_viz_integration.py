@@ -172,7 +172,7 @@ def _install_nanovdb_distribution(env_ctx: dict, dist_name: str):
     _run([str(pip_exe), "install", dist_name], env=env)
 
 
-def _run_notebook_script(env_ctx: dict, expect_success: bool):
+def _run_notebook_script(env_ctx: dict):
     python_exe = env_ctx["python"]
     env = env_ctx["env"]
     proc = subprocess.run(
@@ -183,13 +183,8 @@ def _run_notebook_script(env_ctx: dict, expect_success: bool):
         timeout=SCRIPT_TIMEOUT,
         check=False,
     )
-    if expect_success and proc.returncode != 0:
-        raise AssertionError("Viewer smoke test failed:\\n" f"STDOUT:\\n{proc.stdout}\\nSTDERR:\\n{proc.stderr}")
-    if not expect_success and proc.returncode == 0:
-        raise AssertionError(
-            "nanovdb-editor-dev unexpectedly succeeded; "
-            "update the test expectation if the incompatibility was resolved."
-        )
+    if proc.returncode != 0:
+        raise AssertionError("Viewer test failed:\\n" f"STDOUT:\\n{proc.stdout}\\nSTDERR:\\n{proc.stderr}")
 
 
 @pytest.mark.slow
@@ -199,7 +194,7 @@ def test_fvdb_viz_with_release_package(fvdb_viz_env):
     nanovdb-editor.
     """
     _install_nanovdb_distribution(fvdb_viz_env, "nanovdb-editor")
-    _run_notebook_script(fvdb_viz_env, expect_success=True)
+    _run_notebook_script(fvdb_viz_env)
 
 
 @pytest.mark.slow
@@ -209,4 +204,4 @@ def test_fvdb_viz_with_dev_package(fvdb_viz_env):
     support; fail loudly if that changes.
     """
     _install_nanovdb_distribution(fvdb_viz_env, "nanovdb-editor-dev")
-    _run_notebook_script(fvdb_viz_env, expect_success=False)
+    _run_notebook_script(fvdb_viz_env)
