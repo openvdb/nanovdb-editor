@@ -134,7 +134,6 @@ class pnanovdb_Compute(Structure):
         ),  # readback_buffer
         ("create_array", CFUNCTYPE(POINTER(pnanovdb_ComputeArray), c_size_t, c_uint64, c_void_p)),
         ("destroy_array", CFUNCTYPE(None, POINTER(pnanovdb_ComputeArray))),
-        ("duplicate_array", CFUNCTYPE(POINTER(pnanovdb_ComputeArray), POINTER(pnanovdb_ComputeArray))),
         ("map_array", CFUNCTYPE(c_void_p, POINTER(pnanovdb_ComputeArray))),
         ("unmap_array", CFUNCTYPE(None, POINTER(pnanovdb_ComputeArray))),
         (
@@ -157,6 +156,7 @@ class pnanovdb_Compute(Structure):
                 c_uint32,  # height
             ),
         ),
+        ("duplicate_array", CFUNCTYPE(POINTER(pnanovdb_ComputeArray), POINTER(pnanovdb_ComputeArray))),
     ]
 
 
