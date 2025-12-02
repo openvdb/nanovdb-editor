@@ -143,16 +143,16 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 
     //float4 mean = float4(means_in[3u * global_prim_idx + 0u], means_in[3u * global_prim_idx + 1u],
     //                     means_in[3u * global_prim_idx + 2u], 1.f);
-    float4 mean = float4(constants.ptr_means[3u * global_prim_idx + 0u],
-                         constants.ptr_means[3u * global_prim_idx + 1u],
-                         constants.ptr_means[3u * global_prim_idx + 2u], 1.f);
+    float4 mean = float4(constants.ptr_means[3u * uint64_t(global_prim_idx) + 0u],
+                         constants.ptr_means[3u * uint64_t(global_prim_idx) + 1u],
+                         constants.ptr_means[3u * uint64_t(global_prim_idx) + 2u], 1.f);
     float4 mean_c = mul(mean, constants.view);
     if (constants.near_plane > 0.f)
     {
         if (mean_c.z < constants.near_plane || mean_c.z > constants.far_plane)
         {
-            radii_out[global_prim_idx] = 0u;
-            //constants.ptr_radii[global_prim_idx] = 0u;
+            //radii_out[global_prim_idx] = 0u;
+            constants.ptr_radii[uint64_t(global_prim_idx)] = 0u;
             return;
         }
     }
@@ -160,8 +160,8 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     {
         if (-mean_c.z < -constants.near_plane || -mean_c.z > -constants.far_plane)
         {
-            radii_out[global_prim_idx] = 0u;
-            //constants.ptr_radii[global_prim_idx] = 0u;
+            //radii_out[global_prim_idx)] = 0u;
+            constants.ptr_radii[uint64_t(global_prim_idx)] = 0u;
             return;
         }
     }
@@ -170,13 +170,13 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     //                     quats_in[4u * global_prim_idx + 3u], quats_in[4u * global_prim_idx + 0u]);
     //float3 scale = float3(scales_in[3u * global_prim_idx + 0u], scales_in[3u * global_prim_idx + 1u],
     //                      scales_in[3u * global_prim_idx + 2u]);
-    float4 quat = float4(constants.ptr_quats[4u * global_prim_idx + 1u],
-                         constants.ptr_quats[4u * global_prim_idx + 2u],
-                         constants.ptr_quats[4u * global_prim_idx + 3u],
-                         constants.ptr_quats[4u * global_prim_idx + 0u]);
-    float3 scale = float3(constants.ptr_scales[3u * global_prim_idx + 0u],
-                          constants.ptr_scales[3u * global_prim_idx + 1u],
-                          constants.ptr_scales[3u * global_prim_idx + 2u]);
+    float4 quat = float4(constants.ptr_quats[4u * uint64_t(global_prim_idx) + 1u],
+                         constants.ptr_quats[4u * uint64_t(global_prim_idx) + 2u],
+                         constants.ptr_quats[4u * uint64_t(global_prim_idx) + 3u],
+                         constants.ptr_quats[4u * uint64_t(global_prim_idx) + 0u]);
+    float3 scale = float3(constants.ptr_scales[3u * uint64_t(global_prim_idx) + 0u],
+                          constants.ptr_scales[3u * uint64_t(global_prim_idx) + 1u],
+                          constants.ptr_scales[3u * uint64_t(global_prim_idx) + 2u]);
 
 // filtering of different shape types
 #if 0
@@ -218,7 +218,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     if (det <= 0.f)
     {
         //radii_out[global_prim_idx] = 0u;
-        constants.ptr_radii[global_prim_idx] = 0u;
+        constants.ptr_radii[uint64_t(global_prim_idx)] = 0u;
         return;
     }
 
@@ -232,7 +232,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     if (radius <= shader_params.radius_clip)
     {
         //radii_out[global_prim_idx] = 0u;
-        constants.ptr_radii[global_prim_idx] = 0u;
+        constants.ptr_radii[uint64_t(global_prim_idx)] = 0u;
         return;
     }
 
@@ -240,7 +240,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         mean2d.y - radius >= constants.image_height)
     {
         //radii_out[global_prim_idx] = 0u;
-        constants.ptr_radii[global_prim_idx] = 0u;
+        constants.ptr_radii[uint64_t(global_prim_idx)] = 0u;
         return;
     }
 
@@ -251,11 +251,11 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     //conics_out[3u * global_prim_idx + 1u] = covar2d_inv[0][1];
     //conics_out[3u * global_prim_idx + 2u] = covar2d_inv[1][1];
     //compensations_out[global_prim_idx] = compensation;
-    constants.ptr_radii[global_prim_idx] = int(radius);
-    constants.ptr_means2d[global_prim_idx] = mean2d;
-    constants.ptr_depths[global_prim_idx] = mean_c.z;
-    constants.ptr_conics[3u * global_prim_idx + 0u] = covar2d_inv[0][0];
-    constants.ptr_conics[3u * global_prim_idx + 1u] = covar2d_inv[0][1];
-    constants.ptr_conics[3u * global_prim_idx + 2u] = covar2d_inv[1][1];
-    constants.ptr_compensations[global_prim_idx] = compensation;
+    constants.ptr_radii[uint64_t(global_prim_idx)] = int(radius);
+    constants.ptr_means2d[uint64_t(global_prim_idx)] = mean2d;
+    constants.ptr_depths[uint64_t(global_prim_idx)] = mean_c.z;
+    constants.ptr_conics[3u * uint64_t(global_prim_idx) + 0u] = covar2d_inv[0][0];
+    constants.ptr_conics[3u * uint64_t(global_prim_idx) + 1u] = covar2d_inv[0][1];
+    constants.ptr_conics[3u * uint64_t(global_prim_idx) + 2u] = covar2d_inv[1][1];
+    constants.ptr_compensations[uint64_t(global_prim_idx)] = compensation;
 }

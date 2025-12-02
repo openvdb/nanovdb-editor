@@ -10,7 +10,7 @@ StructuredBuffer<float> sh_n_in;
 
 RWStructuredBuffer<float> colors_out;
 
-float3 read_sh_0(uint sh_0_idx_begin)
+float3 read_sh_0(uint64_t sh_0_idx_begin)
 {
     float3 rgb;
     //rgb = float3(sh_0_in[sh_0_idx_begin + 0u],
@@ -22,7 +22,7 @@ float3 read_sh_0(uint sh_0_idx_begin)
     return rgb;
 }
 
-float3 read_sh_n(uint sh_n_idx_begin, uint n)
+float3 read_sh_n(uint64_t sh_n_idx_begin, uint n)
 {
     uint idx = n - 1u;
     float3 rgb;
@@ -51,7 +51,7 @@ float3 read_sh_n(uint sh_n_idx_begin, uint n)
 // approach described by Efficient Spherical Harmonic Evaluation, Peter-Pike
 // Sloan, JCGT 2013 See https://jcgt.org/published/0002/02/06/ for reference
 // implementation
-float3 eval_sh_function(uint degree, uint sh_0_idx_begin, uint sh_n_idx_begin, float3 viewDir)
+float3 eval_sh_function(uint degree, uint64_t sh_0_idx_begin, uint64_t sh_n_idx_begin, float3 viewDir)
 {
     float3 cSH0 = read_sh_0(sh_0_idx_begin);
 
@@ -182,9 +182,12 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         sh_degree = sh_degree > 3u ? 3u : sh_degree;
     }
 
-    float3 color = eval_sh_function(sh_degree, 3u * idx, 3u * constants.sh_stride * idx, constants.view_dir);
+    float3 color = eval_sh_function(sh_degree, 3u * uint64_t(idx), 3u * constants.sh_stride * uint64_t(idx), constants.view_dir);
 
-    colors_out[3u * idx + 0u] = color.r;
-    colors_out[3u * idx + 1u] = color.g;
-    colors_out[3u * idx + 2u] = color.b;
+    //colors_out[3u * idx + 0u] = color.r;
+    //colors_out[3u * idx + 1u] = color.g;
+    //colors_out[3u * idx + 2u] = color.b;
+    constants.ptr_colors[3u * uint64_t(idx) + 0u] = color.r;
+    constants.ptr_colors[3u * uint64_t(idx) + 1u] = color.g;
+    constants.ptr_colors[3u * uint64_t(idx) + 2u] = color.b;
 }
