@@ -80,12 +80,7 @@ jobs:
         id: local_wheel
         run: |
           set -euo pipefail
-          wheel_path=$(
-            python -c "import pathlib, sys; dist = pathlib.Path('pymodule') / 'dist'; matches = sorted(dist.glob('nanovdb_editor*.whl')); \
-import json; \
-sys.stdout.write(str(matches[0]) if matches else ''); \
-sys.exit(0 if matches else 1)"
-          )
+          wheel_path=$(python -c "import pathlib, sys; dist = pathlib.Path('pymodule') / 'dist'; matches = sorted(dist.glob('nanovdb_editor*.whl')); sys.stdout.write(str(matches[0]) if matches else ''); sys.exit(0 if matches else 1)")
           if [[ -z "$wheel_path" ]]; then
             echo 'No nanovdb_editor*.whl found in pymodule/dist' >&2
             exit 1
