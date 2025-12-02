@@ -136,7 +136,7 @@ jobs:
             -v "${GITHUB_WORKSPACE}":/workspace \
             -w /workspace \
             "fvdb-viz-${{ steps.config.outputs.package_stream }}" \
-            bash -c "python3 -m pip install --break-system-packages pytest >/tmp/pip.log 2>&1 && python3 -c 'import importlib; mod = importlib.import_module(\"nanovdb_editor\"); version = getattr(mod, \"__version__\", \"unknown\"); print(f\"nanovdb_editor version: {version}\")' && exec pytest pytests/test_fvdb_viz_integration.py -k '${PYTEST_EXPR}' -vv"
+            sh -c 'python3 -m pip install --break-system-packages pytest >/tmp/pip.log 2>&1; python3 -c "import importlib; mod = importlib.import_module(\"nanovdb_editor\"); version = getattr(mod, \"__version__\", \"unknown\"); print(f\"nanovdb_editor version: {version}\")"; pytest pytests/test_fvdb_viz_integration.py -k "'"${PYTEST_EXPR}"'" -vv; PYTEST_EXIT=$?; echo "Pytest exit code: $PYTEST_EXIT"; exit $PYTEST_EXIT'
           DOCKER_EXIT_CODE=$?
           echo "Docker exit code: ${DOCKER_EXIT_CODE}"
           if [[ ${DOCKER_EXIT_CODE} -ne 0 ]]; then
