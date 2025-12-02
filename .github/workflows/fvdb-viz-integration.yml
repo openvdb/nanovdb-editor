@@ -75,6 +75,19 @@ jobs:
           name: ${{ steps.config.outputs.artifact }}
           path: pymodule/dist
 
+      - name: Locate local wheel artifact
+        if: ${{ steps.config.outputs.use_local == 'true' }}
+        id: local_wheel
+        run: |
+          set -euo pipefail
+          wheel_path=$(python -c "import pathlib, sys; dist = pathlib.Path('pymodule') / 'dist'; matches = sorted(dist.glob('nanovdb_editor*.whl')); sys.stdout.write(str(matches[0]) if matches else ''); sys.exit(0 if matches else 1)")
+          if [[ -z "$wheel_path" ]]; then
+            echo 'No nanovdb_editor*.whl found in pymodule/dist' >&2
+            exit 1
+          fi
+          echo "host_path=${wheel_path}" >> "$GITHUB_OUTPUT"
+          echo "container_path=/workspace/${wheel_path}" >> "$GITHUB_OUTPUT"
+
       - name: Build headless test image
         run: |
           set -euo pipefail
@@ -94,12 +107,17 @@ jobs:
 
       - name: Run fvdb.viz notebook workflow
         run: |
-          set -euo pipefail
-
-          if [[ "${{ steps.config.outputs.package_stream }}" == "dev" ]]; then
+          if [[ "${{ steps.config.outputs.use_local }}" == "true" ]]; then
+            PYTEST_EXPR="test_fvdb_viz_with_local_package"
+          elif [[ "${{ steps.config.outputs.package_stream }}" == "dev" ]]; then
             PYTEST_EXPR="test_fvdb_viz_with_dev_package"
           else
             PYTEST_EXPR="test_fvdb_viz_with_release_package"
+          fi
+
+          LOCAL_DIST_ENV=""
+          if [[ "${{ steps.config.outputs.use_local }}" == "true" ]]; then
+            LOCAL_DIST_ENV="-e FVDB_VIZ_LOCAL_DIST=${{ steps.local_wheel.outputs.container_path }}"
           fi
 
           docker run --rm \
@@ -114,8 +132,15 @@ jobs:
             -e LP_NUM_THREADS=1 \
             -e LIBGL_ALWAYS_SOFTWARE=1 \
             -e GALLIUM_DRIVER=llvmpipe \
+            ${LOCAL_DIST_ENV} \
             -v "${GITHUB_WORKSPACE}":/workspace \
             -w /workspace \
             "fvdb-viz-${{ steps.config.outputs.package_stream }}" \
-            bash -lc "set -euo pipefail; pip install --break-system-packages pytest >/tmp/pip.log && pytest pytests/test_fvdb_viz_integration.py -k ${PYTEST_EXPR} -vv"
+            sh -c 'python3 -m pip install --break-system-packages pytest >/tmp/pip.log 2>&1; python3 -c "import importlib; mod = importlib.import_module(\"nanovdb_editor\"); version = getattr(mod, \"__version__\", \"unknown\"); print(f\"nanovdb_editor version: {version}\")"; pytest pytests/test_fvdb_viz_integration.py -k "'"${PYTEST_EXPR}"'" -vv; PYTEST_EXIT=$?; echo "Pytest exit code: $PYTEST_EXIT"; exit $PYTEST_EXIT'
+          DOCKER_EXIT_CODE=$?
+          echo "Docker exit code: ${DOCKER_EXIT_CODE}"
+          if [[ ${DOCKER_EXIT_CODE} -ne 0 ]]; then
+            echo "::error::fvdb.viz pytest failed with exit code ${DOCKER_EXIT_CODE}"
+            exit ${DOCKER_EXIT_CODE}
+          fi
 

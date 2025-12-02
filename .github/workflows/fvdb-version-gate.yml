@@ -20,51 +20,54 @@ jobs:
         id: requirement
         run: |
           python - <<'PY'
-import itertools
-import os
-import pathlib
-import re
-import tomllib
-import urllib.request
+            import itertools
+            import os
+            import pathlib
+            import re
+            import tomllib
+            import urllib.request
 
-URL = "https://raw.githubusercontent.com/openvdb/fvdb-reality-capture/main/pyproject.toml"
-DEPENDENCY = "nanovdb-editor"
+            URL = "https://raw.githubusercontent.com/openvdb/fvdb-reality-capture/main/pyproject.toml"
+            DEPENDENCY = "nanovdb-editor"
 
-def parse_numeric(version: str):
-    parts = []
-    for token in re.split(r"[.+-]", version):
-        if token.isdigit():
-            parts.append(int(token))
-        else:
-            break
-    return parts
+            def parse_numeric(version: str):
+                parts = []
+                for token in re.split(r"[.+-]", version):
+                    if token.isdigit():
+                        parts.append(int(token))
+                    else:
+                        break
+                return parts
 
-def compare(lhs, rhs):
-    for l, r in itertools.zip_longest(lhs, rhs, fillvalue=0):
-        if l < r:
-            return -1
-        if l > r:
-            return 1
-    return 0
+            def compare(lhs, rhs):
+                for l, r in itertools.zip_longest(lhs, rhs, fillvalue=0):
+                    if l < r:
+                        return -1
+                    if l > r:
+                        return 1
+                return 0
 
-with urllib.request.urlopen(URL, timeout=30) as response:
-    pyproject = tomllib.loads(response.read().decode())
+            with urllib.request.urlopen(URL, timeout=30) as response:
+                pyproject = tomllib.loads(response.read().decode())
 
-dependencies = pyproject.get("project", {}).get("dependencies", [])
-constraint = next(
-    dep for dep in dependencies if dep.replace("_", "-").startswith(DEPENDENCY)
-)
-match = re.search(r"<\s*([0-9][^\",]*)", constraint)
-if not match:
-    raise SystemExit(f"Unable to locate upper bound for {DEPENDENCY!r}")
+            dependencies = pyproject.get("project", {}).get("dependencies", [])
+            constraint = next(
+                (dep for dep in dependencies if dep.replace("_", "-").startswith(DEPENDENCY)),
+                None,
+            )
+            if constraint is None:
+                raise SystemExit(f"Unable to locate dependency constraint for {DEPENDENCY!r}")
+            match = re.search(r"<\s*([0-9][^\",]*)", constraint)
+            if not match:
+                raise SystemExit(f"Unable to locate upper bound for {DEPENDENCY!r}")
 
-limit_version = match.group(1).strip()
-package_version = pathlib.Path("pymodule/VERSION.txt").read_text().strip()
+            limit_version = match.group(1).strip()
+            package_version = pathlib.Path("pymodule/VERSION.txt").read_text().strip()
 
-compatible = compare(parse_numeric(package_version), parse_numeric(limit_version)) == -1
-print(f"Package version {package_version}, fvdb requirement < {limit_version}: {compatible}")
+            compatible = compare(parse_numeric(package_version), parse_numeric(limit_version)) == -1
+            print(f"Package version {package_version}, fvdb requirement < {limit_version}: {compatible}")
 
-with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-    fh.write(f"compatible={'true' if compatible else 'false'}\n")
-PY
+            with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+                fh.write(f"compatible={'true' if compatible else 'false'}\n")
+          PY
 
