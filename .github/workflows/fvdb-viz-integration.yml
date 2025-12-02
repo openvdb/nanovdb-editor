@@ -1,10 +1,20 @@
-name: FVDB Viewer Integration
+name: fVDB Viewer Integration
 
 on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "Package stream to validate"
+        required: true
+        type: choice
+        default: release
+        options:
+          - release
+          - dev
   workflow_call:
     inputs:
       package:
-        description: "Package stream to validate (release/dev/both)"
+        description: "Package stream to validate (release/dev)"
         required: false
         type: string
         default: release
