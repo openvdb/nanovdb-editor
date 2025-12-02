@@ -177,6 +177,8 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
         pnanovdb_uint64_t ptr_depths;
         pnanovdb_uint64_t ptr_conics;
         pnanovdb_uint64_t ptr_compensations;
+        pnanovdb_uint64_t ptr_sh_0;
+        pnanovdb_uint64_t ptr_sh_n;
         pnanovdb_uint64_t ptr_colors;
     };
     constants_t constants = {};
@@ -319,6 +321,8 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
     constants.ptr_depths = compute_interface->get_buffer_device_address(context, depths_buffer);
     constants.ptr_conics = compute_interface->get_buffer_device_address(context, conics_buffer);
     constants.ptr_compensations = compute_interface->get_buffer_device_address(context, compensations_buffer);
+    constants.ptr_sh_0 = compute_interface->get_buffer_device_address(context, data->sh_0_gpu_array->device_buffer);
+    constants.ptr_sh_n = compute_interface->get_buffer_device_address(context, data->sh_n_gpu_array->device_buffer);
     constants.ptr_colors = compute_interface->get_buffer_device_address(context, resolved_color_buffer);
 
     // copy constants

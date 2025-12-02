@@ -13,9 +13,12 @@ RWStructuredBuffer<float> colors_out;
 float3 read_sh_0(uint sh_0_idx_begin)
 {
     float3 rgb;
-    rgb = float3(sh_0_in[sh_0_idx_begin + 0u],
-                    sh_0_in[sh_0_idx_begin + 1u],
-                    sh_0_in[sh_0_idx_begin + 2u]);
+    //rgb = float3(sh_0_in[sh_0_idx_begin + 0u],
+    //                sh_0_in[sh_0_idx_begin + 1u],
+    //                sh_0_in[sh_0_idx_begin + 2u]);
+    rgb = float3(constants.ptr_sh_0[sh_0_idx_begin + 0u],
+                 constants.ptr_sh_0[sh_0_idx_begin + 1u],
+                 constants.ptr_sh_0[sh_0_idx_begin + 2u]);
     return rgb;
 }
 
@@ -25,15 +28,21 @@ float3 read_sh_n(uint sh_n_idx_begin, uint n)
     float3 rgb;
     if (shader_params.sh_stride_rgbrgbrgb != 0u)
     {
-        rgb = float3(sh_n_in[sh_n_idx_begin + 3u * idx + 0u],
-                     sh_n_in[sh_n_idx_begin + 3u * idx + 1u],
-                     sh_n_in[sh_n_idx_begin + 3u * idx + 2u]);
+        //rgb = float3(sh_n_in[sh_n_idx_begin + 3u * idx + 0u],
+        //             sh_n_in[sh_n_idx_begin + 3u * idx + 1u],
+        //             sh_n_in[sh_n_idx_begin + 3u * idx + 2u]);
+        rgb = float3(constants.ptr_sh_n[sh_n_idx_begin + 3u * idx + 0u],
+                     constants.ptr_sh_n[sh_n_idx_begin + 3u * idx + 1u],
+                     constants.ptr_sh_n[sh_n_idx_begin + 3u * idx + 2u]);
     }
     else
     {
-        rgb = float3(sh_n_in[sh_n_idx_begin + idx],
-                     sh_n_in[sh_n_idx_begin + idx + constants.sh_stride],
-                     sh_n_in[sh_n_idx_begin + idx + 2u * constants.sh_stride]);
+        //rgb = float3(sh_n_in[sh_n_idx_begin + idx],
+        //             sh_n_in[sh_n_idx_begin + idx + constants.sh_stride],
+        //             sh_n_in[sh_n_idx_begin + idx + 2u * constants.sh_stride]);
+        rgb = float3(constants.ptr_sh_n[sh_n_idx_begin + idx],
+                     constants.ptr_sh_n[sh_n_idx_begin + idx + constants.sh_stride],
+                     constants.ptr_sh_n[sh_n_idx_begin + idx + 2u * constants.sh_stride]);
     }
     return rgb;
 }

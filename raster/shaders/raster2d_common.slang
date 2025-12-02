@@ -48,6 +48,8 @@ struct constants_t
     float* ptr_depths;
     float* ptr_conics;
     float* ptr_compensations;
+    float* ptr_sh_0;
+    float* ptr_sh_n;
     float* ptr_colors;
 };
 
