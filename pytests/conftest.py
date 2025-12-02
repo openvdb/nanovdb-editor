@@ -8,7 +8,7 @@ import atexit
 import os
 
 
-def cleanup_modules():
+def cleanup_modules(exit_code=0):
     """Remove native library wrapper modules to prevent segfaults during interpreter shutdown"""
     try:
         # Force garbage collection to clear any remaining objects
@@ -34,7 +34,8 @@ def cleanup_modules():
         gc.collect()
 
         # Force exit to prevent library unload segfaults
-        os._exit(0)
+        # Preserve the original exit code from pytest
+        os._exit(exit_code)
     except Exception:
         # If cleanup fails, still try to exit cleanly
         os._exit(1)
@@ -42,8 +43,8 @@ def cleanup_modules():
 
 def pytest_sessionfinish(session, exitstatus):
     """Hook called after session finishes - use it to trigger exit"""
-    # Schedule cleanup to happen immediately
-    cleanup_modules()
+    # Schedule cleanup to happen immediately, preserving pytest's exit status
+    cleanup_modules(exitstatus)
 
 
 # Register cleanup at module exit
