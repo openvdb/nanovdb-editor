@@ -358,9 +358,9 @@ jobs:
           python3 -c 'import nanovdb_editor; print("SUCCESS: Module imported on ARM64")'
           pytest pytests -vvv --tb=short --timeout=300 --timeout-method=thread || echo 'Tests completed'
 
-  fvdb-viz-pr:
+  fvdb-viz:
     if: ${{ github.event_name == 'pull_request' }}
-    name: FVDB Viewer Integration (PR)
+    name: FVDB Viewer Integration
     needs:
       - nanovdb-editor-build-python-linux
     uses: ./.github/workflows/fvdb-viz-integration.yml
