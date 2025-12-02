@@ -140,12 +140,7 @@ jobs:
             -v "${GITHUB_WORKSPACE}":/workspace
             -w /workspace
             "fvdb-viz-${{ steps.config.outputs.package_stream }}"
-            bash -c "
-          set -euo pipefail
-          python3 -m pip install --break-system-packages pytest >/tmp/pip.log 2>&1
-          python3 -c 'import importlib; mod = importlib.import_module(\"nanovdb_editor\"); version = getattr(mod, \"__version__\", \"unknown\"); print(f\"nanovdb_editor version: {version}\")'
-          pytest pytests/test_fvdb_viz_integration.py -k '${PYTEST_EXPR}' -vv
-          "
+            bash -c "python3 -m pip install --break-system-packages pytest >/tmp/pip.log 2>&1 && python3 -c 'import importlib; mod = importlib.import_module(\"nanovdb_editor\"); version = getattr(mod, \"__version__\", \"unknown\"); print(f\"nanovdb_editor version: {version}\")' && pytest pytests/test_fvdb_viz_integration.py -k '${PYTEST_EXPR}' -vv"
           )
           "${DOCKER_CMD[@]}"
 
