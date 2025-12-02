@@ -1,0 +1,111 @@
+name: FVDB Viewer Integration
+
+on:
+  workflow_call:
+    inputs:
+      package:
+        description: "Package stream to validate (release/dev/both)"
+        required: false
+        type: string
+        default: release
+      release_wheel_artifact:
+        description: "Artifact name for locally built release wheel"
+        required: false
+        type: string
+        default: ""
+
+env:
+  FVDB_VIZ_TORCH_VERSION: "2.8.0"
+  FVDB_VIZ_TORCH_INDEX_URL: "https://download.pytorch.org/whl/cu128"
+  FVDB_VIZ_CORE_VERSION: "0.3.0+pt28.cu128"
+  FVDB_VIZ_CORE_INDEX_URL: "https://d36m13axqqhiit.cloudfront.net/simple"
+  FVDB_VIZ_SCRIPT_TIMEOUT: "480"
+
+jobs:
+  fvdb-viz-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve package selection
+        id: config
+        run: |
+          set -euo pipefail
+          stream="${{ inputs.package }}"
+          stream="${stream,,}"
+          if [[ -z "$stream" ]]; then
+            stream="release"
+          fi
+          if [[ "$stream" != "release" && "$stream" != "dev" ]]; then
+            echo "Unsupported package stream: $stream" >&2
+            exit 1
+          fi
+          use_local="false"
+          artifact=""
+          if [[ "$stream" == "release" && "${{ inputs.release_wheel_artifact }}" != "" ]]; then
+            use_local="true"
+            artifact="${{ inputs.release_wheel_artifact }}"
+          fi
+          {
+            echo "package_stream=$stream"
+            echo "use_local=$use_local"
+            echo "artifact=$artifact"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare wheel directory
+        run: |
+          rm -rf pymodule/dist
+          mkdir -p pymodule/dist
+
+      - name: Download release wheel artifact
+        if: ${{ steps.config.outputs.use_local == 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.config.outputs.artifact }}
+          path: pymodule/dist
+
+      - name: Build headless test image
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.config.outputs.package_stream }}" == "dev" ]]; then
+            PACKAGE_NAME="nanovdb-editor-dev"
+          else
+            PACKAGE_NAME="nanovdb-editor"
+          fi
+          docker build \
+            --progress=plain \
+            --network=host \
+            --build-arg PYPI_PACKAGE="${PACKAGE_NAME}" \
+            --build-arg USE_LOCAL_WHEEL="${{ steps.config.outputs.use_local }}" \
+            --build-arg INSTALL_GRAPHICS_LIBS=false \
+            -t "fvdb-viz-${{ steps.config.outputs.package_stream }}" \
+            .
+
+      - name: Run fvdb.viz notebook workflow
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ steps.config.outputs.package_stream }}" == "dev" ]]; then
+            PYTEST_EXPR="test_fvdb_viz_with_dev_package"
+          else
+            PYTEST_EXPR="test_fvdb_viz_with_release_package"
+          fi
+
+          docker run --rm \
+            -e FVDB_VIZ_TESTS=1 \
+            -e FVDB_VIZ_TORCH_VERSION="${FVDB_VIZ_TORCH_VERSION}" \
+            -e FVDB_VIZ_TORCH_INDEX_URL="${FVDB_VIZ_TORCH_INDEX_URL}" \
+            -e FVDB_VIZ_CORE_VERSION="${FVDB_VIZ_CORE_VERSION}" \
+            -e FVDB_VIZ_CORE_INDEX_URL="${FVDB_VIZ_CORE_INDEX_URL}" \
+            -e FVDB_VIZ_SCRIPT_TIMEOUT="${FVDB_VIZ_SCRIPT_TIMEOUT}" \
+            -e VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json \
+            -e VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json \
+            -e LP_NUM_THREADS=1 \
+            -e LIBGL_ALWAYS_SOFTWARE=1 \
+            -e GALLIUM_DRIVER=llvmpipe \
+            -v "${GITHUB_WORKSPACE}":/workspace \
+            -w /workspace \
+            "fvdb-viz-${{ steps.config.outputs.package_stream }}" \
+            bash -lc "set -euo pipefail; pip install --upgrade pip pytest >/tmp/pip.log && pytest pytests/test_fvdb_viz_integration.py -k ${PYTEST_EXPR} -vv"
+

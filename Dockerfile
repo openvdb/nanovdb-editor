@@ -16,9 +16,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 # RUN sed -i 's/archive.ubuntu.com/mirrors.ocf.berkeley.edu/g' /etc/apt/sources.list
 
 # Install Python
-# skipping python3-dev python3-venv python-is-python3
+# skipping python3-dev python-is-python3
 RUN apt-get update && \
-    apt-get install -y python3-pip && \
+    apt-get install -y python3-pip python3-venv && \
     rm -rf /var/lib/apt/lists/*
 #    && \
 #    python -m pip install --upgrade pip
