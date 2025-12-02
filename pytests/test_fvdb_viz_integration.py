@@ -1,3 +1,6 @@
+# Copyright Contributors to the OpenVDB Project
+# SPDX-License-Identifier: Apache-2.0
+
 import os
 import subprocess
 import sys
@@ -11,10 +14,7 @@ RUNS_ON_FVDB_VIZ_ENV = os.environ.get("FVDB_VIZ_TESTS") == "1"
 
 pytestmark = pytest.mark.skipif(
     not RUNS_ON_FVDB_VIZ_ENV,
-    reason=(
-        "Set FVDB_VIZ_TESTS=1 to enable fvdb.viz integration checks "
-        "(runs in CI Docker)."
-    ),
+    reason=("Set FVDB_VIZ_TESTS=1 to enable fvdb.viz integration checks " "(runs in CI Docker)."),
 )
 
 TORCH_VERSION = os.environ.get("FVDB_VIZ_TORCH_VERSION", "2.8.0")
@@ -184,10 +184,7 @@ def _run_notebook_script(env_ctx: dict, expect_success: bool):
         check=False,
     )
     if expect_success and proc.returncode != 0:
-        raise AssertionError(
-            "Viewer smoke test failed:\\n"
-            f"STDOUT:\\n{proc.stdout}\\nSTDERR:\\n{proc.stderr}"
-        )
+        raise AssertionError("Viewer smoke test failed:\\n" f"STDOUT:\\n{proc.stdout}\\nSTDERR:\\n{proc.stderr}")
     if not expect_success and proc.returncode == 0:
         raise AssertionError(
             "nanovdb-editor-dev unexpectedly succeeded; "
