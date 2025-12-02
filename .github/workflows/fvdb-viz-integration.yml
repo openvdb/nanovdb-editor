@@ -142,8 +142,10 @@ jobs:
             "fvdb-viz-${{ steps.config.outputs.package_stream }}"
             bash -lc $'set -euo pipefail\npython3 -m pip install --break-system-packages pytest >/tmp/pip.log\npython3 - <<\'PY\'\nimport importlib\nmod = importlib.import_module("nanovdb_editor")\nversion = getattr(mod, "__version__", "unknown")\nprint(f"nanovdb_editor version: {version}")\nPY\npytest pytests/test_fvdb_viz_integration.py -k '"${PYTEST_EXPR}"' -vv'
           )
+          set +e
           "${DOCKER_CMD[@]}"
           exit_code=$?
+          set -e
           if [[ $exit_code -ne 0 ]]; then
             echo "fvdb.viz pytest run failed with exit code $exit_code" >&2
             exit $exit_code
