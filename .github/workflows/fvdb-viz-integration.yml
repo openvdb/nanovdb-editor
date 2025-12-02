@@ -117,9 +117,9 @@ jobs:
             PYTEST_EXPR="test_fvdb_viz_with_release_package"
           fi
 
-          LOCAL_ENV=()
+          LOCAL_ENV_ARGS=()
           if [[ "${{ steps.config.outputs.use_local }}" == "true" ]]; then
-            LOCAL_ENV+=(-e FVDB_VIZ_LOCAL_DIST="${{ steps.local_wheel.outputs.container_path }}")
+            LOCAL_ENV_ARGS+=(-e FVDB_VIZ_LOCAL_DIST="${{ steps.local_wheel.outputs.container_path }}")
           fi
 
           docker run --rm \
@@ -134,17 +134,9 @@ jobs:
             -e LP_NUM_THREADS=1 \
             -e LIBGL_ALWAYS_SOFTWARE=1 \
             -e GALLIUM_DRIVER=llvmpipe \
-            "${LOCAL_ENV[@]}" \
+            "${LOCAL_ENV_ARGS[@]}" \
             -v "${GITHUB_WORKSPACE}":/workspace \
             -w /workspace \
             "fvdb-viz-${{ steps.config.outputs.package_stream }}" \
-            bash -lc "set -euo pipefail
-pip install --break-system-packages pytest >/tmp/pip.log
-python - <<'PY'
-import importlib
-mod = importlib.import_module('nanovdb_editor')
-version = getattr(mod, '__version__', 'unknown')
-print(f'nanovdb_editor version: {version}')
-PY
-pytest pytests/test_fvdb_viz_integration.py -k ${PYTEST_EXPR} -vv"
+            bash -lc $'set -euo pipefail\npip install --break-system-packages pytest >/tmp/pip.log\npython - <<\'PY\'\nimport importlib\nmod = importlib.import_module("nanovdb_editor")\nversion = getattr(mod, "__version__", "unknown")\nprint(f"nanovdb_editor version: {version}")\nPY\npytest pytests/test_fvdb_viz_integration.py -k '"${PYTEST_EXPR}"' -vv'
 
