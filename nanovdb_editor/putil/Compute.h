@@ -838,7 +838,6 @@ typedef struct pnanovdb_compute_t
                                                           pnanovdb_uint64_t element_count,
                                                           const void* data);
     void(PNANOVDB_ABI* destroy_array)(pnanovdb_compute_array_t* array);
-    pnanovdb_compute_array_t*(PNANOVDB_ABI* duplicate_array)(pnanovdb_compute_array_t* array);
     void*(PNANOVDB_ABI* map_array)(pnanovdb_compute_array_t* array);
     void(PNANOVDB_ABI* unmap_array)(pnanovdb_compute_array_t* array);
     void(PNANOVDB_ABI* compute_array_print_range)(const pnanovdb_compute_t* compute,
@@ -849,6 +848,7 @@ typedef struct pnanovdb_compute_t
     pnanovdb_compute_array_t*(PNANOVDB_ABI* nanovdb_from_image_rgba8)(pnanovdb_compute_array_t* image_data,
                                                                       pnanovdb_uint32_t width,
                                                                       pnanovdb_uint32_t height);
+    pnanovdb_compute_array_t*(PNANOVDB_ABI* duplicate_array)(pnanovdb_compute_array_t* array);
 } pnanovdb_compute_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_compute_t
@@ -868,11 +868,11 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(dispatch_shader_on_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(dispatch_shader_on_nanovdb_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(create_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(destroy_array, 0, 0)
-PNANOVDB_REFLECT_FUNCTION_POINTER(duplicate_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(map_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(unmap_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(compute_array_print_range, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_from_image_rgba8, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(duplicate_array, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE
