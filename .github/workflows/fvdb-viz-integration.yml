@@ -107,5 +107,5 @@ jobs:
             -v "${GITHUB_WORKSPACE}":/workspace \
             -w /workspace \
             "fvdb-viz-${{ steps.config.outputs.package_stream }}" \
-            bash -lc "set -euo pipefail; pip install --break-system-packages --upgrade pip pytest >/tmp/pip.log && pytest pytests/test_fvdb_viz_integration.py -k ${PYTEST_EXPR} -vv"
+            bash -lc "set -euo pipefail; pip install --break-system-packages pytest >/tmp/pip.log && pytest pytests/test_fvdb_viz_integration.py -k ${PYTEST_EXPR} -vv"
 
