@@ -156,6 +156,14 @@ pnanovdb_compute_pipeline_t* createComputePipeline(pnanovdb_compute_context_t* c
 
     // create pipeline
     {
+        if (!ptr->module)
+        {
+            loader->vkDestroyDescriptorSetLayout(vulkanDevice, ptr->descriptorSetLayout, nullptr);
+            loader->vkDestroyPipelineLayout(vulkanDevice, ptr->pipelineLayout, nullptr);
+            delete ptr;
+            return nullptr;
+        }
+
         VkPipelineShaderStageCreateInfo stage = {};
         stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         stage.pNext = nullptr;
@@ -171,7 +179,23 @@ pnanovdb_compute_pipeline_t* createComputePipeline(pnanovdb_compute_context_t* c
         createInfo.stage = stage;
         createInfo.layout = ptr->pipelineLayout;
 
-        loader->vkCreateComputePipelines(vulkanDevice, VK_NULL_HANDLE, 1u, &createInfo, nullptr, &ptr->pipeline);
+        VkResult result =
+            loader->vkCreateComputePipelines(vulkanDevice, VK_NULL_HANDLE, 1u, &createInfo, nullptr, &ptr->pipeline);
+
+        if (result != VK_SUCCESS)
+        {
+            context->logPrint(
+                PNANOVDB_COMPUTE_LOG_LEVEL_ERROR, "vkCreateComputePipelines failed with VkResult = %d\n", result);
+
+            loader->vkDestroyShaderModule(vulkanDevice, ptr->module, nullptr);
+            loader->vkDestroyDescriptorSetLayout(vulkanDevice, ptr->descriptorSetLayout, nullptr);
+            loader->vkDestroyPipelineLayout(vulkanDevice, ptr->pipelineLayout, nullptr);
+            delete ptr;
+            return nullptr;
+        }
+
+        loader->vkDestroyShaderModule(vulkanDevice, ptr->module, nullptr);
+        ptr->module = VK_NULL_HANDLE;
     }
 
     return cast(ptr);
@@ -211,7 +235,10 @@ void computePipeline_destroy(Context* context, pnanovdb_compute_pipeline_t* pipe
     loader->vkDestroyPipelineLayout(loader->device, ptr->pipelineLayout, nullptr);
     loader->vkDestroyPipeline(loader->device, ptr->pipeline, nullptr);
 
-    loader->vkDestroyShaderModule(loader->device, ptr->module, nullptr);
+    if (ptr->module != VK_NULL_HANDLE)
+    {
+        loader->vkDestroyShaderModule(loader->device, ptr->module, nullptr);
+    }
 
     delete ptr;
 }
@@ -403,6 +430,13 @@ void computePipeline_updateDescriptorSet(Context* context,
 void computePipeline_dispatch(Context* context, const pnanovdb_compute_dispatch_params_t* params)
 {
     ComputePipeline* ptr = cast(params->pipeline);
+
+    if (!ptr || !ptr->pipeline)
+    {
+        context->logPrint(PNANOVDB_COMPUTE_LOG_LEVEL_ERROR,
+                          "cannot dispatch - compute pipeline is null or invalid. Shader compilation may have failed.");
+        return;
+    }
 
     auto loader = &context->deviceQueue->device->loader;
     auto vulkanDevice = context->deviceQueue->device->vulkanDevice;

@@ -692,6 +692,14 @@ void showCompilerSettingsWindow(imgui_instance_user::Instance* ptr)
             ImGui::SetTooltip("Empty uses default");
         }
 
+        const char* optimization_levels[] = { "None (Fastest)", "Default", "High", "Maximal (Slowest)" };
+        int optimization_level = (int)ptr->compiler_settings.optimization_level;
+        if (ImGui::Combo(
+                "Optimization Level", &optimization_level, optimization_levels, IM_ARRAYSIZE(optimization_levels)))
+        {
+            ptr->compiler_settings.optimization_level = (pnanovdb_optimization_level_t)(optimization_level);
+        }
+
         ImGui::Separator();
         ImGui::Text("Additional Shader Directories");
         if (!ptr->additional_shader_directories.empty())
