@@ -10,6 +10,7 @@
 */
 
 #include "Common.h"
+#include "nanovdb_editor/putil/Compute.h"
 #define PNANOVDB_BUF_BOUNDS_CHECK
 #include "Raster.h"
 
@@ -823,6 +824,12 @@ pnanovdb_compute_array_t* upload_and_readback_array(const pnanovdb_compute_t* co
                                                     pnanovdb_compute_queue_t* queue,
                                                     pnanovdb_compute_array_t* src)
 {
+    pnanovdb_compiler_settings_t compile_settings = {};
+    pnanovdb_compiler_settings_init(&compile_settings);
+
+    pnanovdb_shader_context_t* shader_context = compute->create_shader_context("raster/copy_large_buffer.slang");
+    pnanovdb_bool_t shader_is_valid = compute->init_shader(compute, queue, shader_context, &compile_settings);
+
     compute_gpu_array_t* src_gpu_array = gpu_array_create();
     compute_gpu_array_t* dst_gpu_array = gpu_array_create();
 
@@ -836,7 +843,45 @@ pnanovdb_compute_array_t* upload_and_readback_array(const pnanovdb_compute_t* co
 
     // device side copy to another gpu array
     gpu_array_alloc_device(compute, queue, dst_gpu_array, src);
-    gpu_array_copy(compute, queue, dst_gpu_array, src_gpu_array->device_buffer, 0llu, copy_size);
+    //gpu_array_copy(compute, queue, dst_gpu_array, src_gpu_array->device_buffer, 0llu, copy_size);
+
+    pnanovdb_compute_interface_t* compute_iface = compute->device_interface.get_compute_interface(queue);
+    pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
+
+    struct constants_t
+    {
+        pnanovdb_uint64_t copy_element_count;
+        pnanovdb_uint64_t ptr_src;
+        pnanovdb_uint64_t ptr_dst;
+        pnanovdb_uint32_t grid_dim_x;
+        pnanovdb_uint32_t pad;
+    };
+    constants_t constants = {};
+    constants.copy_element_count = src->element_count;
+    constants.grid_dim_x = 1024u;
+    constants.ptr_src = compute_iface->get_buffer_device_address(context, src_gpu_array->device_buffer);
+    constants.ptr_dst = compute_iface->get_buffer_device_address(context, dst_gpu_array->device_buffer);
+
+    pnanovdb_compute_buffer_desc_t buf_desc = {};
+    buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT;
+    buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+    buf_desc.structure_stride = 0u;
+    buf_desc.size_in_bytes = sizeof(constants_t);
+    pnanovdb_compute_buffer_t* constant_buffer =
+        compute_iface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &buf_desc);
+
+    void* mapped_constants = compute_iface->map_buffer(context, constant_buffer);
+    memcpy(mapped_constants, &constants, sizeof(constants_t));
+    compute_iface->unmap_buffer(context, constant_buffer);
+
+    pnanovdb_compute_buffer_transient_t* constant_transient =
+        compute_iface->register_buffer_as_transient(context, constant_buffer);
+
+    pnanovdb_compute_resource_t resources[1u] = {};
+    resources[0].buffer_transient = constant_transient;
+
+    compute->dispatch_shader(compute_iface, context, shader_context, resources,
+                             1024u, 1u, 1u, "copy_texture_to_buffer");
 
     // copy second device array back to CPU
     pnanovdb_compute_array_t* dst = compute->create_array(src->element_size, src->element_count, nullptr);
@@ -850,6 +895,10 @@ pnanovdb_compute_array_t* upload_and_readback_array(const pnanovdb_compute_t* co
 
     gpu_array_destroy(compute, queue, src_gpu_array);
     gpu_array_destroy(compute, queue, dst_gpu_array);
+
+    compute_iface->destroy_buffer(context, constant_buffer);
+
+    compute->destroy_shader_context(compute, queue, shader_context);
 
     return dst;
 }
