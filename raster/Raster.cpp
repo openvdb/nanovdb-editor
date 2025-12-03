@@ -823,25 +823,33 @@ pnanovdb_compute_array_t* upload_and_readback_array(const pnanovdb_compute_t* co
                                                     pnanovdb_compute_queue_t* queue,
                                                     pnanovdb_compute_array_t* src)
 {
-    compute_gpu_array_t* gpu_array = gpu_array_create();
+    compute_gpu_array_t* src_gpu_array = gpu_array_create();
+    compute_gpu_array_t* dst_gpu_array = gpu_array_create();
 
-    gpu_array_upload(compute, queue, gpu_array, src);
+    pnanovdb_uint64_t copy_size = src->element_size * src->element_count;
 
+    // upload data
+    gpu_array_upload(compute, queue, src_gpu_array, src);
     pnanovdb_uint64_t flushed_frame = 0llu;
     compute->device_interface.flush(queue, &flushed_frame, nullptr, nullptr);
-
     compute->device_interface.wait_idle(queue);
 
+    // device side copy to another gpu array
+    gpu_array_alloc_device(compute, queue, dst_gpu_array, src);
+    gpu_array_copy(compute, queue, dst_gpu_array, src_gpu_array->device_buffer, 0llu, copy_size);
+
+    // copy second device array back to CPU
     pnanovdb_compute_array_t* dst = compute->create_array(src->element_size, src->element_count, nullptr);
-
-    gpu_array_readback(compute, queue, gpu_array, dst);
-
+    gpu_array_readback(compute, queue, dst_gpu_array, dst);
     flushed_frame = 0llu;
     compute->device_interface.flush(queue, &flushed_frame, nullptr, nullptr);
-
     compute->device_interface.wait_idle(queue);
 
-    gpu_array_map(compute, queue, gpu_array, dst);
+    // map result and copy to compute array
+    gpu_array_map(compute, queue, dst_gpu_array, dst);
+
+    gpu_array_destroy(compute, queue, src_gpu_array);
+    gpu_array_destroy(compute, queue, dst_gpu_array);
 
     return dst;
 }
