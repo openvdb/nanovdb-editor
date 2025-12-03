@@ -163,4 +163,8 @@ pnanovdb_bool_t create_gaussian_data_from_desc(pnanovdb_raster_t* raster,
                                                pnanovdb_raster_gaussian_data_t** gaussian_data,
                                                pnanovdb_raster_shader_params_t* raster_params,
                                                pnanovdb_raster_context_t** raster_context);
+
+pnanovdb_compute_array_t* upload_and_readback_array(const pnanovdb_compute_t* compute,
+                                                    pnanovdb_compute_queue_t* queue,
+                                                    pnanovdb_compute_array_t* src);
 }

@@ -9,6 +9,7 @@
     \brief
 */
 
+#include "Common.h"
 #define PNANOVDB_BUF_BOUNDS_CHECK
 #include "Raster.h"
 
@@ -817,6 +818,33 @@ static void raster_validate(const pnanovdb_compute_t* compute,
     compute->unmap_array(nanovdb_arr);
 }
 #endif
+
+pnanovdb_compute_array_t* upload_and_readback_array(const pnanovdb_compute_t* compute,
+                                                    pnanovdb_compute_queue_t* queue,
+                                                    pnanovdb_compute_array_t* src)
+{
+    compute_gpu_array_t* gpu_array = gpu_array_create();
+
+    gpu_array_upload(compute, queue, gpu_array, src);
+
+    pnanovdb_uint64_t flushed_frame = 0llu;
+    compute->device_interface.flush(queue, &flushed_frame, nullptr, nullptr);
+
+    compute->device_interface.wait_idle(queue);
+
+    pnanovdb_compute_array_t* dst = compute->create_array(src->element_size, src->element_count, nullptr);
+
+    gpu_array_readback(compute, queue, gpu_array, dst);
+
+    flushed_frame = 0llu;
+    compute->device_interface.flush(queue, &flushed_frame, nullptr, nullptr);
+
+    compute->device_interface.wait_idle(queue);
+
+    gpu_array_map(compute, queue, gpu_array, dst);
+
+    return dst;
+}
 }
 
 pnanovdb_raster_t* pnanovdb_get_raster()
@@ -835,6 +863,7 @@ pnanovdb_raster_t* pnanovdb_get_raster()
     raster.raster_to_nanovdb_from_arrays = pnanovdb_raster::raster_to_nanovdb_from_arrays;
     raster.create_gaussian_data_from_arrays = pnanovdb_raster::create_gaussian_data_from_arrays;
     raster.create_gaussian_data_from_desc = pnanovdb_raster::create_gaussian_data_from_desc;
+    raster.upload_and_readback_array = pnanovdb_raster::upload_and_readback_array;
 
     return &raster;
 }

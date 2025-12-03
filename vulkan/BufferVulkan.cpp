@@ -22,7 +22,7 @@
 namespace pnanovdb_vulkan
 {
 
-static const pnanovdb_uint64_t sparse_threshold = 16llu * 1024llu * 1024llu;
+static const pnanovdb_uint64_t sparse_threshold = 1024llu * 1024llu * 1024llu;
 
 void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_interop_handle_t* interopHandle)
 {
@@ -243,7 +243,7 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
                 ptr->sparseBinds[mem_idx].memoryOffset = 0;
             }
 
-            printf("SparseBuffer mem_count(%zu bufMemAllocInfo.memoryTypeIndex(%d)\n", mem_count, bufMemAllocInfo.memoryTypeIndex);
+            printf("SparseBuffer mem_count(%zu) bufMemAllocInfo.memoryTypeIndex(%d)\n", mem_count, bufMemAllocInfo.memoryTypeIndex);
 
             VkSparseBufferMemoryBindInfo bufBindInfo = {};
             bufBindInfo.buffer = ptr->bufferVk;

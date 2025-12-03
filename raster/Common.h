@@ -49,7 +49,7 @@ PNANOVDB_INLINE float timestamp_diff(pnanovdb_uint64_t begin, pnanovdb_uint64_t 
     return (float)(((double)(end - begin) / (double)(freq)));
 }
 
-static const pnanovdb_uint64_t upload_chunk_size = 16llu * 1024llu * 1024llu;
+static const pnanovdb_uint64_t upload_chunk_size = 1024llu * 1024llu * 1024llu;
 
 struct compute_gpu_array_t
 {
