@@ -24,6 +24,8 @@ typedef struct pnanovdb_vulkan_enabled_features_t
 {
     pnanovdb_bool_t shaderStorageImageWriteWithoutFormat;
     pnanovdb_bool_t shaderInt64;
+    pnanovdb_bool_t sparseBinding;
+    pnanovdb_bool_t sparseResidencyBuffer;
 } pnanovdb_vulkan_enabled_features_t;
 
 typedef struct pnanovdb_vulkan_enabled_instance_extensions_t
@@ -201,6 +203,8 @@ typedef struct pnanovdb_vulkan_device_loader_t
     PNANOVDB_VK_LOADER_PTR(vkDestroyVideoSessionKHR);
 
     PNANOVDB_VK_LOADER_PTR(vkGetBufferDeviceAddressKHR);
+    PNANOVDB_VK_LOADER_PTR(vkQueueBindSparse);
+    PNANOVDB_VK_LOADER_PTR(vkGetBufferMemoryRequirements2);
 } pnanovdb_vulkan_device_loader_t;
 
 PNANOVDB_INLINE void pnanovdb_vulkan_loader_global(pnanovdb_vulkan_instance_loader_t* ptr,
@@ -354,4 +358,6 @@ PNANOVDB_INLINE void pnanovdb_vulkan_loader_device(pnanovdb_vulkan_device_loader
     PNANOVDB_VK_LOADER_DEVICE(vkDestroyVideoSessionKHR);
 
     PNANOVDB_VK_LOADER_DEVICE(vkGetBufferDeviceAddressKHR);
+    PNANOVDB_VK_LOADER_DEVICE(vkQueueBindSparse);
+    PNANOVDB_VK_LOADER_DEVICE(vkGetBufferMemoryRequirements2);
 }

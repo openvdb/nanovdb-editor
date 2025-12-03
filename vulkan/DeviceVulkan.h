@@ -299,13 +299,15 @@ struct Buffer
     pnanovdb_compute_memory_type_t memory_type = PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE;
     pnanovdb_uint64_t allocationBytes = 0llu;
 
-    VkDeviceMemory memoryVk = VK_NULL_HANDLE;
+    std::vector<VkDeviceMemory> memoryVks;
     VkBuffer bufferVk = VK_NULL_HANDLE;
     VkBufferView bufferViewVk = VK_NULL_HANDLE;
     std::vector<VkBufferView> aliasBufferViews;
     std::vector<pnanovdb_compute_format_t> aliasFormats;
     void* mappedData = nullptr;
     pnanovdb_uint64_t bufferAddress = 0llu;
+
+    std::vector<VkSparseMemoryBind> sparseBinds;
 
     VkBufferMemoryBarrier restoreBarrier = {};
     VkBufferMemoryBarrier currentBarrier = {};
