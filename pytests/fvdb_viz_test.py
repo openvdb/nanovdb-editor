@@ -14,15 +14,9 @@ import warnings
 
 import pytest
 
-fvdb = pytest.importorskip(
-    "fvdb", reason="fvdb package is required for fvdb viz tests"
-)
-np = pytest.importorskip(
-    "numpy", reason="numpy is required for fvdb viz tests"
-)
-torch = pytest.importorskip(
-    "torch", reason="torch is required for fvdb viz tests"
-)
+fvdb = pytest.importorskip("fvdb", reason="fvdb package is required for fvdb viz tests")
+np = pytest.importorskip("numpy", reason="numpy is required for fvdb viz tests")
+torch = pytest.importorskip("torch", reason="torch is required for fvdb viz tests")
 
 PORT = 8080
 
@@ -136,4 +130,3 @@ class TestViewerScene(unittest.TestCase):
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

@@ -1,4 +1,6 @@
-#!/usr/bin/env bash
+#!/bin/bash
+# Copyright Contributors to the OpenVDB Project
+# SPDX-License-Identifier: Apache-2.0
 
 # Central definition for the fvdb viewer dependency versions.
 # Scripts should source this file and use the *_DEFAULT values as fallbacks
