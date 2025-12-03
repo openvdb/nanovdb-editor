@@ -123,6 +123,7 @@ jobs:
             PACKAGE_NAME="nanovdb-editor"
           fi
           docker build \
+            -f "${GITHUB_WORKSPACE}/docker/Dockerfile.fvdb_viz_test" \
             --progress=plain \
             --network=host \
             --build-arg PYPI_PACKAGE="${PACKAGE_NAME}" \

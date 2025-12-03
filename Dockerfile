@@ -58,8 +58,6 @@ else:
     print("run_editor.py not present in package; skipping copy")
 PY
 
-COPY ./test.py ./test.py
-
 EXPOSE 8080
 
 ENV NVIDIA_DRIVER_CAPABILITIES compute,graphics,utility
