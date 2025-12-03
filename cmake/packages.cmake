@@ -579,16 +579,17 @@ if(Slang_ADDED)
                 message(STATUS "slang-llvm library not found, skipping copy")
             endif()
         else()
+            # Note: libslang-compiler and libslang-glslang have version suffix in filename (e.g., libslang-compiler-2025.23.1.so)
             add_custom_command(TARGET copy_slang_libs POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     ${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}
                     ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    ${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}
-                    ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}
+                    ${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}.0.${SLANG_VERSION}
+                    ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}.0.${SLANG_VERSION}
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    ${Slang_SOURCE_DIR}/lib/libslang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}
-                    ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}
+                    ${Slang_SOURCE_DIR}/lib/libslang-glslang-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}
+                    ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang-glslang-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}
             )
             # Copy slang-llvm only if it exists
             if(SLANG_LLVM_EXISTS)
