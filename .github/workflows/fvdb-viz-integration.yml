@@ -88,6 +88,32 @@ jobs:
           echo "host_path=${wheel_path}" >> "$GITHUB_OUTPUT"
           echo "container_path=/workspace/${wheel_path}" >> "$GITHUB_OUTPUT"
 
+      - name: Derive fvdb.viz image cache key
+        id: fvdb_cache
+        run: |
+          set -euo pipefail
+          core_version="${FVDB_VIZ_CORE_VERSION%%+*}"
+          if [[ -z "${core_version}" ]]; then
+            core_version="${FVDB_VIZ_CORE_VERSION}"
+          fi
+          if [[ -n "${FVDB_VIZ_TEST_IMAGE:-}" ]]; then
+            image_name="${FVDB_VIZ_TEST_IMAGE}"
+          else
+            image_name="fvdb-viz-test-${core_version}"
+          fi
+          cache_path=".cache/${image_name}.tar"
+          package_stream="${{ steps.config.outputs.package_stream }}"
+          key="fvdb-viz-image-${{ runner.os }}-${package_stream}-${FVDB_VIZ_TORCH_VERSION}-${FVDB_VIZ_CORE_VERSION}"
+          echo "path=${cache_path}" >> "$GITHUB_OUTPUT"
+          echo "key=${key}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore fvdb.viz image cache
+        id: restore_fvdb_cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.fvdb_cache.outputs.path }}
+          key: ${{ steps.fvdb_cache.outputs.key }}
+
       - name: Build headless test image
         run: |
           set -euo pipefail
@@ -107,6 +133,8 @@ jobs:
 
       - name: Run fvdb.viz notebook workflow
         run: |
+          set -euo pipefail
+
           if [[ "${{ steps.config.outputs.use_local }}" == "true" ]]; then
             PYTEST_EXPR="test_fvdb_viz_with_local_package"
           elif [[ "${{ steps.config.outputs.package_stream }}" == "dev" ]]; then
@@ -115,11 +143,19 @@ jobs:
             PYTEST_EXPR="test_fvdb_viz_with_release_package"
           fi
 
-          LOCAL_DIST_ENV=""
+          LOCAL_DIST_ARGS=()
           if [[ "${{ steps.config.outputs.use_local }}" == "true" ]]; then
-            LOCAL_DIST_ENV="-e FVDB_VIZ_LOCAL_DIST=${{ steps.local_wheel.outputs.container_path }}"
+            LOCAL_DIST_ARGS=(-e "FVDB_VIZ_LOCAL_DIST=${{ steps.local_wheel.outputs.container_path }}")
           fi
 
+          PYTEST_CMD=$'python3 -m pip install --break-system-packages pytest >/tmp/pip.log 2>&1; '\
+          $'python3 -c "import importlib; mod = importlib.import_module(\'nanovdb_editor\'); '\
+          $'version = getattr(mod, \'__version__\', \'unknown\'); '\
+          $'print(f\'nanovdb_editor version: {version}\')"; '\
+          $'pytest pytests/test_fvdb_viz_integration.py -k "'"${PYTEST_EXPR}"'" -vv -s --maxfail=1 --full-trace -rA; '\
+          $'PYTEST_EXIT=$?; echo "Pytest exit code: $PYTEST_EXIT"; exit $PYTEST_EXIT'
+
+          set +e
           docker run --rm \
             -e FVDB_VIZ_TESTS=1 \
             -e FVDB_VIZ_TORCH_VERSION="${FVDB_VIZ_TORCH_VERSION}" \
@@ -132,15 +168,36 @@ jobs:
             -e LP_NUM_THREADS=1 \
             -e LIBGL_ALWAYS_SOFTWARE=1 \
             -e GALLIUM_DRIVER=llvmpipe \
-            ${LOCAL_DIST_ENV} \
+            -e PYTHONUNBUFFERED=1 \
+            "${LOCAL_DIST_ARGS[@]}" \
             -v "${GITHUB_WORKSPACE}":/workspace \
             -w /workspace \
             "fvdb-viz-${{ steps.config.outputs.package_stream }}" \
-            sh -c 'python3 -m pip install --break-system-packages pytest >/tmp/pip.log 2>&1; python3 -c "import importlib; mod = importlib.import_module(\"nanovdb_editor\"); version = getattr(mod, \"__version__\", \"unknown\"); print(f\"nanovdb_editor version: {version}\")"; pytest pytests/test_fvdb_viz_integration.py -k "'"${PYTEST_EXPR}"'" -vv; PYTEST_EXIT=$?; echo "Pytest exit code: $PYTEST_EXIT"; exit $PYTEST_EXIT'
+            sh -c "${PYTEST_CMD}"
           DOCKER_EXIT_CODE=$?
+          set -e
           echo "Docker exit code: ${DOCKER_EXIT_CODE}"
           if [[ ${DOCKER_EXIT_CODE} -ne 0 ]]; then
             echo "::error::fvdb.viz pytest failed with exit code ${DOCKER_EXIT_CODE}"
             exit ${DOCKER_EXIT_CODE}
           fi
+
+      - name: Check fvdb.viz cache artifact
+        if: always()
+        id: fvdb_cache_exists
+        run: |
+          set -euo pipefail
+          cache_path="${{ steps.fvdb_cache.outputs.path }}"
+          if [[ -f "${cache_path}" ]]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save fvdb.viz image cache
+        if: always() && steps.restore_fvdb_cache.outputs.cache-hit != 'true' && steps.fvdb_cache_exists.outputs.found == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.fvdb_cache.outputs.path }}
+          key: ${{ steps.fvdb_cache.outputs.key }}
 

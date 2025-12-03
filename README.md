@@ -213,6 +213,42 @@ With GDB:
 gdb -p <PID>
 ```
 
+## fvdb.viz Integration Tests
+
+We keep the Vulkan headless FVDB viewer validated in both CI and local development by sharing a cached Docker image and integration suite.
+
+### Local workflow
+
+`./scripts/run_fvdb_viz_integration.sh` mirrors the GitHub Actions job:
+
+```sh
+# Run release package tests (default)
+./scripts/run_fvdb_viz_integration.sh
+
+# Force rebuild the cached Docker image
+./scripts/run_fvdb_viz_integration.sh --force-rebuild
+
+# Validate the dev PyPI stream
+./scripts/run_fvdb_viz_integration.sh --stream dev
+
+# Smoke-test a locally built wheel
+./scripts/run_fvdb_viz_integration.sh --local-wheel pymodule/dist/nanovdb_editor-*.whl
+```
+
+Highlights:
+- Ensures (and caches) the `fvdb-viz-test-<fvdb-core-version>` Docker image (for example, `fvdb-viz-test-0.3.0`) with matching Torch/fvdb-core versions.
+- Prints the installed `nanovdb_editor` version inside the container before running `pytests/test_fvdb_viz_integration.py -vv -s --full-trace`.
+- Accepts `--force-rebuild` to bypass the local `.cache` tarball when you need a fresh base image.
+
+### CI workflow
+
+`.github/workflows/fvdb-viz-integration.yml` runs on `workflow_dispatch` or `workflow_call` and:
+- Resolves the package stream (release/dev) plus optional release wheel artifact.
+- Restores a cached Docker image tarball (keyed by OS/stream/Torch/FVDB versions) before building.
+- Executes the same pytest selector in Docker, then saves the tarball back to the cache if we rebuilt it.
+
+Use the workflow dispatch inputs in GitHub Actions to pick the stream or supply a wheel artifact. Thanks to caching, we only rebuild the heavy CUDA image when dependencies change.
+
 ## NanoVDB Editor GUI
 
 ### Shader Parameters
