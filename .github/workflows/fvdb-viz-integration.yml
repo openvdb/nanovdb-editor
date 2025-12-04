@@ -27,30 +27,59 @@ on:
     branches:
       - main
 
-env:
-  FVDB_VIZ_TORCH_VERSION: "2.8.0"
-  FVDB_VIZ_TORCH_INDEX_URL: "https://download.pytorch.org/whl/cu128"
-  FVDB_VIZ_CORE_VERSION: "0.3.0+pt28.cu128"
-  FVDB_VIZ_CORE_INDEX_URL: "https://d36m13axqqhiit.cloudfront.net/simple"
-  FVDB_VIZ_SCRIPT_TIMEOUT: "480"
-  FVDB_VIZ_TEST_IMAGE: "fvdb-viz-test"
-
 jobs:
+  resolve-fvdb-versions:
+    name: Resolve fvdb dependencies
+    runs-on: ubuntu-latest
+    outputs:
+      torch_version: ${{ steps.fvdb.outputs.torch_version }}
+      torch_index_url: ${{ steps.fvdb.outputs.torch_index_url }}
+      core_version: ${{ steps.fvdb.outputs.core_version }}
+      core_index_url: ${{ steps.fvdb.outputs.core_index_url }}
+      script_timeout: ${{ steps.fvdb.outputs.script_timeout }}
+      test_image: ${{ steps.fvdb.outputs.test_image }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Export fvdb defaults
+        id: fvdb
+        run: |
+          set -euo pipefail
+          source scripts/fvdb_viz_versions.sh
+          core_tag="${FVDB_VIZ_CORE_VERSION_DEFAULT%%+*}"
+          {
+            echo "torch_version=${FVDB_VIZ_TORCH_VERSION_DEFAULT}"
+            echo "torch_index_url=${FVDB_VIZ_TORCH_INDEX_URL_DEFAULT}"
+            echo "core_version=${FVDB_VIZ_CORE_VERSION_DEFAULT}"
+            echo "core_index_url=${FVDB_VIZ_CORE_INDEX_URL_DEFAULT}"
+            echo "script_timeout=${FVDB_VIZ_SCRIPT_TIMEOUT_DEFAULT}"
+            echo "test_image=fvdb-viz-test-${core_tag}"
+          } >> "$GITHUB_OUTPUT"
+
   build-test-image:
     name: Build Image
+    needs: resolve-fvdb-versions
     uses: ./.github/workflows/build-fvdb-viz-test-image.yml
     with:
-      image_name: ${{ env.FVDB_VIZ_TEST_IMAGE }}
+      image_name: ${{ needs.resolve-fvdb-versions.outputs.test_image }}
       image_artifact_name: fvdb-viz-test-image
-      torch_version: ${{ env.FVDB_VIZ_TORCH_VERSION }}
-      torch_index_url: ${{ env.FVDB_VIZ_TORCH_INDEX_URL }}
-      fvdb_core_version: ${{ env.FVDB_VIZ_CORE_VERSION }}
-      fvdb_core_index_url: ${{ env.FVDB_VIZ_CORE_INDEX_URL }}
+      torch_version: ${{ needs.resolve-fvdb-versions.outputs.torch_version }}
+      torch_index_url: ${{ needs.resolve-fvdb-versions.outputs.torch_index_url }}
+      fvdb_core_version: ${{ needs.resolve-fvdb-versions.outputs.core_version }}
+      fvdb_core_index_url: ${{ needs.resolve-fvdb-versions.outputs.core_index_url }}
 
   fvdb-viz-integration:
     name: Run Tests
-    needs: [build-test-image]
+    needs: [resolve-fvdb-versions, build-test-image]
     runs-on: ubuntu-latest
+    env:
+      FVDB_VIZ_TORCH_VERSION: ${{ needs.resolve-fvdb-versions.outputs.torch_version }}
+      FVDB_VIZ_TORCH_INDEX_URL: ${{ needs.resolve-fvdb-versions.outputs.torch_index_url }}
+      FVDB_VIZ_CORE_VERSION: ${{ needs.resolve-fvdb-versions.outputs.core_version }}
+      FVDB_VIZ_CORE_INDEX_URL: ${{ needs.resolve-fvdb-versions.outputs.core_index_url }}
+      FVDB_VIZ_SCRIPT_TIMEOUT: ${{ needs.resolve-fvdb-versions.outputs.script_timeout }}
+      FVDB_VIZ_TEST_IMAGE: ${{ needs.resolve-fvdb-versions.outputs.test_image }}
     steps:
       - name: Resolve package selection
         id: config
