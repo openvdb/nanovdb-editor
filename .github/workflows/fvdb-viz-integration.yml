@@ -63,7 +63,6 @@ jobs:
     uses: ./.github/workflows/build-fvdb-viz-test-image.yml
     with:
       image_name: ${{ needs.resolve-fvdb-versions.outputs.test_image }}
-      image_artifact_name: fvdb-viz-test-image
       torch_version: ${{ needs.resolve-fvdb-versions.outputs.torch_version }}
       torch_index_url: ${{ needs.resolve-fvdb-versions.outputs.torch_index_url }}
       fvdb_core_version: ${{ needs.resolve-fvdb-versions.outputs.core_version }}
@@ -79,7 +78,7 @@ jobs:
       FVDB_VIZ_CORE_VERSION: ${{ needs.resolve-fvdb-versions.outputs.core_version }}
       FVDB_VIZ_CORE_INDEX_URL: ${{ needs.resolve-fvdb-versions.outputs.core_index_url }}
       FVDB_VIZ_SCRIPT_TIMEOUT: ${{ needs.resolve-fvdb-versions.outputs.script_timeout }}
-      FVDB_VIZ_TEST_IMAGE: ${{ needs.resolve-fvdb-versions.outputs.test_image }}
+      FVDB_VIZ_TEST_IMAGE: ${{ needs.build-test-image.outputs.image_ref }}
     steps:
       - name: Resolve package selection
         id: config
@@ -134,31 +133,11 @@ jobs:
           echo "host_path=${wheel_path}" >> "$GITHUB_OUTPUT"
           echo "container_path=/workspace/${wheel_path}" >> "$GITHUB_OUTPUT"
 
-      - name: Select fvdb.viz image artifact
-        id: image_artifact
+      - name: Pull fvdb.viz test image
         run: |
           set -euo pipefail
-          artifact="${{ needs.build-test-image.outputs.image_artifact }}"
-          echo "name=$artifact" >> "$GITHUB_OUTPUT"
-
-      - name: Download fvdb.viz test image
-        if: ${{ steps.image_artifact.outputs.name != '' }}
-        id: download_image
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ steps.image_artifact.outputs.name }}
-          path: .cache/fvdb-viz-test-image
-
-      - name: Load fvdb.viz Docker image
-        if: ${{ steps.image_artifact.outputs.name != '' }}
-        run: |
-          set -euo pipefail
-          TAR_PATH=$(find .cache/fvdb-viz-test-image -name '*.tar' -print -quit)
-          if [[ -z "$TAR_PATH" ]]; then
-            echo "No Docker image tarball found in artifact" >&2
-            exit 1
-          fi
-          docker load -i "$TAR_PATH"
+          docker pull "${{ needs.build-test-image.outputs.image_ref }}"
+          echo "test_image=${{ needs.build-test-image.outputs.image_ref }}" >> "$GITHUB_ENV"
 
       - name: Run fvdb.viz notebook workflow
         run: |

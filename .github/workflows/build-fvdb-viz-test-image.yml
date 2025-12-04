@@ -4,13 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       image_name:
-        description: "Docker image tag to produce"
+        description: "Docker image tag (without registry/user)"
         default: fvdb-viz-test
-        required: false
-        type: string
-      image_artifact_name:
-        description: "Artifact name to upload"
-        default: fvdb-viz-test-image
         required: false
         type: string
       torch_version:
@@ -38,10 +33,6 @@ on:
         required: false
         type: string
         default: fvdb-viz-test
-      image_artifact_name:
-        required: false
-        type: string
-        default: fvdb-viz-test-image
       torch_version:
         required: false
         type: string
@@ -58,19 +49,18 @@ on:
         type: string
         default: "https://d36m13axqqhiit.cloudfront.net/simple"
     outputs:
-      image_artifact:
-        description: "Name of the uploaded Docker image artifact"
-        value: ${{ jobs.build-and-upload-image.outputs.image_artifact }}
+      image_ref:
+        description: "Fully qualified image reference pushed to registry"
+        value: ${{ jobs.build-and-push.outputs.image_ref }}
 
 jobs:
-  build-and-upload-image:
-    name: Build and Upload fVDB Viz Test Image
+  build-and-push:
+    name: Build and Push fVDB Viz Test Image
     runs-on: ubuntu-latest
     outputs:
-      image_artifact: ${{ steps.artifact_metadata.outputs.artifact_name }}
+      image_ref: ${{ steps.build_push.outputs.image_ref }}
     env:
       IMAGE_NAME: ${{ inputs.image_name }}
-      IMAGE_ARTIFACT_NAME: ${{ inputs.image_artifact_name }}
       TORCH_VERSION: ${{ inputs.torch_version }}
       TORCH_INDEX_URL: ${{ inputs.torch_index_url }}
       FVDB_CORE_VERSION: ${{ inputs.fvdb_core_version }}
@@ -82,33 +72,26 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build fvdb.viz test base image tarball
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push fvdb.viz test image
+        id: build_push
         run: |
           set -euo pipefail
-          mkdir -p .cache
+          IMAGE_REF="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${FVDB_CORE_VERSION//[^0-9a-zA-Z.-]/-}"
           docker buildx build \
             -f docker/Dockerfile.fvdb_viz_test \
             --build-arg TORCH_VERSION="${TORCH_VERSION}" \
             --build-arg TORCH_INDEX_URL="${TORCH_INDEX_URL}" \
             --build-arg FVDB_CORE_VERSION="${FVDB_CORE_VERSION}" \
             --build-arg FVDB_CORE_INDEX_URL="${FVDB_CORE_INDEX_URL}" \
-            --output "type=tar,dest=.cache/${IMAGE_NAME}.tar" \
+            -t "${IMAGE_REF}" \
+            --push \
             "${{ github.workspace }}"
-
-      - name: Prepare artifact metadata
-        id: artifact_metadata
-        run: |
-          TAR_PATH=".cache/${IMAGE_NAME}.tar"
-          if [[ ! -f "$TAR_PATH" ]]; then
-            echo "Expected image tarball $TAR_PATH not found" >&2
-            exit 1
-          fi
-          echo "artifact_name=${IMAGE_ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
-
-      - name: Upload Docker image artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.IMAGE_ARTIFACT_NAME }}
-          path: .cache/${{ env.IMAGE_NAME }}.tar
-          if-no-files-found: error
+          echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
 
