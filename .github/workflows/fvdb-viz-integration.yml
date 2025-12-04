@@ -80,32 +80,15 @@ jobs:
           core_tag="${CORE_VERSION//[^0-9a-zA-Z.-]/-}"
           image_ref="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${core_tag}"
           echo "image_ref=${image_ref}" >> "$GITHUB_OUTPUT"
-          echo "Looking up image: ${image_ref}"
 
-          if [[ -z "${GHCR_USER}" || -z "${GHCR_TOKEN}" ]]; then
-            echo "::warning::GHCR credentials are empty"
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin >/dev/null 2>&1
 
-          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
-          echo "Login successful"
-
-          # Try docker pull instead of manifest inspect (more reliable)
-          echo "Attempting to pull image..."
-          if docker pull "${image_ref}" 2>&1; then
+          if docker manifest inspect "${image_ref}" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Successfully pulled cached image ${image_ref}"
+            echo "Found cached image: ${image_ref}"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "Image ${image_ref} not found or not accessible; build required."
-
-            # Debug: list available tags
-            echo ""
-            echo "Listing available tags with skopeo..."
-            docker run --rm quay.io/skopeo/stable list-tags \
-              --creds "${GHCR_USER}:${GHCR_TOKEN}" \
-              "docker://ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}" 2>&1 || true
+            echo "Image not found, build required: ${image_ref}"
           fi
 
   build-test-image:
@@ -124,6 +107,8 @@ jobs:
   run-integration-tests:
     name: Run Tests
     needs: [resolve-fvdb-versions, lookup-test-image, build-test-image]
+    # Run even if build-test-image was skipped (image already exists)
+    if: ${{ !cancelled() && !failure() }}
     runs-on: ubuntu-latest
     env:
       FVDB_VIZ_TORCH_VERSION: ${{ needs.resolve-fvdb-versions.outputs.torch_version }}
