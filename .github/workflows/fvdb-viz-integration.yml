@@ -84,13 +84,41 @@ jobs:
           image_ref="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${core_tag}"
           echo "image_ref=${image_ref}" >> "$GITHUB_OUTPUT"
           echo "Looking up image: ${image_ref}"
+          echo "  Owner: ${{ github.repository_owner }}"
+          echo "  Image name: ${IMAGE_NAME}"
+          echo "  Core version: ${CORE_VERSION}"
+          echo "  Computed tag: ${core_tag}"
 
           if [[ -z "${GHCR_USER}" || -z "${GHCR_TOKEN}" ]]; then
             echo "::warning::GHCR credentials are empty; cannot authenticate for private image lookup."
             echo "exists=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          echo "Credentials present (user: ${GHCR_USER})"
 
+          # First try using the GHCR API to check if tag exists
+          echo "Checking GHCR API for tag..."
+          api_url="https://ghcr.io/v2/${{ github.repository_owner }}/${IMAGE_NAME}/manifests/${core_tag}"
+          echo "API URL: ${api_url}"
+
+          http_code=$(curl -s -o /tmp/ghcr_response.txt -w "%{http_code}" \
+            -H "Authorization: Bearer ${GHCR_TOKEN}" \
+            -H "Accept: application/vnd.oci.image.index.v1+json" \
+            "${api_url}")
+          echo "GHCR API response code: ${http_code}"
+
+          if [[ "${http_code}" == "200" ]]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Found cached image ${image_ref} via API"
+            exit 0
+          fi
+
+          echo "API response body:"
+          cat /tmp/ghcr_response.txt || true
+          echo ""
+
+          # Fallback to docker manifest inspect
+          echo "Trying docker login..."
           if ! echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin; then
             echo "::warning::Docker login to ghcr.io failed"
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -100,12 +128,12 @@ jobs:
 
           if docker manifest inspect "${image_ref}" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Found cached image ${image_ref} (authenticated)"
+            echo "Found cached image ${image_ref} (docker manifest)"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "Cached image ${image_ref} not found; build required."
-            echo "Debug: attempting manifest inspect with output..."
-            docker manifest inspect "${image_ref}" || true
+            echo "Debug: docker manifest inspect output:"
+            docker manifest inspect "${image_ref}" 2>&1 || true
           fi
 
   build-test-image:
