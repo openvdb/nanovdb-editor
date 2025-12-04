@@ -75,8 +75,6 @@ jobs:
       - name: Look up cached image
         id: lookup
         env:
-          GHCR_USER: ${{ secrets.GHCR_PUSH_USERNAME }}
-          GHCR_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN }}
           DOCKER_CLI_EXPERIMENTAL: enabled
         run: |
           set -euo pipefail
@@ -89,51 +87,25 @@ jobs:
           echo "  Core version: ${CORE_VERSION}"
           echo "  Computed tag: ${core_tag}"
 
-          if [[ -z "${GHCR_USER}" || -z "${GHCR_TOKEN}" ]]; then
-            echo "::warning::GHCR credentials are empty; cannot authenticate for private image lookup."
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "Credentials present (user: ${GHCR_USER})"
+          # Use GITHUB_TOKEN with packages:read permission (declared at workflow level)
+          echo "Logging in to ghcr.io with GITHUB_TOKEN..."
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-          # First try using the GHCR API to check if tag exists
-          echo "Checking GHCR API for tag..."
-          api_url="https://ghcr.io/v2/${{ github.repository_owner }}/${IMAGE_NAME}/manifests/${core_tag}"
-          echo "API URL: ${api_url}"
-
-          http_code=$(curl -s -o /tmp/ghcr_response.txt -w "%{http_code}" \
-            -H "Authorization: Bearer ${GHCR_TOKEN}" \
-            -H "Accept: application/vnd.oci.image.index.v1+json" \
-            "${api_url}")
-          echo "GHCR API response code: ${http_code}"
-
-          if [[ "${http_code}" == "200" ]]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Found cached image ${image_ref} via API"
-            exit 0
-          fi
-
-          echo "API response body:"
-          cat /tmp/ghcr_response.txt || true
-          echo ""
-
-          # Fallback to docker manifest inspect
-          echo "Trying docker login..."
-          if ! echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin; then
-            echo "::warning::Docker login to ghcr.io failed"
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "Login successful, checking manifest..."
-
+          echo "Checking manifest..."
           if docker manifest inspect "${image_ref}" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Found cached image ${image_ref} (docker manifest)"
+            echo "Found cached image ${image_ref}"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "Cached image ${image_ref} not found; build required."
-            echo "Debug: docker manifest inspect output:"
+            echo "Debug output:"
             docker manifest inspect "${image_ref}" 2>&1 || true
+
+            # Also try listing tags to see what's available
+            echo ""
+            echo "Attempting to list available tags..."
+            curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              "https://ghcr.io/v2/${{ github.repository_owner }}/${IMAGE_NAME}/tags/list" 2>&1 || true
           fi
 
   build-test-image:
