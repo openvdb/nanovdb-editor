@@ -29,7 +29,7 @@ on:
 
 jobs:
   resolve-fvdb-versions:
-    name: Resolve fVDB dependencies
+    name: Resolve fVDB Versions
     runs-on: ubuntu-latest
     outputs:
       torch_version: ${{ steps.fvdb.outputs.torch_version }}
@@ -101,6 +101,9 @@ jobs:
             use_local="true"
             artifact="${{ inputs.release_wheel_artifact }}"
           fi
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            use_local="true"
+          fi
           {
             echo "package_stream=$stream"
             echo "use_local=$use_local"
@@ -122,8 +125,15 @@ jobs:
           rm -rf pymodule/dist
           mkdir -p pymodule/dist
 
+      - name: Build wheel from PR source
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          set -euo pipefail
+          python3 -m pip install --upgrade pip build
+          python3 -m build --wheel --outdir pymodule/dist pymodule
+
       - name: Download release wheel artifact
-        if: ${{ steps.config.outputs.use_local == 'true' }}
+        if: ${{ steps.config.outputs.use_local == 'true' && steps.config.outputs.artifact != '' }}
         uses: actions/download-artifact@v4
         with:
           name: ${{ steps.config.outputs.artifact }}
