@@ -30,9 +30,22 @@ env:
   FVDB_VIZ_CORE_VERSION: "0.3.0+pt28.cu128"
   FVDB_VIZ_CORE_INDEX_URL: "https://d36m13axqqhiit.cloudfront.net/simple"
   FVDB_VIZ_SCRIPT_TIMEOUT: "480"
+  FVDB_VIZ_TEST_IMAGE: "fvdb-viz-test"
 
 jobs:
+  build-test-image:
+    if: ${{ inputs.base_image_artifact == '' }}
+    uses: ./.github/workflows/build-fvdb-viz-test-image.yml
+    with:
+      image_name: fvdb-viz-test
+      image_artifact_name: fvdb-viz-test-image
+      torch_version: "2.8.0"
+      torch_index_url: "https://download.pytorch.org/whl/cu128"
+      fvdb_core_version: "0.3.0+pt28.cu128"
+      fvdb_core_index_url: "https://d36m13axqqhiit.cloudfront.net/simple"
+
   fvdb-viz-integration:
+    needs: [build-test-image]
     runs-on: ubuntu-latest
     steps:
       - name: Resolve package selection
@@ -88,49 +101,34 @@ jobs:
           echo "host_path=${wheel_path}" >> "$GITHUB_OUTPUT"
           echo "container_path=/workspace/${wheel_path}" >> "$GITHUB_OUTPUT"
 
-      - name: Derive fvdb.viz image cache key
-        id: fvdb_cache
+      - name: Select fvdb.viz image artifact
+        id: image_artifact
         run: |
           set -euo pipefail
-          core_version="${FVDB_VIZ_CORE_VERSION%%+*}"
-          if [[ -z "${core_version}" ]]; then
-            core_version="${FVDB_VIZ_CORE_VERSION}"
+          artifact="${{ inputs.base_image_artifact }}"
+          if [[ -z "$artifact" ]]; then
+            artifact="${{ needs.build-test-image.outputs.image_artifact }}"
           fi
-          if [[ -n "${FVDB_VIZ_TEST_IMAGE:-}" ]]; then
-            image_name="${FVDB_VIZ_TEST_IMAGE}"
-          else
-            image_name="fvdb-viz-test-${core_version}"
-          fi
-          cache_path=".cache/${image_name}.tar"
-          package_stream="${{ steps.config.outputs.package_stream }}"
-          key="fvdb-viz-image-${{ runner.os }}-${package_stream}-${FVDB_VIZ_TORCH_VERSION}-${FVDB_VIZ_CORE_VERSION}"
-          echo "path=${cache_path}" >> "$GITHUB_OUTPUT"
-          echo "key=${key}" >> "$GITHUB_OUTPUT"
+          echo "name=$artifact" >> "$GITHUB_OUTPUT"
 
-      - name: Restore fvdb.viz image cache
-        id: restore_fvdb_cache
-        uses: actions/cache/restore@v4
+      - name: Download fvdb.viz test image
+        if: ${{ steps.image_artifact.outputs.name != '' }}
+        id: download_image
+        uses: actions/download-artifact@v4
         with:
-          path: ${{ steps.fvdb_cache.outputs.path }}
-          key: ${{ steps.fvdb_cache.outputs.key }}
+          name: ${{ steps.image_artifact.outputs.name }}
+          path: .cache/fvdb-viz-test-image
 
-      - name: Build headless test image
+      - name: Load fvdb.viz Docker image
+        if: ${{ steps.image_artifact.outputs.name != '' }}
         run: |
           set -euo pipefail
-          if [[ "${{ steps.config.outputs.package_stream }}" == "dev" ]]; then
-            PACKAGE_NAME="nanovdb-editor-dev"
-          else
-            PACKAGE_NAME="nanovdb-editor"
+          TAR_PATH=$(find .cache/fvdb-viz-test-image -name '*.tar' -print -quit)
+          if [[ -z "$TAR_PATH" ]]; then
+            echo "No Docker image tarball found in artifact" >&2
+            exit 1
           fi
-          docker build \
-            -f "${GITHUB_WORKSPACE}/docker/Dockerfile.fvdb_viz_test" \
-            --progress=plain \
-            --network=host \
-            --build-arg PYPI_PACKAGE="${PACKAGE_NAME}" \
-            --build-arg USE_LOCAL_WHEEL="${{ steps.config.outputs.use_local }}" \
-            --build-arg INSTALL_GRAPHICS_LIBS=false \
-            -t "fvdb-viz-${{ steps.config.outputs.package_stream }}" \
-            .
+          docker load -i "$TAR_PATH"
 
       - name: Run fvdb.viz notebook workflow
         run: |
@@ -173,7 +171,7 @@ jobs:
             "${LOCAL_DIST_ARGS[@]}" \
             -v "${GITHUB_WORKSPACE}":/workspace \
             -w /workspace \
-            "fvdb-viz-${{ steps.config.outputs.package_stream }}" \
+            "${FVDB_VIZ_TEST_IMAGE}" \
             sh -c "${PYTEST_CMD}"
           DOCKER_EXIT_CODE=$?
           set -e
@@ -183,22 +181,4 @@ jobs:
             exit ${DOCKER_EXIT_CODE}
           fi
 
-      - name: Check fvdb.viz cache artifact
-        if: always()
-        id: fvdb_cache_exists
-        run: |
-          set -euo pipefail
-          cache_path="${{ steps.fvdb_cache.outputs.path }}"
-          if [[ -f "${cache_path}" ]]; then
-            echo "found=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "found=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Save fvdb.viz image cache
-        if: always() && steps.restore_fvdb_cache.outputs.cache-hit != 'true' && steps.fvdb_cache_exists.outputs.found == 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ steps.fvdb_cache.outputs.path }}
-          key: ${{ steps.fvdb_cache.outputs.key }}
 
