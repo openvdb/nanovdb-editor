@@ -28,6 +28,8 @@ permissions:
   deployments: write
   pull-requests: read
   issues: read
+  packages: read
+  actions: read
 
 jobs:
   nanovdb-editor-build-python-linux:
@@ -350,3 +352,11 @@ jobs:
           pip install pytest numpy pytest-timeout
           python3 -c 'import nanovdb_editor; print("SUCCESS: Module imported on ARM64")'
           pytest pytests -vvv --tb=short --timeout=300 --timeout-method=thread || echo 'Tests completed'
+
+  fvdb-viz-integration:
+    name: fVDB Integration
+    needs: nanovdb-editor-build-python-linux
+    uses: ./.github/workflows/fvdb-viz-integration.yml
+    with:
+      wheel_artifact: nanovdb-editor-wheel
+    secrets: inherit

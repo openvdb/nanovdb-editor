@@ -23,23 +23,15 @@ on:
         required: false
         type: string
         default: release
-      release_wheel_artifact:
-        description: "Artifact name for locally built release wheel"
+      wheel_artifact:
+        description: "Artifact name for the wheel to test"
         required: false
         type: string
         default: ""
-  workflow_run:
-    workflows: ["NanoVDB Editor Python"]
-    types:
-      - completed
-    branches:
-      - main
 
 jobs:
   resolve-fvdb-versions:
     name: Resolve fVDB Versions
-    # Only run if triggering workflow succeeded (or if not triggered by workflow_run)
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     outputs:
       torch_version: ${{ steps.fvdb.outputs.torch_version }}
@@ -51,8 +43,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Export fvdb defaults
         id: fvdb
@@ -158,24 +148,16 @@ jobs:
             exit 1
           fi
           use_local="false"
-          artifact=""
-          if [[ "$stream" == "release" && "${{ inputs.release_wheel_artifact }}" != "" ]]; then
-            use_local="true"
-            artifact="${{ inputs.release_wheel_artifact }}"
-          fi
-          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+          if [[ "${{ inputs.wheel_artifact }}" != "" ]]; then
             use_local="true"
           fi
           {
             echo "package_stream=$stream"
             echo "use_local=$use_local"
-            echo "artifact=$artifact"
           } >> "$GITHUB_OUTPUT"
 
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -189,20 +171,11 @@ jobs:
           rm -rf pymodule/dist
           mkdir -p pymodule/dist
 
-      - name: Download wheel from triggering workflow
-        if: ${{ github.event_name == 'workflow_run' }}
+      - name: Download wheel artifact
+        if: ${{ inputs.wheel_artifact != '' }}
         uses: actions/download-artifact@v4
         with:
-          name: nanovdb-editor-wheel
-          path: pymodule/dist
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id }}
-
-      - name: Download release wheel artifact
-        if: ${{ steps.config.outputs.use_local == 'true' && steps.config.outputs.artifact != '' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ steps.config.outputs.artifact }}
+          name: ${{ inputs.wheel_artifact }}
           path: pymodule/dist
 
       - name: Locate local wheel artifact
