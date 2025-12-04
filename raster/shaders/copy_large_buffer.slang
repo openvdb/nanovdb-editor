@@ -27,6 +27,8 @@ void store_uint64(uint64_t ptr_raw, uint64_t idx, uint64_t val)
 }
 
 ConstantBuffer<constants_t> constants;
+StructuredBuffer<uint64_t> src;
+RWStructuredBuffer<uint64_t> dst;
 
 [shader("compute")][numthreads(256, 1, 1)]
 void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)

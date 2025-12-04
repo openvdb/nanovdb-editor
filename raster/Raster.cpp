@@ -877,8 +877,10 @@ pnanovdb_compute_array_t* upload_and_readback_array(const pnanovdb_compute_t* co
     pnanovdb_compute_buffer_transient_t* constant_transient =
         compute_iface->register_buffer_as_transient(context, constant_buffer);
 
-    pnanovdb_compute_resource_t resources[1u] = {};
+    pnanovdb_compute_resource_t resources[3u] = {};
     resources[0].buffer_transient = constant_transient;
+    resources[1].buffer_transient = compute_iface->register_buffer_as_transient(context, src_gpu_array->device_buffer);
+    resources[2].buffer_transient = compute_iface->register_buffer_as_transient(context, dst_gpu_array->device_buffer);
 
     compute->dispatch_shader(compute_iface, context, shader_context, resources,
                              1024u, 1u, 1u, "copy_texture_to_buffer");
