@@ -75,6 +75,11 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN }}
         run: |
           set -euo pipefail
+          if [[ -z "${GHCR_USER}" || -z "${GHCR_TOKEN}" ]]; then
+            echo "::warning::GHCR credentials are empty; image lookup cannot authenticate."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           core_tag="${CORE_VERSION//[^0-9a-zA-Z.-]/-}"
           image_ref="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${core_tag}"
           echo "image_ref=${image_ref}" >> "$GITHUB_OUTPUT"
@@ -105,7 +110,7 @@ jobs:
       fvdb_core_index_url: ${{ needs.resolve-fvdb-versions.outputs.core_index_url }}
     secrets: inherit
 
-  fvdb-viz-integration:
+  run-integration-tests:
     name: Run Tests
     needs: [resolve-fvdb-versions, lookup-test-image, build-test-image]
     runs-on: ubuntu-latest
