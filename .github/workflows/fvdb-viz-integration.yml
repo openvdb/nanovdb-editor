@@ -54,7 +54,7 @@ jobs:
             echo "core_version=${FVDB_VIZ_CORE_VERSION_DEFAULT}"
             echo "core_index_url=${FVDB_VIZ_CORE_INDEX_URL_DEFAULT}"
             echo "script_timeout=${FVDB_VIZ_SCRIPT_TIMEOUT_DEFAULT}"
-            echo "test_image=fvdb-viz-test-${core_tag}"
+            echo "test_image=fvdb-test-image"
           } >> "$GITHUB_OUTPUT"
 
   build-test-image:

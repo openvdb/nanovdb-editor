@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       image_name:
-        description: "Docker image tag (without registry/user)"
-        default: fvdb-viz-test
+        description: "Docker image repository (without registry)"
+        default: fvdb-test-image
         required: false
         type: string
       torch_version:
@@ -32,7 +32,7 @@ on:
       image_name:
         required: false
         type: string
-        default: fvdb-viz-test
+        default: fvdb-test-image
       torch_version:
         required: false
         type: string
@@ -91,7 +91,8 @@ jobs:
         id: image_lookup
         run: |
           set -euo pipefail
-          IMAGE_REF="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}"
+          CORE_TAG="${FVDB_CORE_VERSION//[^0-9a-zA-Z.-]/-}"
+          IMAGE_REF="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${CORE_TAG}"
           echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
           if docker manifest inspect "${IMAGE_REF}" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"

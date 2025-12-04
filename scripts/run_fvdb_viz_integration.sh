@@ -103,7 +103,7 @@ if [[ -z "${CORE_VERSION_TAG}" ]]; then
 fi
 
 if [[ -z "${FVDB_VIZ_TEST_IMAGE:-}" ]]; then
-  FVDB_VIZ_TEST_IMAGE="fvdb-viz-test-${CORE_VERSION_TAG}"
+  FVDB_VIZ_TEST_IMAGE="fvdb-test-image-${CORE_VERSION_TAG}"
 fi
 
 if [[ -n "$IMAGE_NAME" ]]; then
