@@ -70,12 +70,15 @@ jobs:
     steps:
       - name: Look up cached image
         id: lookup
+        env:
+          GHCR_USER: ${{ secrets.GHCR_PUSH_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN }}
         run: |
           set -euo pipefail
           core_tag="${CORE_VERSION//[^0-9a-zA-Z.-]/-}"
           image_ref="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${core_tag}"
           echo "image_ref=${image_ref}" >> "$GITHUB_OUTPUT"
-          auth="$(printf '%s:%s' '${{ secrets.GHCR_PUSH_USERNAME }}' '${{ secrets.GHCR_PUSH_TOKEN }}' | base64)"
+          auth="$(printf '%s:%s' "${GHCR_USER}" "${GHCR_TOKEN}" | base64)"
           url="https://ghcr.io/v2/${{ github.repository_owner }}/${IMAGE_NAME}/manifests/${core_tag}"
           status=$(curl -sS -o /tmp/manifest.json -w "%{http_code}" \
             -H "Authorization: Basic ${auth}" \
