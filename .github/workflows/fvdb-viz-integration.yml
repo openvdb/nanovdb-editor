@@ -179,8 +179,8 @@ jobs:
       - name: Pull fvdb.viz test image
         run: |
           set -euo pipefail
-          docker pull "${{ needs.build-test-image.outputs.image_ref }}"
-          echo "test_image=${{ needs.build-test-image.outputs.image_ref }}" >> "$GITHUB_ENV"
+          docker pull "${{ needs.lookup-test-image.outputs.image_ref }}"
+          echo "test_image=${{ needs.lookup-test-image.outputs.image_ref }}" >> "$GITHUB_ENV"
 
       - name: Run fvdb.viz tests
         run: |
