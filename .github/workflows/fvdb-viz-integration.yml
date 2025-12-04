@@ -75,37 +75,39 @@ jobs:
       - name: Look up cached image
         id: lookup
         env:
-          DOCKER_CLI_EXPERIMENTAL: enabled
+          GHCR_USER: ${{ secrets.GHCR_PUSH_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN }}
         run: |
           set -euo pipefail
           core_tag="${CORE_VERSION//[^0-9a-zA-Z.-]/-}"
           image_ref="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${core_tag}"
           echo "image_ref=${image_ref}" >> "$GITHUB_OUTPUT"
           echo "Looking up image: ${image_ref}"
-          echo "  Owner: ${{ github.repository_owner }}"
-          echo "  Image name: ${IMAGE_NAME}"
-          echo "  Core version: ${CORE_VERSION}"
-          echo "  Computed tag: ${core_tag}"
 
-          # Use GITHUB_TOKEN with packages:read permission (declared at workflow level)
-          echo "Logging in to ghcr.io with GITHUB_TOKEN..."
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          if [[ -z "${GHCR_USER}" || -z "${GHCR_TOKEN}" ]]; then
+            echo "::warning::GHCR credentials are empty"
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
-          echo "Checking manifest..."
-          if docker manifest inspect "${image_ref}" >/dev/null 2>&1; then
+          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
+          echo "Login successful"
+
+          # Try docker pull instead of manifest inspect (more reliable)
+          echo "Attempting to pull image..."
+          if docker pull "${image_ref}" 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Found cached image ${image_ref}"
+            echo "Successfully pulled cached image ${image_ref}"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "Cached image ${image_ref} not found; build required."
-            echo "Debug output:"
-            docker manifest inspect "${image_ref}" 2>&1 || true
+            echo "Image ${image_ref} not found or not accessible; build required."
 
-            # Also try listing tags to see what's available
+            # Debug: list available tags
             echo ""
-            echo "Attempting to list available tags..."
-            curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-              "https://ghcr.io/v2/${{ github.repository_owner }}/${IMAGE_NAME}/tags/list" 2>&1 || true
+            echo "Listing available tags with skopeo..."
+            docker run --rm quay.io/skopeo/stable list-tags \
+              --creds "${GHCR_USER}:${GHCR_TOKEN}" \
+              "docker://ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}" 2>&1 || true
           fi
 
   build-test-image:
