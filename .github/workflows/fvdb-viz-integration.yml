@@ -67,6 +67,7 @@ jobs:
       torch_index_url: ${{ needs.resolve-fvdb-versions.outputs.torch_index_url }}
       fvdb_core_version: ${{ needs.resolve-fvdb-versions.outputs.core_version }}
       fvdb_core_index_url: ${{ needs.resolve-fvdb-versions.outputs.core_index_url }}
+    secrets: inherit
 
   fvdb-viz-integration:
     name: Run Tests
