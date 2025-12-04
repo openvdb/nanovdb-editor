@@ -85,6 +85,7 @@ jobs:
           FVDB_VIZ_TORCH_INDEX_URL: ${{ env.TORCH_INDEX_URL }}
           FVDB_VIZ_CORE_VERSION: ${{ env.FVDB_CORE_VERSION }}
           FVDB_VIZ_CORE_INDEX_URL: ${{ env.FVDB_CORE_INDEX_URL }}
+          FVDB_VIZ_TEST_IMAGE_SKIP_SAVE: "1"
         run: |
           ./scripts/build_fvdb_viz_test_image.sh
 

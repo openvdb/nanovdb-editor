@@ -133,3 +133,8 @@ fi
 ensure_cache_dir
 build_image
 
+if [[ "${FVDB_VIZ_TEST_IMAGE_SKIP_SAVE:-0}" == "1" ]]; then
+  echo "FVDB_VIZ_TEST_IMAGE_SKIP_SAVE=1; removing ${TAR_PATH} after build."
+  rm -f "${TAR_PATH}" "${META_PATH}"
+fi
+
