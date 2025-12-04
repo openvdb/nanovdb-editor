@@ -16,9 +16,9 @@ float3 read_sh_0(uint64_t sh_0_idx_begin)
     //rgb = float3(sh_0_in[sh_0_idx_begin + 0u],
     //                sh_0_in[sh_0_idx_begin + 1u],
     //                sh_0_in[sh_0_idx_begin + 2u]);
-    rgb = float3(constants.ptr_sh_0[sh_0_idx_begin + 0u],
-                 constants.ptr_sh_0[sh_0_idx_begin + 1u],
-                 constants.ptr_sh_0[sh_0_idx_begin + 2u]);
+    rgb = float3(load_float(constants.ptr_sh_0, sh_0_idx_begin + 0u),
+                 load_float(constants.ptr_sh_0, sh_0_idx_begin + 1u),
+                 load_float(constants.ptr_sh_0, sh_0_idx_begin + 2u));
     return rgb;
 }
 
@@ -31,18 +31,18 @@ float3 read_sh_n(uint64_t sh_n_idx_begin, uint n)
         //rgb = float3(sh_n_in[sh_n_idx_begin + 3u * idx + 0u],
         //             sh_n_in[sh_n_idx_begin + 3u * idx + 1u],
         //             sh_n_in[sh_n_idx_begin + 3u * idx + 2u]);
-        rgb = float3(constants.ptr_sh_n[sh_n_idx_begin + 3u * idx + 0u],
-                     constants.ptr_sh_n[sh_n_idx_begin + 3u * idx + 1u],
-                     constants.ptr_sh_n[sh_n_idx_begin + 3u * idx + 2u]);
+        rgb = float3(load_float(constants.ptr_sh_n, sh_n_idx_begin + 3u * idx + 0u),
+                     load_float(constants.ptr_sh_n, sh_n_idx_begin + 3u * idx + 1u),
+                     load_float(constants.ptr_sh_n, sh_n_idx_begin + 3u * idx + 2u));
     }
     else
     {
         //rgb = float3(sh_n_in[sh_n_idx_begin + idx],
         //             sh_n_in[sh_n_idx_begin + idx + constants.sh_stride],
         //             sh_n_in[sh_n_idx_begin + idx + 2u * constants.sh_stride]);
-        rgb = float3(constants.ptr_sh_n[sh_n_idx_begin + idx],
-                     constants.ptr_sh_n[sh_n_idx_begin + idx + constants.sh_stride],
-                     constants.ptr_sh_n[sh_n_idx_begin + idx + 2u * constants.sh_stride]);
+        rgb = float3(load_float(constants.ptr_sh_n, sh_n_idx_begin + idx),
+                     load_float(constants.ptr_sh_n, sh_n_idx_begin + idx + constants.sh_stride),
+                     load_float(constants.ptr_sh_n, sh_n_idx_begin + idx + 2u * constants.sh_stride));
     }
     return rgb;
 }
@@ -187,7 +187,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     //colors_out[3u * idx + 0u] = color.r;
     //colors_out[3u * idx + 1u] = color.g;
     //colors_out[3u * idx + 2u] = color.b;
-    constants.ptr_colors[3u * uint64_t(idx) + 0u] = color.r;
-    constants.ptr_colors[3u * uint64_t(idx) + 1u] = color.g;
-    constants.ptr_colors[3u * uint64_t(idx) + 2u] = color.b;
+    store_float(constants.ptr_colors, 3u * uint64_t(idx) + 0u, color.r);
+    store_float(constants.ptr_colors, 3u * uint64_t(idx) + 1u, color.g);
+    store_float(constants.ptr_colors, 3u * uint64_t(idx) + 2u, color.b);
 }

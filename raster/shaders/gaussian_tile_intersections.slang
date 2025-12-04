@@ -26,7 +26,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     }
 
     //int radius = radii_in[idx];
-    int radius = constants.ptr_radii[uint64_t(idx)];
+    int radius = load_int(constants.ptr_radii, uint64_t(idx));
     if (radius <= 0)
     {
         return;
@@ -34,7 +34,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     float radiusf = float(radius);
 
     //float2 mean2d = means2d_in[idx];
-    float2 mean2d = constants.ptr_means2d[uint64_t(idx)];
+    float2 mean2d = load_float2(constants.ptr_means2d, uint64_t(idx));
     float tile_radius = radiusf / float(shader_params.tile_size);
     float tile_mean_u = mean2d.x / float(shader_params.tile_size);
     float tile_mean_v = mean2d.y / float(shader_params.tile_size);
@@ -47,14 +47,14 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     tile_max.y = min(max(0, (uint32_t)ceil(tile_mean_v + tile_radius)), constants.num_tiles_h);
 
     //float depth = depths_in[idx];
-    float depth = constants.ptr_depths[uint64_t(idx)];
+    float depth = load_float(constants.ptr_depths, uint64_t(idx));
 
     uint2 key;
     key.x = asuint(depth);
     key.y = 0u;
 
     //uint cur_isect = (idx == 0u) ? 0u : scan_tiles_per_gaussian_in[idx - 1u];
-    uint cur_isect = (idx == 0u) ? 0u : constants.ptr_scan_tiles_per_gaussian[uint64_t(idx) - 1u];
+    uint cur_isect = (idx == 0u) ? 0u : load_uint(constants.ptr_scan_tiles_per_gaussian, uint64_t(idx) - 1u);
     for (int i = tile_min.y; i < tile_max.y; i++)
     {
         for (int j = tile_min.x; j < tile_max.x; j++)
@@ -64,9 +64,9 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
             //intersection_keys_low_out[cur_isect] = key.x;
             //intersection_keys_high_out[cur_isect] = key.y;
             //intersection_vals_out[cur_isect] = idx;
-            constants.ptr_intersection_keys_low[uint64_t(cur_isect)] = key.x;
-            constants.ptr_intersection_keys_high[uint64_t(cur_isect)] = key.y;
-            constants.ptr_intersection_vals[uint64_t(cur_isect)] = idx;
+            store_uint(constants.ptr_intersection_keys_low, uint64_t(cur_isect), key.x);
+            store_uint(constants.ptr_intersection_keys_high, uint64_t(cur_isect), key.y);
+            store_uint(constants.ptr_intersection_vals, uint64_t(cur_isect), idx);
             cur_isect++;
         }
     }

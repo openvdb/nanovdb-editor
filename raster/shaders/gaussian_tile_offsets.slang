@@ -21,7 +21,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     }
 
     //uint tile_start_idx = sorted_intersection_keys_high_in[idx];
-    uint tile_start_idx = constants.ptr_intersection_keys_high[uint64_t(idx)];
+    uint tile_start_idx = load_uint(constants.ptr_intersection_keys_high, uint64_t(idx));
 
     if (idx == 0)
     {
@@ -31,7 +31,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         for (uint i = 0u; i < tile_start_idx + 1u; i++)
         {
             //offsets_out[i] = 0;
-            constants.ptr_tile_offsets[uint64_t(i)] = 0;
+            store_uint(constants.ptr_tile_offsets, uint64_t(i), 0);
         }
     }
     if (idx == constants.n_isects - 1u)
@@ -39,14 +39,14 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         for (uint i = tile_start_idx + 1; i < constants.num_tiles; i++)
         {
             //offsets_out[i] = constants.n_isects;
-            constants.ptr_tile_offsets[uint64_t(i)] = constants.n_isects;
+            store_uint(constants.ptr_tile_offsets, uint64_t(i), constants.n_isects);
         }
     }
 
     if (idx > 0)
     {
         //uint prev_tile_start_idx = sorted_intersection_keys_high_in[idx - 1];
-        uint prev_tile_start_idx = constants.ptr_intersection_keys_high[uint64_t(idx) - 1];
+        uint prev_tile_start_idx = load_uint(constants.ptr_intersection_keys_high, uint64_t(idx) - 1);
 
         if (prev_tile_start_idx == tile_start_idx)
         {
@@ -56,7 +56,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         for (uint i = prev_tile_start_idx + 1; i < tile_start_idx + 1u; i++)
         {
             //offsets_out[i] = idx;
-            constants.ptr_tile_offsets[uint64_t(i)] = idx;
+            store_uint(constants.ptr_tile_offsets, uint64_t(i), idx);
         }
     }
 }
