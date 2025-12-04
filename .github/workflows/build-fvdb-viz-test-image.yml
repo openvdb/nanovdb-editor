@@ -58,7 +58,7 @@ jobs:
     name: Build and Push Test Image
     runs-on: ubuntu-latest
     outputs:
-      image_ref: ${{ steps.build_push.outputs.image_ref }}
+      image_ref: ${{ steps.emit_image_ref.outputs.image_ref }}
     env:
       IMAGE_NAME: ${{ inputs.image_name }}
       TORCH_VERSION: ${{ inputs.torch_version }}
@@ -78,9 +78,6 @@ jobs:
           sudo rm -rf "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}"
           sudo docker image prune --all --force || true
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -88,12 +85,31 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check for existing image
+        id: image_lookup
+        run: |
+          set -euo pipefail
+          IMAGE_REF="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${FVDB_CORE_VERSION//[^0-9a-zA-Z.-]/-}"
+          echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
+          if docker manifest inspect "${IMAGE_REF}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Image ${IMAGE_REF} already exists; skipping build."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Image ${IMAGE_REF} not found; build will proceed."
+          fi
+
+      - name: Set up Docker Buildx
+        if: ${{ steps.image_lookup.outputs.exists != 'true' }}
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and Push
+        if: ${{ steps.image_lookup.outputs.exists != 'true' }}
         timeout-minutes: 30
         id: build_push
         run: |
           set -euo pipefail
-          IMAGE_REF="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${FVDB_CORE_VERSION//[^0-9a-zA-Z.-]/-}"
+          IMAGE_REF="${{ steps.image_lookup.outputs.image_ref }}"
           docker buildx build \
             -f docker/Dockerfile.fvdb_viz_test \
             --build-arg TORCH_VERSION="${TORCH_VERSION}" \
@@ -105,3 +121,10 @@ jobs:
             --progress=plain \
             "${{ github.workspace }}"
           echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
+
+      - name: Emit image ref
+        id: emit_image_ref
+        run: |
+          set -euo pipefail
+          echo "image_ref=${{ steps.image_lookup.outputs.image_ref }}" >> "$GITHUB_OUTPUT"
+
