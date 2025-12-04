@@ -32,7 +32,7 @@ jobs:
     name: Build and Push Test Image
     runs-on: ubuntu-latest
     outputs:
-      image_ref: ${{ steps.image_lookup.outputs.image_ref }}
+      image_ref: ${{ steps.compute_ref.outputs.image_ref }}
     env:
       IMAGE_NAME: ${{ inputs.image_name }}
       TORCH_VERSION: ${{ inputs.torch_version }}
@@ -40,6 +40,15 @@ jobs:
       FVDB_CORE_VERSION: ${{ inputs.fvdb_core_version }}
       FVDB_CORE_INDEX_URL: ${{ inputs.fvdb_core_index_url }}
     steps:
+      - name: Compute image reference
+        id: compute_ref
+        run: |
+          set -euo pipefail
+          core_tag="${FVDB_CORE_VERSION//[^0-9a-zA-Z.-]/-}"
+          image_ref="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${core_tag}"
+          echo "image_ref=${image_ref}" >> "$GITHUB_OUTPUT"
+          echo "Will build and push: ${image_ref}"
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -62,16 +71,14 @@ jobs:
           sudo docker system prune --all --force --volumes || true
 
       - name: Set up Docker Buildx
-        if: ${{ steps.image_lookup.outputs.exists != 'true' }}
         uses: docker/setup-buildx-action@v3
 
       - name: Build and Push
-        if: ${{ steps.image_lookup.outputs.exists != 'true' }}
         timeout-minutes: 30
         id: build_push
         run: |
           set -euo pipefail
-          IMAGE_REF="${{ steps.image_lookup.outputs.image_ref }}"
+          IMAGE_REF="${{ steps.compute_ref.outputs.image_ref }}"
           docker buildx build \
             -f docker/Dockerfile.fvdb_viz_test \
             --build-arg TORCH_VERSION="${TORCH_VERSION}" \
