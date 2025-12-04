@@ -29,7 +29,7 @@ on:
 
 jobs:
   resolve-fvdb-versions:
-    name: Resolve fvdb dependencies
+    name: Resolve fVDB dependencies
     runs-on: ubuntu-latest
     outputs:
       torch_version: ${{ steps.fvdb.outputs.torch_version }}
@@ -139,7 +139,7 @@ jobs:
           docker pull "${{ needs.build-test-image.outputs.image_ref }}"
           echo "test_image=${{ needs.build-test-image.outputs.image_ref }}" >> "$GITHUB_ENV"
 
-      - name: Run fvdb.viz notebook workflow
+      - name: Run fvdb.viz tests
         run: |
           set -euo pipefail
 

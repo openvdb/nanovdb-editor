@@ -79,7 +79,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push fvdb.viz test image
+      - name: Build and Push Image
+        timeout-minutes: 30
         id: build_push
         run: |
           set -euo pipefail
@@ -92,6 +93,7 @@ jobs:
             --build-arg FVDB_CORE_INDEX_URL="${FVDB_CORE_INDEX_URL}" \
             -t "${IMAGE_REF}" \
             --push \
+            --progress=plain \
             "${{ github.workspace }}"
           echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
 

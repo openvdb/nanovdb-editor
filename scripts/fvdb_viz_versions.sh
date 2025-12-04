@@ -5,6 +5,7 @@
 # Central definition for the fvdb viewer dependency versions.
 # Scripts should source this file and use the *_DEFAULT values as fallbacks
 # so that bumping versions only needs to happen in one place.
+# Also used on GitHub Actions workflows to resolve the fVDB dependencies.
 
 FVDB_VIZ_TORCH_VERSION_DEFAULT="2.8.0"
 FVDB_VIZ_TORCH_INDEX_URL_DEFAULT="https://download.pytorch.org/whl/cu128"
