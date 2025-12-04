@@ -37,16 +37,18 @@ env:
 
 jobs:
   build-test-image:
+    name: Build Image
     uses: ./.github/workflows/build-fvdb-viz-test-image.yml
     with:
-      image_name: fvdb-viz-test
+      image_name: ${{ env.FVDB_VIZ_TEST_IMAGE }}
       image_artifact_name: fvdb-viz-test-image
-      torch_version: "2.8.0"
-      torch_index_url: "https://download.pytorch.org/whl/cu128"
-      fvdb_core_version: "0.3.0+pt28.cu128"
-      fvdb_core_index_url: "https://d36m13axqqhiit.cloudfront.net/simple"
+      torch_version: ${{ env.FVDB_VIZ_TORCH_VERSION }}
+      torch_index_url: ${{ env.FVDB_VIZ_TORCH_INDEX_URL }}
+      fvdb_core_version: ${{ env.FVDB_VIZ_CORE_VERSION }}
+      fvdb_core_index_url: ${{ env.FVDB_VIZ_CORE_INDEX_URL }}
 
   fvdb-viz-integration:
+    name: Run Tests
     needs: [build-test-image]
     runs-on: ubuntu-latest
     steps:

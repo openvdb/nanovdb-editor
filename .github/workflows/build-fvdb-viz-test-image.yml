@@ -60,10 +60,11 @@ on:
     outputs:
       image_artifact:
         description: "Name of the uploaded Docker image artifact"
-        value: ${{ jobs.build-and-upload.outputs.image_artifact }}
+        value: ${{ jobs.build-and-upload-image.outputs.image_artifact }}
 
 jobs:
-  build-and-upload:
+  build-and-upload-image:
+    name: Build and Upload fVDB Viz Test Image
     runs-on: ubuntu-latest
     outputs:
       image_artifact: ${{ steps.artifact_metadata.outputs.artifact_name }}
@@ -78,16 +79,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build fvdb.viz test base image
-        env:
-          FVDB_VIZ_TEST_IMAGE: ${{ env.IMAGE_NAME }}
-          FVDB_VIZ_TORCH_VERSION: ${{ env.TORCH_VERSION }}
-          FVDB_VIZ_TORCH_INDEX_URL: ${{ env.TORCH_INDEX_URL }}
-          FVDB_VIZ_CORE_VERSION: ${{ env.FVDB_CORE_VERSION }}
-          FVDB_VIZ_CORE_INDEX_URL: ${{ env.FVDB_CORE_INDEX_URL }}
-          FVDB_VIZ_TEST_IMAGE_SKIP_SAVE: "1"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build fvdb.viz test base image tarball
         run: |
-          ./scripts/build_fvdb_viz_test_image.sh
+          set -euo pipefail
+          mkdir -p .cache
+          docker buildx build \
+            -f docker/Dockerfile.fvdb_viz_test \
+            --build-arg TORCH_VERSION="${TORCH_VERSION}" \
+            --build-arg TORCH_INDEX_URL="${TORCH_INDEX_URL}" \
+            --build-arg FVDB_CORE_VERSION="${FVDB_CORE_VERSION}" \
+            --build-arg FVDB_CORE_INDEX_URL="${FVDB_CORE_INDEX_URL}" \
+            --output "type=tar,dest=.cache/${IMAGE_NAME}.tar" \
+            "${{ github.workspace }}"
 
       - name: Prepare artifact metadata
         id: artifact_metadata
