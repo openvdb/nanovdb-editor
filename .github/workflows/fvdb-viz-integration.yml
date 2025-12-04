@@ -78,6 +78,7 @@ jobs:
       FVDB_VIZ_CORE_VERSION: ${{ needs.resolve-fvdb-versions.outputs.core_version }}
       FVDB_VIZ_CORE_INDEX_URL: ${{ needs.resolve-fvdb-versions.outputs.core_index_url }}
       FVDB_VIZ_SCRIPT_TIMEOUT: ${{ needs.resolve-fvdb-versions.outputs.script_timeout }}
+      FVDB_VIZ_SKIP_BASE_INSTALL: 1
       FVDB_VIZ_TEST_IMAGE: ${{ needs.build-test-image.outputs.image_ref }}
     steps:
       - name: Resolve package selection
@@ -171,6 +172,7 @@ jobs:
             -e FVDB_VIZ_CORE_VERSION="${FVDB_VIZ_CORE_VERSION}" \
             -e FVDB_VIZ_CORE_INDEX_URL="${FVDB_VIZ_CORE_INDEX_URL}" \
             -e FVDB_VIZ_SCRIPT_TIMEOUT="${FVDB_VIZ_SCRIPT_TIMEOUT}" \
+            -e FVDB_VIZ_SKIP_BASE_INSTALL="${FVDB_VIZ_SKIP_BASE_INSTALL}" \
             -e VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json \
             -e VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json \
             -e LP_NUM_THREADS=1 \

@@ -54,8 +54,8 @@ on:
         value: ${{ jobs.build-and-push.outputs.image_ref }}
 
 jobs:
-  build-and-push:
-    name: Build and Push fVDB Viz Test Image
+  build-and-push-image:
+    name: Build and Push Test Image
     runs-on: ubuntu-latest
     outputs:
       image_ref: ${{ steps.build_push.outputs.image_ref }}
@@ -79,7 +79,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push Image
+      - name: Build and Push
         timeout-minutes: 30
         id: build_push
         run: |
