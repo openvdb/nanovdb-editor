@@ -1,7 +1,7 @@
 FROM nvidia/cuda:12.8.1-base-ubuntu24.04
 
 ## Build examples:
-# docker build --progress=plain . --network=host -t nanovdb-editor                                              # Default: nanovdb-editor-dev from PyPI
+# docker build --progress=plain . --network=host -t nanovdb-editor                                              # Default: nanovdb-editor from PyPI
 # docker build --progress=plain . --network=host --build-arg PYPI_PACKAGE=nanovdb-editor-dev -t nanovdb-editor  # Use dev release of nanovdb-editor
 # docker build --progress=plain . --network=host --build-arg USE_LOCAL_WHEEL=true -t nanovdb-editor             # Use local wheel
 # docker build --progress=plain . --network=host --build-arg INSTALL_GRAPHICS_LIBS=false -t nanovdb-editor      # Minimal headless build for CPU encode
@@ -16,9 +16,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 # RUN sed -i 's/archive.ubuntu.com/mirrors.ocf.berkeley.edu/g' /etc/apt/sources.list
 
 # Install Python
-# skipping python3-dev python-is-python3
+# skipping python3-dev python3-venv python-is-python3
 RUN apt-get update && \
-    apt-get install -y python3-pip python3-venv && \
+    apt-get install -y python3-pip && \
     rm -rf /var/lib/apt/lists/*
 #    && \
 #    python -m pip install --upgrade pip
@@ -42,8 +42,21 @@ RUN if [ "$USE_LOCAL_WHEEL" = "true" ]; then \
         pip install --break-system-packages numpy $PYPI_PACKAGE; \
     fi
 
-# Find the nanovdb-editor installation directory and copy run_editor.py
-RUN python3 -c "import nanovdb_editor; import os; import shutil; src = os.path.join(os.path.dirname(nanovdb_editor.__file__), 'run_editor.py'); shutil.copy2(src, './run_editor.py');"
+# Find the nanovdb-editor installation directory and copy run_editor.py when available
+RUN python3 - <<'PY'
+import importlib
+import os
+import shutil
+
+mod = importlib.import_module("nanovdb_editor")
+src = os.path.join(os.path.dirname(mod.__file__), "run_editor.py")
+dst = "./run_editor.py"
+if os.path.exists(src):
+    shutil.copy2(src, dst)
+    print(f"Copied {src} -> {dst}")
+else:
+    print("run_editor.py not present in package; skipping copy")
+PY
 
 EXPOSE 8080
 

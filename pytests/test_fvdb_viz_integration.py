@@ -4,10 +4,45 @@
 import os
 import subprocess
 import sys
-import textwrap
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+VERSIONS_FILE = REPO_ROOT / "scripts" / "fvdb_viz_versions.sh"
+
+
+@lru_cache(maxsize=1)
+def _load_fvdb_defaults() -> dict[str, str]:
+    defaults: dict[str, str] = {}
+    try:
+        content = VERSIONS_FILE.read_text()
+    except FileNotFoundError:
+        return defaults
+
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, raw_value = line.split("=", 1)
+        if not key.endswith("_DEFAULT"):
+            continue
+        value = raw_value.strip()
+        if value.startswith(("'", '"')) and value.endswith(("'", '"')):
+            value = value[1:-1]
+        defaults[key] = value
+
+    return defaults
+
+
+def _default_version(var_name: str, fallback: str) -> str:
+    env_value = os.environ.get(var_name)
+    if env_value:
+        return env_value
+    defaults = _load_fvdb_defaults()
+    return defaults.get(f"{var_name}_DEFAULT", fallback)
 
 
 RUNS_ON_FVDB_VIZ_ENV = os.environ.get("FVDB_VIZ_TESTS") == "1"
@@ -15,84 +50,35 @@ LOCAL_DIST_SPEC = os.environ.get("FVDB_VIZ_LOCAL_DIST")
 
 pytestmark = pytest.mark.skipif(
     not RUNS_ON_FVDB_VIZ_ENV,
-    reason=("Set FVDB_VIZ_TESTS=1 to enable fvdb.viz integration checks " "(runs in CI Docker)."),
+    reason=("Set FVDB_VIZ_TESTS=1 to enable fvdb.viz integration checks"),
 )
 
-TORCH_VERSION = os.environ.get("FVDB_VIZ_TORCH_VERSION", "2.8.0")
-TORCH_INDEX_URL = os.environ.get(
+TORCH_VERSION = _default_version("FVDB_VIZ_TORCH_VERSION", "2.8.0")
+TORCH_INDEX_URL = _default_version(
     "FVDB_VIZ_TORCH_INDEX_URL",
     "https://download.pytorch.org/whl/cu128",
 )
-FVDB_CORE_VERSION = os.environ.get(
+FVDB_CORE_VERSION = _default_version(
     "FVDB_VIZ_CORE_VERSION",
     "0.3.0+pt28.cu128",
 )
-FVDB_CORE_INDEX_URL = os.environ.get(
+FVDB_CORE_INDEX_URL = _default_version(
     "FVDB_VIZ_CORE_INDEX_URL",
     "https://d36m13axqqhiit.cloudfront.net/simple",
 )
-SCRIPT_TIMEOUT = int(os.environ.get("FVDB_VIZ_SCRIPT_TIMEOUT", "300"))
+UPSTREAM_TEST_PATH = Path(__file__).with_name("fvdb_viz_test.py")
 
-_NOTEBOOK_STYLE_SCRIPT = textwrap.dedent(
-    """
-    import sys
-    import webbrowser
 
-    import torch
-
-    webbrowser.open_new_tab = lambda url: None
-
-    import fvdb.viz
-
+def _run(cmd: list[str], env: dict[str, str], **kwargs):
     try:
-        fvdb.viz.init(port=8123, verbose=True)
-    except Exception as exc:
-        print(
-            f\"FVDB_VIZ_INIT_FAILED: {exc}\",
-            file=sys.stderr,
+        subprocess.run(
+            cmd,
+            env=env,
+            check=True,
+            **kwargs,
         )
-        raise
-
-    scene = fvdb.viz.get_scene(\"NotebookScene\")
-
-    points = torch.tensor(
-        [
-            [0.0, 0.0, 0.0],
-            [0.5, 0.2, 0.1],
-            [0.1, 0.6, 0.9],
-        ],
-        dtype=torch.float32,
-    )
-    colors = torch.tensor(
-        [
-            [1.0, 0.2, 0.3],
-            [0.2, 1.0, 0.3],
-            [0.2, 0.3, 1.0],
-        ],
-        dtype=torch.float32,
-    )
-    scene.add_point_cloud(
-        \"sample_points\",
-        points,
-        colors,
-        point_size=3.0,
-    )
-
-    camera_to_world = torch.eye(4).unsqueeze(0)
-    projection = torch.eye(3).unsqueeze(0)
-    scene.add_cameras(
-        \"sample_cameras\",
-        camera_to_world,
-        projection,
-    )
-    scene.set_camera_lookat(
-        torch.tensor([2.0, 2.0, 2.0]),
-        torch.tensor([0.0, 0.0, 0.0]),
-    )
-
-    fvdb.viz.show()
-    """
-)
+    except subprocess.CalledProcessError as exc:  # pragma: no cover
+        raise RuntimeError(f"Command {cmd} failed with code {exc.returncode}") from exc
 
 
 def _venv_bin_path(venv_path: Path, binary: str) -> Path:
@@ -100,68 +86,66 @@ def _venv_bin_path(venv_path: Path, binary: str) -> Path:
     return venv_path / scripts_dir / binary
 
 
-def _run(cmd: list[str], env: dict[str, str], **kwargs):
-    result = subprocess.run(
-        cmd,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-        **kwargs,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(
-            "Command "
-            f"{cmd} failed with code {result.returncode}\\n"
-            f"STDOUT:\\n{result.stdout}\\n"
-            f"STDERR:\\n{result.stderr}"
-        )
-    return result
-
-
 @pytest.fixture(name="fvdb_viz_env", scope="module")
 def _fvdb_viz_env(tmp_path_factory):
-    venv_root = tmp_path_factory.mktemp("fvdb_viz_env")
-    subprocess.run([sys.executable, "-m", "venv", str(venv_root)], check=True)
+    skip_base_setup = os.environ.get("FVDB_VIZ_SKIP_BASE_INSTALL") == "1"
 
     env = os.environ.copy()
     env.setdefault("PIP_DISABLE_PIP_VERSION_CHECK", "1")
     env.setdefault("PYTHONNOUSERSITE", "1")
+    env.setdefault("PYTHONUNBUFFERED", "1")
 
-    python_exe = _venv_bin_path(venv_root, "python")
-    pip_exe = _venv_bin_path(venv_root, "pip")
+    if skip_base_setup:
+        python_exe = sys.executable
+        pip_cmd = [sys.executable, "-m", "pip"]
+        env.setdefault("PIP_BREAK_SYSTEM_PACKAGES", "1")
+    else:
+        venv_root = tmp_path_factory.mktemp("fvdb_viz_env")
+        subprocess.run(
+            [sys.executable, "-m", "venv", str(venv_root)],
+            check=True,
+        )
 
-    _run([str(pip_exe), "install", "--upgrade", "pip"], env=env)
-    _run(
-        [
-            str(pip_exe),
+        python_exe = _venv_bin_path(venv_root, "python")
+        pip_exe = _venv_bin_path(venv_root, "pip")
+        env["VIRTUAL_ENV"] = str(venv_root)
+        env["PATH"] = f"{pip_exe.parent}:{env.get('PATH', '')}"
+        pip_cmd = [str(pip_exe)]
+
+    if not skip_base_setup:
+        _run(pip_cmd + ["install", "--upgrade", "pip"], env=env)
+        _run(pip_cmd + ["install", "pytest", "numpy"], env=env)
+        torch_args = [
             "install",
             f"torch=={TORCH_VERSION}",
-            "--extra-index-url",
-            TORCH_INDEX_URL,
-        ],
-        env=env,
-    )
-    _run(
-        [
-            str(pip_exe),
-            "install",
-            f"fvdb-core=={FVDB_CORE_VERSION}",
-            "--extra-index-url",
-            FVDB_CORE_INDEX_URL,
-        ],
-        env=env,
-    )
+        ]
+        if TORCH_INDEX_URL:
+            torch_args += ["--extra-index-url", TORCH_INDEX_URL]
+        _run(pip_cmd + torch_args, env=env)
+        _run(
+            pip_cmd
+            + [
+                "install",
+                f"fvdb-core=={FVDB_CORE_VERSION}",
+                "--extra-index-url",
+                FVDB_CORE_INDEX_URL,
+            ],
+            env=env,
+        )
 
-    return {"python": python_exe, "pip": pip_exe, "env": env}
+    return {
+        "env": env,
+        "pip_cmd": pip_cmd,
+        "python": python_exe,
+    }
 
 
 def _install_nanovdb_distribution(env_ctx: dict, dist_name: str):
-    pip_exe = env_ctx["pip"]
+    pip_cmd = env_ctx["pip_cmd"]
     env = env_ctx["env"]
     subprocess.run(
         [
-            str(pip_exe),
+            *pip_cmd,
             "uninstall",
             "-y",
             "nanovdb-editor",
@@ -170,22 +154,45 @@ def _install_nanovdb_distribution(env_ctx: dict, dist_name: str):
         env=env,
         check=False,
     )
-    _run([str(pip_exe), "install", dist_name], env=env)
+    _run(pip_cmd + ["install", dist_name], env=env)
+    _log_nanovdb_version(env_ctx)
 
 
-def _run_notebook_script(env_ctx: dict):
+def _log_nanovdb_version(env_ctx: dict):
     python_exe = env_ctx["python"]
     env = env_ctx["env"]
-    proc = subprocess.run(
-        [str(python_exe), "-c", _NOTEBOOK_STYLE_SCRIPT],
+    _run(
+        [
+            str(python_exe),
+            "-c",
+            (
+                "import importlib; "
+                "mod = importlib.import_module('nanovdb_editor'); "
+                "print("
+                "'nanovdb_editor version:', "
+                "getattr(mod, '__version__', 'unknown')"
+                ")"
+            ),
+        ],
         env=env,
-        capture_output=True,
-        text=True,
-        timeout=SCRIPT_TIMEOUT,
-        check=False,
     )
-    if proc.returncode != 0:
-        raise AssertionError("Viewer test failed:\n" f"STDOUT:\n{proc.stdout}\n" f"STDERR:\n{proc.stderr}")
+
+
+def _run_upstream_viz_suite(env_ctx: dict):
+    python_exe = env_ctx["python"]
+    env = env_ctx["env"]
+    cmd = [
+        str(python_exe),
+        "-m",
+        "pytest",
+        str(UPSTREAM_TEST_PATH),
+        "-vv",
+        "-s",
+        "--maxfail=1",
+        "--full-trace",
+        "-rA",
+    ]
+    subprocess.run(cmd, env=env, check=True)
 
 
 @pytest.mark.slow
@@ -195,7 +202,7 @@ def test_fvdb_viz_with_release_package(fvdb_viz_env):
     nanovdb-editor.
     """
     _install_nanovdb_distribution(fvdb_viz_env, "nanovdb-editor")
-    _run_notebook_script(fvdb_viz_env)
+    _run_upstream_viz_suite(fvdb_viz_env)
 
 
 @pytest.mark.slow
@@ -205,13 +212,13 @@ def test_fvdb_viz_with_dev_package(fvdb_viz_env):
     nanovdb-editor-dev.
     """
     _install_nanovdb_distribution(fvdb_viz_env, "nanovdb-editor-dev")
-    _run_notebook_script(fvdb_viz_env)
+    _run_upstream_viz_suite(fvdb_viz_env)
 
 
 @pytest.mark.slow
 @pytest.mark.skipif(
     not LOCAL_DIST_SPEC,
-    reason=("Set FVDB_VIZ_LOCAL_DIST to the local wheel or source path " "to test it."),
+    reason=("Set FVDB_VIZ_LOCAL_DIST to the local wheel or source path to test it."),
 )
 def test_fvdb_viz_with_local_package(fvdb_viz_env):
     """
@@ -227,4 +234,4 @@ def test_fvdb_viz_with_local_package(fvdb_viz_env):
         raise AssertionError(f"FVDB_VIZ_LOCAL_DIST target does not exist: {local_spec}")
 
     _install_nanovdb_distribution(fvdb_viz_env, str(local_spec))
-    _run_notebook_script(fvdb_viz_env)
+    _run_upstream_viz_suite(fvdb_viz_env)

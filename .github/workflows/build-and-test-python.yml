@@ -28,10 +28,11 @@ permissions:
   deployments: write
   pull-requests: read
   issues: read
+  packages: read
+  actions: read
 
 jobs:
   nanovdb-editor-build-python-linux:
-    if: ${{ github.event_name == 'pull_request' }}
     name: Build (Linux)
     runs-on: ubuntu-latest
     defaults:
@@ -102,7 +103,6 @@ jobs:
           ./build.sh
 
   nanovdb-editor-test-docker-linux:
-    if: ${{ github.event_name == 'pull_request' }}
     name: Test Docker (Headless)
     needs: nanovdb-editor-build-python-linux
     runs-on: ubuntu-latest
@@ -154,7 +154,6 @@ jobs:
             fi
 
   nanovdb-editor-test-python-linux:
-    if: ${{ github.event_name == 'pull_request' }}
     name: Test (Linux)
     needs: nanovdb-editor-build-python-linux
     runs-on: ubuntu-latest
@@ -196,7 +195,6 @@ jobs:
           pytest -vvv
 
   nanovdb-editor-build-python-windows:
-    if: ${{ github.event_name == 'pull_request' }}
     name: Build (Windows)
     runs-on: windows-latest
     defaults:
@@ -224,7 +222,6 @@ jobs:
           retention-days: 2
 
   nanovdb-editor-test-python-windows:
-    if: ${{ github.event_name == 'pull_request' }}
     name: Test (Windows)
     needs: nanovdb-editor-build-python-windows
     runs-on: windows-latest
@@ -286,7 +283,6 @@ jobs:
           pytest pytests -vvv --tb=short
 
   nanovdb-editor-build-python-linux-arm:
-    if: ${{ github.event_name == 'pull_request' }}
     # if: github.ref == 'refs/heads/main'
     name: Build (Linux ARM64)
     runs-on: ubuntu-24.04-arm
@@ -323,7 +319,6 @@ jobs:
           retention-days: 2
 
   nanovdb-editor-test-python-linux-arm:
-    if: ${{ github.event_name == 'pull_request' }}
     # if: github.ref == 'refs/heads/main'
     name: Test (Linux ARM64)
     needs: nanovdb-editor-build-python-linux-arm
@@ -358,12 +353,10 @@ jobs:
           python3 -c 'import nanovdb_editor; print("SUCCESS: Module imported on ARM64")'
           pytest pytests -vvv --tb=short --timeout=300 --timeout-method=thread || echo 'Tests completed'
 
-  fvdb-viz:
-    if: ${{ github.event_name == 'pull_request' }}
-    name: FVDB Viewer Integration
-    needs:
-      - nanovdb-editor-build-python-linux
+  fvdb-viz-integration:
+    name: fVDB Integration
+    needs: nanovdb-editor-build-python-linux
     uses: ./.github/workflows/fvdb-viz-integration.yml
-    secrets: inherit
     with:
-      release_wheel_artifact: nanovdb-editor-wheel
+      wheel_artifact: nanovdb-editor-wheel
+    secrets: inherit
