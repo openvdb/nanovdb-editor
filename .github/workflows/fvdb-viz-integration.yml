@@ -191,56 +191,17 @@ jobs:
         run: |
           set -euo pipefail
           docker pull "${{ needs.lookup-test-image.outputs.image_ref }}"
-          echo "test_image=${{ needs.lookup-test-image.outputs.image_ref }}" >> "$GITHUB_ENV"
 
       - name: Run fvdb.viz tests
+        env:
+          FVDB_VIZ_TEST_IMAGE: ${{ needs.lookup-test-image.outputs.image_ref }}
         run: |
           set -euo pipefail
 
+          SCRIPT_ARGS=("--stream" "${{ steps.config.outputs.package_stream }}" "--skip-image-build")
+
           if [[ "${{ steps.config.outputs.use_local }}" == "true" ]]; then
-            PYTEST_EXPR="test_fvdb_viz_with_local_package"
-          elif [[ "${{ steps.config.outputs.package_stream }}" == "dev" ]]; then
-            PYTEST_EXPR="test_fvdb_viz_with_dev_package"
-          else
-            PYTEST_EXPR="test_fvdb_viz_with_release_package"
+            SCRIPT_ARGS+=("--local-wheel" "${{ steps.local_wheel.outputs.host_path }}")
           fi
 
-          LOCAL_DIST_ARGS=()
-          if [[ "${{ steps.config.outputs.use_local }}" == "true" ]]; then
-            LOCAL_DIST_ARGS=(-e "FVDB_VIZ_LOCAL_DIST=${{ steps.local_wheel.outputs.container_path }}")
-          fi
-
-          PYTEST_CMD=$'python3 -m pip install --break-system-packages pytest >/tmp/pip.log 2>&1; '\
-          $'python3 -c "import importlib; mod = importlib.import_module(\'nanovdb_editor\'); '\
-          $'version = getattr(mod, \'__version__\', \'unknown\'); '\
-          $'print(f\'nanovdb_editor version: {version}\')"; '\
-          $'pytest pytests/test_fvdb_viz_integration.py -k "'"${PYTEST_EXPR}"'" -vv -s --maxfail=1 --full-trace -rA; '\
-          $'PYTEST_EXIT=$?; echo "Pytest exit code: $PYTEST_EXIT"; exit $PYTEST_EXIT'
-
-          set +e
-          docker run --rm \
-            -e FVDB_VIZ_TESTS=1 \
-            -e FVDB_VIZ_TORCH_VERSION="${FVDB_VIZ_TORCH_VERSION}" \
-            -e FVDB_VIZ_TORCH_INDEX_URL="${FVDB_VIZ_TORCH_INDEX_URL}" \
-            -e FVDB_VIZ_CORE_VERSION="${FVDB_VIZ_CORE_VERSION}" \
-            -e FVDB_VIZ_CORE_INDEX_URL="${FVDB_VIZ_CORE_INDEX_URL}" \
-            -e FVDB_VIZ_SCRIPT_TIMEOUT="${FVDB_VIZ_SCRIPT_TIMEOUT}" \
-            -e FVDB_VIZ_SKIP_BASE_INSTALL="${FVDB_VIZ_SKIP_BASE_INSTALL}" \
-            -e VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json \
-            -e VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json \
-            -e LP_NUM_THREADS=1 \
-            -e LIBGL_ALWAYS_SOFTWARE=1 \
-            -e GALLIUM_DRIVER=llvmpipe \
-            -e PYTHONUNBUFFERED=1 \
-            "${LOCAL_DIST_ARGS[@]}" \
-            -v "${GITHUB_WORKSPACE}":/workspace \
-            -w /workspace \
-            "${FVDB_VIZ_TEST_IMAGE}" \
-            sh -c "${PYTEST_CMD}"
-          DOCKER_EXIT_CODE=$?
-          set -e
-          echo "Docker exit code: ${DOCKER_EXIT_CODE}"
-          if [[ ${DOCKER_EXIT_CODE} -ne 0 ]]; then
-            echo "::error::fvdb.viz pytest failed with exit code ${DOCKER_EXIT_CODE}"
-            exit ${DOCKER_EXIT_CODE}
-          fi
+          ./scripts/run_fvdb_viz_integration.sh "${SCRIPT_ARGS[@]}"

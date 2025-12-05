@@ -20,6 +20,8 @@ Options:
   -i, --image-name NAME      Override the Docker image tag (default derived
                              from stream, e.g. fvdb-viz-release)
   -f, --force-rebuild        Force a rebuild of the fvdb-viz test image cache
+  --skip-image-build         Skip building/checking the test image (assume it
+                             already exists, useful in CI)
   -h, --help                 Show this help message and exit
 EOF
 }
@@ -32,6 +34,7 @@ PACKAGE_STREAM="release"
 LOCAL_WHEEL=""
 IMAGE_NAME=""
 FORCE_REBUILD="0"
+SKIP_IMAGE_BUILD="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -49,6 +52,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     -f|--force-rebuild)
       FORCE_REBUILD="1"
+      shift 1
+      ;;
+    --skip-image-build)
+      SKIP_IMAGE_BUILD="1"
       shift 1
       ;;
     -h|--help)
@@ -96,6 +103,7 @@ fi
 : "${FVDB_VIZ_CORE_VERSION:=${FVDB_VIZ_CORE_VERSION_DEFAULT}}"
 : "${FVDB_VIZ_CORE_INDEX_URL:=${FVDB_VIZ_CORE_INDEX_URL_DEFAULT}}"
 : "${FVDB_VIZ_SCRIPT_TIMEOUT:=${FVDB_VIZ_SCRIPT_TIMEOUT_DEFAULT}}"
+: "${FVDB_VIZ_SKIP_BASE_INSTALL:=1}"
 
 CORE_VERSION_TAG="${FVDB_VIZ_CORE_VERSION%%+*}"
 if [[ -z "${CORE_VERSION_TAG}" ]]; then
@@ -110,17 +118,21 @@ if [[ -n "$IMAGE_NAME" ]]; then
   FVDB_VIZ_TEST_IMAGE="$IMAGE_NAME"
 fi
 
-echo "Ensuring base fvdb viz test image (${FVDB_VIZ_TEST_IMAGE}) exists (torch index: ${FVDB_VIZ_TORCH_INDEX_URL})"
-(
-  cd "${REPO_ROOT}"
-  FVDB_VIZ_TEST_IMAGE="${FVDB_VIZ_TEST_IMAGE}" \
-  FVDB_VIZ_TORCH_VERSION="${FVDB_VIZ_TORCH_VERSION}" \
-  FVDB_VIZ_TORCH_INDEX_URL="${FVDB_VIZ_TORCH_INDEX_URL}" \
-  FVDB_VIZ_CORE_VERSION="${FVDB_VIZ_CORE_VERSION}" \
-  FVDB_VIZ_CORE_INDEX_URL="${FVDB_VIZ_CORE_INDEX_URL}" \
-  FVDB_VIZ_FORCE_IMAGE_REBUILD="${FORCE_REBUILD}" \
-    ./scripts/build_fvdb_viz_test_image.sh
-)
+if [[ "$SKIP_IMAGE_BUILD" != "1" ]]; then
+  echo "Ensuring base fvdb viz test image (${FVDB_VIZ_TEST_IMAGE}) exists (torch index: ${FVDB_VIZ_TORCH_INDEX_URL})"
+  (
+    cd "${REPO_ROOT}"
+    FVDB_VIZ_TEST_IMAGE="${FVDB_VIZ_TEST_IMAGE}" \
+    FVDB_VIZ_TORCH_VERSION="${FVDB_VIZ_TORCH_VERSION}" \
+    FVDB_VIZ_TORCH_INDEX_URL="${FVDB_VIZ_TORCH_INDEX_URL}" \
+    FVDB_VIZ_CORE_VERSION="${FVDB_VIZ_CORE_VERSION}" \
+    FVDB_VIZ_CORE_INDEX_URL="${FVDB_VIZ_CORE_INDEX_URL}" \
+    FVDB_VIZ_FORCE_IMAGE_REBUILD="${FORCE_REBUILD}" \
+      ./scripts/build_fvdb_viz_test_image.sh
+  )
+else
+  echo "Skipping image build, using existing image: ${FVDB_VIZ_TEST_IMAGE}"
+fi
 
 if [[ "$USE_LOCAL" == "true" ]]; then
   RELATIVE_WHEEL="${LOCAL_WHEEL_ABS#${REPO_ROOT}/}"
@@ -151,12 +163,12 @@ DOCKER_RUN_COMMON=(
   -e "FVDB_VIZ_CORE_VERSION=${FVDB_VIZ_CORE_VERSION}"
   -e "FVDB_VIZ_CORE_INDEX_URL=${FVDB_VIZ_CORE_INDEX_URL}"
   -e "FVDB_VIZ_SCRIPT_TIMEOUT=${FVDB_VIZ_SCRIPT_TIMEOUT}"
+  -e "FVDB_VIZ_SKIP_BASE_INSTALL=${FVDB_VIZ_SKIP_BASE_INSTALL}"
   -e "VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json"
   -e "VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json"
   -e "LP_NUM_THREADS=1"
   -e "LIBGL_ALWAYS_SOFTWARE=1"
   -e "GALLIUM_DRIVER=llvmpipe"
-  -e "FVDB_VIZ_SKIP_BASE_INSTALL=1"
   -e "PYTHONUNBUFFERED=1"
   -v "${REPO_ROOT}:/workspace"
   -w /workspace
