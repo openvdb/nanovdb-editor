@@ -117,7 +117,7 @@ if [[ "${FORCE_REBUILD}" == "1" ]]; then
 fi
 
 if image_exists; then
-  echo "Docker image ${IMAGE_NAME} already available. Force deleting the image with force_rebuild."
+  echo "Docker image ${IMAGE_NAME} already available. Use --force-rebuild to recreate it."
   exit 0
 fi
 
