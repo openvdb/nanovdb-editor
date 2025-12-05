@@ -213,6 +213,41 @@ With GDB:
 gdb -p <PID>
 ```
 
+## fvdb.viz Integration Tests
+
+We keep the Vulkan headless FVDB viewer validated in both CI and local development by sharing a cached Docker image and integration suite.
+
+### Local workflow
+
+`./scripts/run_fvdb_viz_integration.sh` mirrors the GitHub Actions job:
+
+```sh
+# Run release package tests (default)
+./scripts/run_fvdb_viz_integration.sh
+
+# Force rebuild the cached Docker image
+./scripts/run_fvdb_viz_integration.sh --force-rebuild
+
+# Validate the dev PyPI stream
+./scripts/run_fvdb_viz_integration.sh --stream dev
+
+# Smoke-test a locally built wheel
+./scripts/run_fvdb_viz_integration.sh --local-wheel pymodule/dist/nanovdb_editor-*.whl
+```
+
+Highlights:
+- Ensures (and caches) the `fvdb-test-image-<fvdb-core-version>` Docker image (for example, `fvdb-test-image-0.3.0`) with matching Torch/fvdb-core versions.
+- Prints the installed `nanovdb_editor` version inside the container before running `pytests/test_fvdb_viz_integration.py -vv -s --full-trace`.
+- Accepts `--force-rebuild` to bypass the local `.cache` tarball when you need a fresh base image.
+
+### CI workflow
+
+`.github/workflows/fvdb-viz-integration.yml` runs on `workflow_dispatch` or `workflow_call` and:
+- Resolves the package stream (release/dev) plus optional wheel artifact.
+- Restores a cached Docker image package with installed latest `fvdb-core` before building and executes the same pytest selector in Docker.
+
+Use the workflow dispatch inputs in GitHub Actions to pick the stream or supply a wheel artifact.
+
 ## NanoVDB Editor GUI
 
 ### Shader Parameters

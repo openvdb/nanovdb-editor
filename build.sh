@@ -217,7 +217,7 @@ function run_tests() {
     fi
 
     ctest --test-dir $BUILD_DIR_CONFIG/gtests -C $CONFIG --output-on-failure $VERBOSE
-    pytest -vvv
+    pytest -vvv pytests
 }
 
 if $python_only; then

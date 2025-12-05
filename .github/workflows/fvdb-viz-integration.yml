@@ -1,0 +1,207 @@
+name: fVDB Viewer Integration
+
+permissions:
+  contents: read
+  packages: read
+  actions: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "Package stream to validate"
+        required: true
+        type: choice
+        default: release
+        options:
+          - release
+          - dev
+  workflow_call:
+    inputs:
+      package:
+        description: "Package stream to validate (release/dev)"
+        required: false
+        type: string
+        default: release
+      wheel_artifact:
+        description: "Artifact name for the wheel to test"
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  resolve-fvdb-versions:
+    name: Resolve fVDB Versions
+    runs-on: ubuntu-latest
+    outputs:
+      torch_version: ${{ steps.fvdb.outputs.torch_version }}
+      torch_index_url: ${{ steps.fvdb.outputs.torch_index_url }}
+      core_version: ${{ steps.fvdb.outputs.core_version }}
+      core_index_url: ${{ steps.fvdb.outputs.core_index_url }}
+      script_timeout: ${{ steps.fvdb.outputs.script_timeout }}
+      test_image: ${{ steps.fvdb.outputs.test_image }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Export fvdb defaults
+        id: fvdb
+        run: |
+          set -euo pipefail
+          source scripts/fvdb_viz_versions.sh
+          core_tag="${FVDB_VIZ_CORE_VERSION_DEFAULT%%+*}"
+          {
+            echo "torch_version=${FVDB_VIZ_TORCH_VERSION_DEFAULT}"
+            echo "torch_index_url=${FVDB_VIZ_TORCH_INDEX_URL_DEFAULT}"
+            echo "core_version=${FVDB_VIZ_CORE_VERSION_DEFAULT}"
+            echo "core_index_url=${FVDB_VIZ_CORE_INDEX_URL_DEFAULT}"
+            echo "script_timeout=${FVDB_VIZ_SCRIPT_TIMEOUT_DEFAULT}"
+            echo "test_image=fvdb-test-image"
+          } >> "$GITHUB_OUTPUT"
+
+  lookup-test-image:
+    name: Check Image Exists
+    needs: resolve-fvdb-versions
+    runs-on: ubuntu-latest
+    outputs:
+      exists: ${{ steps.lookup.outputs.exists }}
+      image_ref: ${{ steps.lookup.outputs.image_ref }}
+    env:
+      IMAGE_NAME: ${{ needs.resolve-fvdb-versions.outputs.test_image }}
+      CORE_VERSION: ${{ needs.resolve-fvdb-versions.outputs.core_version }}
+    steps:
+      - name: Look up cached image
+        id: lookup
+        env:
+          GHCR_USER: ${{ secrets.GHCR_PUSH_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN }}
+        run: |
+          set -euo pipefail
+          core_tag="${CORE_VERSION//[^0-9a-zA-Z.-]/-}"
+          image_ref="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${core_tag}"
+          echo "image_ref=${image_ref}" >> "$GITHUB_OUTPUT"
+
+          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin >/dev/null 2>&1
+
+          if docker manifest inspect "${image_ref}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Found cached image: ${image_ref}"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Image not found, build required: ${image_ref}"
+          fi
+
+  build-test-image:
+    name: Build Image
+    needs: [resolve-fvdb-versions, lookup-test-image]
+    if: ${{ needs.lookup-test-image.outputs.exists != 'true' }}
+    uses: ./.github/workflows/build-fvdb-viz-test-image.yml
+    with:
+      image_name: ${{ needs.resolve-fvdb-versions.outputs.test_image }}
+      torch_version: ${{ needs.resolve-fvdb-versions.outputs.torch_version }}
+      torch_index_url: ${{ needs.resolve-fvdb-versions.outputs.torch_index_url }}
+      fvdb_core_version: ${{ needs.resolve-fvdb-versions.outputs.core_version }}
+      fvdb_core_index_url: ${{ needs.resolve-fvdb-versions.outputs.core_index_url }}
+    secrets: inherit
+
+  run-integration-tests:
+    name: Run Tests
+    needs: [resolve-fvdb-versions, lookup-test-image, build-test-image]
+    # Run even if build-test-image was skipped (image already exists)
+    if: ${{ !cancelled() && !failure() }}
+    runs-on: ubuntu-latest
+    env:
+      FVDB_VIZ_TORCH_VERSION: ${{ needs.resolve-fvdb-versions.outputs.torch_version }}
+      FVDB_VIZ_TORCH_INDEX_URL: ${{ needs.resolve-fvdb-versions.outputs.torch_index_url }}
+      FVDB_VIZ_CORE_VERSION: ${{ needs.resolve-fvdb-versions.outputs.core_version }}
+      FVDB_VIZ_CORE_INDEX_URL: ${{ needs.resolve-fvdb-versions.outputs.core_index_url }}
+      FVDB_VIZ_SCRIPT_TIMEOUT: ${{ needs.resolve-fvdb-versions.outputs.script_timeout }}
+      FVDB_VIZ_SKIP_BASE_INSTALL: 1
+      FVDB_VIZ_TEST_IMAGE: ${{ needs.lookup-test-image.outputs.image_ref }}
+    steps:
+      - name: Resolve package selection
+        id: config
+        run: |
+          set -euo pipefail
+          stream="${{ inputs.package }}"
+          stream="${stream,,}"
+          if [[ -z "$stream" ]]; then
+            stream="release"
+          fi
+          if [[ "$stream" != "release" && "$stream" != "dev" ]]; then
+            echo "Unsupported package stream: $stream" >&2
+            exit 1
+          fi
+          use_local="false"
+          if [[ "${{ inputs.wheel_artifact }}" != "" ]]; then
+            use_local="true"
+          fi
+          {
+            echo "package_stream=$stream"
+            echo "use_local=$use_local"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_PUSH_USERNAME }}
+          password: ${{ secrets.GHCR_PUSH_TOKEN }}
+
+      - name: Prepare wheel directory
+        run: |
+          rm -rf pymodule/dist
+          mkdir -p pymodule/dist
+
+      - name: Download wheel artifact
+        if: ${{ inputs.wheel_artifact != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.wheel_artifact }}
+          path: pymodule/dist
+
+      - name: Locate local wheel artifact
+        if: ${{ steps.config.outputs.use_local == 'true' }}
+        id: local_wheel
+        run: |
+          set -euo pipefail
+          wheel_path=$(python -c "import pathlib, sys; dist = pathlib.Path('pymodule') / 'dist'; matches = sorted(dist.glob('nanovdb_editor*.whl')); sys.stdout.write(str(matches[0]) if matches else ''); sys.exit(0 if matches else 1)")
+          if [[ -z "$wheel_path" ]]; then
+            echo 'No nanovdb_editor*.whl found in pymodule/dist' >&2
+            exit 1
+          fi
+          echo "host_path=${wheel_path}" >> "$GITHUB_OUTPUT"
+          echo "container_path=/workspace/${wheel_path}" >> "$GITHUB_OUTPUT"
+
+      - name: Free disk space
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/lib/jvm
+          sudo rm -rf "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}"
+          sudo apt-get clean
+          sudo docker system prune --all --force --volumes || true
+
+      - name: Pull fvdb.viz test image
+        run: |
+          set -euo pipefail
+          docker pull "${{ needs.lookup-test-image.outputs.image_ref }}"
+
+      - name: Run fvdb.viz tests
+        env:
+          FVDB_VIZ_TEST_IMAGE: ${{ needs.lookup-test-image.outputs.image_ref }}
+        run: |
+          set -euo pipefail
+
+          SCRIPT_ARGS=("--stream" "${{ steps.config.outputs.package_stream }}" "--skip-image-build")
+
+          if [[ "${{ steps.config.outputs.use_local }}" == "true" ]]; then
+            SCRIPT_ARGS+=("--local-wheel" "${{ steps.local_wheel.outputs.host_path }}")
+          fi
+
+          ./scripts/run_fvdb_viz_integration.sh "${SCRIPT_ARGS[@]}"

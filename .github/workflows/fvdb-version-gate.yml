@@ -1,0 +1,27 @@
+name: FVDB Version Gate
+
+on:
+  workflow_call:
+    outputs:
+      compatible:
+        description: "True if current VERSION.txt satisfies fvdb requirement"
+        value: ${{ jobs.evaluate.outputs.compatible }}
+
+jobs:
+  evaluate:
+    name: Check fVDB dependency constraint
+    runs-on: ubuntu-latest
+    outputs:
+      compatible: ${{ steps.requirement.outputs.compatible }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Evaluate fvdb-reality-capture requirement
+        id: requirement
+        run: python scripts/check_fvdb_version_compatibility.py
+

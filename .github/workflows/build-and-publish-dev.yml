@@ -17,6 +17,9 @@ on:
         default: false
 
 jobs:
+  check_fvdb_requirement:
+    uses: ./.github/workflows/fvdb-version-gate.yml
+
   build:
     name: Build wheels and sdist
     if: ${{ !inputs.skip_build }}
@@ -44,3 +47,13 @@ jobs:
         password: ${{ secrets.PYPI_API_TOKEN }}
         verbose: true
         skip-existing: true
+
+  verify_dev_package:
+    name: Verify fvdb viewer integration (dev)
+    needs:
+      - upload_pypi_dev
+      - check_fvdb_requirement
+    if: ${{ needs.upload_pypi_dev.result == 'success' && needs.check_fvdb_requirement.outputs.compatible == 'true' }}
+    uses: ./.github/workflows/fvdb-viz-integration.yml
+    with:
+      package: dev
