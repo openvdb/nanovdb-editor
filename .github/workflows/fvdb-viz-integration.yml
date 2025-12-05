@@ -176,6 +176,17 @@ jobs:
           echo "host_path=${wheel_path}" >> "$GITHUB_OUTPUT"
           echo "container_path=/workspace/${wheel_path}" >> "$GITHUB_OUTPUT"
 
+      - name: Free disk space
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/lib/jvm
+          sudo rm -rf "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}"
+          sudo apt-get clean
+          sudo docker system prune --all --force --volumes || true
+
       - name: Pull fvdb.viz test image
         run: |
           set -euo pipefail
