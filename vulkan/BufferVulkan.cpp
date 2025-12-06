@@ -107,7 +107,7 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
 
     VkMemoryRequirements bufMemReq = bufMemReq2.memoryRequirements;
 
-    printf("memReq size(%zu) alignment(%zu) memTypeBits(%d)\n", bufMemReq.size, bufMemReq.alignment, bufMemReq.memoryTypeBits);
+    //printf("memReq size(%zu) alignment(%zu) memTypeBits(%d)\n", bufMemReq.size, bufMemReq.alignment, bufMemReq.memoryTypeBits);
 
     uint32_t bufMemType = 0u;
     uint32_t bufMemType_sysmem = 0u;
