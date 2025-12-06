@@ -438,7 +438,7 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
     constants.n_isects = total_count;
     constants.isects_grid_dim_x = isect_grid_dim.x;
 
-    printf("raster_2d total_intersections(%u)\n", total_count);
+    //printf("raster_2d total_intersections(%u)\n", total_count);
 
     compute_interface->destroy_buffer(context, constant_buffer);
     buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT;
