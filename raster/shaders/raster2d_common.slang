@@ -77,14 +77,12 @@ struct ptr_uint_t
 };
 uint load_uint(uint64_t ptr_raw, uint64_t idx)
 {
-    ptr_raw = ptr_raw + 4u * idx;
-    ptr_uint_t ptr = reinterpret<ptr_uint_t>(ptr_raw);
+    ptr_uint_t ptr = reinterpret<ptr_uint_t>(ptr_raw + 4u * idx);
     return *ptr.ptr;
 }
 void store_uint(uint64_t ptr_raw, uint64_t idx, uint val)
 {
-    ptr_raw = ptr_raw + 4u * idx;
-    ptr_uint_t ptr = reinterpret<ptr_uint_t>(ptr_raw);
+    ptr_uint_t ptr = reinterpret<ptr_uint_t>(ptr_raw + 4u * idx);
     *ptr.ptr = val;
 }
 
@@ -94,14 +92,12 @@ struct ptr_int_t
 };
 int load_int(uint64_t ptr_raw, uint64_t idx)
 {
-    ptr_raw = ptr_raw + 4u * idx;
-    ptr_int_t ptr = reinterpret<ptr_int_t>(ptr_raw);
+    ptr_int_t ptr = reinterpret<ptr_int_t>(ptr_raw + 4u * idx);
     return *ptr.ptr;
 }
 void store_int(uint64_t ptr_raw, uint64_t idx, int val)
 {
-    ptr_raw = ptr_raw + 4u * idx;
-    ptr_int_t ptr = reinterpret<ptr_int_t>(ptr_raw);
+    ptr_int_t ptr = reinterpret<ptr_int_t>(ptr_raw + 4u * idx);
     *ptr.ptr = val;
 }
 
@@ -111,14 +107,12 @@ struct ptr_float_t
 };
 float load_float(uint64_t ptr_raw, uint64_t idx)
 {
-    ptr_raw = ptr_raw + 4u * idx;
-    ptr_float_t ptr = reinterpret<ptr_float_t>(ptr_raw);
+    ptr_float_t ptr = reinterpret<ptr_float_t>(ptr_raw + 4u * idx);
     return *ptr.ptr;
 }
 void store_float(uint64_t ptr_raw, uint64_t idx, float val)
 {
-    ptr_raw = ptr_raw + 4u * idx;
-    ptr_float_t ptr = reinterpret<ptr_float_t>(ptr_raw);
+    ptr_float_t ptr = reinterpret<ptr_float_t>(ptr_raw + 4u * idx);
     *ptr.ptr = val;
 }
 
@@ -128,13 +122,11 @@ struct ptr_float2_t
 };
 float2 load_float2(uint64_t ptr_raw, uint64_t idx)
 {
-    ptr_raw = ptr_raw + 8u * idx;
-    ptr_float2_t ptr = reinterpret<ptr_float2_t>(ptr_raw);
+    ptr_float2_t ptr = reinterpret<ptr_float2_t>(ptr_raw + 8u * idx);
     return *ptr.ptr;
 }
 void store_float2(uint64_t ptr_raw, uint64_t idx, float2 val)
 {
-    ptr_raw = ptr_raw + 8u * idx;
-    ptr_float2_t ptr = reinterpret<ptr_float2_t>(ptr_raw);
+    ptr_float2_t ptr = reinterpret<ptr_float2_t>(ptr_raw + 8u * idx);
     *ptr.ptr = val;
 }
