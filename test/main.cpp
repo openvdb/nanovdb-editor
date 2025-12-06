@@ -191,6 +191,51 @@ void test_image_2d(pnanovdb_editor_t* editor,
     printf("Image2d '%s' added to scene\n", image_name);
 }
 
+#define TEST_LARGE_BUFFER
+
+void test_large_buffer(pnanovdb_compute_t* compute,
+                      pnanovdb_compute_device_t* device)
+{
+    pnanovdb_raster_t raster = {};
+    pnanovdb_raster_load(&raster, compute);
+
+    pnanovdb_uint64_t element_count = 1024llu * 1024llu * 1024llu;
+
+    pnanovdb_compute_array_t* arr = compute->create_array(8u, element_count, nullptr);
+    pnanovdb_uint64_t* mapped = (pnanovdb_uint64_t*)compute->map_array(arr);
+    for (pnanovdb_uint64_t idx = 0u; idx < element_count; idx++)
+    {
+        mapped[idx] = idx;
+    }
+    compute->unmap_array(arr);
+
+    pnanovdb_compute_queue_t* queue = compute->device_interface.get_device_queue(device);
+
+    pnanovdb_uint64_t mismatch_count = 0u;
+
+    pnanovdb_compute_array_t* dst = raster.upload_and_readback_array(compute, queue, arr);
+    mapped = (pnanovdb_uint64_t*)compute->map_array(dst);
+    for (pnanovdb_uint64_t idx = 0u; idx < element_count; idx++)
+    {
+        if (mapped[idx] != idx)
+        {
+            mismatch_count++;
+        }
+        if (element_count - idx < 16u)
+        {
+            printf("mapped[%zu] = %zu\n", idx, mapped[idx]);
+        }
+    }
+    compute->unmap_array(dst);
+
+    printf("test_larger_buffer mismatch_count(%zu) of count(%zu)\n", mismatch_count, element_count);
+
+    compute->destroy_array(arr);
+    compute->destroy_array(dst);
+
+    pnanovdb_raster_free(&raster);
+}
+
 int main(int argc, char* argv[])
 {
     auto args = argparse::parse<NanoVDBEditorArgs>(argc, argv);
@@ -218,6 +263,11 @@ int main(int argc, char* argv[])
 
     pnanovdb_fileformat_t fileformat = {};
     pnanovdb_fileformat_load(&fileformat, &compute);
+
+#ifdef TEST_LARGE_BUFFER
+    test_large_buffer(&compute, device);
+    return 0;
+#endif
 
 #if defined(TEST_EDITOR) || defined(TEST_EDITOR_START_STOP)
     pnanovdb_compute_array_t* data_nanovdb = compute.load_nanovdb(nvdb_filepath);

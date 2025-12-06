@@ -492,6 +492,8 @@ pnanovdb_compute_device_t* createDevice(pnanovdb_compute_device_manager_t* devic
 
         PNANOVDB_VULKAN_TRY_ENABLE_FEATURE(shaderStorageImageWriteWithoutFormat)
         PNANOVDB_VULKAN_TRY_ENABLE_FEATURE(shaderInt64)
+        PNANOVDB_VULKAN_TRY_ENABLE_FEATURE(sparseBinding)
+        PNANOVDB_VULKAN_TRY_ENABLE_FEATURE(sparseResidencyBuffer)
 
 #undef PNANOVDB_VULKAN_TRY_ENABLE_FEATURE
 
@@ -505,6 +507,12 @@ pnanovdb_compute_device_t* createDevice(pnanovdb_compute_device_manager_t* devic
     // get properties
     instanceLoader->vkGetPhysicalDeviceProperties(ptr->physicalDevice, &ptr->physicalDeviceProperties);
     instanceLoader->vkGetPhysicalDeviceMemoryProperties(ptr->physicalDevice, &ptr->memoryProperties);
+
+    for (uint32_t i = 0u; i < ptr->memoryProperties.memoryTypeCount; i++)
+    {
+        uint32_t propertyFlags = ptr->memoryProperties.memoryTypes[i].propertyFlags;
+        printf("Vulkan memory[%d] propertyFlags(%d)\n", i, propertyFlags);
+    }
 
     // get graphics queue
     deviceLoader->vkGetDeviceQueue(ptr->vulkanDevice, ptr->graphicsQueueFamilyIdx, 0u, &ptr->graphicsQueueVk);

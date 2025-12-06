@@ -170,6 +170,10 @@ typedef struct pnanovdb_raster_t
                                                                   pnanovdb_raster_gaussian_data_t** gaussian_data,
                                                                   pnanovdb_raster_shader_params_t* raster_params,
                                                                   pnanovdb_raster_context_t** raster_context);
+
+    pnanovdb_compute_array_t*(PNANOVDB_ABI* upload_and_readback_array)(const pnanovdb_compute_t* compute,
+                                                                       pnanovdb_compute_queue_t* queue,
+                                                                       pnanovdb_compute_array_t* src);
 } pnanovdb_raster_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_raster_t
@@ -186,6 +190,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(raster_file, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(raster_to_nanovdb_from_arrays, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(create_gaussian_data_from_arrays, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(create_gaussian_data_from_desc, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(upload_and_readback_array, 0, 0)
 PNANOVDB_REFLECT_POINTER(pnanovdb_compute_t, compute, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
