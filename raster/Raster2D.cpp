@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <vector>
+#include <atomic>
 
 namespace pnanovdb_raster
 {
@@ -485,6 +486,22 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
         {
             buf_desc.size_in_bytes *= 2u;
         }
+
+        //if (ctx->max_isects_bytes == 0llu)
+        //{
+        //    ctx->max_isects_bytes = 2u * 1024llu * 1024llu * 1024llu;
+        //}
+
+        // make isect buffers effectively grow only
+        if (buf_desc.size_in_bytes > ctx->max_isects_bytes)
+        {
+            ctx->max_isects_bytes = buf_desc.size_in_bytes;
+        }
+        if (buf_desc.size_in_bytes < ctx->max_isects_bytes)
+        {
+            buf_desc.size_in_bytes = ctx->max_isects_bytes;
+        }
+
         pnanovdb_compute_buffer_t* intersection_keys_low_buffer =
             compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
         pnanovdb_compute_buffer_t* intersection_keys_high_buffer =
