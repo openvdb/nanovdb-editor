@@ -18,7 +18,6 @@
 #include <stdlib.h>
 #include <math.h>
 #include <vector>
-#include <atomic>
 
 namespace pnanovdb_raster
 {
