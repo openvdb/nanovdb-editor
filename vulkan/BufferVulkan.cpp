@@ -89,7 +89,9 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
     }
 
     bool isSparse = bufCreateInfo.size > sparse_threshold &&
-        ptr->memory_type == PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE;
+        ptr->memory_type == PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE &&
+        context->deviceQueue->device->enabledFeatures.sparseBinding &&
+        context->deviceQueue->device->enabledFeatures.sparseResidencyBuffer;
     if (isSparse)
     {
         bufCreateInfo.flags |= VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
@@ -243,7 +245,8 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
                 ptr->sparseBinds[mem_idx].memoryOffset = 0;
             }
 
-            printf("SparseBuffer mem_count(%zu) bufMemAllocInfo.memoryTypeIndex(%d)\n", mem_count, bufMemAllocInfo.memoryTypeIndex);
+            context->deviceQueue->device->logPrint(
+                PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "SparseBuffer mem_count(%zu) bufMemAllocInfo.memoryTypeIndex(%d)\n", mem_count, bufMemAllocInfo.memoryTypeIndex);
 
             VkSparseBufferMemoryBindInfo bufBindInfo = {};
             bufBindInfo.buffer = ptr->bufferVk;
