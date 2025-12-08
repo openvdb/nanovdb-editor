@@ -508,12 +508,6 @@ pnanovdb_compute_device_t* createDevice(pnanovdb_compute_device_manager_t* devic
     instanceLoader->vkGetPhysicalDeviceProperties(ptr->physicalDevice, &ptr->physicalDeviceProperties);
     instanceLoader->vkGetPhysicalDeviceMemoryProperties(ptr->physicalDevice, &ptr->memoryProperties);
 
-    for (uint32_t i = 0u; i < ptr->memoryProperties.memoryTypeCount; i++)
-    {
-        uint32_t propertyFlags = ptr->memoryProperties.memoryTypes[i].propertyFlags;
-        printf("Vulkan memory[%d] propertyFlags(%d)\n", i, propertyFlags);
-    }
-
     // get graphics queue
     deviceLoader->vkGetDeviceQueue(ptr->vulkanDevice, ptr->graphicsQueueFamilyIdx, 0u, &ptr->graphicsQueueVk);
 
