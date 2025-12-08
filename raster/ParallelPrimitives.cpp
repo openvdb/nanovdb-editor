@@ -99,6 +99,7 @@ static pnanovdb_parallel_primitives_context_t* create_context(const pnanovdb_com
     pnanovdb_compiler_settings_t compile_settings = {};
     pnanovdb_compiler_settings_init(&compile_settings);
 
+#if 0
     pnanovdb_util::ThreadPool pool;
     std::vector<std::future<bool>> futures;
 
@@ -121,6 +122,16 @@ static pnanovdb_parallel_primitives_context_t* create_context(const pnanovdb_com
             return nullptr;
         }
     }
+#else
+    for (pnanovdb_uint32_t idx = 0u; idx < shader_count; idx++)
+    {
+        ctx->shader_ctx[idx] = compute->create_shader_context(s_shader_names[idx]);
+        if (!compute->init_shader(compute, queue, ctx->shader_ctx[idx], &compile_settings) == PNANOVDB_TRUE)
+        {
+            return nullptr;
+        }
+    }
+#endif
 
     return cast(ctx);
 }

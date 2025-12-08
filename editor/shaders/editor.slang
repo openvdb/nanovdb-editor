@@ -283,6 +283,7 @@ float4 ray_march_nanovdb_leaf_fetch_float_trilinear(pnanovdb_grid_type_t grid_ty
 {
     TrilinearWeights tw = compute_trilinear_weights(pos, ijk_offset);
 
+#if 0
     if (grid_type == PNANOVDB_GRID_TYPE_FLOAT)
     {
         pnanovdb_leaf_handle_t leaf = acc.leaf;
@@ -303,6 +304,7 @@ float4 ray_march_nanovdb_leaf_fetch_float_trilinear(pnanovdb_grid_type_t grid_ty
         }
         return levelset_to_color(value);
     }
+#endif
 
     float4 value = float4(0.f, 0.f, 0.f, 0.f);
     [unroll]

@@ -45,6 +45,7 @@ pnanovdb_raster_context_t* create_context(const pnanovdb_compute_t* compute, pna
     pnanovdb_compiler_settings_t compile_settings = {};
     pnanovdb_compiler_settings_init(&compile_settings);
 
+#if 0
     pnanovdb_util::ThreadPool pool;
     std::vector<std::future<bool>> futures;
 
@@ -67,6 +68,16 @@ pnanovdb_raster_context_t* create_context(const pnanovdb_compute_t* compute, pna
             return nullptr;
         }
     }
+#else
+    for (pnanovdb_uint32_t idx = 0u; idx < shader_count; idx++)
+    {
+        ctx->shader_ctx[idx] = compute->create_shader_context(s_shader_names[idx]);
+        if (!compute->init_shader(compute, queue, ctx->shader_ctx[idx], &compile_settings) == PNANOVDB_TRUE)
+        {
+            return nullptr;
+        }
+    }
+#endif
 
     return cast(ctx);
 }
