@@ -45,7 +45,7 @@ pnanovdb_raster_context_t* create_context(const pnanovdb_compute_t* compute, pna
     pnanovdb_compiler_settings_t compile_settings = {};
     pnanovdb_compiler_settings_init(&compile_settings);
 
-#if 0
+#if 1
     pnanovdb_util::ThreadPool pool;
     std::vector<std::future<bool>> futures;
 

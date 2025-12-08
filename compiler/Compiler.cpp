@@ -12,8 +12,13 @@
 #include "Compiler.h"
 #include "SlangCompiler.h"
 
+#include <mutex>
+
 namespace pnanovdb_compiler
 {
+
+std::mutex g_slang_mutex;
+
 // userdata are include paths, function should return single include path and leave userdata with remaining include
 // paths path is the base path prepended to the include path
 pnanovdb_compute_shader_get_source_t get_source_include = [](void* userdata, const char* path) -> const char*
@@ -90,7 +95,13 @@ pnanovdb_bool_t compile_file(pnanovdb_compiler_instance_t* instance,
         }
     }
 
-    auto compilerPtr = cast(instance ? instance : create_instance());
+    SlangCompiler* compilerPtr = cast(instance);
+    if (!compilerPtr)
+    {
+        std::lock_guard<std::mutex> lock(g_slang_mutex);
+
+        compilerPtr = cast(create_instance());
+    }
 
     pnanovdb_compute_shader_source_t source = {};
     source.source = nullptr;
@@ -102,6 +113,8 @@ pnanovdb_bool_t compile_file(pnanovdb_compiler_instance_t* instance,
 
     if (!instance)
     {
+        std::lock_guard<std::mutex> lock(g_slang_mutex);
+
         destroy_instance(cast(compilerPtr));
     }
 
