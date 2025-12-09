@@ -476,24 +476,21 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
 
     if (total_count != 0u)
     {
+        pnanovdb_uint64_t max_isects_count = ctx->max_isects_count;
+        if (total_count > max_isects_count)
+        {
+            max_isects_count = total_count;
+            ctx->max_isects_count = max_isects_count;
+        }
+
         // create sort keys/vals
         buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED;
         buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
         buf_desc.structure_stride = 4u;
         buf_desc.size_in_bytes = 65536u;
-        while (buf_desc.size_in_bytes < 4u * pnanovdb_uint64_t(constants.n_isects))
+        while (buf_desc.size_in_bytes < 4u * max_isects_count)
         {
             buf_desc.size_in_bytes *= 2u;
-        }
-
-        // make isect buffers effectively grow only
-        if (buf_desc.size_in_bytes > ctx->max_isects_bytes)
-        {
-            ctx->max_isects_bytes = buf_desc.size_in_bytes;
-        }
-        if (buf_desc.size_in_bytes < ctx->max_isects_bytes)
-        {
-            buf_desc.size_in_bytes = ctx->max_isects_bytes;
         }
 
         pnanovdb_compute_buffer_t* intersection_keys_low_buffer =
@@ -548,7 +545,7 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
 
             ctx->parallel_primitives.radix_sort_dual_key(
                 compute, queue, ctx->parallel_primitives_ctx, intersection_keys_low_buffer,
-                intersection_keys_high_buffer, intersection_vals_buffer, constants.n_isects, 32u, num_tile_id_bits);
+                intersection_keys_high_buffer, intersection_vals_buffer, constants.n_isects, max_isects_count, 32u, num_tile_id_bits);
         }
 
         buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED;
