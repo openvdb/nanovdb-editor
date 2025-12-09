@@ -290,17 +290,32 @@ jobs:
 
           # Update ICD JSON to use absolute path for the library
           $IcdContent = Get-Content $VulkanICDPath -Raw | ConvertFrom-Json
-          $IcdContent.ICD.library_path = "D:/mesa3d/x64/vulkan_lvp.dll"
+          $IcdContent.ICD.library_path = "D:\mesa3d\x64\vulkan_lvp.dll"
           $IcdContent | ConvertTo-Json -Depth 10 | Set-Content $VulkanICDPath -Encoding UTF8
           Write-Host "Updated ICD JSON with absolute library path"
           Get-Content $VulkanICDPath
 
-          # Use forward slashes for better cross-shell compatibility
+          # Register ICD in Windows Registry (more reliable than environment variables)
+          Write-Host "`nRegistering ICD in Windows Registry..."
+          $RegistryPath = "HKLM:\SOFTWARE\Khronos\Vulkan\Drivers"
+          if (-not (Test-Path $RegistryPath)) {
+            New-Item -Path $RegistryPath -Force | Out-Null
+          }
+          # Value 0 means the driver is enabled
+          New-ItemProperty -Path $RegistryPath -Name $VulkanICDPath -Value 0 -PropertyType DWord -Force | Out-Null
+          Write-Host "Registered ICD at: $RegistryPath"
+          Write-Host "Registry contents:"
+          Get-ItemProperty -Path $RegistryPath | Format-List
+
+          # Also set environment variables as backup
           $VulkanICDPathUnix = $VulkanICDPath.Replace('\', '/')
           echo "VK_ICD_FILENAMES=$VulkanICDPathUnix" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           echo "VK_DRIVER_FILES=$VulkanICDPathUnix" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-          # Add Mesa to PATH
+          # Enable Vulkan loader debug output
+          echo "VK_LOADER_DEBUG=all" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          # Add Mesa to PATH for DLL dependencies
           $MesaBinPath = Join-Path $MesaDir "x64"
           echo "$MesaBinPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
@@ -312,6 +327,7 @@ jobs:
           Write-Host "=== Environment variables ==="
           Write-Host "VK_ICD_FILENAMES=$env:VK_ICD_FILENAMES"
           Write-Host "VK_DRIVER_FILES=$env:VK_DRIVER_FILES"
+          Write-Host "VK_LOADER_DEBUG=$env:VK_LOADER_DEBUG"
 
           Write-Host "`n=== Vulkan loader (vulkan-1.dll) ==="
           if (Test-Path "C:\Windows\System32\vulkan-1.dll") {
@@ -320,6 +336,14 @@ jobs:
           } else {
             Write-Host "ERROR: vulkan-1.dll not found!"
             exit 1
+          }
+
+          Write-Host "`n=== Registry ICD entries ==="
+          $RegistryPath = "HKLM:\SOFTWARE\Khronos\Vulkan\Drivers"
+          if (Test-Path $RegistryPath) {
+            Get-ItemProperty -Path $RegistryPath | Format-List
+          } else {
+            Write-Host "No registry entries found at $RegistryPath"
           }
 
           Write-Host "`n=== ICD JSON content ==="
@@ -333,6 +357,14 @@ jobs:
             Write-Host "ERROR: vulkan_lvp.dll not found!"
             exit 1
           }
+
+          Write-Host "`n=== Mesa DLL dependencies (libgallium_wgl.dll) ==="
+          if (Test-Path "D:\mesa3d\x64\libgallium_wgl.dll") {
+            $GalliumInfo = Get-Item "D:\mesa3d\x64\libgallium_wgl.dll"
+            Write-Host "Found: D:\mesa3d\x64\libgallium_wgl.dll ($($GalliumInfo.Length) bytes)"
+          } else {
+            Write-Host "WARNING: libgallium_wgl.dll not found"
+          }
         shell: pwsh
 
       - name: Test Vulkan initialization
@@ -343,11 +375,19 @@ jobs:
           print('VK_ICD_FILENAMES:', os.environ.get('VK_ICD_FILENAMES', 'NOT SET'))
           print('VK_DRIVER_FILES:', os.environ.get('VK_DRIVER_FILES', 'NOT SET'))
           try:
-              import nanovdb_editor
+              from nanovdb_editor import Compiler, Compute
               print('Module imported successfully')
-              # Try to create compute instance to test Vulkan
-              compute = nanovdb_editor.Compute()
-              print('Compute instance created')
+
+              # Create compiler instance
+              compiler = Compiler()
+              compiler.create_instance()
+              print('Compiler instance created')
+
+              # Create compute and initialize Vulkan device
+              compute = Compute(compiler)
+              compute.device_interface().create_device_manager()
+              compute.device_interface().create_device()
+              print('Vulkan device created successfully!')
           except Exception as e:
               print(f'Error: {e}')
               import traceback
