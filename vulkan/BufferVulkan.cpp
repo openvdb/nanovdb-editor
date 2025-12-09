@@ -246,7 +246,7 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
             }
 
             context->deviceQueue->device->logPrint(
-                PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "SparseBuffer mem_count(%zu) bufMemAllocInfo.memoryTypeIndex(%d)\n", mem_count, bufMemAllocInfo.memoryTypeIndex);
+                PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "SparseBuffer mem_count(%zu) bufMemAllocInfo.memoryTypeIndex(%d)", mem_count, bufMemAllocInfo.memoryTypeIndex);
 
             VkSparseBufferMemoryBindInfo bufBindInfo = {};
             bufBindInfo.buffer = ptr->bufferVk;
