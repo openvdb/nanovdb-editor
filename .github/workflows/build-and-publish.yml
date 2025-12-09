@@ -24,6 +24,9 @@ on:
         default: false
 
 jobs:
+  check_fvdb_requirement:
+    uses: ./.github/workflows/fvdb-version-gate.yml
+
   build:
     name: Build wheels and sdist
     if: ${{ !inputs.skip_build }}
@@ -70,3 +73,19 @@ jobs:
     - uses: pypa/gh-action-pypi-publish@release/v1
       with:
         password: ${{ secrets.PYPI_API_TOKEN }}
+
+  verify_release_package:
+    name: Verify fvdb viewer integration (release)
+    needs:
+      - upload_pypi
+      - upload_test_pypi
+      - check_fvdb_requirement
+    if: >-
+      ${{
+        ((needs.upload_pypi.result == 'success') ||
+         (needs.upload_test_pypi.result == 'success')) &&
+        needs.check_fvdb_requirement.outputs.compatible == 'true'
+      }}
+    uses: ./.github/workflows/fvdb-viz-integration.yml
+    with:
+      package: release
