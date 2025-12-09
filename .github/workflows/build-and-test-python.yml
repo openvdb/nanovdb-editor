@@ -246,7 +246,7 @@ jobs:
           Write-Host "Downloading Mesa3D lavapipe..."
           $MesaUrl = "https://github.com/pal1000/mesa-dist-win/releases/download/24.2.7/mesa3d-24.2.7-release-msvc.7z"
           $MesaArchive = "$env:TEMP\mesa3d.7z"
-          $MesaDir = "$env:TEMP\mesa3d"
+          $MesaDir = "D:\mesa3d"
 
           Invoke-WebRequest -Uri $MesaUrl -OutFile $MesaArchive
 
@@ -254,16 +254,67 @@ jobs:
           Write-Host "Extracting Mesa3D..."
           7z x $MesaArchive -o"$MesaDir" -y
 
+          # List extracted contents for debugging
+          Write-Host "Extracted contents:"
+          Get-ChildItem -Path $MesaDir -Recurse | Select-Object FullName
+
           # Set environment variables for lavapipe
           $VulkanICDPath = Join-Path $MesaDir "x64\lvp_icd.x86_64.json"
-          echo "VK_ICD_FILENAMES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "VK_DRIVER_FILES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          if (Test-Path $VulkanICDPath) {
+            Write-Host "Found ICD file at: $VulkanICDPath"
+          } else {
+            Write-Host "ERROR: ICD file not found at: $VulkanICDPath"
+            Write-Host "Listing available files in $MesaDir..."
+            Get-ChildItem -Path $MesaDir -Recurse | Select-Object FullName
+            exit 1
+          }
+
+          # Use forward slashes for better cross-shell compatibility
+          $VulkanICDPathUnix = $VulkanICDPath.Replace('\', '/')
+          echo "VK_ICD_FILENAMES=$VulkanICDPathUnix" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "VK_DRIVER_FILES=$VulkanICDPathUnix" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
           # Add Mesa to PATH
           $MesaBinPath = Join-Path $MesaDir "x64"
           echo "$MesaBinPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
           Write-Host "Lavapipe installed successfully"
+          Write-Host "VK_ICD_FILENAMES=$VulkanICDPath"
+        shell: pwsh
+
+      - name: Verify Vulkan setup
+        run: |
+          Write-Host "Environment variables:"
+          Write-Host "VK_ICD_FILENAMES=$env:VK_ICD_FILENAMES"
+          Write-Host "VK_DRIVER_FILES=$env:VK_DRIVER_FILES"
+          Write-Host "PATH contains Mesa: $($env:PATH -like '*mesa*')"
+
+          # Check ICD JSON file
+          $IcdPath = "D:\mesa3d\x64\lvp_icd.x86_64.json"
+          if (Test-Path $IcdPath) {
+            Write-Host "ICD JSON exists at: $IcdPath"
+            Write-Host "ICD JSON content:"
+            Get-Content $IcdPath
+          } else {
+            Write-Host "ERROR: ICD JSON not found at: $IcdPath"
+            exit 1
+          }
+
+          # Check vulkan DLL exists
+          $DllPath = "D:\mesa3d\x64\vulkan_lvp.dll"
+          if (Test-Path $DllPath) {
+            Write-Host "Vulkan DLL exists at: $DllPath"
+            $DllInfo = Get-Item $DllPath
+            Write-Host "DLL size: $($DllInfo.Length) bytes"
+          } else {
+            Write-Host "ERROR: vulkan_lvp.dll not found at: $DllPath"
+            exit 1
+          }
+
+          # List all files in Mesa x64 directory
+          Write-Host "Files in D:\mesa3d\x64:"
+          Get-ChildItem "D:\mesa3d\x64" | Select-Object Name, Length
         shell: pwsh
 
       - name: Download package with nanovdb_editor
@@ -280,6 +331,10 @@ jobs:
       - name: Run Python tests
         run: |
           conda activate nanovdb_editor
+          echo "VK_ICD_FILENAMES=$VK_ICD_FILENAMES"
+          echo "VK_DRIVER_FILES=$VK_DRIVER_FILES"
+          echo "Checking ICD file exists:"
+          ls -la "$VK_ICD_FILENAMES" || echo "Could not list ICD file"
           pytest pytests -vvv --tb=short
 
   nanovdb-editor-build-python-linux-arm:
