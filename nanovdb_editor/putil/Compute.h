@@ -301,8 +301,8 @@ typedef struct pnanovdb_compute_interop_handle_t
 #define pnanovdb_compute_interop_handle_default_init                                                                   \
     {                                                                                                                  \
         PNANOVDB_COMPUTE_INTEROP_HANDLE_TYPE_UNKNOWN, /*type*/                                                         \
-            0u, /*value*/                                                                                              \
-            0u, /*resource_size_in_bytes*/                                                                             \
+        0u, /*value*/                                                                                                  \
+        0u, /*resource_size_in_bytes*/                                                                                 \
     }
 static const pnanovdb_compute_interop_handle_t pnanovdb_compute_interop_handle_default =
     pnanovdb_compute_interop_handle_default_init;
@@ -397,8 +397,6 @@ typedef struct pnanovdb_compute_interface_t
         const pnanovdb_compute_buffer_desc_t* desc,
         const pnanovdb_compute_interop_handle_t* interopHandle);
 
-    pnanovdb_uint64_t(PNANOVDB_ABI* get_buffer_device_address)(pnanovdb_compute_context_t* context, pnanovdb_compute_buffer_t* buffer);
-
 
     pnanovdb_compute_texture_t*(PNANOVDB_ABI* create_texture)(pnanovdb_compute_context_t* context,
                                                               const pnanovdb_compute_texture_desc_t* desc);
@@ -445,6 +443,10 @@ typedef struct pnanovdb_compute_interface_t
     void(PNANOVDB_ABI* copy_buffer)(pnanovdb_compute_context_t* context,
                                     const pnanovdb_compute_copy_buffer_params_t* params);
 
+
+    pnanovdb_uint64_t(PNANOVDB_ABI* get_buffer_device_address)(pnanovdb_compute_context_t* context,
+                                                               pnanovdb_compute_buffer_t* buffer);
+
 } pnanovdb_compute_interface_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_compute_interface_t
@@ -466,7 +468,6 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(unmap_buffer, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_buffer_external_handle, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(close_buffer_external_handle, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(create_buffer_from_external_handle, 0, 0)
-PNANOVDB_REFLECT_FUNCTION_POINTER(get_buffer_device_address, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(create_texture, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(destroy_texture, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_texture_transient, 0, 0)
@@ -481,6 +482,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(create_compute_pipeline, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(destroy_compute_pipeline, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(dispatch, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(copy_buffer, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(get_buffer_device_address, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE
