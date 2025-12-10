@@ -28,10 +28,11 @@ permissions:
   deployments: write
   pull-requests: read
   issues: read
+  packages: read
+  actions: read
 
 jobs:
   nanovdb-editor-build-python-linux:
-    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Build (Linux)
     runs-on: ubuntu-latest
     defaults:
@@ -102,7 +103,6 @@ jobs:
           ./build.sh
 
   nanovdb-editor-test-docker-linux:
-    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Test Docker (Headless)
     needs: nanovdb-editor-build-python-linux
     runs-on: ubuntu-latest
@@ -154,7 +154,6 @@ jobs:
             fi
 
   nanovdb-editor-test-python-linux:
-    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Test (Linux)
     needs: nanovdb-editor-build-python-linux
     runs-on: ubuntu-latest
@@ -196,7 +195,6 @@ jobs:
           pytest -vvv
 
   nanovdb-editor-build-python-windows:
-    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Build (Windows)
     runs-on: windows-latest
     defaults:
@@ -224,7 +222,6 @@ jobs:
           retention-days: 2
 
   nanovdb-editor-test-python-windows:
-    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Test (Windows)
     needs: nanovdb-editor-build-python-windows
     runs-on: windows-latest
@@ -243,30 +240,51 @@ jobs:
           activate-environment: nanovdb_editor
           environment-file: pymodule/test_environment.yml
 
+      - name: Install Vulkan Runtime
+        run: |
+          # Download and install Vulkan Runtime (vulkan-1.dll loader)
+          $VulkanRuntimeUrl = "https://sdk.lunarg.com/sdk/download/1.3.290.0/windows/VulkanRT-1.3.290.0-Installer.exe"
+          $VulkanInstaller = "$env:TEMP\VulkanRT-Installer.exe"
+          Invoke-WebRequest -Uri $VulkanRuntimeUrl -OutFile $VulkanInstaller
+          Start-Process -FilePath $VulkanInstaller -ArgumentList "/S" -Wait
+
+          if (-not (Test-Path "C:\Windows\System32\vulkan-1.dll")) {
+            Write-Host "ERROR: vulkan-1.dll not found after installation"
+            exit 1
+          }
+        shell: pwsh
+
       - name: Install Mesa3D lavapipe
         run: |
-          # Download Mesa3D with lavapipe for Windows
-          Write-Host "Downloading Mesa3D lavapipe..."
+          # Download and extract Mesa3D with lavapipe for Windows
           $MesaUrl = "https://github.com/pal1000/mesa-dist-win/releases/download/24.2.7/mesa3d-24.2.7-release-msvc.7z"
           $MesaArchive = "$env:TEMP\mesa3d.7z"
-          $MesaDir = "$env:TEMP\mesa3d"
+          $MesaDir = "D:\mesa3d"
 
           Invoke-WebRequest -Uri $MesaUrl -OutFile $MesaArchive
-
-          # Extract Mesa3D
-          Write-Host "Extracting Mesa3D..."
           7z x $MesaArchive -o"$MesaDir" -y
 
-          # Set environment variables for lavapipe
           $VulkanICDPath = Join-Path $MesaDir "x64\lvp_icd.x86_64.json"
-          echo "VK_ICD_FILENAMES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "VK_DRIVER_FILES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          if (-not (Test-Path $VulkanICDPath)) {
+            Write-Host "ERROR: ICD file not found at: $VulkanICDPath"
+            exit 1
+          }
 
-          # Add Mesa to PATH
+          # Update ICD JSON to use absolute path for the library
+          $IcdContent = Get-Content $VulkanICDPath -Raw | ConvertFrom-Json
+          $IcdContent.ICD.library_path = "D:\mesa3d\x64\vulkan_lvp.dll"
+          $IcdContent | ConvertTo-Json -Depth 10 | Set-Content $VulkanICDPath -Encoding UTF8
+
+          # Register ICD in Windows Registry
+          $RegistryPath = "HKLM:\SOFTWARE\Khronos\Vulkan\Drivers"
+          if (-not (Test-Path $RegistryPath)) {
+            New-Item -Path $RegistryPath -Force | Out-Null
+          }
+          New-ItemProperty -Path $RegistryPath -Name $VulkanICDPath -Value 0 -PropertyType DWord -Force | Out-Null
+
+          # Add Mesa to PATH for DLL dependencies
           $MesaBinPath = Join-Path $MesaDir "x64"
           echo "$MesaBinPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-          Write-Host "Lavapipe installed successfully"
         shell: pwsh
 
       - name: Download package with nanovdb_editor
@@ -286,7 +304,6 @@ jobs:
           pytest pytests -vvv --tb=short
 
   nanovdb-editor-build-python-linux-arm:
-    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     # if: github.ref == 'refs/heads/main'
     name: Build (Linux ARM64)
     runs-on: ubuntu-24.04-arm
@@ -323,7 +340,6 @@ jobs:
           retention-days: 2
 
   nanovdb-editor-test-python-linux-arm:
-    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     # if: github.ref == 'refs/heads/main'
     name: Test (Linux ARM64)
     needs: nanovdb-editor-build-python-linux-arm
@@ -357,3 +373,11 @@ jobs:
           pip install pytest numpy pytest-timeout
           python3 -c 'import nanovdb_editor; print("SUCCESS: Module imported on ARM64")'
           pytest pytests -vvv --tb=short --timeout=300 --timeout-method=thread || echo 'Tests completed'
+
+  fvdb-viz-integration:
+    name: fVDB Integration
+    needs: nanovdb-editor-build-python-linux
+    uses: ./.github/workflows/fvdb-viz-integration.yml
+    with:
+      wheel_artifact: nanovdb-editor-wheel
+    secrets: inherit
