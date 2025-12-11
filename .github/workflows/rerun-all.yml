@@ -14,3 +14,50 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           comment_id: ${{ github.event.comment.id }}
+
+  run-all-workflows:
+    name: Run All Workflows
+    if: github.event.issue.pull_request && contains(github.event.comment.body, '/run-all')
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      pull-requests: read
+    steps:
+      - name: Get PR info
+        id: pr-info
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+            core.setOutput('ref', pr.data.head.ref);
+            console.log(`PR branch: ${pr.data.head.ref}`);
+
+      - name: Trigger all PR workflows
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ref = '${{ steps.pr-info.outputs.ref }}';
+            const workflows = [
+              'build-and-test.yml',
+              'build-and-test-python.yml',
+              'codestyle.yml'
+            ];
+
+            for (const workflow of workflows) {
+              try {
+                console.log(`Triggering ${workflow} on ref ${ref}`);
+                await github.rest.actions.createWorkflowDispatch({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  workflow_id: workflow,
+                  ref: ref
+                });
+                console.log(`Successfully triggered ${workflow}`);
+              } catch (error) {
+                console.log(`Failed to trigger ${workflow}: ${error.message}`);
+              }
+            }
