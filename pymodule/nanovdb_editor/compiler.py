@@ -20,10 +20,10 @@ class CompileTarget(Enum):
 
 
 class OptimizationLevel(Enum):
-    NONE = 0      # Fastest compilation
-    DEFAULT = 1   # Balanced
-    HIGH = 2      # Aggressive optimization
-    MAXIMAL = 3   # Maximum optimization (slowest compile)
+    NONE = 0  # Fastest compilation
+    DEFAULT = 1  # Balanced
+    HIGH = 2  # Aggressive optimization
+    MAXIMAL = 3  # Maximum optimization (slowest compile)
 
 
 class pnanovdb_CompilerSettings(Structure):
