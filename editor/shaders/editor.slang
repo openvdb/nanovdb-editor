@@ -283,33 +283,6 @@ float4 ray_march_nanovdb_leaf_fetch_float_trilinear(pnanovdb_grid_type_t grid_ty
 {
     TrilinearWeights tw = compute_trilinear_weights(pos, ijk_offset);
 
-    if (grid_type == PNANOVDB_GRID_TYPE_FLOAT)
-    {
-        // Check if all 8 interpolation samples are within the same leaf.
-        // A leaf is 8x8x8, so if any local coord is 7, adding 1 would cross into next leaf.
-        int3 local = tw.ijk000 & 7;
-        if ((local.x < 7) && (local.y < 7) && (local.z < 7))
-        {
-            pnanovdb_leaf_handle_t leaf = acc.leaf;
-            pnanovdb_uint64_t table_offset = PNANOVDB_GRID_TYPE_GET(grid_type, leaf_off_table);
-            float value = 0.f;
-
-            [unroll]
-            for (int i = 0; i < 8; i++)
-            {
-                int3 ijk = tw.ijk000 + int3(i & 1, (i >> 1) & 1, (i >> 2) & 1);
-                pnanovdb_uint32_t n = (pnanovdb_uint32_t(ijk.x) & 7u) +
-                                      ((pnanovdb_uint32_t(ijk.y) & 7u) << 3u) +
-                                      ((pnanovdb_uint32_t(ijk.z) & 7u) << 6u);
-                pnanovdb_address_t addr = pnanovdb_address_offset(
-                    leaf.address,
-                    pnanovdb_uint32_as_uint64_low(pnanovdb_uint64_low(table_offset) + n * 4u));
-                value += tw.weights[i] * pnanovdb_read_float(buf, addr);
-            }
-            return levelset_to_color(value);
-        }
-    }
-
     float4 value = float4(0.f, 0.f, 0.f, 0.f);
     [unroll]
     for (int i = 0; i < 8; i++)
