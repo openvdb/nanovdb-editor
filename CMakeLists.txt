@@ -380,10 +380,11 @@ if(SKBUILD)
                 )
             endif()
         else()
+            # Note: libslang-compiler and libslang-glslang have version suffix in filename
             install(FILES
                 "${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
-                "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}"
-                "${Slang_SOURCE_DIR}/lib/libslang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
+                "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}.0.${SLANG_VERSION}"
+                "${Slang_SOURCE_DIR}/lib/libslang-glslang-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
                 DESTINATION nanovdb_editor/lib
                 COMPONENT python_libs
             )
