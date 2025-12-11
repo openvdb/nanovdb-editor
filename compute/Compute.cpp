@@ -164,7 +164,20 @@ pnanovdb_bool_t init_shader(const pnanovdb_compute_t* compute,
     }
 #endif
 
+    if (shader_ctx->shader_build->pipeline_desc.bytecode.size_in_bytes == 0)
+    {
+        log_print(PNANOVDB_COMPUTE_LOG_LEVEL_ERROR, "shader bytecode is empty. Compilation may have failed for '%s'",
+                  shader_ctx->source.source_filename);
+        return PNANOVDB_FALSE;
+    }
+
     shader_ctx->pipeline = compute_interface->create_compute_pipeline(context, &shader_ctx->shader_build->pipeline_desc);
+    if (!shader_ctx->pipeline)
+    {
+        log_print(PNANOVDB_COMPUTE_LOG_LEVEL_ERROR, "failed to create compute pipeline.");
+        return PNANOVDB_FALSE;
+    }
+
     return PNANOVDB_TRUE;
 }
 

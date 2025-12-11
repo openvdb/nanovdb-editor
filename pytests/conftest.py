@@ -3,7 +3,6 @@
 
 import pytest
 import sys
-import gc
 import atexit
 import os
 
@@ -11,11 +10,10 @@ import os
 def cleanup_modules(exit_code=0):
     """Remove native library wrapper modules to prevent segfaults during interpreter shutdown"""
     try:
-        # Force garbage collection to clear any remaining objects
-        gc.collect()
-
         # Remove computed/native lib wrapper modules from sys.modules
         # This prevents ctypes library destructor issues during interpreter shutdown
+        # NOTE: Do NOT call gc.collect() here - it triggers native object destructors
+        # while threads/state may still be active, causing memory corruption
         modules_to_remove = [
             "nanovdb_editor",
             "nanovdb_editor.compiler",
@@ -29,9 +27,6 @@ def cleanup_modules(exit_code=0):
         for module_name in modules_to_remove:
             if module_name in sys.modules:
                 del sys.modules[module_name]
-
-        # Final garbage collection pass
-        gc.collect()
 
         # Force exit to prevent library unload segfaults
         # Preserve the original exit code from pytest

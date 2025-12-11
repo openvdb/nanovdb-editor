@@ -299,7 +299,7 @@ bool SlangCompiler::compile(const pnanovdb_compiler_settings_t* settings,
         settings->is_row_major ? SLANG_MATRIX_LAYOUT_ROW_MAJOR : SLANG_MATRIX_LAYOUT_COLUMN_MAJOR;
 
     // Compiler options
-#define ENTRY_CNT 5
+#define ENTRY_CNT 7
     CompilerOptionEntry compilerOptionEntries[ENTRY_CNT];
     CompilerOptionValue entryValue;
     entryValue.kind = CompilerOptionValueKind::Int;
@@ -320,15 +320,26 @@ bool SlangCompiler::compile(const pnanovdb_compiler_settings_t* settings,
     compilerOptionEntries[2] = { CompilerOptionName::EmitSpirvDirectly, entryValue };
 
     // 3. Debug information level
-    entryValue.intValue0 = SLANG_DEBUG_INFO_LEVEL_MINIMAL;
-#ifdef _DEBUG
-    entryValue.intValue0 = SLANG_DEBUG_INFO_LEVEL_MAXIMAL;
-#endif
+    // NOTE: All debug info levels (MINIMAL, STANDARD, MAXIMAL) cause 20x+ slowdown after Slang 2025.5
+    entryValue.intValue0 = SLANG_DEBUG_INFO_LEVEL_NONE;
     compilerOptionEntries[3] = { CompilerOptionName::DebugInformation, entryValue };
 
     // 4. Dump intermediate files
     entryValue.intValue0 = (settings->compile_target == PNANOVDB_COMPILE_TARGET_CPU) ? 1 : 0;
     compilerOptionEntries[4] = { CompilerOptionName::DumpIntermediates, entryValue };
+
+    // 5. Optimization level - configurable via settings, DEFAULT by default
+    entryValue.intValue0 = settings->optimization_level; // Maps directly to SLANG_OPTIMIZATION_LEVEL_*
+    compilerOptionEntries[5] = { CompilerOptionName::Optimization, entryValue };
+
+    // 6. MinimumSlangOptimization
+    // Enable for debug builds to slightly speed up compilation (~5% improvement)
+#ifdef _DEBUG
+    entryValue.intValue0 = 1;
+#else
+    entryValue.intValue0 = 0;
+#endif
+    compilerOptionEntries[6] = { CompilerOptionName::MinimumSlangOptimization, entryValue };
 
     // TODO: this is not working, string value is not set
     // entryValue.stringValue0 = dumpPrefix.c_str();

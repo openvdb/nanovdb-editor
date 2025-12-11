@@ -258,8 +258,8 @@ jobs:
         run: |
           # Download and extract Mesa3D with lavapipe for Windows
           $MesaUrl = "https://github.com/pal1000/mesa-dist-win/releases/download/24.2.7/mesa3d-24.2.7-release-msvc.7z"
-          $MesaArchive = "$env:TEMP\mesa3d.7z"
-          $MesaDir = "D:\mesa3d"
+          $MesaArchive = "$env:RUNNER_TEMP\mesa3d.7z"
+          $MesaDir = "$env:RUNNER_TEMP\mesa3d"
 
           Invoke-WebRequest -Uri $MesaUrl -OutFile $MesaArchive
           7z x $MesaArchive -o"$MesaDir" -y
@@ -272,7 +272,8 @@ jobs:
 
           # Update ICD JSON to use absolute path for the library
           $IcdContent = Get-Content $VulkanICDPath -Raw | ConvertFrom-Json
-          $IcdContent.ICD.library_path = "D:\mesa3d\x64\vulkan_lvp.dll"
+          $VulkanDllPath = Join-Path $MesaDir "x64\vulkan_lvp.dll"
+          $IcdContent.ICD.library_path = $VulkanDllPath
           $IcdContent | ConvertTo-Json -Depth 10 | Set-Content $VulkanICDPath -Encoding UTF8
 
           # Register ICD in Windows Registry

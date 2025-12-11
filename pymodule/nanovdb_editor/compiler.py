@@ -19,6 +19,13 @@ class CompileTarget(Enum):
     CPU = 2
 
 
+class OptimizationLevel(Enum):
+    NONE = 0  # Fastest compilation
+    DEFAULT = 1  # Balanced
+    HIGH = 2  # Aggressive optimization
+    MAXIMAL = 3  # Maximum optimization (slowest compile)
+
+
 class pnanovdb_CompilerSettings(Structure):
     """Definition equivalent to pnanovdb_compiler_settings_t."""
 
@@ -27,6 +34,7 @@ class pnanovdb_CompilerSettings(Structure):
         ("use_glslang", c_int32),
         ("hlsl_output", c_int32),
         ("compile_target", c_uint32),
+        ("optimization_level", c_uint32),
         ("entry_point_name", c_char * 64),
     ]
 
@@ -123,7 +131,12 @@ class Compiler:
             raise RuntimeError("Failed to create compiler instance")
 
     def compile_shader(
-        self, filename: str, entry_point_name="main", is_row_major=False, compile_target=CompileTarget.VULKAN
+        self,
+        filename: str,
+        entry_point_name="main",
+        is_row_major=False,
+        compile_target=CompileTarget.VULKAN,
+        optimization_level=OptimizationLevel.DEFAULT,
     ) -> bool:
         if not self._instance:
             raise RuntimeError("No compiler instance exists")
@@ -134,6 +147,7 @@ class Compiler:
             use_glslang=False,
             hlsl_output=False,
             compile_target=(c_uint32)(compile_target.value),
+            optimization_level=(c_uint32)(optimization_level.value),
         )
 
         compile_func = self._compiler.contents.compile_shader_from_file
