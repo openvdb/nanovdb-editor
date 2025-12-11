@@ -56,10 +56,13 @@ if(zlib_ADDED)
     set(ZLIB_INCLUDE_DIR "${zlib_SOURCE_DIR};${zlib_BINARY_DIR}" CACHE STRING "ZLIB include directory" FORCE)
 endif()
 
+set(BLOSC_VERSION 1.21.4)
 CPMAddPackage(
     NAME blosc
-    URL https://github.com/Blosc/c-blosc/archive/refs/tags/v1.21.4.tar.gz
-    VERSION 1.21.4
+    URL
+        https://github.com/Blosc/c-blosc/archive/refs/tags/v${BLOSC_VERSION}.tar.gz
+        https://codeload.github.com/Blosc/c-blosc/tar.gz/refs/tags/v${BLOSC_VERSION}
+    VERSION ${BLOSC_VERSION}
     OPTIONS
         "BUILD_TESTS OFF"
         "BUILD_BENCHMARKS OFF"
