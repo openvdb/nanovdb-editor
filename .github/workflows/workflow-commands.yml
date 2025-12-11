@@ -1,0 +1,199 @@
+name: PR Workflow Commands
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  rerun-failed-workflows:
+    name: Rerun Failed Workflows
+    if: >
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/rerun-all') &&
+      (
+        github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      pull-requests: write
+      checks: write
+    steps:
+      - name: Add reaction to comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'rocket'
+            });
+
+      - uses: estroz/rerun-actions@v0.3.0
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          comment_id: ${{ github.event.comment.id }}
+
+  run-all-workflows:
+    name: Run All Workflows
+    if: >
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/run-all') &&
+      (
+        github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      pull-requests: write
+    steps:
+      - name: Add reaction to comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'rocket'
+            });
+
+      - name: Get PR info
+        id: pr-info
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+            core.setOutput('ref', pr.data.head.ref);
+            console.log(`PR branch: ${pr.data.head.ref}`);
+
+      - name: Trigger all workflows
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ref = '${{ steps.pr-info.outputs.ref }}';
+            const workflows = [
+              'build-and-test.yml',
+              'build-and-test-python.yml',
+              'codestyle.yml'
+            ];
+
+            const results = [];
+            for (const workflow of workflows) {
+              try {
+                console.log(`Triggering ${workflow} on ref ${ref}`);
+                await github.rest.actions.createWorkflowDispatch({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  workflow_id: workflow,
+                  ref: ref
+                });
+                console.log(`Successfully triggered ${workflow}`);
+                results.push(`✅ \`${workflow}\``);
+              } catch (error) {
+                console.log(`Failed to trigger ${workflow}: ${error.message}`);
+                results.push(`❌ \`${workflow}\`: ${error.message}`);
+              }
+            }
+
+            // Post summary comment
+            const body = `### 🚀 Triggered workflows on branch \`${ref}\`\n\n${results.join('\n')}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+
+  run-single-workflow:
+    name: Run Single Workflow
+    if: >
+      github.event.issue.pull_request &&
+      (
+        contains(github.event.comment.body, '/run-build') ||
+        contains(github.event.comment.body, '/run-python') ||
+        contains(github.event.comment.body, '/run-codestyle')
+      ) &&
+      (
+        github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      pull-requests: write
+    steps:
+      - name: Add reaction to comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'rocket'
+            });
+
+      - name: Get PR info
+        id: pr-info
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+            core.setOutput('ref', pr.data.head.ref);
+            console.log(`PR branch: ${pr.data.head.ref}`);
+
+      - name: Trigger requested workflow
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ref = '${{ steps.pr-info.outputs.ref }}';
+            const comment = context.payload.comment.body;
+
+            const workflowMap = {
+              '/run-build': 'build-and-test.yml',
+              '/run-python': 'build-and-test-python.yml',
+              '/run-codestyle': 'codestyle.yml'
+            };
+
+            for (const [command, workflow] of Object.entries(workflowMap)) {
+              if (comment.includes(command)) {
+                try {
+                  console.log(`Triggering ${workflow} on ref ${ref}`);
+                  await github.rest.actions.createWorkflowDispatch({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    workflow_id: workflow,
+                    ref: ref
+                  });
+
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                    body: `✅ Triggered \`${workflow}\` on branch \`${ref}\``
+                  });
+                } catch (error) {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                    body: `❌ Failed to trigger \`${workflow}\`: ${error.message}`
+                  });
+                }
+              }
+            }

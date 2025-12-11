@@ -26,7 +26,10 @@ CPMAddPackage(
 set(ZLIB_VERSION 1.3.1)
 CPMAddPackage(
     NAME zlib
-    URL https://github.com/madler/zlib/archive/refs/tags/v${ZLIB_VERSION}.tar.gz
+    URL
+        https://github.com/madler/zlib/archive/refs/tags/v${ZLIB_VERSION}.tar.gz
+        https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz
+        https://www.zlib.net/fossils/zlib-${ZLIB_VERSION}.tar.gz
     VERSION ${ZLIB_VERSION}
     OPTIONS
         "SKIP_INSTALL_LIBRARIES OFF"
