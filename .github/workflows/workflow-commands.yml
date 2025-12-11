@@ -87,8 +87,29 @@ jobs:
               'codestyle.yml'
             ];
 
+            // Helper to find the triggered run
+            async function findWorkflowRun(workflowId, beforeTime) {
+              // Wait for the run to be created
+              await new Promise(resolve => setTimeout(resolve, 2000));
+
+              const runs = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: workflowId,
+                branch: ref,
+                per_page: 5
+              });
+
+              // Find a run created after we triggered it
+              const run = runs.data.workflow_runs.find(r =>
+                new Date(r.created_at) > beforeTime
+              );
+              return run;
+            }
+
             const results = [];
             for (const workflow of workflows) {
+              const beforeTime = new Date();
               try {
                 console.log(`Triggering ${workflow} on ref ${ref}`);
                 await github.rest.actions.createWorkflowDispatch({
@@ -98,7 +119,14 @@ jobs:
                   ref: ref
                 });
                 console.log(`Successfully triggered ${workflow}`);
-                results.push(`✅ \`${workflow}\``);
+
+                // Try to find the run and get its URL
+                const run = await findWorkflowRun(workflow, beforeTime);
+                if (run) {
+                  results.push(`✅ [\`${workflow}\`](${run.html_url})`);
+                } else {
+                  results.push(`✅ \`${workflow}\` (run pending)`);
+                }
               } catch (error) {
                 console.log(`Failed to trigger ${workflow}: ${error.message}`);
                 results.push(`❌ \`${workflow}\`: ${error.message}`);
@@ -170,8 +198,27 @@ jobs:
               '/run-codestyle': 'codestyle.yml'
             };
 
+            // Helper to find the triggered run
+            async function findWorkflowRun(workflowId, beforeTime) {
+              await new Promise(resolve => setTimeout(resolve, 2000));
+
+              const runs = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: workflowId,
+                branch: ref,
+                per_page: 5
+              });
+
+              const run = runs.data.workflow_runs.find(r =>
+                new Date(r.created_at) > beforeTime
+              );
+              return run;
+            }
+
             for (const [command, workflow] of Object.entries(workflowMap)) {
               if (comment.includes(command)) {
+                const beforeTime = new Date();
                 try {
                   console.log(`Triggering ${workflow} on ref ${ref}`);
                   await github.rest.actions.createWorkflowDispatch({
@@ -181,11 +228,14 @@ jobs:
                     ref: ref
                   });
 
+                  const run = await findWorkflowRun(workflow, beforeTime);
+                  const link = run ? `[\`${workflow}\`](${run.html_url})` : `\`${workflow}\``;
+
                   await github.rest.issues.createComment({
                     owner: context.repo.owner,
                     repo: context.repo.repo,
                     issue_number: context.issue.number,
-                    body: `✅ Triggered \`${workflow}\` on branch \`${ref}\``
+                    body: `✅ Triggered ${link} on branch \`${ref}\``
                   });
                 } catch (error) {
                   await github.rest.issues.createComment({

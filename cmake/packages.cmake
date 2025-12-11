@@ -56,10 +56,13 @@ if(zlib_ADDED)
     set(ZLIB_INCLUDE_DIR "${zlib_SOURCE_DIR};${zlib_BINARY_DIR}" CACHE STRING "ZLIB include directory" FORCE)
 endif()
 
+set(BLOSC_VERSION 1.21.4)
 CPMAddPackage(
     NAME blosc
-    URL https://github.com/Blosc/c-blosc/archive/refs/tags/v1.21.4.tar.gz
-    VERSION 1.21.4
+    URL
+        https://github.com/Blosc/c-blosc/archive/refs/tags/v${BLOSC_VERSION}.tar.gz
+        https://codeload.github.com/Blosc/c-blosc/tar.gz/refs/tags/v${BLOSC_VERSION}
+    VERSION ${BLOSC_VERSION}
     OPTIONS
         "BUILD_TESTS OFF"
         "BUILD_BENCHMARKS OFF"
@@ -419,10 +422,13 @@ CPMAddPackage(
     DOWNLOAD_ONLY YES
 )
 
+set(EXPECTED_VERSION 0.9.0)
 CPMAddPackage(
     NAME expected
-    URL https://github.com/martinmoene/expected-lite/archive/refs/tags/v0.9.0.tar.gz
-    VERSION 0.9.0
+    URL
+        https://github.com/martinmoene/expected-lite/archive/refs/tags/v${EXPECTED_VERSION}.tar.gz
+        https://codeload.github.com/martinmoene/expected-lite/tar.gz/refs/tags/v${EXPECTED_VERSION}
+    VERSION ${EXPECTED_VERSION}
 )
 
 # Optional dependencies
