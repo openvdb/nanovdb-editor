@@ -68,7 +68,7 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
     bufCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     // enable device address on SSBO
-    if ( context->deviceQueue->device->enabledExtensions.VK_KHR_BUFFER_DEVICE_ADDRESS &&
+    if (context->deviceQueue->device->enabledFeatures.bufferDeviceAddress &&
         ((ptr->desc.usage & PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED) != 0u ||
         (ptr->desc.usage & PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED) != 0u))
     {

@@ -26,6 +26,7 @@ typedef struct pnanovdb_vulkan_enabled_features_t
     pnanovdb_bool_t shaderInt64;
     pnanovdb_bool_t sparseBinding;
     pnanovdb_bool_t sparseResidencyBuffer;
+    pnanovdb_bool_t bufferDeviceAddress;
 } pnanovdb_vulkan_enabled_features_t;
 
 typedef struct pnanovdb_vulkan_enabled_instance_extensions_t
