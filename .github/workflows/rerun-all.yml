@@ -1,0 +1,16 @@
+name: Rerun PR Actions
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  rerun-pr-tests:
+    name: Rerun PR Tests
+    if: ${{ github.event.issue.pull_request }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: estroz/rerun-actions@v0.3.0
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          comment_id: ${{ github.event.comment.id }}
