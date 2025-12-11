@@ -7,7 +7,7 @@ name: NanoVDB Editor Publish Dev
 on:
   push:
     tags:
-      - '*-dev'
+      - 'v*-dev'
   workflow_dispatch:
     inputs:
       skip_build:
@@ -25,8 +25,7 @@ jobs:
     if: ${{ !inputs.skip_build }}
     uses: ./.github/workflows/build-wheels.yml
     with:
-      is_dev_package: true
-      allow_dev_suffix: true
+      is_dev: true
 
   # Dev package upload - publishes to production PyPI with -dev package name
   upload_pypi_dev:

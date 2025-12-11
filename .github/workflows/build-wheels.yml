@@ -3,12 +3,8 @@ name: Build Wheels
 on:
   workflow_call:
     inputs:
-      is_dev_package:
-        description: 'Whether to build as dev package (nanovdb-editor-dev)'
-        required: true
-        type: boolean
-      allow_dev_suffix:
-        description: 'Whether to allow -dev suffix in version validation'
+      is_dev:
+        description: 'Whether to build as dev package (nanovdb-editor-dev) with -dev version suffix'
         required: true
         type: boolean
     outputs:
@@ -32,7 +28,7 @@ jobs:
       id: validate
       uses: ./.github/actions/validate-version
       with:
-        allow-dev-suffix: ${{ inputs.allow_dev_suffix }}
+        allow-dev-suffix: ${{ inputs.is_dev }}
 
   build_wheels:
     name: Build (${{ matrix.os }}${{ matrix.arch && format(' {0}', matrix.arch) || '' }})
@@ -63,7 +59,7 @@ jobs:
         python-version: '3.11'
 
     - name: Rename package for dev release
-      if: inputs.is_dev_package
+      if: inputs.is_dev
       shell: bash
       run: |
         sed -i 's/name = "nanovdb-editor"/name = "nanovdb-editor-dev"/' pymodule/pyproject.toml
@@ -137,7 +133,7 @@ jobs:
         python-version: '3.11'
 
     - name: Rename package for dev release
-      if: inputs.is_dev_package
+      if: inputs.is_dev
       run: |
         sed -i 's/name = "nanovdb-editor"/name = "nanovdb-editor-dev"/' pymodule/pyproject.toml
         cat pymodule/pyproject.toml | grep "name ="

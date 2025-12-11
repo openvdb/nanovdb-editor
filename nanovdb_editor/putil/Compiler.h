@@ -28,6 +28,13 @@ typedef pnanovdb_uint32_t pnanovdb_compile_target_type_t;
 #define PNANOVDB_COMPILE_TARGET_CPU 2
 // TODO support CUDA
 
+typedef pnanovdb_uint32_t pnanovdb_optimization_level_t;
+
+#define PNANOVDB_OPTIMIZATION_LEVEL_NONE 0
+#define PNANOVDB_OPTIMIZATION_LEVEL_DEFAULT 1
+#define PNANOVDB_OPTIMIZATION_LEVEL_HIGH 2
+#define PNANOVDB_OPTIMIZATION_LEVEL_MAXIMAL 3
+
 struct pnanovdb_compiler_settings_t;
 typedef struct pnanovdb_compiler_settings_t
 {
@@ -35,6 +42,7 @@ typedef struct pnanovdb_compiler_settings_t
     pnanovdb_bool_t use_glslang;
     pnanovdb_bool_t hlsl_output;
     pnanovdb_compile_target_type_t compile_target;
+    pnanovdb_optimization_level_t optimization_level;
     char entry_point_name[64];
 } pnanovdb_compiler_settings_t;
 
@@ -127,6 +135,7 @@ static inline void pnanovdb_compiler_settings_init(pnanovdb_compiler_settings_t*
     settings->use_glslang = PNANOVDB_FALSE;
     settings->hlsl_output = PNANOVDB_FALSE;
     settings->compile_target = PNANOVDB_COMPILE_TARGET_VULKAN;
+    settings->optimization_level = PNANOVDB_OPTIMIZATION_LEVEL_HIGH;
     settings->entry_point_name[0] = '\0';
 }
 

@@ -80,6 +80,7 @@ if(WIN32)
         pnanovdbeditor.dll
         glfw3.dll
         slang.dll
+        slang-compiler.dll
         slang-glslang.dll
         slang-llvm.dll
         vulkan-1.dll
