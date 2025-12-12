@@ -13,7 +13,8 @@ Run the same Docker build + pytest workflow defined in
 
 Options:
   -s, --stream {release|dev}  Package stream to validate (default: release)
-  -l, --local-wheel PATH     Path to nanovdb_editor*.whl inside the repo.
+  -l, --local-wheel [PATH]   Path to nanovdb_editor*.whl inside the repo.
+                             If PATH is omitted, defaults to pymodule/dist/nanovdb_editor-*.whl.
                              Only valid with --stream release. Mirrors the
                              GitHub Actions behavior when a local wheel
                              artifact is provided.
@@ -43,8 +44,14 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     -l|--local-wheel)
-      LOCAL_WHEEL="${2:-}"
-      shift 2
+      # If next arg is missing or starts with '-', use default
+      if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
+        LOCAL_WHEEL="__DEFAULT__"
+        shift 1
+      else
+        LOCAL_WHEEL="${2}"
+        shift 2
+      fi
       ;;
     -i|--image-name)
       IMAGE_NAME="${2:-}"
@@ -86,6 +93,23 @@ fi
 USE_LOCAL="false"
 LOCAL_WHEEL_ABS=""
 if [[ -n "$LOCAL_WHEEL" ]]; then
+  if [[ "$LOCAL_WHEEL" == "__DEFAULT__" ]]; then
+    # Expand glob to find default wheel
+    DEFAULT_WHEEL_GLOB="${REPO_ROOT}/pymodule/dist/nanovdb_editor-*.whl"
+    WHEELS=( $DEFAULT_WHEEL_GLOB )
+    if [[ ${#WHEELS[@]} -eq 0 || ! -f "${WHEELS[0]}" ]]; then
+      echo "No wheel found matching: $DEFAULT_WHEEL_GLOB" >&2
+      exit 1
+    fi
+    if [[ ${#WHEELS[@]} -gt 1 ]]; then
+      echo "Multiple wheels found matching $DEFAULT_WHEEL_GLOB:" >&2
+      printf '  %s\n' "${WHEELS[@]}" >&2
+      echo "Please specify which wheel to use with --local-wheel PATH" >&2
+      exit 1
+    fi
+    LOCAL_WHEEL="${WHEELS[0]}"
+    echo "Using default wheel: $LOCAL_WHEEL"
+  fi
   LOCAL_WHEEL_ABS="$(realpath "$LOCAL_WHEEL")"
   if [[ ! -f "$LOCAL_WHEEL_ABS" ]]; then
     echo "Local wheel not found: $LOCAL_WHEEL" >&2
