@@ -22,6 +22,8 @@
 namespace pnanovdb_vulkan
 {
 
+static const pnanovdb_uint64_t sparse_threshold = 1024llu * 1024llu * 1024llu;
+
 void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_interop_handle_t* interopHandle)
 {
     auto loader = &context->deviceQueue->device->loader;
@@ -65,6 +67,14 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
     }
     bufCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
+    // enable device address on SSBO
+    if (context->deviceQueue->device->enabledFeatures.bufferDeviceAddress &&
+        ((ptr->desc.usage & PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED) != 0u ||
+        (ptr->desc.usage & PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED) != 0u))
+    {
+        bufCreateInfo.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR;
+    }
+
     VkExternalMemoryBufferCreateInfoKHR externalMemoryBufferCreateInfo = {};
     if (context->deviceQueue->device->desc.enable_external_usage &&
         ptr->memory_type == PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE)
@@ -78,10 +88,28 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
         bufCreateInfo.pNext = &externalMemoryBufferCreateInfo;
     }
 
+    bool isSparse = bufCreateInfo.size > sparse_threshold &&
+        ptr->memory_type == PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE &&
+        context->deviceQueue->device->enabledFeatures.sparseBinding &&
+        context->deviceQueue->device->enabledFeatures.sparseResidencyBuffer;
+    if (isSparse)
+    {
+        bufCreateInfo.flags |= VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
+    }
+
     loader->vkCreateBuffer(vulkanDevice, &bufCreateInfo, nullptr, &ptr->bufferVk);
 
-    VkMemoryRequirements bufMemReq = {};
-    loader->vkGetBufferMemoryRequirements(vulkanDevice, ptr->bufferVk, &bufMemReq);
+    VkBufferMemoryRequirementsInfo2 reqInfo = {};
+    reqInfo.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2;
+    reqInfo.buffer = ptr->bufferVk;
+
+    VkMemoryRequirements2 bufMemReq2 = {};
+    bufMemReq2.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+    loader->vkGetBufferMemoryRequirements2(vulkanDevice, &reqInfo, &bufMemReq2);
+
+    VkMemoryRequirements bufMemReq = bufMemReq2.memoryRequirements;
+
+    //printf("memReq size(%zu) alignment(%zu) memTypeBits(%d)\n", bufMemReq.size, bufMemReq.alignment, bufMemReq.memoryTypeBits);
 
     uint32_t bufMemType = 0u;
     uint32_t bufMemType_sysmem = 0u;
@@ -146,25 +174,52 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
     }
 #endif
 
-    VkResult result = loader->vkAllocateMemory(vulkanDevice, &bufMemAllocInfo, nullptr, &ptr->memoryVk);
-    if (result == VK_SUCCESS)
+    VkMemoryAllocateFlagsInfoKHR flagsInfo = {};
+    flagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO_KHR;
+    flagsInfo.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR;
+    if (bufCreateInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR)
     {
-        context->deviceQueue->device->logPrint(
-            PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Buffer mem allocate %lld bytes", bufMemReq.size);
+        flagsInfo.pNext = bufMemAllocInfo.pNext;
+        bufMemAllocInfo.pNext = &flagsInfo;
     }
-    else
+
+    size_t mem_count = isSparse ? ((bufMemReq.size + sparse_threshold - 1u) / sparse_threshold) : 1u;
+    ptr->memoryVks.resize(mem_count);
+
+    VkResult result = VK_SUCCESS;
+    for (size_t mem_idx = 0u; mem_idx < mem_count; mem_idx++)
     {
-        bufMemAllocInfo.memoryTypeIndex = bufMemType_sysmem;
-        result = loader->vkAllocateMemory(vulkanDevice, &bufMemAllocInfo, nullptr, &ptr->memoryVk);
+        VkDeviceSize mem_size = bufMemReq.size;
+        if (isSparse)
+        {
+            mem_size -= mem_idx * sparse_threshold;
+            if (mem_size > sparse_threshold)
+            {
+                mem_size = sparse_threshold;
+            }
+        }
+
+        bufMemAllocInfo.allocationSize = mem_size;
+        result = loader->vkAllocateMemory(vulkanDevice, &bufMemAllocInfo, nullptr, &ptr->memoryVks[mem_idx]);
         if (result == VK_SUCCESS)
         {
             context->deviceQueue->device->logPrint(
-                PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Buffer sysmem fallback allocate %lld bytes", bufMemReq.size);
+                PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Buffer mem allocate %lld bytes", mem_size);
         }
         else
         {
-            context->deviceQueue->device->logPrint(
-                PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Buffer allocate failed %lld bytes", bufMemReq.size);
+            bufMemAllocInfo.memoryTypeIndex = bufMemType_sysmem;
+            result = loader->vkAllocateMemory(vulkanDevice, &bufMemAllocInfo, nullptr, &ptr->memoryVks[mem_idx]);
+            if (result == VK_SUCCESS)
+            {
+                context->deviceQueue->device->logPrint(
+                    PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Buffer sysmem fallback allocate %lld bytes", mem_size);
+            }
+            else
+            {
+                context->deviceQueue->device->logPrint(
+                    PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "Buffer allocate failed %lld bytes", mem_size);
+            }
         }
     }
 
@@ -173,12 +228,59 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
         ptr->allocationBytes = bufMemReq.size;
         device_reportMemoryAllocate(context->deviceQueue->device, ptr->memory_type, ptr->allocationBytes);
 
-        loader->vkBindBufferMemory(vulkanDevice, ptr->bufferVk, ptr->memoryVk, 0u);
+        if (isSparse)
+        {
+            ptr->sparseBinds.resize(mem_count);
+            for (size_t mem_idx = 0u; mem_idx < mem_count; mem_idx++)
+            {
+                VkDeviceSize mem_size = bufMemReq.size;
+                mem_size -= mem_idx * sparse_threshold;
+                if (mem_size > sparse_threshold)
+                {
+                    mem_size = sparse_threshold;
+                }
+                ptr->sparseBinds[mem_idx].resourceOffset = mem_idx * sparse_threshold;
+                ptr->sparseBinds[mem_idx].size = mem_size;
+                ptr->sparseBinds[mem_idx].memory = ptr->memoryVks[mem_idx];
+                ptr->sparseBinds[mem_idx].memoryOffset = 0;
+            }
+
+            context->deviceQueue->device->logPrint(
+                PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "SparseBuffer mem_count(%zu) bufMemAllocInfo.memoryTypeIndex(%d)", mem_count, bufMemAllocInfo.memoryTypeIndex);
+
+            VkSparseBufferMemoryBindInfo bufBindInfo = {};
+            bufBindInfo.buffer = ptr->bufferVk;
+            bufBindInfo.bindCount = mem_count;
+            bufBindInfo.pBinds = ptr->sparseBinds.data();
+
+            VkBindSparseInfo bindSparseInfo = {};
+            bindSparseInfo.sType = VK_STRUCTURE_TYPE_BIND_SPARSE_INFO;
+            bindSparseInfo.bufferBindCount = 1u;
+            bindSparseInfo.pBufferBinds = &bufBindInfo;
+
+            loader->vkQueueBindSparse(context->deviceQueue->queueVk, 1u, &bindSparseInfo, VK_NULL_HANDLE);
+
+            loader->vkQueueWaitIdle(context->deviceQueue->queueVk);
+        }
+        else
+        {
+            loader->vkBindBufferMemory(vulkanDevice, ptr->bufferVk, ptr->memoryVks[0], 0u);
+        }
 
         if (ptr->memory_type == PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD ||
             ptr->memory_type == PNANOVDB_COMPUTE_MEMORY_TYPE_READBACK)
         {
-            loader->vkMapMemory(vulkanDevice, ptr->memoryVk, 0u, VK_WHOLE_SIZE, 0u, &ptr->mappedData);
+            loader->vkMapMemory(vulkanDevice, ptr->memoryVks[0], 0u, VK_WHOLE_SIZE, 0u, &ptr->mappedData);
+        }
+
+        if (bufCreateInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR)
+        {
+            VkBufferDeviceAddressInfoKHR addressInfo = {};
+            addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO_KHR;
+            addressInfo.buffer = ptr->bufferVk;
+            ptr->bufferAddress = loader->vkGetBufferDeviceAddressKHR(vulkanDevice, &addressInfo);
+
+            //printf("bufferAddress(%zu) allocationBytes(%zu)\n", ptr->bufferAddress, ptr->allocationBytes);
         }
     }
     else // free buffer and set null
@@ -332,12 +434,21 @@ void buffer_destroy(Context* context, Buffer* ptr)
     ptr->mappedData = nullptr;
 
     // use memoryVk as indicator of ownership of original buffer
-    if (ptr->memoryVk)
+    for (size_t mem_idx = 0u; mem_idx < ptr->memoryVks.size(); mem_idx++)
     {
-        loader->vkDestroyBuffer(loader->device, ptr->bufferVk, nullptr);
-        loader->vkFreeMemory(loader->device, ptr->memoryVk, nullptr);
+        if (ptr->memoryVks[mem_idx])
+        {
+            if (mem_idx == 0u)
+            {
+                loader->vkDestroyBuffer(loader->device, ptr->bufferVk, nullptr);
+            }
+            loader->vkFreeMemory(loader->device, ptr->memoryVks[mem_idx], nullptr);
 
-        device_reportMemoryFree(context->deviceQueue->device, ptr->memory_type, ptr->allocationBytes);
+            if (mem_idx == 0u)
+            {
+                device_reportMemoryFree(context->deviceQueue->device, ptr->memory_type, ptr->allocationBytes);
+            }
+        }
     }
 
     delete ptr;
@@ -538,7 +649,7 @@ void device_getBufferExternalHandle(pnanovdb_compute_context_t* context,
     HANDLE handle = {};
     VkMemoryGetWin32HandleInfoKHR handleInfo = {};
     handleInfo.sType = VK_STRUCTURE_TYPE_MEMORY_GET_WIN32_HANDLE_INFO_KHR;
-    handleInfo.memory = ptr->memoryVk;
+    handleInfo.memory = ptr->memoryVks[0];
     handleInfo.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT_KHR;
 
     ctx->deviceQueue->device->loader.vkGetMemoryWin32HandleKHR(
@@ -553,7 +664,7 @@ void device_getBufferExternalHandle(pnanovdb_compute_context_t* context,
     int fd = 0;
     VkMemoryGetFdInfoKHR handleInfo = {};
     handleInfo.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
-    handleInfo.memory = ptr->memoryVk;
+    handleInfo.memory = ptr->memoryVks[0];
     handleInfo.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
 
     ctx->deviceQueue->device->loader.vkGetMemoryFdKHR(ctx->deviceQueue->device->vulkanDevice, &handleInfo, &fd);
@@ -614,6 +725,12 @@ void closeBufferExternalHandle(pnanovdb_compute_context_t* context,
                                const pnanovdb_compute_interop_handle_t* srcHandle)
 {
     device_closeBufferExternalHandle(context, buffer, &srcHandle->value, sizeof(srcHandle->value));
+}
+
+pnanovdb_uint64_t getBufferDeviceAddress(pnanovdb_compute_context_t* context, pnanovdb_compute_buffer_t* buffer)
+{
+    auto ptr = cast(buffer);
+    return ptr->bufferAddress;
 }
 
 } // end namespace

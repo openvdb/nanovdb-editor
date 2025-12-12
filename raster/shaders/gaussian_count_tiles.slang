@@ -21,15 +21,18 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         return;
     }
 
-    int radius = radii_in[idx];
+    //int radius = radii_in[idx];
+    int radius = load_int(constants.ptr_radii, uint64_t(idx));
     if (radius <= 0)
     {
-        num_tiles_per_gaussian_out[idx] = 0u;
+        //num_tiles_per_gaussian_out[idx] = 0u;
+        store_uint(constants.ptr_num_tiles_per_gaussian, uint64_t(idx), 0u);
         return;
     }
     float radiusf = float(radius);
 
-    float2 mean2d = means2d_in[idx];
+    //float2 mean2d = means2d_in[idx];
+    float2 mean2d = load_float2(constants.ptr_means2d, uint64_t(idx));
     float tile_radius = radiusf / float(shader_params.tile_size);
     float tile_mean_u = mean2d.x / float(shader_params.tile_size);
     float tile_mean_v = mean2d.y / float(shader_params.tile_size);
@@ -43,5 +46,6 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 
     uint num_tiles = (tile_max.y - tile_min.y) * (tile_max.x - tile_min.x);
 
-    num_tiles_per_gaussian_out[idx] = num_tiles;
+    //num_tiles_per_gaussian_out[idx] = num_tiles;
+    store_uint(constants.ptr_num_tiles_per_gaussian, uint64_t(idx), num_tiles);
 }
