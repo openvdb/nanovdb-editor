@@ -469,16 +469,17 @@ pnanovdb_compute_device_t* createDevice(pnanovdb_compute_device_manager_t* devic
         VkPhysicalDeviceSynchronization2Features synchronization2_features = {};
         synchronization2_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
         synchronization2_features.synchronization2 = VK_TRUE;
+        synchronization2_features.pNext = nullptr;
 
         VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures = {};
-        bufferDeviceAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
         if (ptr->enabledExtensions.VK_KHR_BUFFER_DEVICE_ADDRESS)
         {
+            bufferDeviceAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
             bufferDeviceAddressFeatures.bufferDeviceAddress = VK_TRUE;
+            bufferDeviceAddressFeatures.pNext = nullptr;
+            synchronization2_features.pNext = &bufferDeviceAddressFeatures;
             ptr->enabledFeatures.bufferDeviceAddress = PNANOVDB_TRUE;
         }
-        bufferDeviceAddressFeatures.pNext = nullptr;
-        synchronization2_features.pNext = &bufferDeviceAddressFeatures;
 
         VkDeviceCreateInfo deviceCreateInfo = {};
         deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
