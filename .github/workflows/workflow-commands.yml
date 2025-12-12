@@ -87,24 +87,35 @@ jobs:
               'codestyle.yml'
             ];
 
-            // Helper to find the triggered run
+            // Helper to find the triggered run with retries
             async function findWorkflowRun(workflowId, beforeTime) {
-              // Wait for the run to be created
-              await new Promise(resolve => setTimeout(resolve, 2000));
+              const maxRetries = 5;
+              const delayMs = 3000;
 
-              const runs = await github.rest.actions.listWorkflowRuns({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                workflow_id: workflowId,
-                branch: ref,
-                per_page: 5
-              });
+              for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+                console.log(`Looking for ${workflowId} run (attempt ${attempt}/${maxRetries})...`);
 
-              // Find a run created after we triggered it
-              const run = runs.data.workflow_runs.find(r =>
-                new Date(r.created_at) > beforeTime
-              );
-              return run;
+                const runs = await github.rest.actions.listWorkflowRuns({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  workflow_id: workflowId,
+                  branch: ref,
+                  per_page: 10,
+                  event: 'workflow_dispatch'
+                });
+
+                // Find a run created after we triggered it
+                const run = runs.data.workflow_runs.find(r =>
+                  new Date(r.created_at) >= beforeTime
+                );
+
+                if (run) {
+                  console.log(`Found run: ${run.html_url}`);
+                  return run;
+                }
+              }
+              return null;
             }
 
             const results = [];
@@ -198,22 +209,34 @@ jobs:
               '/run-codestyle': 'codestyle.yml'
             };
 
-            // Helper to find the triggered run
+            // Helper to find the triggered run with retries
             async function findWorkflowRun(workflowId, beforeTime) {
-              await new Promise(resolve => setTimeout(resolve, 2000));
+              const maxRetries = 5;
+              const delayMs = 3000;
 
-              const runs = await github.rest.actions.listWorkflowRuns({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                workflow_id: workflowId,
-                branch: ref,
-                per_page: 5
-              });
+              for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+                console.log(`Looking for ${workflowId} run (attempt ${attempt}/${maxRetries})...`);
 
-              const run = runs.data.workflow_runs.find(r =>
-                new Date(r.created_at) > beforeTime
-              );
-              return run;
+                const runs = await github.rest.actions.listWorkflowRuns({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  workflow_id: workflowId,
+                  branch: ref,
+                  per_page: 10,
+                  event: 'workflow_dispatch'
+                });
+
+                const run = runs.data.workflow_runs.find(r =>
+                  new Date(r.created_at) >= beforeTime
+                );
+
+                if (run) {
+                  console.log(`Found run: ${run.html_url}`);
+                  return run;
+                }
+              }
+              return null;
             }
 
             for (const [command, workflow] of Object.entries(workflowMap)) {
