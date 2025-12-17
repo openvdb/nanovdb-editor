@@ -980,6 +980,53 @@ bool EditorScene::remove_object(pnanovdb_editor_token_t* scene_token, const char
     return removed;
 }
 
+std::string EditorScene::add_new_camera(const char* name)
+{
+    pnanovdb_editor_token_t* scene_token = get_current_scene_token();
+    std::string camera_name = m_scene_view.add_new_camera(scene_token, name);
+
+    if (!camera_name.empty())
+    {
+        // Register with EditorSceneManager for proper removal support
+        pnanovdb_editor_token_t* name_token = EditorToken::getInstance().getToken(camera_name.c_str());
+        if (name_token && scene_token)
+        {
+            // Get the camera's shared_ptr from SceneView
+            const auto& cameras = m_scene_view.get_cameras();
+            auto it = cameras.find(name_token->id);
+            if (it != cameras.end() && it->second.camera_view)
+            {
+                m_scene_manager.register_camera(scene_token, name_token, it->second.camera_view);
+            }
+        }
+    }
+
+    return camera_name;
+}
+
+SceneViewData* EditorScene::get_or_create_scene(pnanovdb_editor_token_t* scene_token)
+{
+    // Create scene if needed (this also creates the initial viewport camera)
+    SceneViewData* scene = m_scene_view.get_or_create_scene(scene_token);
+
+    // Register all cameras from this scene with scene manager (idempotent - okay if already registered)
+    if (scene && scene_token)
+    {
+        for (const auto& [cam_id, cam_ctx] : scene->cameras)
+        {
+            if (cam_ctx.camera_view)
+            {
+                pnanovdb_editor_token_t* cam_token = EditorToken::getInstance().getTokenById(cam_id);
+                if (cam_token)
+                {
+                    m_scene_manager.register_camera(scene_token, cam_token, cam_ctx.camera_view);
+                }
+            }
+        }
+    }
+
+    return scene;
+}
 
 const std::map<uint64_t, CameraViewContext>& EditorScene::get_camera_views() const
 {

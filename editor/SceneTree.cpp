@@ -308,23 +308,33 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
             if (ptr->editor_scene)
             {
                 bool allVisible = true;
-                ptr->editor_scene->for_each_view(ViewType::Cameras,
-                                                 [&](uint64_t name_id, const auto& view_data)
-                                                 {
-                                                     using ViewT = std::decay_t<decltype(view_data)>;
-                                                     if constexpr (std::is_same_v<ViewT, CameraViewContext>)
-                                                     {
-                                                         if (!view_data.camera_view)
-                                                         {
-                                                             return;
-                                                         }
-                                                         if (!view_data.camera_view->is_visible)
-                                                         {
-                                                             allVisible = false;
-                                                         }
-                                                     }
-                                                 });
-                bool commonVisible = allVisible;
+                bool hasNonViewportCameras = false;
+                ptr->editor_scene->for_each_view(
+                    ViewType::Cameras,
+                    [&](uint64_t name_id, const auto& view_data)
+                    {
+                        using ViewT = std::decay_t<decltype(view_data)>;
+                        if constexpr (std::is_same_v<ViewT, CameraViewContext>)
+                        {
+                            if (!view_data.camera_view)
+                            {
+                                return;
+                            }
+                            // Skip viewport camera - it should always be hidden
+                            pnanovdb_editor_token_t* cam_token = EditorToken::getInstance().getTokenById(name_id);
+                            if (cam_token && ptr->editor_scene->is_viewport_camera(cam_token))
+                            {
+                                return;
+                            }
+                            hasNonViewportCameras = true;
+                            if (!view_data.camera_view->is_visible)
+                            {
+                                allVisible = false;
+                            }
+                        }
+                    });
+                // If no non-viewport cameras exist, show as "all hidden"
+                bool commonVisible = hasNonViewportCameras ? allVisible : false;
 
                 bool treeNodeOpen = renderTreeNodeHeader("Camera Views", nullptr, false, false);
 
@@ -382,24 +392,30 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                     ImGui::SetTooltip("Add new camera");
                 }
 
-                // Update all camera views if visibility was toggled
+                // Update all camera views if visibility was toggled (skip viewport camera)
                 if (commonVisible != allVisible && ptr->editor_scene)
                 {
                     // Note: We need mutable access to update visibility
-                    ptr->editor_scene->for_each_view(ViewType::Cameras,
-                                                     [&](uint64_t name_id, const auto& view_data)
-                                                     {
-                                                         using ViewT = std::decay_t<decltype(view_data)>;
-                                                         if constexpr (std::is_same_v<ViewT, CameraViewContext>)
-                                                         {
-                                                             if (!view_data.camera_view)
-                                                             {
-                                                                 return;
-                                                             }
-                                                             view_data.camera_view->is_visible =
-                                                                 commonVisible ? PNANOVDB_TRUE : PNANOVDB_FALSE;
-                                                         }
-                                                     });
+                    ptr->editor_scene->for_each_view(
+                        ViewType::Cameras,
+                        [&](uint64_t name_id, const auto& view_data)
+                        {
+                            using ViewT = std::decay_t<decltype(view_data)>;
+                            if constexpr (std::is_same_v<ViewT, CameraViewContext>)
+                            {
+                                if (!view_data.camera_view)
+                                {
+                                    return;
+                                }
+                                // Skip viewport camera - it should always be hidden
+                                pnanovdb_editor_token_t* cam_token = EditorToken::getInstance().getTokenById(name_id);
+                                if (cam_token && ptr->editor_scene->is_viewport_camera(cam_token))
+                                {
+                                    return;
+                                }
+                                view_data.camera_view->is_visible = commonVisible ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+                            }
+                        });
                 }
 
                 if (treeNodeOpen)
@@ -435,45 +451,54 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                                     ptr->editor_scene->set_properties_selection(ViewType::Cameras, camera_token);
                                 }
 
-                                // Custom context menu for cameras (only if there are menu items to show)
-                                bool hasContextMenuItems = !isViewportCamera || canDeleteCameras;
-                                if (hasContextMenuItems)
+                                // Custom context menu for cameras (only for non-viewport cameras)
+                                // Viewport camera can't be removed and is already the viewport
+                                if (!isViewportCamera &&
+                                    ImGui::BeginPopupContextItem((std::string("##CameraMenu_") + cameraName).c_str()))
                                 {
-                                    std::string popupId = std::string("CameraPopup_") + cameraName;
-                                    ImGui::OpenPopupOnItemClick(popupId.c_str(), ImGuiPopupFlags_MouseButtonRight);
-                                    if (ImGui::BeginPopup(popupId.c_str()))
+                                    if (ImGui::MenuItem("Set as Viewport Camera"))
                                     {
-                                        if (!isViewportCamera && ImGui::MenuItem("Set as Viewport Camera"))
+                                        // Update the previous viewport camera
+                                        pnanovdb_editor_token_t* prevViewportToken =
+                                            ptr->editor_scene->get_viewport_camera_token();
+                                        if (prevViewportToken)
                                         {
-                                            // Hide the previous viewport camera
-                                            pnanovdb_editor_token_t* prevViewportToken =
-                                                ptr->editor_scene->get_viewport_camera_token();
-                                            if (prevViewportToken)
+                                            pnanovdb_camera_view_t* prevCamera =
+                                                ptr->editor_scene->get_camera(prevViewportToken);
+                                            if (prevCamera)
                                             {
-                                                pnanovdb_camera_view_t* prevCamera =
-                                                    ptr->editor_scene->get_camera(prevViewportToken);
-                                                if (prevCamera)
+                                                prevCamera->is_visible = PNANOVDB_FALSE;
+                                                // Set far plane to 100 for frustum visualization
+                                                int prevCameraIdx =
+                                                    ptr->editor_scene->get_camera_frustum_index(prevViewportToken);
+                                                if (prevCamera->configs && prevCameraIdx >= 0 &&
+                                                    prevCameraIdx < prevCamera->num_cameras)
                                                 {
-                                                    prevCamera->is_visible = PNANOVDB_FALSE;
+                                                    prevCamera->configs[prevCameraIdx].far_plane = 100.0f;
                                                 }
                                             }
-
-                                            // Hide the new viewport camera (shouldn't render its own frustum)
-                                            camera->is_visible = PNANOVDB_FALSE;
-
-                                            ptr->editor_scene->set_viewport_camera(camera_token);
-                                            // Sync camera state to render settings
-                                            int cameraIdx = ptr->editor_scene->get_camera_frustum_index(camera_token);
-                                            ptr->render_settings->camera_state = camera->states[cameraIdx];
-                                            ptr->render_settings->camera_config = camera->configs[cameraIdx];
-                                            ptr->render_settings->sync_camera = PNANOVDB_TRUE;
                                         }
-                                        if (canDeleteCameras && ImGui::MenuItem("Remove"))
+
+                                        // Hide the new viewport camera (shouldn't render its own frustum)
+                                        camera->is_visible = PNANOVDB_FALSE;
+
+                                        ptr->editor_scene->set_viewport_camera(camera_token);
+                                        // Sync camera state to render settings
+                                        int cameraIdx = ptr->editor_scene->get_camera_frustum_index(camera_token);
+                                        // Set far plane to infinity for viewport camera
+                                        if (camera->configs && cameraIdx >= 0 && cameraIdx < camera->num_cameras)
                                         {
-                                            camerasToDelete.push_back(cameraName);
+                                            camera->configs[cameraIdx].far_plane = PNANOVDB_CAMERA_INFINITY;
                                         }
-                                        ImGui::EndPopup();
+                                        ptr->render_settings->camera_state = camera->states[cameraIdx];
+                                        ptr->render_settings->camera_config = camera->configs[cameraIdx];
+                                        ptr->render_settings->sync_camera = PNANOVDB_TRUE;
                                     }
+                                    if (canDeleteCameras && ImGui::MenuItem("Remove"))
+                                    {
+                                        camerasToDelete.push_back(cameraName);
+                                    }
+                                    ImGui::EndPopup();
                                 }
 
                                 // Draw icon on the right side
@@ -488,6 +513,10 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                                     // Viewport camera icon
                                     drawSideEyeIcon(drawList, ImGui::GetCursorScreenPos(), iconSize);
                                     ImGui::Dummy(ImVec2(iconSize, iconSize));
+                                    if (ImGui::IsItemHovered())
+                                    {
+                                        ImGui::SetTooltip("Viewport camera");
+                                    }
                                 }
                                 else
                                 {

@@ -204,6 +204,22 @@ public:
     void add_camera(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name, pnanovdb_camera_view_t* camera_view);
 
     /*!
+        \brief Register an existing camera with shared ownership
+
+        Used for UI-created cameras that already have a shared_ptr owner.
+        Unlike add_camera(), this does NOT create a copy - it shares ownership.
+
+        \param scene Scene token
+        \param name Object name token
+        \param camera_view_owner Existing shared_ptr to the camera view
+
+        \note Thread-safe
+    */
+    void register_camera(pnanovdb_editor_token_t* scene,
+                         pnanovdb_editor_token_t* name,
+                         std::shared_ptr<pnanovdb_camera_view_t> camera_view_owner);
+
+    /*!
         \brief Remove an object by tokens
 
         Removes the object and destroys all its associated data (arrays, gaussian data, etc.)

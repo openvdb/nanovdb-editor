@@ -184,7 +184,9 @@ std::string SceneView::add_new_camera(pnanovdb_editor_token_t* scene_token, cons
     std::string camera_name = name ? name : "";
     if (camera_name.empty())
     {
-        camera_name = "Camera " + std::to_string(scene->unnamed_counter++);
+        int counter = scene->unnamed_counter++;
+        // First camera is "Camera", subsequent are "Camera 1", "Camera 2", etc.
+        camera_name = (counter == 0) ? "Camera" : "Camera " + std::to_string(counter);
     }
 
     // Create token for the name
@@ -217,6 +219,7 @@ std::string SceneView::add_new_camera(pnanovdb_editor_token_t* scene_token, cons
     CameraViewContext camera_ctx;
     camera_ctx.camera_config = std::make_shared<pnanovdb_camera_config_t>();
     pnanovdb_camera_config_default(camera_ctx.camera_config.get());
+    camera_ctx.camera_config->far_plane = 100.0f; // Non-viewport cameras use bounded far plane for viz
 
     const pnanovdb_bool_t is_y_up = (m_imgui_settings ? m_imgui_settings->is_y_up : PNANOVDB_TRUE);
     camera_ctx.camera_state = std::make_shared<pnanovdb_camera_state_t>();

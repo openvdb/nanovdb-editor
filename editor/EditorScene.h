@@ -156,10 +156,8 @@ public:
 
     // Create a new camera with default settings in the current scene
     // Returns the name of the created camera, or empty string on failure
-    std::string add_new_camera(const char* name = nullptr)
-    {
-        return m_scene_view.add_new_camera(get_current_scene_token(), name);
-    }
+    // Also registers the camera with EditorSceneManager for proper removal support
+    std::string add_new_camera(const char* name = nullptr);
 
     // Get a camera by token (in current scene)
     pnanovdb_camera_view_t* get_camera(pnanovdb_editor_token_t* camera_token) const
@@ -174,10 +172,8 @@ public:
     void set_selected_object_shader_name(const std::string& shader_name);
 
     // Ensure scene exists (creates with default viewport camera if needed)
-    SceneViewData* get_or_create_scene(pnanovdb_editor_token_t* scene_token)
-    {
-        return m_scene_view.get_or_create_scene(scene_token);
-    }
+    // Also registers the viewport camera with EditorSceneManager for proper removal support
+    SceneViewData* get_or_create_scene(pnanovdb_editor_token_t* scene_token);
 
     std::vector<pnanovdb_editor_token_t*> get_all_scene_tokens() const;
 
