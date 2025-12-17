@@ -129,9 +129,36 @@ public:
     EditorSceneManager* get_scene_manager() const;
     void set_current_scene(pnanovdb_editor_token_t* scene_token);
     pnanovdb_editor_token_t* get_current_scene_token() const;
+
+    // Get the viewport camera token for the current scene
     pnanovdb_editor_token_t* get_viewport_camera_token() const
     {
         return m_scene_view.get_viewport_camera_token();
+    }
+
+    // Get the viewport camera token for a specific scene
+    pnanovdb_editor_token_t* get_viewport_camera_token(pnanovdb_editor_token_t* scene_token) const
+    {
+        return m_scene_view.get_viewport_camera_token(scene_token);
+    }
+
+    // Check if a camera is the viewport camera (in current scene)
+    bool is_viewport_camera(pnanovdb_editor_token_t* camera_token) const
+    {
+        return m_scene_view.is_viewport_camera(camera_token);
+    }
+
+    // Set which camera is the viewport camera (in current scene)
+    void set_viewport_camera(pnanovdb_editor_token_t* camera_token)
+    {
+        m_scene_view.set_viewport_camera(camera_token);
+    }
+
+    // Create a new camera with default settings in the current scene
+    // Returns the name of the created camera, or empty string on failure
+    std::string add_new_camera(const char* name = nullptr)
+    {
+        return m_scene_view.add_new_camera(get_current_scene_token(), name);
     }
 
     // Get the shader name from the currently selected object (for Properties window)

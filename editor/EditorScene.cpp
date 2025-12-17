@@ -773,7 +773,7 @@ void EditorScene::sync_editor_camera_from_scene()
     // Ensure the scene exists (creates with default camera if needed)
     m_scene_view.get_or_create_scene(current_scene);
 
-    pnanovdb_editor_token_t* viewport_token = m_scene_view.get_viewport_camera_token();
+    pnanovdb_editor_token_t* viewport_token = m_scene_view.get_viewport_camera_token(current_scene);
     pnanovdb_camera_view_t* viewport_view = m_scene_view.get_camera(current_scene, viewport_token);
     if (viewport_view && viewport_view->num_cameras > 0)
     {
@@ -809,7 +809,7 @@ void EditorScene::sync_scene_camera_from_editor()
     // Ensure the scene exists (creates with default camera if needed)
     m_scene_view.get_or_create_scene(current_scene);
 
-    pnanovdb_editor_token_t* viewport_token = m_scene_view.get_viewport_camera_token();
+    pnanovdb_editor_token_t* viewport_token = m_scene_view.get_viewport_camera_token(current_scene);
     pnanovdb_camera_view_t* viewport_view = m_scene_view.get_camera(current_scene, viewport_token);
     if (viewport_view && viewport_view->num_cameras > 0)
     {

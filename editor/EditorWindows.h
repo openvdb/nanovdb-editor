@@ -25,7 +25,6 @@ void createMenu(Instance* ptr);
 void showSceneWindow(Instance* ptr);
 void showCameraViews(Instance* ptr);
 void showPropertiesWindow(Instance* ptr);
-void showViewportSettingsWindow(Instance* ptr);
 void showRenderSettingsWindow(Instance* ptr);
 void showCompilerSettingsWindow(Instance* ptr);
 void showShaderParamsWindow(Instance* ptr);

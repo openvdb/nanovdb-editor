@@ -20,8 +20,6 @@ namespace pnanovdb_editor
 
 SceneView::SceneView()
 {
-    // Initialize cached viewport camera token once
-    m_viewport_camera_token = EditorToken::getInstance().getToken(imgui_instance_user::VIEWPORT_CAMERA);
 }
 
 template <typename MapType>
@@ -60,25 +58,13 @@ SceneViewData* SceneView::get_or_create_scene(pnanovdb_editor_token_t* scene_tok
     // New scene being created - initialize it with a default camera
     SceneViewData& new_scene = m_scene_view_data[scene_token->id];
 
-    // Heap-allocate config, state, and view to ensure stable addresses when map reallocates
-    const pnanovdb_bool_t is_y_up = (m_imgui_settings ? m_imgui_settings->is_y_up : PNANOVDB_TRUE);
-
-    new_scene.default_camera_config = std::make_shared<pnanovdb_camera_config_t>();
-    pnanovdb_camera_config_default(new_scene.default_camera_config.get());
-
-    new_scene.default_camera_state = std::make_shared<pnanovdb_camera_state_t>();
-    pnanovdb_camera_state_default(new_scene.default_camera_state.get(), is_y_up);
-
-    new_scene.default_camera_view.camera_view = std::make_shared<pnanovdb_camera_view_t>();
-    pnanovdb_camera_view_default(new_scene.default_camera_view.camera_view.get());
-    new_scene.default_camera_view.camera_view->name = m_viewport_camera_token;
-    new_scene.default_camera_view.camera_view->configs = new_scene.default_camera_config.get();
-    new_scene.default_camera_view.camera_view->states = new_scene.default_camera_state.get();
-    new_scene.default_camera_view.camera_view->num_cameras = 1;
-    new_scene.default_camera_view.camera_view->is_visible = PNANOVDB_FALSE;
-
-    // Add the default viewport camera to this scene
-    new_scene.cameras[m_viewport_camera_token->id] = new_scene.default_camera_view;
+    // Create the initial camera and mark it as viewport
+    std::string camera_name = add_new_camera(scene_token, nullptr);
+    pnanovdb_editor_token_t* camera_token = EditorToken::getInstance().getToken(camera_name.c_str());
+    if (camera_token)
+    {
+        new_scene.viewport_camera_token_id = camera_token->id;
+    }
 
     return &new_scene;
 }
@@ -186,6 +172,121 @@ const std::map<uint64_t, CameraViewContext>& SceneView::get_cameras() const
     const SceneViewData* scene = get_current_scene();
     static const std::map<uint64_t, CameraViewContext> empty_map;
     return scene ? scene->cameras : empty_map;
+}
+
+std::string SceneView::add_new_camera(pnanovdb_editor_token_t* scene_token, const char* name)
+{
+    SceneViewData* scene = scene_token ? get_or_create_scene(scene_token) : get_current_scene();
+    if (!scene)
+        return "";
+
+    // Generate unique name if not provided
+    std::string camera_name = name ? name : "";
+    if (camera_name.empty())
+    {
+        camera_name = "Camera " + std::to_string(scene->unnamed_counter++);
+    }
+
+    // Create token for the name
+    pnanovdb_editor_token_t* name_token = EditorToken::getInstance().getToken(camera_name.c_str());
+    if (!name_token)
+        return "";
+
+    // Check if name already exists, append number to make unique
+    if (scene->cameras.find(name_token->id) != scene->cameras.end())
+    {
+        int suffix = 1;
+        while (true)
+        {
+            std::string new_name = camera_name + " " + std::to_string(suffix++);
+            name_token = EditorToken::getInstance().getToken(new_name.c_str());
+            if (scene->cameras.find(name_token->id) == scene->cameras.end())
+            {
+                camera_name = new_name;
+                break;
+            }
+        }
+    }
+
+    // Create camera context with its own config/state storage
+    CameraViewContext camera_ctx;
+    camera_ctx.camera_config = std::make_shared<pnanovdb_camera_config_t>();
+    pnanovdb_camera_config_default(camera_ctx.camera_config.get());
+
+    const pnanovdb_bool_t is_y_up = (m_imgui_settings ? m_imgui_settings->is_y_up : PNANOVDB_TRUE);
+    camera_ctx.camera_state = std::make_shared<pnanovdb_camera_state_t>();
+    pnanovdb_camera_state_default(camera_ctx.camera_state.get(), is_y_up);
+
+    camera_ctx.camera_view = std::make_shared<pnanovdb_camera_view_t>();
+    pnanovdb_camera_view_default(camera_ctx.camera_view.get());
+    camera_ctx.camera_view->name = name_token;
+    camera_ctx.camera_view->configs = camera_ctx.camera_config.get();
+    camera_ctx.camera_view->states = camera_ctx.camera_state.get();
+    camera_ctx.camera_view->num_cameras = 1;
+    camera_ctx.camera_view->is_visible = PNANOVDB_FALSE; // New cameras are invisible by default
+
+    scene->cameras[name_token->id] = std::move(camera_ctx);
+
+    return camera_name;
+}
+
+// Viewport camera methods
+pnanovdb_editor_token_t* SceneView::get_viewport_camera_token() const
+{
+    const SceneViewData* scene = get_current_scene();
+    if (!scene || scene->viewport_camera_token_id == 0)
+        return nullptr;
+    return EditorToken::getInstance().getTokenById(scene->viewport_camera_token_id);
+}
+
+pnanovdb_editor_token_t* SceneView::get_viewport_camera_token(pnanovdb_editor_token_t* scene_token) const
+{
+    const SceneViewData* scene = get_scene(scene_token);
+    if (!scene || scene->viewport_camera_token_id == 0)
+        return nullptr;
+    return EditorToken::getInstance().getTokenById(scene->viewport_camera_token_id);
+}
+
+void SceneView::set_viewport_camera(pnanovdb_editor_token_t* camera_token)
+{
+    SceneViewData* scene = get_current_scene();
+    if (scene && camera_token)
+    {
+        // Verify camera exists in this scene
+        if (scene->cameras.find(camera_token->id) != scene->cameras.end())
+        {
+            scene->viewport_camera_token_id = camera_token->id;
+        }
+    }
+}
+
+void SceneView::set_viewport_camera(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* camera_token)
+{
+    SceneViewData* scene = get_scene(scene_token);
+    if (scene && camera_token)
+    {
+        // Verify camera exists in this scene
+        if (scene->cameras.find(camera_token->id) != scene->cameras.end())
+        {
+            scene->viewport_camera_token_id = camera_token->id;
+        }
+    }
+}
+
+bool SceneView::is_viewport_camera(pnanovdb_editor_token_t* camera_token) const
+{
+    const SceneViewData* scene = get_current_scene();
+    if (!scene || !camera_token)
+        return false;
+    return scene->viewport_camera_token_id == camera_token->id;
+}
+
+bool SceneView::is_viewport_camera(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* camera_token) const
+{
+    const SceneViewData* scene = get_scene(scene_token);
+    if (!scene || !camera_token)
+        return false;
+    return scene->viewport_camera_token_id == camera_token->id;
 }
 
 void SceneView::set_view(SceneViewData* scene, pnanovdb_editor_token_t* view_token)
