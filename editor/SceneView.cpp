@@ -195,17 +195,22 @@ std::string SceneView::add_new_camera(pnanovdb_editor_token_t* scene_token, cons
     // Check if name already exists, append number to make unique
     if (scene->cameras.find(name_token->id) != scene->cameras.end())
     {
+        static constexpr int kMaxSuffixAttempts = 10000;
         int suffix = 1;
-        while (true)
+        while (suffix <= kMaxSuffixAttempts)
         {
             std::string new_name = camera_name + " " + std::to_string(suffix++);
             name_token = EditorToken::getInstance().getToken(new_name.c_str());
+            if (!name_token)
+                return ""; // Token generation failed
             if (scene->cameras.find(name_token->id) == scene->cameras.end())
             {
                 camera_name = new_name;
                 break;
             }
         }
+        if (suffix > kMaxSuffixAttempts)
+            return ""; // Could not generate unique name within limit
     }
 
     // Create camera context with its own config/state storage

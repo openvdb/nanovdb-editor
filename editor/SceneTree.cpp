@@ -43,19 +43,29 @@ static bool drawEyeIcon(ImDrawList* drawList, ImVec2 pos, float size, bool isVis
     return clicked;
 }
 
-// Helper to draw a camera/camcorder icon (viewport indicator)
-static void drawCameraIcon(ImDrawList* drawList, ImVec2 pos, float size)
+// Helper to draw a side-facing eye icon (viewport camera indicator)
+static void drawSideEyeIcon(ImDrawList* drawList, ImVec2 pos, float size)
 {
-    float cx = pos.x + size * 0.5f;
     float cy = pos.y + size * 0.5f;
-    float s = size * 0.32f;
     ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
+    float thickness = 1.5f;
 
-    // Camera body (rounded rectangle)
-    drawList->AddRectFilled(ImVec2(cx - s * 1.4f, cy - s * 0.8f), ImVec2(cx + s * 0.2f, cy + s * 0.8f), col, s * 0.3f);
-    // Lens/viewfinder triangle (pointing left into camera)
-    drawList->AddTriangleFilled(
-        ImVec2(cx + s * 1.2f, cy - s * 0.55f), ImVec2(cx + s * 1.2f, cy + s * 0.55f), ImVec2(cx + s * 0.3f, cy), col);
+    // Eye ellipse
+    float eyeCenterX = pos.x + size * 0.30f;
+    float eyeRadiusX = size * 0.18f;
+    float eyeRadiusY = size * 0.34f;
+    drawList->AddEllipse(ImVec2(eyeCenterX, cy), ImVec2(eyeRadiusX, eyeRadiusY), col, 0.f, 16, thickness);
+
+    // Small filled pupil
+    float pupilRadius = size * 0.07f;
+    drawList->AddCircleFilled(ImVec2(eyeCenterX - size * 0.08f, cy), pupilRadius, col);
+
+    // ">" viewing direction
+    float vTipX = pos.x + size;
+    float vStartX = eyeCenterX - size * 0.12f;
+    float vHalfHeight = size * 0.48f;
+    drawList->AddLine(ImVec2(vStartX, cy - vHalfHeight), ImVec2(vTipX, cy), col, thickness);
+    drawList->AddLine(ImVec2(vTipX, cy), ImVec2(vStartX, cy + vHalfHeight), col, thickness);
 }
 
 // Helper to draw a "+" icon
@@ -391,7 +401,7 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                     // Collect cameras to delete (can't delete while iterating)
                     std::vector<std::string> camerasToDelete;
 
-                    // Check camera count - don't allow deleting the last camera
+                    // Only allow deleting cameras when more than one exists
                     size_t cameraCount = ptr->editor_scene->get_camera_views().size();
                     bool canDeleteCameras = (cameraCount > 1);
 
@@ -453,9 +463,8 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
 
                                 if (isViewportCamera)
                                 {
-                                    // Camera icon for viewport camera (not clickable, viewport camera is always
-                                    // "active")
-                                    drawCameraIcon(drawList, ImGui::GetCursorScreenPos(), iconSize);
+                                    // Viewport camera icon
+                                    drawSideEyeIcon(drawList, ImGui::GetCursorScreenPos(), iconSize);
                                     ImGui::Dummy(ImVec2(iconSize, iconSize));
                                 }
                                 else

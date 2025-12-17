@@ -161,6 +161,12 @@ public:
         return m_scene_view.add_new_camera(get_current_scene_token(), name);
     }
 
+    // Get a camera by token (in current scene)
+    pnanovdb_camera_view_t* get_camera(pnanovdb_editor_token_t* camera_token) const
+    {
+        return m_scene_view.get_camera(camera_token);
+    }
+
     // Get the shader name from the currently selected object (for Properties window)
     std::string get_selected_object_shader_name() const;
 
