@@ -57,7 +57,9 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
     int cameraIdx = ptr->editor_scene->get_camera_frustum_index(selection.name_token);
     pnanovdb_camera_state_t& state = camera->states[cameraIdx];
 
-    bool isViewportCamera = (strcmp(selected_name, VIEWPORT_CAMERA) == 0);
+    // Check if this camera is marked as the viewport camera
+    bool isViewportCamera = ptr->editor_scene->is_viewport_camera(selection.name_token);
+
     if (isViewportCamera)
     {
         // Projection mode: Perspective vs Orthographic
@@ -198,32 +200,6 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
         else
         {
             ImGui::Dummy(ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetFrameHeight()));
-        }
-        if (ImGui::Button("Set Viewport Camera"))
-        {
-            pnanovdb_vec3_t& up = state.eye_up;
-            if (state.eye_up.x != ptr->render_settings->camera_state.eye_up.x ||
-                state.eye_up.y != ptr->render_settings->camera_state.eye_up.y ||
-                state.eye_up.z != ptr->render_settings->camera_state.eye_up.z)
-            {
-                pnanovdb_vec3_t& dir = state.eye_direction;
-                pnanovdb_vec3_t right = { dir.y * up.z - dir.z * up.y, dir.z * up.x - dir.x * up.z,
-                                          dir.x * up.y - dir.y * up.x };
-                up.x = -(right.y * dir.z - right.z * dir.y);
-                up.y = -(right.z * dir.x - right.x * dir.z);
-                up.z = -(right.x * dir.y - right.y * dir.x);
-                float len = sqrtf(up.x * up.x + up.y * up.y + up.z * up.z);
-                if (len > EPSILON)
-                {
-                    up.x /= len;
-                    up.y /= len;
-                    up.z /= len;
-                }
-            }
-            ptr->render_settings->camera_state = state;
-            ptr->render_settings->camera_state.eye_up = up;
-            ptr->render_settings->camera_config.is_orthographic = camera->configs[cameraIdx].is_orthographic;
-            ptr->render_settings->sync_camera = PNANOVDB_TRUE;
         }
     }
 

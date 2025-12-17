@@ -32,6 +32,8 @@ static constexpr const char* DEFAULT_SCENE_NAME = "default";
 struct CameraViewContext
 {
     std::shared_ptr<pnanovdb_camera_view_t> camera_view;
+    std::shared_ptr<pnanovdb_camera_config_t> camera_config;
+    std::shared_ptr<pnanovdb_camera_state_t> camera_state;
 };
 
 // Context data for a NanoVDB view
@@ -60,10 +62,8 @@ struct SceneViewData
     std::atomic<uint64_t> current_view_epoch{ 0 };
     int unnamed_counter = 0;
 
-    // Per-scene default camera config, state, and view (heap-allocated to ensure stable addresses)
-    std::shared_ptr<pnanovdb_camera_config_t> default_camera_config;
-    std::shared_ptr<pnanovdb_camera_state_t> default_camera_state;
-    CameraViewContext default_camera_view;
+    // ID of the camera that is currently used as the viewport camera for this scene
+    uint64_t viewport_camera_token_id = 0;
 };
 
 // Views representing loaded scenes via editor's API, does not own the data
@@ -81,11 +81,17 @@ public:
     SceneViewData* get_current_scene();
     const SceneViewData* get_current_scene() const;
 
-    // Get cached viewport camera token (initialized once in constructor)
-    pnanovdb_editor_token_t* get_viewport_camera_token() const
-    {
-        return m_viewport_camera_token;
-    }
+    // Get the viewport camera token for a scene (the camera marked as viewport)
+    pnanovdb_editor_token_t* get_viewport_camera_token() const;
+    pnanovdb_editor_token_t* get_viewport_camera_token(pnanovdb_editor_token_t* scene_token) const;
+
+    // Set which camera is the viewport camera for the current/specified scene
+    void set_viewport_camera(pnanovdb_editor_token_t* camera_token);
+    void set_viewport_camera(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* camera_token);
+
+    // Check if a camera is the viewport camera
+    bool is_viewport_camera(pnanovdb_editor_token_t* camera_token) const;
+    bool is_viewport_camera(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* camera_token) const;
 
     // Set which scene is current
     void set_current_scene(pnanovdb_editor_token_t* scene_token);
@@ -111,6 +117,9 @@ public:
     pnanovdb_camera_view_t* get_camera(pnanovdb_editor_token_t* name_token) const;
     pnanovdb_camera_view_t* get_camera(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token) const;
     const std::map<uint64_t, CameraViewContext>& get_cameras() const;
+
+    // Create a new camera with default settings
+    pnanovdb_editor_token_t* add_new_camera(pnanovdb_editor_token_t* scene_token = nullptr, const char* name = nullptr);
 
     // Current view selection (in current scene)
     void set_current_view(pnanovdb_editor_token_t* view_token);
@@ -192,7 +201,6 @@ private:
     std::map<uint64_t, SceneViewData> m_scene_view_data;
     pnanovdb_editor_token_t* m_current_scene_token = nullptr; // Currently active scene
     pnanovdb_editor_token_t* m_default_scene_token = nullptr; // Default scene for backward compatibility
-    pnanovdb_editor_token_t* m_viewport_camera_token = nullptr; // Cached token for viewport camera (initialized once)
 };
 
 } // namespace pnanovdb_editor

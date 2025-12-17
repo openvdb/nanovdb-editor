@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright Contributors to the OpenVDB Project
+# SPDX-License-Identifier: Apache-2.0
+#
 # NanoVDB Editor Setup Script for Ubuntu 24.04 with NVIDIA GH200
 # https://github.com/openvdb/nanovdb-editor
 #

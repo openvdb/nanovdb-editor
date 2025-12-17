@@ -30,7 +30,6 @@ static const char* FIELD_WINDOW_HEIGHT = "WindowHeight";
 static const char* FIELD_SHOW_PROFILER = "ShowProfiler";
 static const char* FIELD_SHOW_CODE_EDITOR = "ShowCodeEditor";
 static const char* FIELD_SHOW_CONSOLE = "ShowConsole";
-static const char* FIELD_SHOW_VIEWPORT_SETTINGS = "ShowViewportSettings";
 static const char* FIELD_SHOW_RENDER_SETTINGS = "ShowRenderSettings";
 static const char* FIELD_SHOW_COMPILER_SETTINGS = "ShowCompilerSettings";
 static const char* FIELD_SHOW_SHADER_PARAMS = "ShowShaderParams";
@@ -119,10 +118,6 @@ static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* ent
             {
                 instance->window.show_console = (value != 0);
             }
-            else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_SHOW_VIEWPORT_SETTINGS), sscanf(line, fmt, &value) == 1)
-            {
-                instance->window.show_viewport_settings = (value != 0);
-            }
             else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_SHOW_RENDER_SETTINGS), sscanf(line, fmt, &value) == 1)
             {
                 instance->window.show_render_settings = (value != 0);
@@ -178,7 +173,6 @@ static void WriteAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler, ImGuiText
     buf->appendf("%s=%d\n", FIELD_SHOW_PROFILER, instance->window.show_profiler ? 1 : 0);
     buf->appendf("%s=%d\n", FIELD_SHOW_CODE_EDITOR, instance->window.show_code_editor ? 1 : 0);
     buf->appendf("%s=%d\n", FIELD_SHOW_CONSOLE, instance->window.show_console ? 1 : 0);
-    buf->appendf("%s=%d\n", FIELD_SHOW_VIEWPORT_SETTINGS, instance->window.show_viewport_settings ? 1 : 0);
     buf->appendf("%s=%d\n", FIELD_SHOW_RENDER_SETTINGS, instance->window.show_render_settings ? 1 : 0);
     buf->appendf("%s=%d\n", FIELD_SHOW_COMPILER_SETTINGS, instance->window.show_compiler_settings ? 1 : 0);
     buf->appendf("%s=%d\n", FIELD_SHOW_SHADER_PARAMS, instance->window.show_shader_params ? 1 : 0);
