@@ -46,24 +46,30 @@ static bool drawEyeIcon(ImDrawList* drawList, ImVec2 pos, float size, bool isVis
 // Helper to draw a side-facing eye icon (viewport camera indicator)
 static void drawSideEyeIcon(ImDrawList* drawList, ImVec2 pos, float size)
 {
-    float cy = pos.y + size * 0.5f;
+    // Draw at 0.75 scale, centered in the row
+    const float scale = 0.75f;
+    float scaledSize = size * scale;
+    float offsetY = (size - scaledSize) * 0.5f; // Center vertically
+    ImVec2 drawPos = ImVec2(pos.x, pos.y + offsetY);
+
+    float cy = drawPos.y + scaledSize * 0.5f;
     ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
     float thickness = 1.5f;
 
     // Eye ellipse
-    float eyeCenterX = pos.x + size * 0.30f;
-    float eyeRadiusX = size * 0.18f;
-    float eyeRadiusY = size * 0.34f;
+    float eyeCenterX = drawPos.x + scaledSize * 0.30f;
+    float eyeRadiusX = scaledSize * 0.18f;
+    float eyeRadiusY = scaledSize * 0.34f;
     drawList->AddEllipse(ImVec2(eyeCenterX, cy), ImVec2(eyeRadiusX, eyeRadiusY), col, 0.f, 16, thickness);
 
     // Small filled pupil
-    float pupilRadius = size * 0.07f;
-    drawList->AddCircleFilled(ImVec2(eyeCenterX - size * 0.08f, cy), pupilRadius, col);
+    float pupilRadius = scaledSize * 0.07f;
+    drawList->AddCircleFilled(ImVec2(eyeCenterX - scaledSize * 0.08f, cy), pupilRadius, col);
 
     // ">" viewing direction
-    float vTipX = pos.x + size;
-    float vStartX = eyeCenterX - size * 0.12f;
-    float vHalfHeight = size * 0.48f;
+    float vTipX = drawPos.x + scaledSize;
+    float vStartX = eyeCenterX - scaledSize * 0.12f;
+    float vHalfHeight = scaledSize * 0.48f;
     drawList->AddLine(ImVec2(vStartX, cy - vHalfHeight), ImVec2(vTipX, cy), col, thickness);
     drawList->AddLine(ImVec2(vTipX, cy), ImVec2(vStartX, cy + vHalfHeight), col, thickness);
 }
@@ -439,6 +445,22 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                                     {
                                         if (!isViewportCamera && ImGui::MenuItem("Set as Viewport Camera"))
                                         {
+                                            // Hide the previous viewport camera
+                                            pnanovdb_editor_token_t* prevViewportToken =
+                                                ptr->editor_scene->get_viewport_camera_token();
+                                            if (prevViewportToken)
+                                            {
+                                                pnanovdb_camera_view_t* prevCamera =
+                                                    ptr->editor_scene->get_camera(prevViewportToken);
+                                                if (prevCamera)
+                                                {
+                                                    prevCamera->is_visible = PNANOVDB_FALSE;
+                                                }
+                                            }
+
+                                            // Hide the new viewport camera (shouldn't render its own frustum)
+                                            camera->is_visible = PNANOVDB_FALSE;
+
                                             ptr->editor_scene->set_viewport_camera(camera_token);
                                             // Sync camera state to render settings
                                             int cameraIdx = ptr->editor_scene->get_camera_frustum_index(camera_token);
