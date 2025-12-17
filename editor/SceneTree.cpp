@@ -341,14 +341,10 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                 // Helper to add a new camera and select it
                 auto addCameraAndSelect = [&ptr]()
                 {
-                    std::string name = ptr->editor_scene->add_new_camera();
-                    if (!name.empty())
+                    pnanovdb_editor_token_t* name_token = ptr->editor_scene->add_new_camera();
+                    if (name_token)
                     {
-                        pnanovdb_editor_token_t* name_token = EditorToken::getInstance().getToken(name.c_str());
-                        if (name_token)
-                        {
-                            ptr->editor_scene->set_properties_selection(ViewType::Cameras, name_token);
-                        }
+                        ptr->editor_scene->set_properties_selection(ViewType::Cameras, name_token);
                     }
                 };
 

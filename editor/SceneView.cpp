@@ -59,8 +59,7 @@ SceneViewData* SceneView::get_or_create_scene(pnanovdb_editor_token_t* scene_tok
     SceneViewData& new_scene = m_scene_view_data[scene_token->id];
 
     // Create the initial camera and mark it as viewport
-    std::string camera_name = add_new_camera(scene_token, nullptr);
-    pnanovdb_editor_token_t* camera_token = EditorToken::getInstance().getToken(camera_name.c_str());
+    pnanovdb_editor_token_t* camera_token = add_new_camera(scene_token, nullptr);
     if (camera_token)
     {
         new_scene.viewport_camera_token_id = camera_token->id;
@@ -174,11 +173,11 @@ const std::map<uint64_t, CameraViewContext>& SceneView::get_cameras() const
     return scene ? scene->cameras : empty_map;
 }
 
-std::string SceneView::add_new_camera(pnanovdb_editor_token_t* scene_token, const char* name)
+pnanovdb_editor_token_t* SceneView::add_new_camera(pnanovdb_editor_token_t* scene_token, const char* name)
 {
     SceneViewData* scene = scene_token ? get_or_create_scene(scene_token) : get_current_scene();
     if (!scene)
-        return "";
+        return nullptr;
 
     // Generate unique name if not provided
     std::string camera_name = name ? name : "";
@@ -192,7 +191,7 @@ std::string SceneView::add_new_camera(pnanovdb_editor_token_t* scene_token, cons
     // Create token for the name
     pnanovdb_editor_token_t* name_token = EditorToken::getInstance().getToken(camera_name.c_str());
     if (!name_token)
-        return "";
+        return nullptr;
 
     // Check if name already exists, append number to make unique
     if (scene->cameras.find(name_token->id) != scene->cameras.end())
@@ -204,15 +203,14 @@ std::string SceneView::add_new_camera(pnanovdb_editor_token_t* scene_token, cons
             std::string new_name = camera_name + " " + std::to_string(suffix++);
             name_token = EditorToken::getInstance().getToken(new_name.c_str());
             if (!name_token)
-                return ""; // Token generation failed
+                return nullptr; // Token generation failed
             if (scene->cameras.find(name_token->id) == scene->cameras.end())
             {
-                camera_name = new_name;
                 break;
             }
         }
         if (suffix > kMaxSuffixAttempts)
-            return ""; // Could not generate unique name within limit
+            return nullptr; // Could not generate unique name within limit
     }
 
     // Create camera context with its own config/state storage
@@ -235,7 +233,7 @@ std::string SceneView::add_new_camera(pnanovdb_editor_token_t* scene_token, cons
 
     scene->cameras[name_token->id] = std::move(camera_ctx);
 
-    return camera_name;
+    return name_token;
 }
 
 // Viewport camera methods

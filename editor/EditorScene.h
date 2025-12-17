@@ -155,9 +155,8 @@ public:
     }
 
     // Create a new camera with default settings in the current scene
-    // Returns the name of the created camera, or empty string on failure
     // Also registers the camera with EditorSceneManager for proper removal support
-    std::string add_new_camera(const char* name = nullptr);
+    pnanovdb_editor_token_t* add_new_camera(const char* name = nullptr);
 
     // Get a camera by token (in current scene)
     pnanovdb_camera_view_t* get_camera(pnanovdb_editor_token_t* camera_token) const

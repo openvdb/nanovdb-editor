@@ -980,28 +980,24 @@ bool EditorScene::remove_object(pnanovdb_editor_token_t* scene_token, const char
     return removed;
 }
 
-std::string EditorScene::add_new_camera(const char* name)
+pnanovdb_editor_token_t* EditorScene::add_new_camera(const char* name)
 {
     pnanovdb_editor_token_t* scene_token = get_current_scene_token();
-    std::string camera_name = m_scene_view.add_new_camera(scene_token, name);
+    pnanovdb_editor_token_t* name_token = m_scene_view.add_new_camera(scene_token, name);
 
-    if (!camera_name.empty())
+    if (name_token && scene_token)
     {
         // Register with EditorSceneManager for proper removal support
-        pnanovdb_editor_token_t* name_token = EditorToken::getInstance().getToken(camera_name.c_str());
-        if (name_token && scene_token)
+        // Get the camera's shared_ptr from SceneView
+        const auto& cameras = m_scene_view.get_cameras();
+        auto it = cameras.find(name_token->id);
+        if (it != cameras.end() && it->second.camera_view)
         {
-            // Get the camera's shared_ptr from SceneView
-            const auto& cameras = m_scene_view.get_cameras();
-            auto it = cameras.find(name_token->id);
-            if (it != cameras.end() && it->second.camera_view)
-            {
-                m_scene_manager.register_camera(scene_token, name_token, it->second.camera_view);
-            }
+            m_scene_manager.register_camera(scene_token, name_token, it->second.camera_view);
         }
     }
 
-    return camera_name;
+    return name_token;
 }
 
 SceneViewData* EditorScene::get_or_create_scene(pnanovdb_editor_token_t* scene_token)

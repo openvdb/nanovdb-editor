@@ -119,8 +119,7 @@ public:
     const std::map<uint64_t, CameraViewContext>& get_cameras() const;
 
     // Create a new camera with default settings
-    // Returns the name of the created camera, or empty string on failure
-    std::string add_new_camera(pnanovdb_editor_token_t* scene_token = nullptr, const char* name = nullptr);
+    pnanovdb_editor_token_t* add_new_camera(pnanovdb_editor_token_t* scene_token = nullptr, const char* name = nullptr);
 
     // Current view selection (in current scene)
     void set_current_view(pnanovdb_editor_token_t* view_token);
