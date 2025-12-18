@@ -914,7 +914,7 @@ pnanovdb_camera_t* get_camera(pnanovdb_editor_t* editor, pnanovdb_editor_token_t
         // Ensure scene exists (creates with default camera if needed)
         editor->impl->scene_view->get_or_create_scene(scene);
 
-        pnanovdb_editor_token_t* viewport_token = editor->impl->scene_view->get_viewport_camera_token();
+        pnanovdb_editor_token_t* viewport_token = editor->impl->scene_view->get_viewport_camera_token(scene);
         pnanovdb_camera_view_t* viewport_view = editor->impl->scene_view->get_camera(scene, viewport_token);
         if (viewport_view && viewport_view->configs && viewport_view->states && viewport_view->num_cameras > 0)
         {
@@ -1159,14 +1159,14 @@ void update_camera_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, 
         return;
     }
 
-    // 1) Update the scene's viewport camera view (name == VIEWPORT_CAMERA)
+    // 1) Update the scene's viewport camera view
     SceneView* views = editor->impl->scene_view;
     if (views)
     {
         // Create the scene if it doesn't exist
         views->get_or_create_scene(scene);
 
-        pnanovdb_editor_token_t* viewport_token = views->get_viewport_camera_token();
+        pnanovdb_editor_token_t* viewport_token = views->get_viewport_camera_token(scene);
         pnanovdb_camera_view_t* viewport_view = views->get_camera(scene, viewport_token);
         if (viewport_view && viewport_view->configs && viewport_view->states)
         {

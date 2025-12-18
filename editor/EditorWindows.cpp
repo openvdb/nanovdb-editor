@@ -127,7 +127,6 @@ void createMenu(imgui_instance_user::Instance* ptr)
             ImGui::MenuItem(RENDER_SETTINGS, "", &ptr->window.show_render_settings);
             if (!isViewerProfile)
             {
-                ImGui::MenuItem(VIEWPORT_SETTINGS, "", &ptr->window.show_viewport_settings);
                 ImGui::MenuItem(COMPILER_SETTINGS, "", &ptr->window.show_compiler_settings);
             }
             ImGui::MenuItem(SCENE, "", &ptr->window.show_scene);
@@ -295,127 +294,6 @@ void showPropertiesWindow(imgui_instance_user::Instance* ptr)
     }
 
     Properties::getInstance().render(ptr);
-}
-
-void showViewportSettingsWindow(imgui_instance_user::Instance* ptr)
-{
-    if (!ptr->window.show_viewport_settings)
-    {
-        return;
-    }
-
-    if (ImGui::Begin(VIEWPORT_SETTINGS, &ptr->window.show_viewport_settings))
-    {
-        ImGui::SeparatorText("Viewport Camera");
-        {
-            ImGui::BeginGroup();
-            if (ImGui::BeginCombo("##viewpor_camera", "Select..."))
-            {
-                for (const auto& pair : ptr->saved_render_settings)
-                {
-                    bool is_selected = (ptr->render_settings_name == pair.first);
-                    if (ImGui::Selectable(pair.first.c_str(), is_selected))
-                    {
-                        ptr->render_settings_name = pair.first;
-
-                        if (ptr->editor_scene)
-                        {
-                            pnanovdb_editor_token_t* name_token =
-                                pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
-                            const pnanovdb_camera_state_t* state = ptr->editor_scene->get_saved_camera_state(name_token);
-                            if (state)
-                            {
-                                ptr->render_settings->camera_state = *state;
-                            }
-                            ptr->render_settings->sync_camera = PNANOVDB_TRUE;
-
-                            ImGui::MarkIniSettingsDirty();
-                        }
-                        if (is_selected)
-                        {
-                            ImGui::SetItemDefaultFocus();
-                        }
-                    }
-                }
-                ImGui::EndCombo();
-            }
-            ImGui::InputText("##render_settings_name", &ptr->render_settings_name);
-            ImGui::SameLine();
-            if (ImGui::Button("Save"))
-            {
-                if (!ptr->render_settings_name.empty())
-                {
-                    if (ptr->saved_render_settings.find(ptr->render_settings_name) == ptr->saved_render_settings.end())
-                    {
-                        if (ptr->editor_scene)
-                        {
-                            pnanovdb_editor_token_t* name_token =
-                                pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
-                            ptr->editor_scene->save_camera_state(name_token, ptr->render_settings->camera_state);
-                        }
-
-                        imgui_instance_user::copyPersistentFields(
-                            ptr->saved_render_settings[ptr->render_settings_name], *ptr->render_settings);
-
-                        ImGui::MarkIniSettingsDirty();
-
-                        pnanovdb_editor::Console::getInstance().addLog(
-                            "Render settings '%s' saved", ptr->render_settings_name.c_str());
-                    }
-                    else
-                    {
-                        pnanovdb_editor::Console::getInstance().addLog(
-                            "Render settings '%s' already exists", ptr->render_settings_name.c_str());
-                    }
-                }
-                else
-                {
-                    pnanovdb_editor::Console::getInstance().addLog("Please enter a name for the render settings");
-                }
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Remove"))
-            {
-                if (ptr->saved_render_settings.erase(ptr->render_settings_name))
-                {
-                    pnanovdb_editor::Console::getInstance().addLog(
-                        "Render settings '%s' removed", ptr->render_settings_name.c_str());
-                    ptr->render_settings_name = "";
-                }
-                else
-                {
-                    pnanovdb_editor::Console::getInstance().addLog(
-                        "Render settings '%s' not found", ptr->render_settings_name.c_str());
-                }
-            }
-            ImGui::EndGroup();
-        }
-
-
-        ImGui::SeparatorText("UI Profile");
-        {
-            const char* profile_options[] = { "default", "viewer" }; // TODO: load from current dir
-            const char* current_profile =
-                ptr->render_settings->ui_profile_name[0] != '\0' ? ptr->render_settings->ui_profile_name : "default";
-            if (ImGui::BeginCombo("##ui_profile", current_profile))
-            {
-                for (int i = 0; i < IM_ARRAYSIZE(profile_options); i++)
-                {
-                    bool is_selected = (strcmp(current_profile, profile_options[i]) == 0);
-                    if (ImGui::Selectable(profile_options[i], is_selected))
-                    {
-                        strcpy(ptr->render_settings->ui_profile_name, profile_options[i]);
-                    }
-                    if (is_selected)
-                    {
-                        ImGui::SetItemDefaultFocus();
-                    }
-                }
-                ImGui::EndCombo();
-            }
-        }
-    }
-    ImGui::End();
 }
 
 void showRenderSettingsWindow(imgui_instance_user::Instance* ptr)
@@ -655,6 +533,31 @@ void showRenderSettingsWindow(imgui_instance_user::Instance* ptr)
             else
             {
                 ImGui::TextDisabled("No devices found");
+            }
+        }
+
+        // UI Profile - only visible with default profile
+        if (!ptr->is_viewer())
+        {
+            ImGui::SeparatorText("UI Profile");
+            const char* profile_options[] = { "default", "viewer" };
+            const char* current_profile =
+                ptr->render_settings->ui_profile_name[0] != '\0' ? ptr->render_settings->ui_profile_name : "default";
+            if (ImGui::BeginCombo("##ui_profile", current_profile))
+            {
+                for (int i = 0; i < IM_ARRAYSIZE(profile_options); i++)
+                {
+                    bool is_selected = (strcmp(current_profile, profile_options[i]) == 0);
+                    if (ImGui::Selectable(profile_options[i], is_selected))
+                    {
+                        strcpy(ptr->render_settings->ui_profile_name, profile_options[i]);
+                    }
+                    if (is_selected)
+                    {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
             }
         }
     }

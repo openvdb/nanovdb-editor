@@ -129,9 +129,39 @@ public:
     EditorSceneManager* get_scene_manager() const;
     void set_current_scene(pnanovdb_editor_token_t* scene_token);
     pnanovdb_editor_token_t* get_current_scene_token() const;
+
+    // Get the viewport camera token for the current scene
     pnanovdb_editor_token_t* get_viewport_camera_token() const
     {
         return m_scene_view.get_viewport_camera_token();
+    }
+
+    // Get the viewport camera token for a specific scene
+    pnanovdb_editor_token_t* get_viewport_camera_token(pnanovdb_editor_token_t* scene_token) const
+    {
+        return m_scene_view.get_viewport_camera_token(scene_token);
+    }
+
+    // Check if a camera is the viewport camera (in current scene)
+    bool is_viewport_camera(pnanovdb_editor_token_t* camera_token) const
+    {
+        return m_scene_view.is_viewport_camera(camera_token);
+    }
+
+    // Set which camera is the viewport camera (in current scene)
+    void set_viewport_camera(pnanovdb_editor_token_t* camera_token)
+    {
+        m_scene_view.set_viewport_camera(camera_token);
+    }
+
+    // Create a new camera with default settings in the current scene
+    // Also registers the camera with EditorSceneManager for proper removal support
+    pnanovdb_editor_token_t* add_new_camera(const char* name = nullptr);
+
+    // Get a camera by token (in current scene)
+    pnanovdb_camera_view_t* get_camera(pnanovdb_editor_token_t* camera_token) const
+    {
+        return m_scene_view.get_camera(camera_token);
     }
 
     // Get the shader name from the currently selected object (for Properties window)
@@ -141,10 +171,8 @@ public:
     void set_selected_object_shader_name(const std::string& shader_name);
 
     // Ensure scene exists (creates with default viewport camera if needed)
-    SceneViewData* get_or_create_scene(pnanovdb_editor_token_t* scene_token)
-    {
-        return m_scene_view.get_or_create_scene(scene_token);
-    }
+    // Also registers the viewport camera with EditorSceneManager for proper removal support
+    SceneViewData* get_or_create_scene(pnanovdb_editor_token_t* scene_token);
 
     std::vector<pnanovdb_editor_token_t*> get_all_scene_tokens() const;
 

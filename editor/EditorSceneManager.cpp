@@ -472,6 +472,26 @@ void EditorSceneManager::add_camera(pnanovdb_editor_token_t* scene,
                                                                     });
 }
 
+void EditorSceneManager::register_camera(pnanovdb_editor_token_t* scene,
+                                         pnanovdb_editor_token_t* name,
+                                         std::shared_ptr<pnanovdb_camera_view_t> camera_view_owner)
+{
+    if (!camera_view_owner)
+    {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    uint64_t key = make_key(scene, name);
+
+    auto& obj = m_objects[key];
+    obj.type = SceneObjectType::Camera;
+    obj.scene_token = scene;
+    obj.name_token = name;
+    obj.camera_view = camera_view_owner.get();
+    obj.camera_view_owner = camera_view_owner; // Share ownership, no copy
+}
+
 bool EditorSceneManager::remove(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
 {
     std::lock_guard<std::mutex> lock(m_mutex);

@@ -291,6 +291,19 @@ bool FileHeaderInfo::render(pnanovdb_compute_array_t* array)
         ImGui::Text("Voxel Size: (%.6f, %.6f, %.6f)", pnanovdb_grid_get_voxel_size(buf, grid, 0),
                     pnanovdb_grid_get_voxel_size(buf, grid, 1), pnanovdb_grid_get_voxel_size(buf, grid, 2));
     }
+    if (ImGui::CollapsingHeader("Map"))
+    {
+        pnanovdb_map_handle_t map = pnanovdb_grid_get_map(buf, grid);
+        ImGui::Text("Matf[0:2]: (%.6f, %.6f, %.6f)", pnanovdb_map_get_matf(buf, map, 0),
+                    pnanovdb_map_get_matf(buf, map, 1), pnanovdb_map_get_matf(buf, map, 2));
+        ImGui::Text("Matf[3:5]: (%.6f, %.6f, %.6f)", pnanovdb_map_get_matf(buf, map, 3),
+                    pnanovdb_map_get_matf(buf, map, 4), pnanovdb_map_get_matf(buf, map, 5));
+        ImGui::Text("Matf[6:8]: (%.6f, %.6f, %.6f)", pnanovdb_map_get_matf(buf, map, 6),
+                    pnanovdb_map_get_matf(buf, map, 7), pnanovdb_map_get_matf(buf, map, 8));
+        ImGui::Text("Vecf[0:2]: (%.6f, %.6f, %.6f)", pnanovdb_map_get_vecf(buf, map, 0),
+                    pnanovdb_map_get_vecf(buf, map, 1), pnanovdb_map_get_vecf(buf, map, 2));
+        ImGui::Text("Taperf: (%.6f)", pnanovdb_map_get_taperf(buf, map, 0));
+    }
 
     if (ImGui::CollapsingHeader("Tree Information", ImGuiTreeNodeFlags_DefaultOpen))
     {

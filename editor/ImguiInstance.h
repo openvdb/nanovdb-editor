@@ -46,9 +46,6 @@ static const char* s_render_settings_default = "default";
 static const char* s_viewer_profile_name = "viewer";
 
 // UI labels
-static const char* VIEWPORT_CAMERA = "Viewport Camera";
-
-static const char* VIEWPORT_SETTINGS = "Viewport";
 static const char* RENDER_SETTINGS = "Settings";
 static const char* COMPILER_SETTINGS = "Compiler";
 static const char* PROFILER = "Profiler";
@@ -119,7 +116,6 @@ struct WindowState
     bool show_profiler = false;
     bool show_code_editor = false;
     bool show_console = true;
-    bool show_viewport_settings = true;
     bool show_render_settings = true;
     bool show_compiler_settings = false;
     bool show_shader_params = true;
