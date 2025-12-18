@@ -341,6 +341,7 @@ static void radix_sort(const pnanovdb_compute_t* compute,
                        pnanovdb_compute_buffer_t* key_inout,
                        pnanovdb_compute_buffer_t* val_inout,
                        pnanovdb_uint64_t key_count,
+                       pnanovdb_uint64_t buffer_key_count,
                        pnanovdb_uint32_t key_bit_count)
 {
     auto ctx = cast(context_in);
@@ -378,12 +379,14 @@ static void radix_sort(const pnanovdb_compute_t* compute,
     constants.key_count = key_count;
     constants.grid_dim_x = grid_dim.x;
 
+    pnanovdb_uint64_t max_counter_count = 16u * ((buffer_key_count + 1023u) / 1024u);
+
     // counter buffers
     buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED;
     buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
     buf_desc.structure_stride = 4u;
     buf_desc.size_in_bytes = 65536u;
-    while (buf_desc.size_in_bytes < constants.counter_count * 2u * 4u)
+    while (buf_desc.size_in_bytes < max_counter_count * 2u * 4u)
     {
         buf_desc.size_in_bytes *= 2u;
     }
@@ -395,7 +398,7 @@ static void radix_sort(const pnanovdb_compute_t* compute,
     // tmp buffers
     buf_desc.structure_stride = 4u;
     buf_desc.size_in_bytes = 65536u;
-    while (buf_desc.size_in_bytes < constants.key_count * 4u)
+    while (buf_desc.size_in_bytes < buffer_key_count * 4u)
     {
         buf_desc.size_in_bytes *= 2u;
     }
@@ -519,6 +522,7 @@ static void radix_sort_dual_key(const pnanovdb_compute_t* compute,
                                 pnanovdb_compute_buffer_t* key_high_inout,
                                 pnanovdb_compute_buffer_t* val_inout,
                                 pnanovdb_uint64_t key_count,
+                                pnanovdb_uint64_t buffer_key_count,
                                 pnanovdb_uint32_t key_low_bit_count,
                                 pnanovdb_uint32_t key_high_bit_count)
 {
@@ -566,7 +570,7 @@ static void radix_sort_dual_key(const pnanovdb_compute_t* compute,
     // tmp buffers
     buf_desc.structure_stride = 4u;
     buf_desc.size_in_bytes = 65536u;
-    while (buf_desc.size_in_bytes < constants.key_count * 4u)
+    while (buf_desc.size_in_bytes < buffer_key_count * 4u)
     {
         buf_desc.size_in_bytes *= 2u;
     }
@@ -611,7 +615,7 @@ static void radix_sort_dual_key(const pnanovdb_compute_t* compute,
                                  grid_dim.x, grid_dim.y, grid_dim.z, "radix_sort_dual1");
     }
 
-    radix_sort(compute, queue, context_in, key_tmp_buffer, val_tmp_buffer, key_count, key_low_bit_count);
+    radix_sort(compute, queue, context_in, key_tmp_buffer, val_tmp_buffer, key_count, buffer_key_count, key_low_bit_count);
 
     // gather key high to current sorted indices
     {
@@ -625,7 +629,7 @@ static void radix_sort_dual_key(const pnanovdb_compute_t* compute,
                                  grid_dim.x, grid_dim.y, grid_dim.z, "radix_sort_dual2");
     }
 
-    radix_sort(compute, queue, context_in, key_tmp_buffer, val_tmp_buffer, key_count, key_high_bit_count);
+    radix_sort(compute, queue, context_in, key_tmp_buffer, val_tmp_buffer, key_count, buffer_key_count, key_high_bit_count);
 
     // gather values
     {
@@ -687,7 +691,7 @@ static int radix_sort_array(const pnanovdb_compute_t* compute,
     gpu_array_upload(compute, queue, val_gpu_array, val_inout);
 
     radix_sort(compute, queue, context_in, key_gpu_array->device_buffer, val_gpu_array->device_buffer, key_count,
-               key_bit_count);
+               key_count, key_bit_count);
 
     gpu_array_readback(compute, queue, key_gpu_array, key_inout);
     gpu_array_readback(compute, queue, val_gpu_array, val_inout);
