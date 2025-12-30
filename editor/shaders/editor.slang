@@ -253,7 +253,8 @@ float4 ray_march_nanovdb_leaf_fetch_float(pnanovdb_grid_type_t grid_type,
 struct TrilinearWeights
 {
     int3 ijk000;
-    float weights[8];
+    float4 weights0;
+    float4 weights1;
 };
 
 TrilinearWeights compute_trilinear_weights(float3 pos, int3 ijk_offset)
@@ -263,14 +264,14 @@ TrilinearWeights compute_trilinear_weights(float3 pos, int3 ijk_offset)
     float3 pw = (pos - 0.5f) - float3(result.ijk000 - ijk_offset);
     float3 nw = float3(1.f, 1.f, 1.f) - pw;
 
-    result.weights[0] = nw.x * nw.y * nw.z;
-    result.weights[1] = pw.x * nw.y * nw.z;
-    result.weights[2] = nw.x * pw.y * nw.z;
-    result.weights[3] = pw.x * pw.y * nw.z;
-    result.weights[4] = nw.x * nw.y * pw.z;
-    result.weights[5] = pw.x * nw.y * pw.z;
-    result.weights[6] = nw.x * pw.y * pw.z;
-    result.weights[7] = pw.x * pw.y * pw.z;
+    result.weights0.x = nw.x * nw.y * nw.z;
+    result.weights0.y = pw.x * nw.y * nw.z;
+    result.weights0.z = nw.x * pw.y * nw.z;
+    result.weights0.w = pw.x * pw.y * nw.z;
+    result.weights1.x = nw.x * nw.y * pw.z;
+    result.weights1.y = pw.x * nw.y * pw.z;
+    result.weights1.z = nw.x * pw.y * pw.z;
+    result.weights1.w = pw.x * pw.y * pw.z;
 
     return result;
 }
@@ -288,7 +289,16 @@ float4 ray_march_nanovdb_leaf_fetch_float_trilinear(pnanovdb_grid_type_t grid_ty
     for (int i = 0; i < 8; i++)
     {
         int3 offset = int3(i & 1, (i >> 1) & 1, (i >> 2) & 1);
-        value += tw.weights[i] * ray_march_nanovdb_leaf_fetch_float(grid_type, buf, acc, tw.ijk000 + offset);
+        float w = 0.f;
+        if (i == 0) { w = tw.weights0.x;}
+        if (i == 1) { w = tw.weights0.y;}
+        if (i == 2) { w = tw.weights0.z;}
+        if (i == 3) { w = tw.weights0.w;}
+        if (i == 4) { w = tw.weights1.x;}
+        if (i == 5) { w = tw.weights1.y;}
+        if (i == 6) { w = tw.weights1.z;}
+        if (i == 7) { w = tw.weights1.w;}
+        value += w * ray_march_nanovdb_leaf_fetch_float(grid_type, buf, acc, tw.ijk000 + offset);
     }
     return value;
 }
@@ -364,7 +374,16 @@ float4 ray_march_nanovdb_leaf_fetch_float_node2_trilinear(pnanovdb_grid_type_t b
     for (int i = 0; i < 8; i++)
     {
         int3 offset = int3(i & 1, (i >> 1) & 1, (i >> 2) & 1);
-        value += tw.weights[i] * ray_march_nanovdb_leaf_fetch_float_node2(blind_type, buf, acc, values, tw.ijk000 + offset);
+        float w = 0.f;
+        if ( i == 0) { w = tw.weights0.x;}
+        if ( i == 1) { w = tw.weights0.y;}
+        if ( i == 2) { w = tw.weights0.z;}
+        if ( i == 3) { w = tw.weights0.w;}
+        if ( i == 4) { w = tw.weights1.x;}
+        if ( i == 5) { w = tw.weights1.y;}
+        if ( i == 6) { w = tw.weights1.z;}
+        if ( i == 7) { w = tw.weights1.w;}
+        value += w * ray_march_nanovdb_leaf_fetch_float_node2(blind_type, buf, acc, values, tw.ijk000 + offset);
     }
 
     return value;
@@ -953,11 +972,13 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
 
     float4 sum = float4(0.f, 0.f, 0.f, 1.f);
     float nominalT = 0.f;
+#if 0
     if (grid_type == PNANOVDB_GRID_TYPE_NODE2)
     {
         ray_march_nanovdb_node2(buf, rayOrigin, 0.f, rayDir, 1e9f, rayDirInv, sum, nominalT);
     }
     else
+#endif
     {
         ray_march_nanovdb(buf, rayOrigin, 0.f, rayDir, 1e9f, rayDirInv, sum, nominalT);
     }

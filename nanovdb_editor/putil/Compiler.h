@@ -135,7 +135,7 @@ static inline void pnanovdb_compiler_settings_init(pnanovdb_compiler_settings_t*
     settings->use_glslang = PNANOVDB_FALSE;
     settings->hlsl_output = PNANOVDB_FALSE;
     settings->compile_target = PNANOVDB_COMPILE_TARGET_VULKAN;
-    settings->optimization_level = PNANOVDB_OPTIMIZATION_LEVEL_HIGH;
+    settings->optimization_level = PNANOVDB_OPTIMIZATION_LEVEL_NONE;
     settings->entry_point_name[0] = '\0';
 }
 

@@ -132,15 +132,15 @@ pnanovdb_compute_device_manager_t* createDeviceManager(pnanovdb_bool_t enableVal
     // create instance
     uint32_t numLayers = 0u;
     const char** layers = nullptr;
-#ifdef _DEBUG
+//#ifdef _DEBUG
     const uint32_t numLayers_validation = 1u;
     const char* layers_validation[numLayers_validation] = { "VK_LAYER_KHRONOS_validation" };
-    if (enableValidationOnDebugBuild)
+//    if (enableValidationOnDebugBuild)
     {
         numLayers = numLayers_validation;
         layers = layers_validation;
     }
-#endif
+//#endif
 
     VkApplicationInfo appInfo = {};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
