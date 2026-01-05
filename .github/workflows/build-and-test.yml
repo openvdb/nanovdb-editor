@@ -147,6 +147,80 @@ jobs:
           cd build/gtests
           ctest -C Release --output-on-failure --verbose
 
+  nanovdb-editor-build-and-test-windows-arm:
+    name: Build and Test (Windows ARM64)
+    runs-on: windows-latest-arm
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build NanoVDB Editor (GLFW disabled)
+        run: |
+          ./build.bat -rfv
+
+      - name: Build NanoVDB Editor (GLFW enabled)
+        run: |
+          ./build.bat -rv
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanovdb-editor-build-windows-arm64
+          path: |
+            build/
+          retention-days: 2
+
+      - name: Install Mesa3D lavapipe
+        run: |
+          # Download Mesa3D with lavapipe for Windows ARM64
+          Write-Host "Downloading Mesa3D lavapipe for ARM64..."
+          $MesaUrl = "https://github.com/pal1000/mesa-dist-win/releases/download/24.2.7/mesa3d-24.2.7-release-msvc.7z"
+          $MesaArchive = "$env:TEMP\mesa3d.7z"
+          $MesaDir = "$env:TEMP\mesa3d"
+
+          Invoke-WebRequest -Uri $MesaUrl -OutFile $MesaArchive
+
+          # Extract Mesa3D
+          Write-Host "Extracting Mesa3D..."
+          7z x $MesaArchive -o"$MesaDir" -y
+
+          # Verify vulkan_lvp.dll exists for ARM64
+          $VulkanLvpDll = Join-Path $MesaDir "arm64\vulkan_lvp.dll"
+          if (Test-Path $VulkanLvpDll) {
+              Write-Host "Found vulkan_lvp.dll at: $VulkanLvpDll"
+          } else {
+              Write-Host "ERROR: vulkan_lvp.dll not found for ARM64!"
+              Write-Host "Contents of arm64 directory:"
+              Get-ChildItem (Join-Path $MesaDir "arm64") -ErrorAction SilentlyContinue | Format-Table Name
+              exit 1
+          }
+
+          # Register lavapipe ICD in Windows Registry
+          $VulkanICDPath = Join-Path $MesaDir "arm64\lvp_icd.aarch64.json"
+          $RegistryPath = "HKLM:\SOFTWARE\Khronos\Vulkan\Drivers"
+
+          Write-Host "Registering lavapipe ICD in registry..."
+          if (-not (Test-Path $RegistryPath)) {
+              New-Item -Path $RegistryPath -Force | Out-Null
+          }
+          New-ItemProperty -Path $RegistryPath -Name $VulkanICDPath -Value 0 -PropertyType DWord -Force | Out-Null
+
+          Write-Host "Registry entry created: $VulkanICDPath"
+
+          # Add Mesa to PATH
+          $MesaBinPath = Join-Path $MesaDir "arm64"
+          echo "$MesaBinPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+          Write-Host "Lavapipe installed successfully for ARM64"
+
+      - name: Run GTests
+        run: |
+          cd build/gtests
+          ctest -C Release --output-on-failure --verbose
+
   nanovdb-editor-build-and-test-linux-arm:
     name: Build and Test (Linux ARM64)
     runs-on: ubuntu-24.04-arm
