@@ -194,7 +194,7 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
             VkBufferDeviceAddressInfoKHR addressInfo = {};
             addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO_KHR;
             addressInfo.buffer = ptr->bufferVk;
-            ptr->bufferAddress = loader->vkGetBufferDeviceAddressKHR(vulkanDevice, &addressInfo);
+            ptr->bufferAddress = loader->vkGetBufferDeviceAddress(vulkanDevice, &addressInfo);
 
             // context->deviceQueue->device->logPrint(
             //     PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "bufferAddress(%zu) allocationBytes(%zu)", ptr->bufferAddress,

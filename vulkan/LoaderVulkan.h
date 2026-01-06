@@ -52,7 +52,6 @@ typedef struct pnanovdb_vulkan_enabled_device_extensions_t
     pnanovdb_bool_t VK_KHR_EXTERNAL_SEMAPHORE_FD;
     pnanovdb_bool_t VK_KHR_VIDEO_QUEUE;
     pnanovdb_bool_t VK_KHR_VIDEO_ENCODE_QUEUE;
-    pnanovdb_bool_t VK_KHR_BUFFER_DEVICE_ADDRESS;
 } pnanovdb_vulkan_enabled_device_extensions_t;
 
 typedef struct pnanovdb_vulkan_instance_loader_t
@@ -200,7 +199,7 @@ typedef struct pnanovdb_vulkan_device_loader_t
     PNANOVDB_VK_LOADER_PTR(vkGetQueryPoolResults);
     PNANOVDB_VK_LOADER_PTR(vkDestroyVideoSessionParametersKHR);
     PNANOVDB_VK_LOADER_PTR(vkDestroyVideoSessionKHR);
-    PNANOVDB_VK_LOADER_PTR(vkGetBufferDeviceAddressKHR);
+    PNANOVDB_VK_LOADER_PTR(vkGetBufferDeviceAddress);
 } pnanovdb_vulkan_device_loader_t;
 
 PNANOVDB_INLINE void pnanovdb_vulkan_loader_global(pnanovdb_vulkan_instance_loader_t* ptr,
@@ -352,5 +351,5 @@ PNANOVDB_INLINE void pnanovdb_vulkan_loader_device(pnanovdb_vulkan_device_loader
     PNANOVDB_VK_LOADER_DEVICE(vkGetQueryPoolResults);
     PNANOVDB_VK_LOADER_DEVICE(vkDestroyVideoSessionParametersKHR);
     PNANOVDB_VK_LOADER_DEVICE(vkDestroyVideoSessionKHR);
-    PNANOVDB_VK_LOADER_DEVICE(vkGetBufferDeviceAddressKHR);
+    PNANOVDB_VK_LOADER_DEVICE(vkGetBufferDeviceAddress);
 }
