@@ -39,6 +39,25 @@ struct constants_t
     uint sh_stride;
     uint points_grid_dim_x;
     uint isects_grid_dim_x;
+
+    uint64_t ptr_means;
+    uint64_t ptr_quats;
+    uint64_t ptr_scales;
+    uint64_t ptr_radii;
+    uint64_t ptr_means2d;
+    uint64_t ptr_depths;
+    uint64_t ptr_conics;
+    uint64_t ptr_compensations;
+    uint64_t ptr_sh_0;
+    uint64_t ptr_sh_n;
+    uint64_t ptr_opacities;
+    uint64_t ptr_colors;
+    uint64_t ptr_num_tiles_per_gaussian;
+    uint64_t ptr_scan_tiles_per_gaussian;
+    uint64_t ptr_intersection_keys_low;
+    uint64_t ptr_intersection_keys_high;
+    uint64_t ptr_intersection_vals;
+    uint64_t ptr_tile_offsets;
 };
 
 struct shader_params_t
@@ -51,3 +70,63 @@ struct shader_params_t
     uint sh_stride_rgbrgbrgb;
     uint _pad2;
 };
+
+struct ptr_uint_t
+{
+    uint* ptr;
+};
+uint load_uint(uint64_t ptr_raw, uint64_t idx)
+{
+    ptr_uint_t ptr = reinterpret<ptr_uint_t>(ptr_raw + 4u * idx);
+    return *ptr.ptr;
+}
+void store_uint(uint64_t ptr_raw, uint64_t idx, uint val)
+{
+    ptr_uint_t ptr = reinterpret<ptr_uint_t>(ptr_raw + 4u * idx);
+    *ptr.ptr = val;
+}
+
+struct ptr_int_t
+{
+    int* ptr;
+};
+int load_int(uint64_t ptr_raw, uint64_t idx)
+{
+    ptr_int_t ptr = reinterpret<ptr_int_t>(ptr_raw + 4u * idx);
+    return *ptr.ptr;
+}
+void store_int(uint64_t ptr_raw, uint64_t idx, int val)
+{
+    ptr_int_t ptr = reinterpret<ptr_int_t>(ptr_raw + 4u * idx);
+    *ptr.ptr = val;
+}
+
+struct ptr_float_t
+{
+    float* ptr;
+};
+float load_float(uint64_t ptr_raw, uint64_t idx)
+{
+    ptr_float_t ptr = reinterpret<ptr_float_t>(ptr_raw + 4u * idx);
+    return *ptr.ptr;
+}
+void store_float(uint64_t ptr_raw, uint64_t idx, float val)
+{
+    ptr_float_t ptr = reinterpret<ptr_float_t>(ptr_raw + 4u * idx);
+    *ptr.ptr = val;
+}
+
+struct ptr_float2_t
+{
+    float2* ptr;
+};
+float2 load_float2(uint64_t ptr_raw, uint64_t idx)
+{
+    ptr_float2_t ptr = reinterpret<ptr_float2_t>(ptr_raw + 8u * idx);
+    return *ptr.ptr;
+}
+void store_float2(uint64_t ptr_raw, uint64_t idx, float2 val)
+{
+    ptr_float2_t ptr = reinterpret<ptr_float2_t>(ptr_raw + 8u * idx);
+    *ptr.ptr = val;
+}
