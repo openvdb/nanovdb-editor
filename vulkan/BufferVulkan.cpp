@@ -196,8 +196,9 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
             addressInfo.buffer = ptr->bufferVk;
             ptr->bufferAddress = loader->vkGetBufferDeviceAddressKHR(vulkanDevice, &addressInfo);
 
-            //context->deviceQueue->device->logPrint(
-            //    PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "bufferAddress(%zu) allocationBytes(%zu)", ptr->bufferAddress, ptr->allocationBytes);
+            // context->deviceQueue->device->logPrint(
+            //     PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "bufferAddress(%zu) allocationBytes(%zu)", ptr->bufferAddress,
+            //     ptr->allocationBytes);
         }
     }
     else // free buffer and set null
