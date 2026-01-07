@@ -267,7 +267,7 @@ CPMAddPackage(
 # Shader compilation
 set(SLANG_VERSION 2025.24)
 if(WIN32)
-    if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64")
         set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-windows-aarch64.zip)
     else()
         set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-windows-x86_64.zip)
