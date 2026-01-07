@@ -297,6 +297,14 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
     # Match existing variable naming used throughout the project.
     set(Slang_SOURCE_DIR "${SLANG_INSTALL_DIR}")
     set(Slang_ADDED TRUE)
+
+    # The imported target 'slang' uses ${Slang_SOURCE_DIR}/include as an
+    # INTERFACE_INCLUDE_DIRECTORIES entry. CMake requires that include
+    # directory to exist at generate time, but ExternalProject installs it
+    # later during the build.
+    file(MAKE_DIRECTORY "${Slang_SOURCE_DIR}/include")
+    file(MAKE_DIRECTORY "${Slang_SOURCE_DIR}/lib")
+    file(MAKE_DIRECTORY "${Slang_SOURCE_DIR}/bin")
 else()
     if(WIN32)
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64")
