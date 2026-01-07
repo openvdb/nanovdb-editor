@@ -266,51 +266,84 @@ CPMAddPackage(
 
 # Shader compilation
 set(SLANG_VERSION 2025.24)
-if(WIN32)
-    if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64")
-        set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-windows-aarch64.zip)
-    else()
-        set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-windows-x86_64.zip)
-    endif()
-elseif(APPLE)
-    if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
-        set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-macos-arm64.zip)
-    else()
-        set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-macos-x86_64.zip)
-    endif()
-elseif(UNIX AND NOT APPLE)
-    if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
-        set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-linux-aarch64.zip)
-    else()
-        # Detect GLIBC version to choose appropriate Slang build
-        execute_process(
-            COMMAND ldd --version
-            OUTPUT_VARIABLE GLIBC_VERSION_OUTPUT
-            ERROR_QUIET
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-        )
 
-        # Extract GLIBC version number (e.g., "2.28" from "ldd (GNU libc) 2.28")
-        string(REGEX MATCH "([0-9]+\\.[0-9]+)" GLIBC_VERSION "${GLIBC_VERSION_OUTPUT}")
-
-        # Use glibc-2.27 compatible build for older systems (GLIBC < 2.29)
-        if(GLIBC_VERSION AND GLIBC_VERSION VERSION_LESS "2.29")
-            message(STATUS "Detected GLIBC ${GLIBC_VERSION}, using compatibility Slang build")
-            set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-linux-x86_64-glibc-2.27.zip)
-        else()
-            message(STATUS "Using standard Slang build (GLIBC ${GLIBC_VERSION})")
-            set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-linux-x86_64.zip)
-        endif()
+if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
+    if(NOT (UNIX AND NOT APPLE) OR CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
+        message(FATAL_ERROR "NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE is only supported on Linux x86_64")
     endif()
+    if(NOT SKBUILD)
+        message(FATAL_ERROR "NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE is currently intended for wheel builds (SKBUILD=ON)")
+    endif()
+
+    include(ExternalProject)
+    set(SLANG_INSTALL_DIR "${CMAKE_BINARY_DIR}/slang-install")
+
+    ExternalProject_Add(slang_src_build
+        GIT_REPOSITORY https://github.com/shader-slang/slang.git
+        GIT_TAG v${SLANG_VERSION}
+        GIT_SHALLOW TRUE
+        UPDATE_DISCONNECTED TRUE
+        CMAKE_ARGS
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_INSTALL_PREFIX=${SLANG_INSTALL_DIR}
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+            -DBUILD_SHARED_LIBS=ON
+            -DSLANG_ENABLE_TESTS=OFF
+            -DSLANG_ENABLE_EXAMPLES=OFF
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
+        INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target install
+    )
+
+    # Match existing variable naming used throughout the project.
+    set(Slang_SOURCE_DIR "${SLANG_INSTALL_DIR}")
+    set(Slang_ADDED TRUE)
 else()
-    message(WARNING "Unsupported platform for Slang. Please manually specify Slang package.")
-endif()
+    if(WIN32)
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64")
+            set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-windows-aarch64.zip)
+        else()
+            set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-windows-x86_64.zip)
+        endif()
+    elseif(APPLE)
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
+            set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-macos-arm64.zip)
+        else()
+            set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-macos-x86_64.zip)
+        endif()
+    elseif(UNIX AND NOT APPLE)
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
+            set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-linux-aarch64.zip)
+        else()
+            # Detect GLIBC version to choose appropriate Slang build
+            execute_process(
+                COMMAND ldd --version
+                OUTPUT_VARIABLE GLIBC_VERSION_OUTPUT
+                ERROR_QUIET
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+            )
 
-CPMAddPackage(
-    NAME Slang
-    URL ${SLANG_URL}
-    VERSION ${SLANG_VERSION}
-)
+            # Extract GLIBC version number (e.g., "2.28" from "ldd (GNU libc) 2.28")
+            string(REGEX MATCH "([0-9]+\\.[0-9]+)" GLIBC_VERSION "${GLIBC_VERSION_OUTPUT}")
+
+            # Use compatibility build for older systems
+            if(GLIBC_VERSION AND GLIBC_VERSION VERSION_LESS "2.29")
+                message(STATUS "Detected GLIBC ${GLIBC_VERSION}, using compatibility Slang build")
+                set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-linux-x86_64-glibc-2.27.zip)
+            else()
+                message(STATUS "Using standard Slang build (GLIBC ${GLIBC_VERSION})")
+                set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-linux-x86_64.zip)
+            endif()
+        endif()
+    else()
+        message(WARNING "Unsupported platform for Slang. Please manually specify Slang package.")
+    endif()
+
+    CPMAddPackage(
+        NAME Slang
+        URL ${SLANG_URL}
+        VERSION ${SLANG_VERSION}
+    )
+endif()
 
 # File handling and utilities
 CPMAddPackage(

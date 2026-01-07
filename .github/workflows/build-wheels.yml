@@ -41,15 +41,27 @@ jobs:
           - os: ubuntu-latest
             arch: x86_64
             cibw_build: "cp311-manylinux_x86_64"
+            cibw_environment: >
+              CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=ON -DFETCHCONTENT_QUIET=OFF"
+              CPM_SOURCE_CACHE=/tmp/cpm-cache
           - os: ubuntu-24.04-arm
             arch: ARM64
             cibw_build: "cp311-manylinux_aarch64"
+            cibw_environment: >
+              CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DFETCHCONTENT_QUIET=OFF"
+              CPM_SOURCE_CACHE=/tmp/cpm-cache
           - os: windows-latest
             arch: ""
             cibw_build: "cp311-win_amd64"
+            cibw_environment: >
+              CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DFETCHCONTENT_QUIET=OFF"
+              CPM_SOURCE_CACHE=/tmp/cpm-cache
           - os: windows-11-arm
             arch: ARM64
             cibw_build: "cp311-win_arm64"
+            cibw_environment: >
+              CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DFETCHCONTENT_QUIET=OFF"
+              CPM_SOURCE_CACHE=/tmp/cpm-cache
 
     steps:
     - uses: actions/checkout@v4
@@ -118,9 +130,7 @@ jobs:
 
         # Mark this as a PyPI build, disable gtests for published wheels
         # Add retry and timeout settings for CMake downloads
-        CIBW_ENVIRONMENT: >
-          CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DFETCHCONTENT_QUIET=OFF"
-          CPM_SOURCE_CACHE=/tmp/cpm-cache
+        CIBW_ENVIRONMENT: ${{ matrix.cibw_environment }}
       with:
         package-dir: pymodule
 
