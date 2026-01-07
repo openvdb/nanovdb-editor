@@ -24,6 +24,7 @@ typedef struct pnanovdb_vulkan_enabled_features_t
 {
     pnanovdb_bool_t shaderStorageImageWriteWithoutFormat;
     pnanovdb_bool_t shaderInt64;
+    pnanovdb_bool_t bufferDeviceAddress;
 } pnanovdb_vulkan_enabled_features_t;
 
 typedef struct pnanovdb_vulkan_enabled_instance_extensions_t
@@ -73,7 +74,7 @@ typedef struct pnanovdb_vulkan_instance_loader_t
     PNANOVDB_VK_LOADER_PTR(vkCreateDevice);
     PNANOVDB_VK_LOADER_PTR(vkGetPhysicalDeviceMemoryProperties);
     PNANOVDB_VK_LOADER_PTR(vkEnumerateDeviceExtensionProperties);
-    PNANOVDB_VK_LOADER_PTR(vkGetPhysicalDeviceFeatures);
+    PNANOVDB_VK_LOADER_PTR(vkGetPhysicalDeviceFeatures2);
 
     // Instance surface
     PNANOVDB_VK_LOADER_PTR(vkGetPhysicalDeviceSurfaceSupportKHR);
@@ -198,6 +199,7 @@ typedef struct pnanovdb_vulkan_device_loader_t
     PNANOVDB_VK_LOADER_PTR(vkGetQueryPoolResults);
     PNANOVDB_VK_LOADER_PTR(vkDestroyVideoSessionParametersKHR);
     PNANOVDB_VK_LOADER_PTR(vkDestroyVideoSessionKHR);
+    PNANOVDB_VK_LOADER_PTR(vkGetBufferDeviceAddress);
 } pnanovdb_vulkan_device_loader_t;
 
 PNANOVDB_INLINE void pnanovdb_vulkan_loader_global(pnanovdb_vulkan_instance_loader_t* ptr,
@@ -224,7 +226,7 @@ PNANOVDB_INLINE void pnanovdb_vulkan_loader_instance(pnanovdb_vulkan_instance_lo
     PNANOVDB_VK_LOADER_INSTANCE(vkCreateDevice);
     PNANOVDB_VK_LOADER_INSTANCE(vkGetPhysicalDeviceMemoryProperties);
     PNANOVDB_VK_LOADER_INSTANCE(vkEnumerateDeviceExtensionProperties);
-    PNANOVDB_VK_LOADER_INSTANCE(vkGetPhysicalDeviceFeatures);
+    PNANOVDB_VK_LOADER_INSTANCE(vkGetPhysicalDeviceFeatures2);
 
     // surface extensions
     PNANOVDB_VK_LOADER_INSTANCE(vkGetPhysicalDeviceSurfaceSupportKHR);
@@ -349,4 +351,5 @@ PNANOVDB_INLINE void pnanovdb_vulkan_loader_device(pnanovdb_vulkan_device_loader
     PNANOVDB_VK_LOADER_DEVICE(vkGetQueryPoolResults);
     PNANOVDB_VK_LOADER_DEVICE(vkDestroyVideoSessionParametersKHR);
     PNANOVDB_VK_LOADER_DEVICE(vkDestroyVideoSessionKHR);
+    PNANOVDB_VK_LOADER_DEVICE(vkGetBufferDeviceAddress);
 }

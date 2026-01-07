@@ -443,6 +443,9 @@ typedef struct pnanovdb_compute_interface_t
     void(PNANOVDB_ABI* copy_buffer)(pnanovdb_compute_context_t* context,
                                     const pnanovdb_compute_copy_buffer_params_t* params);
 
+    pnanovdb_uint64_t(PNANOVDB_ABI* get_buffer_device_address)(pnanovdb_compute_context_t* context,
+                                                               pnanovdb_compute_buffer_t* buffer);
+
 } pnanovdb_compute_interface_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_compute_interface_t
@@ -478,6 +481,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(create_compute_pipeline, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(destroy_compute_pipeline, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(dispatch, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(copy_buffer, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(get_buffer_device_address, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE

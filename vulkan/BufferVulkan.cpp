@@ -65,6 +65,14 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
     }
     bufCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
+    // enable device address on SSBO
+    if (context->deviceQueue->device->enabledFeatures.bufferDeviceAddress &&
+        ((ptr->desc.usage & PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED) != 0u ||
+         (ptr->desc.usage & PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED) != 0u))
+    {
+        bufCreateInfo.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    }
+
     VkExternalMemoryBufferCreateInfoKHR externalMemoryBufferCreateInfo = {};
     if (context->deviceQueue->device->desc.enable_external_usage &&
         ptr->memory_type == PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE)
@@ -112,6 +120,14 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
     bufMemAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     bufMemAllocInfo.allocationSize = bufMemReq.size;
     bufMemAllocInfo.memoryTypeIndex = bufMemType;
+
+    VkMemoryAllocateFlagsInfo bufMemAllocFlagsInfo = {};
+    bufMemAllocFlagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+    if (bufCreateInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
+    {
+        bufMemAllocInfo.pNext = &bufMemAllocFlagsInfo;
+        bufMemAllocFlagsInfo.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+    }
 
     VkExportMemoryAllocateInfoKHR exportAllocInfo = {};
     if (!interopHandle && context->deviceQueue->device->desc.enable_external_usage &&
@@ -179,6 +195,18 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
             ptr->memory_type == PNANOVDB_COMPUTE_MEMORY_TYPE_READBACK)
         {
             loader->vkMapMemory(vulkanDevice, ptr->memoryVk, 0u, VK_WHOLE_SIZE, 0u, &ptr->mappedData);
+        }
+
+        if (bufCreateInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
+        {
+            VkBufferDeviceAddressInfoKHR addressInfo = {};
+            addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO_KHR;
+            addressInfo.buffer = ptr->bufferVk;
+            ptr->bufferAddress = loader->vkGetBufferDeviceAddress(vulkanDevice, &addressInfo);
+
+            // context->deviceQueue->device->logPrint(
+            //     PNANOVDB_COMPUTE_LOG_LEVEL_DEBUG, "bufferAddress(%zu) allocationBytes(%zu)", ptr->bufferAddress,
+            //     ptr->allocationBytes);
         }
     }
     else // free buffer and set null
@@ -614,6 +642,12 @@ void closeBufferExternalHandle(pnanovdb_compute_context_t* context,
                                const pnanovdb_compute_interop_handle_t* srcHandle)
 {
     device_closeBufferExternalHandle(context, buffer, &srcHandle->value, sizeof(srcHandle->value));
+}
+
+pnanovdb_uint64_t getBufferDeviceAddress(pnanovdb_compute_context_t* context, pnanovdb_compute_buffer_t* buffer)
+{
+    auto ptr = cast(buffer);
+    return ptr->bufferAddress;
 }
 
 } // end namespace
