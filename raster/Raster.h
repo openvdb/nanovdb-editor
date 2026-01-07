@@ -41,6 +41,8 @@ struct raster_context_t
     pnanovdb_parallel_primitives_context_t* parallel_primitives_ctx;
     pnanovdb_grid_build_t grid_build;
     pnanovdb_grid_build_context_t* grid_build_ctx;
+
+    pnanovdb_uint64_t max_isects_count = { 0llu };
 };
 
 PNANOVDB_CAST_PAIR(pnanovdb_raster_context_t, raster_context_t)
