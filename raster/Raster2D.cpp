@@ -178,6 +178,8 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
 
     grid_dim_t points_grid_dim = compute_dispatch_grid_dim((data->point_count + 255u) / 256u);
 
+    pnanovdb_uint64_t prim_count_64 = data->point_count;
+
     constants.view = pnanovdb_camera_mat_transpose(*view);
     constants.view_rot0 = view->x;
     constants.view_rot1 = view->y;
@@ -190,7 +192,7 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
     constants.cy = (float)image_height * 0.5f;
     constants.image_width = image_width;
     constants.image_height = image_height;
-    constants.prim_count = data->point_count;
+    constants.prim_count = prim_count_64;
     constants.n_isects = 0u;
     constants.image_origin_w = 0u;
     constants.image_origin_h = 0u;
@@ -261,31 +263,31 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
                      PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_SRC | PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_DST;
     buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
     buf_desc.structure_stride = 4u;
-    buf_desc.size_in_bytes = 4u * constants.prim_count;
+    buf_desc.size_in_bytes = 4u * prim_count_64;
     pnanovdb_compute_buffer_t* radii_buffer =
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
     buf_desc.structure_stride = 8u;
-    buf_desc.size_in_bytes = 8u * constants.prim_count;
+    buf_desc.size_in_bytes = 8u * prim_count_64;
     pnanovdb_compute_buffer_t* means2d_buffer =
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
     buf_desc.structure_stride = 4u;
-    buf_desc.size_in_bytes = 4u * constants.prim_count;
+    buf_desc.size_in_bytes = 4u * prim_count_64;
     pnanovdb_compute_buffer_t* depths_buffer =
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
     buf_desc.structure_stride = 4u;
-    buf_desc.size_in_bytes = 12u * constants.prim_count;
+    buf_desc.size_in_bytes = 12u * prim_count_64;
     pnanovdb_compute_buffer_t* conics_buffer =
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
     buf_desc.structure_stride = 4u;
-    buf_desc.size_in_bytes = 4u * constants.prim_count;
+    buf_desc.size_in_bytes = 4u * prim_count_64;
     pnanovdb_compute_buffer_t* compensations_buffer =
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
     buf_desc.structure_stride = 4u;
-    buf_desc.size_in_bytes = 12u * constants.prim_count;
+    buf_desc.size_in_bytes = 12u * prim_count_64;
     pnanovdb_compute_buffer_t* resolved_color_buffer =
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
     buf_desc.structure_stride = 4u;
-    buf_desc.size_in_bytes = 4u * constants.prim_count;
+    buf_desc.size_in_bytes = 4u * prim_count_64;
     pnanovdb_compute_buffer_t* num_tiles_per_gaussian_buffer =
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
     pnanovdb_compute_buffer_t* scan_tiles_per_gaussian_buffer =
@@ -377,7 +379,7 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
         pnanovdb_compute_copy_buffer_params_t copy_params = {};
         copy_params.num_bytes = 4u; // uint32_t
         copy_params.src = compute_interface->register_buffer_as_transient(context, scan_tiles_per_gaussian_buffer);
-        copy_params.src_offset = (constants.prim_count - 1u) * 4u;
+        copy_params.src_offset = (prim_count_64 - 1u) * 4u;
         copy_params.dst = compute_interface->register_buffer_as_transient(context, readback_buffer);
         copy_params.dst_offset = 0u;
         copy_params.debug_label = "raster_2d_feedback_copy";
@@ -441,12 +443,19 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
 
     if (total_count != 0u)
     {
+        pnanovdb_uint64_t max_isects_count = ctx->max_isects_count;
+        if (total_count > max_isects_count)
+        {
+            max_isects_count = total_count;
+            ctx->max_isects_count = max_isects_count;
+        }
+
         // create sort keys/vals
         buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED;
         buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
         buf_desc.structure_stride = 4u;
         buf_desc.size_in_bytes = 65536u;
-        while (buf_desc.size_in_bytes < 4u * constants.n_isects)
+        while (buf_desc.size_in_bytes < 4u * max_isects_count)
         {
             buf_desc.size_in_bytes *= 2u;
         }
@@ -491,15 +500,16 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
                 num_tile_id_bits++;
             }
 
-            ctx->parallel_primitives.radix_sort_dual_key(
-                compute, queue, ctx->parallel_primitives_ctx, intersection_keys_low_buffer,
-                intersection_keys_high_buffer, intersection_vals_buffer, constants.n_isects, 32u, num_tile_id_bits);
+            ctx->parallel_primitives.radix_sort_dual_key(compute, queue, ctx->parallel_primitives_ctx,
+                                                         intersection_keys_low_buffer, intersection_keys_high_buffer,
+                                                         intersection_vals_buffer, constants.n_isects, max_isects_count,
+                                                         32u, num_tile_id_bits);
         }
 
         buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED;
         buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
         buf_desc.structure_stride = 4u;
-        buf_desc.size_in_bytes = 4u * constants.num_tiles;
+        buf_desc.size_in_bytes = 4u * pnanovdb_uint64_t(constants.num_tiles);
         if (buf_desc.size_in_bytes < 65536u)
         {
             buf_desc.size_in_bytes = 65536u;

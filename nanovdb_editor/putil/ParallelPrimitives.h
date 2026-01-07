@@ -60,6 +60,7 @@ typedef struct pnanovdb_parallel_primitives_t
                                    pnanovdb_compute_buffer_t* key_inout,
                                    pnanovdb_compute_buffer_t* val_inout,
                                    pnanovdb_uint64_t key_count,
+                                   pnanovdb_uint64_t buffer_key_count,
                                    pnanovdb_uint32_t key_bit_count);
 
     void(PNANOVDB_ABI* radix_sort_dual_key)(const pnanovdb_compute_t* compute,
@@ -69,6 +70,7 @@ typedef struct pnanovdb_parallel_primitives_t
                                             pnanovdb_compute_buffer_t* key_high_inout,
                                             pnanovdb_compute_buffer_t* val_inout,
                                             pnanovdb_uint64_t key_count,
+                                            pnanovdb_uint64_t buffer_key_count,
                                             pnanovdb_uint32_t key_low_bit_count,
                                             pnanovdb_uint32_t key_high_bit_count);
 
