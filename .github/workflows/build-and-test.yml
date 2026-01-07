@@ -149,7 +149,7 @@ jobs:
 
   nanovdb-editor-build-and-test-windows-arm:
     name: Build and Test (Windows ARM64)
-    runs-on: windows-latest-arm
+    runs-on: windows-11-arm
     defaults:
       run:
         shell: pwsh
