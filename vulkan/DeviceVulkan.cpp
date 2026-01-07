@@ -466,44 +466,54 @@ pnanovdb_compute_device_t* createDevice(pnanovdb_compute_device_manager_t* devic
             queueCreateInfoCount++;
         }
 
-        VkPhysicalDeviceSynchronization2Features synchronization2_features = {};
-        synchronization2_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
-        synchronization2_features.synchronization2 = VK_TRUE;
-        synchronization2_features.pNext = nullptr;
-
-        VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures = {};
-        bufferDeviceAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
-        bufferDeviceAddressFeatures.bufferDeviceAddress = VK_TRUE;
-        bufferDeviceAddressFeatures.pNext = nullptr;
-        synchronization2_features.pNext = &bufferDeviceAddressFeatures;
-        ptr->enabledFeatures.bufferDeviceAddress = PNANOVDB_TRUE;
-
         VkDeviceCreateInfo deviceCreateInfo = {};
         deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-        deviceCreateInfo.pNext = &synchronization2_features;
         deviceCreateInfo.queueCreateInfoCount = queueCreateInfoCount;
         deviceCreateInfo.pQueueCreateInfos = queueCreateInfo;
         deviceCreateInfo.enabledExtensionCount = (uint32_t)deviceExtensionsEnabled.size();
         deviceCreateInfo.ppEnabledExtensionNames = deviceExtensionsEnabled.data();
 
-        VkPhysicalDeviceFeatures features = {};
-        instanceLoader->vkGetPhysicalDeviceFeatures(ptr->physicalDevice, &features);
+        VkPhysicalDeviceFeatures2 features = {};
+        features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        VkPhysicalDeviceSynchronization2Features synchronization2_features = {};
+        synchronization2_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+        features.pNext = &synchronization2_features;
+        VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures = {};
+        bufferDeviceAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+        synchronization2_features.pNext = &bufferDeviceAddressFeatures;
 
-        VkPhysicalDeviceFeatures enabledFeaturesVk = {};
+        instanceLoader->vkGetPhysicalDeviceFeatures2(ptr->physicalDevice, &features);
 
-#define PNANOVDB_VULKAN_TRY_ENABLE_FEATURE(X)                                                                          \
-    if (features.X)                                                                                                    \
-    {                                                                                                                  \
-        ptr->enabledFeatures.X = PNANOVDB_TRUE;                                                                        \
-        enabledFeaturesVk.X = VK_TRUE;                                                                                 \
-    }
+        VkPhysicalDeviceFeatures2 enabled_features = {};
+        enabled_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        VkPhysicalDeviceSynchronization2Features enabled_synchronization2_features = {};
+        enabled_synchronization2_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+        enabled_features.pNext = &enabled_synchronization2_features;
+        VkPhysicalDeviceBufferDeviceAddressFeatures enabled_bufferDeviceAddressFeatures = {};
+        enabled_bufferDeviceAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+        enabled_synchronization2_features.pNext = &enabled_bufferDeviceAddressFeatures;
 
-        PNANOVDB_VULKAN_TRY_ENABLE_FEATURE(shaderStorageImageWriteWithoutFormat)
-        PNANOVDB_VULKAN_TRY_ENABLE_FEATURE(shaderInt64)
+        if (features.features.shaderStorageImageWriteWithoutFormat)
+        {
+            ptr->enabledFeatures.shaderStorageImageWriteWithoutFormat = PNANOVDB_TRUE;
+            enabled_features.features.shaderStorageImageWriteWithoutFormat = VK_TRUE;
+        }
+        if (features.features.shaderInt64)
+        {
+            ptr->enabledFeatures.shaderInt64 = PNANOVDB_TRUE;
+            enabled_features.features.shaderInt64 = VK_TRUE;
+        }
+        if (synchronization2_features.synchronization2)
+        {
+            enabled_synchronization2_features.synchronization2 = VK_TRUE;
+        }
+        if (bufferDeviceAddressFeatures.bufferDeviceAddress)
+        {
+            ptr->enabledFeatures.bufferDeviceAddress = PNANOVDB_TRUE;
+            enabled_bufferDeviceAddressFeatures.bufferDeviceAddress = VK_TRUE;
+        }
 
-#undef PNANOVDB_VULKAN_TRY_ENABLE_FEATURE
-
-        deviceCreateInfo.pEnabledFeatures = &enabledFeaturesVk;
+        deviceCreateInfo.pNext = &enabled_features;
 
         instanceLoader->vkCreateDevice(ptr->physicalDevice, &deviceCreateInfo, nullptr, &ptr->vulkanDevice);
 

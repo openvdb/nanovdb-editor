@@ -121,6 +121,14 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
     bufMemAllocInfo.allocationSize = bufMemReq.size;
     bufMemAllocInfo.memoryTypeIndex = bufMemType;
 
+    VkMemoryAllocateFlagsInfo bufMemAllocFlagsInfo = {};
+    bufMemAllocFlagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+    if (bufCreateInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR)
+    {
+        bufMemAllocInfo.pNext = &bufMemAllocFlagsInfo;
+        bufMemAllocFlagsInfo.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+    }
+
     VkExportMemoryAllocateInfoKHR exportAllocInfo = {};
     if (!interopHandle && context->deviceQueue->device->desc.enable_external_usage &&
         ptr->memory_type == PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE)
