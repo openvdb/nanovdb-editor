@@ -70,7 +70,7 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
         ((ptr->desc.usage & PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED) != 0u ||
          (ptr->desc.usage & PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED) != 0u))
     {
-        bufCreateInfo.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR;
+        bufCreateInfo.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     }
 
     VkExternalMemoryBufferCreateInfoKHR externalMemoryBufferCreateInfo = {};
@@ -123,7 +123,7 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
 
     VkMemoryAllocateFlagsInfo bufMemAllocFlagsInfo = {};
     bufMemAllocFlagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
-    if (bufCreateInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR)
+    if (bufCreateInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
     {
         bufMemAllocInfo.pNext = &bufMemAllocFlagsInfo;
         bufMemAllocFlagsInfo.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
@@ -197,7 +197,7 @@ void buffer_createBuffer(Context* context, Buffer* ptr, const pnanovdb_compute_i
             loader->vkMapMemory(vulkanDevice, ptr->memoryVk, 0u, VK_WHOLE_SIZE, 0u, &ptr->mappedData);
         }
 
-        if (bufCreateInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR)
+        if (bufCreateInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
         {
             VkBufferDeviceAddressInfoKHR addressInfo = {};
             addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO_KHR;
