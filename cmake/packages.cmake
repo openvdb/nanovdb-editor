@@ -277,6 +277,7 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
 
     include(ExternalProject)
     set(SLANG_INSTALL_DIR "${CMAKE_BINARY_DIR}/slang-install")
+    set(SLANG_INSTALLED_LIB "${SLANG_INSTALL_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}")
 
     ExternalProject_Add(slang_src_build
         GIT_REPOSITORY https://github.com/shader-slang/slang.git
@@ -286,10 +287,13 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
         CMAKE_ARGS
             -DCMAKE_BUILD_TYPE=Release
             -DCMAKE_INSTALL_PREFIX=${SLANG_INSTALL_DIR}
+            -DCMAKE_INSTALL_LIBDIR=lib
             -DCMAKE_POSITION_INDEPENDENT_CODE=ON
             -DBUILD_SHARED_LIBS=ON
             -DSLANG_ENABLE_TESTS=OFF
             -DSLANG_ENABLE_EXAMPLES=OFF
+        BUILD_BYPRODUCTS
+            ${SLANG_INSTALLED_LIB}
         BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
         INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target install
     )
