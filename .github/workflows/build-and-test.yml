@@ -188,11 +188,11 @@ jobs:
           7z x $MesaArchive -o"$MesaDir" -y
 
           # Locate lavapipe DLL (layout can differ between Mesa releases)
-          $VulkanLvpDll = Get-ChildItem -Path $MesaDir -Recurse -File -Filter "vulkan_lvp.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $VulkanLvpDll) {
-              $VulkanLvpDll = Get-ChildItem -Path $MesaDir -Recurse -File -Filter "vulkan_lvp*.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
+          $VulkanLvpDllCandidates = Get-ChildItem -Path $MesaDir -Recurse -File -Filter "vulkan_lvp.dll" -ErrorAction SilentlyContinue
+          if (-not $VulkanLvpDllCandidates) {
+              $VulkanLvpDllCandidates = Get-ChildItem -Path $MesaDir -Recurse -File -Filter "vulkan_lvp*.dll" -ErrorAction SilentlyContinue
           }
-          if (-not $VulkanLvpDll) {
+          if (-not $VulkanLvpDllCandidates) {
               Write-Host "ERROR: vulkan_lvp.dll not found for ARM64!"
               Write-Host "Mesa root contents:"
               Get-ChildItem $MesaDir -ErrorAction SilentlyContinue | Format-Table Name
@@ -201,12 +201,34 @@ jobs:
                 Select-Object -First 50 FullName | Format-Table -AutoSize
               exit 1
           }
-          Write-Host "Found lavapipe DLL at: $($VulkanLvpDll.FullName)"
+
+          # Prefer ARM64/aarch64 paths (avoid accidentally selecting x64 DLLs)
+          $VulkanLvpDll = $VulkanLvpDllCandidates | Where-Object { $_.FullName -match '(\\|/)(arm64|aarch64)(\\|/)' } | Select-Object -First 1
+          if (-not $VulkanLvpDll) {
+              Write-Host "ERROR: Found vulkan_lvp.dll candidates, but none look like ARM64 (no arm64/aarch64 in path)."
+              Write-Host "This usually means the Mesa package does not contain ARM64 lavapipe binaries."
+              Write-Host "Candidates:"
+              $VulkanLvpDllCandidates | Select-Object FullName | Format-Table -AutoSize
+              exit 1
+          }
+          Write-Host "Using lavapipe DLL: $($VulkanLvpDll.FullName)"
+
+          $MesaBinPath = Split-Path -Parent $VulkanLvpDll.FullName
+          Write-Host "Using Mesa bin path: $MesaBinPath"
 
           # Register lavapipe ICD in Windows Registry
-          $VulkanICDJson = Get-ChildItem -Path $MesaDir -Recurse -File -Filter "lvp_icd*.json" -ErrorAction SilentlyContinue |
+          # Prefer ICD JSON from the same directory as the selected DLL
+          $VulkanICDJson = Get-ChildItem -Path $MesaBinPath -File -Filter "lvp_icd*.json" -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -match "(aarch64|arm64)" } |
             Select-Object -First 1
+          if (-not $VulkanICDJson) {
+              $VulkanICDJson = Get-ChildItem -Path $MesaBinPath -File -Filter "lvp_icd*.json" -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          if (-not $VulkanICDJson) {
+              $VulkanICDJson = Get-ChildItem -Path $MesaDir -Recurse -File -Filter "lvp_icd*.json" -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -match "(aarch64|arm64)" } |
+                Select-Object -First 1
+          }
           if (-not $VulkanICDJson) {
               $VulkanICDJson = Get-ChildItem -Path $MesaDir -Recurse -File -Filter "lvp_icd*.json" -ErrorAction SilentlyContinue | Select-Object -First 1
           }
@@ -222,6 +244,10 @@ jobs:
           $VulkanICDPath = $VulkanICDJson.FullName
           $RegistryPath = "HKLM:\SOFTWARE\Khronos\Vulkan\Drivers"
 
+          Write-Host "Using lavapipe ICD JSON: $VulkanICDPath"
+          Write-Host "ICD JSON preview:"
+          Get-Content -Path $VulkanICDPath -TotalCount 50 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
+
           Write-Host "Registering lavapipe ICD in registry..."
           if (-not (Test-Path $RegistryPath)) {
               New-Item -Path $RegistryPath -Force | Out-Null
@@ -234,7 +260,6 @@ jobs:
           "VK_ICD_FILENAMES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
           # Add Mesa to PATH
-          $MesaBinPath = Split-Path -Parent $VulkanLvpDll.FullName
           echo "$MesaBinPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
           Write-Host "Lavapipe installed successfully for ARM64"
