@@ -385,19 +385,21 @@ if(SKBUILD)
             endif()
         else()
             if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
-                # Install built slang libraries from install prefix (exclude slang-llvm which is in build dir)
-                install(DIRECTORY "${Slang_SOURCE_DIR}/lib/"
-                    DESTINATION nanovdb_editor/lib
-                    COMPONENT python_libs
-                    FILES_MATCHING
-                        PATTERN "libslang*.so*"
-                        PATTERN "libslang-llvm*" EXCLUDE
-                )
-                # Also install slang-llvm which is downloaded to the build directory
-                # Pattern: slang_src_build-prefix/src/slang_src_build-build/slang-VERSION-linux-x86_64/lib/libslang-llvm.so*
+                # Install all slang libraries using install(CODE) to avoid configure-time path resolution
                 install(CODE "
-                    file(GLOB_RECURSE SLANG_LLVM_LIBS
-                        \"${SLANG_BUILD_DIR}/slang-*/lib/libslang-llvm*\")
+                    # Install main slang libraries from install prefix
+                    file(GLOB SLANG_LIBS \"${Slang_SOURCE_DIR}/lib/libslang*.so*\")
+                    foreach(lib \${SLANG_LIBS})
+                        get_filename_component(lib_name \"\${lib}\" NAME)
+                        # Skip slang-llvm files in install dir (they don't exist there)
+                        if(NOT lib_name MATCHES \"libslang-llvm\")
+                            message(STATUS \"Installing: \${lib}\")
+                            file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                        endif()
+                    endforeach()
+
+                    # Install slang-llvm from build directory
+                    file(GLOB_RECURSE SLANG_LLVM_LIBS \"${SLANG_BUILD_DIR}/slang-*/lib/libslang-llvm*\")
                     if(SLANG_LLVM_LIBS)
                         foreach(lib \${SLANG_LLVM_LIBS})
                             message(STATUS \"Installing slang-llvm: \${lib}\")
