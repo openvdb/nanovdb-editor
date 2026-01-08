@@ -376,20 +376,30 @@ if(SKBUILD)
                 DESTINATION nanovdb_editor/lib
                 COMPONENT python_libs
             )
-            if(EXISTS ${Slang_SOURCE_DIR}/bin/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX})
-                install(FILES
-                    "${Slang_SOURCE_DIR}/bin/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            file(GLOB SLANG_LLVM_FILES "${Slang_SOURCE_DIR}/bin/slang-llvm*${CMAKE_SHARED_LIBRARY_SUFFIX}*")
+            if(SLANG_LLVM_FILES)
+                install(FILES ${SLANG_LLVM_FILES}
                     DESTINATION nanovdb_editor/lib
                     COMPONENT python_libs
                 )
             endif()
         else()
             if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
+                # Install built slang libraries from install prefix
                 install(DIRECTORY "${Slang_SOURCE_DIR}/lib/"
                     DESTINATION nanovdb_editor/lib
                     COMPONENT python_libs
                     FILES_MATCHING
                         PATTERN "libslang*.so*"
+                )
+                # Also install slang-llvm which is downloaded to the build directory
+                # Pattern: slang_src_build-prefix/src/slang_src_build-build/slang-VERSION-linux-x86_64/lib/libslang-llvm.so*
+                install(DIRECTORY "${SLANG_BUILD_DIR}/"
+                    DESTINATION nanovdb_editor/lib
+                    COMPONENT python_libs
+                    FILES_MATCHING
+                        PATTERN "*/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}"
+                        PATTERN "*/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}.*"
                 )
             else()
                 # Note: libslang-compiler and libslang-glslang have version suffix in filename
@@ -400,9 +410,9 @@ if(SKBUILD)
                     DESTINATION nanovdb_editor/lib
                     COMPONENT python_libs
                 )
-                if(EXISTS ${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX})
-                    install(FILES
-                        "${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}"
+                file(GLOB SLANG_LLVM_FILES "${Slang_SOURCE_DIR}/lib/libslang-llvm*${CMAKE_SHARED_LIBRARY_SUFFIX}*")
+                if(SLANG_LLVM_FILES)
+                    install(FILES ${SLANG_LLVM_FILES}
                         DESTINATION nanovdb_editor/lib
                         COMPONENT python_libs
                     )
