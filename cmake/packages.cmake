@@ -278,8 +278,7 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
     include(ExternalProject)
     set(SLANG_INSTALL_DIR "${CMAKE_BINARY_DIR}/slang-install")
     set(SLANG_INSTALLED_LIB "${SLANG_INSTALL_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}")
-    # slang-llvm is downloaded by Slang's build to a version-specific subdirectory
-    set(SLANG_BUILD_DIR "${CMAKE_BINARY_DIR}/slang_src_build-prefix/src/slang_src_build-build" CACHE INTERNAL "Slang build directory")
+    set(SLANG_EP_INSTALL_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/slang_ep_install.cmake")
 
     ExternalProject_Add(slang_src_build
         GIT_REPOSITORY https://github.com/shader-slang/slang.git
@@ -299,7 +298,7 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
         BUILD_BYPRODUCTS
             ${SLANG_INSTALLED_LIB}
         BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
-        INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target install
+        INSTALL_COMMAND ${CMAKE_COMMAND} -DSLANG_EP_BINARY_DIR=<BINARY_DIR> -P ${SLANG_EP_INSTALL_SCRIPT}
     )
 
     # Match existing variable naming used throughout the project.

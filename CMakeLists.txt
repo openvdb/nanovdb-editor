@@ -387,27 +387,11 @@ if(SKBUILD)
             if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
                 # Install all slang libraries using install(CODE) to avoid configure-time path resolution
                 install(CODE "
-                    # Install main slang libraries from install prefix
                     file(GLOB SLANG_LIBS \"${Slang_SOURCE_DIR}/lib/libslang*.so*\")
                     foreach(lib \${SLANG_LIBS})
-                        get_filename_component(lib_name \"\${lib}\" NAME)
-                        # Skip slang-llvm files in install dir (they don't exist there)
-                        if(NOT lib_name MATCHES \"libslang-llvm\")
-                            message(STATUS \"Installing: \${lib}\")
-                            file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
-                        endif()
+                        message(STATUS \"Installing: \${lib}\")
+                        file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
                     endforeach()
-
-                    # Install slang-llvm from build directory
-                    file(GLOB_RECURSE SLANG_LLVM_LIBS \"${SLANG_BUILD_DIR}/slang-*/lib/libslang-llvm*\")
-                    if(SLANG_LLVM_LIBS)
-                        foreach(lib \${SLANG_LLVM_LIBS})
-                            message(STATUS \"Installing slang-llvm: \${lib}\")
-                            file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
-                        endforeach()
-                    else()
-                        message(WARNING \"No slang-llvm libraries found in ${SLANG_BUILD_DIR}/slang-*/lib/\")
-                    endif()
                 " COMPONENT python_libs)
             else()
                 # Note: libslang-compiler and libslang-glslang have version suffix in filename
