@@ -594,18 +594,6 @@ if(Slang_ADDED)
         )
     endif()
 
-    # Check if slang-llvm exists and set variable for later use
-    set(SLANG_LLVM_EXISTS FALSE)
-    if(WIN32)
-        if(EXISTS ${Slang_SOURCE_DIR}/bin/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX})
-            set(SLANG_LLVM_EXISTS TRUE)
-        endif()
-    else()
-        if(EXISTS ${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX})
-            set(SLANG_LLVM_EXISTS TRUE)
-        endif()
-    endif()
-
     # SKBUILD installs the library directly via install() rules.
     if(NOT SKBUILD)
         add_custom_target(copy_slang_libs
@@ -626,7 +614,7 @@ if(Slang_ADDED)
                     ${CMAKE_BINARY_DIR}/$<CONFIG>/slang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}
             )
             # Copy slang-llvm only if it exists
-            if(SLANG_LLVM_EXISTS)
+            if(EXISTS ${Slang_SOURCE_DIR}/bin/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX})
                 add_custom_command(TARGET copy_slang_libs POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
                         ${Slang_SOURCE_DIR}/bin/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}
@@ -649,7 +637,7 @@ if(Slang_ADDED)
                     ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang-glslang-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}
             )
             # Copy slang-llvm only if it exists
-            if(SLANG_LLVM_EXISTS)
+            if(EXISTS ${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX})
                 add_custom_command(TARGET copy_slang_libs POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
                         ${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}

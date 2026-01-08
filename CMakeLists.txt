@@ -376,7 +376,7 @@ if(SKBUILD)
                 DESTINATION nanovdb_editor/lib
                 COMPONENT python_libs
             )
-            if(SLANG_LLVM_EXISTS)
+            if(EXISTS ${Slang_SOURCE_DIR}/bin/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX})
                 install(FILES
                     "${Slang_SOURCE_DIR}/bin/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}"
                     DESTINATION nanovdb_editor/lib
@@ -400,7 +400,7 @@ if(SKBUILD)
                     DESTINATION nanovdb_editor/lib
                     COMPONENT python_libs
                 )
-                if(SLANG_LLVM_EXISTS)
+                if(EXISTS ${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX})
                     install(FILES
                         "${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}"
                         DESTINATION nanovdb_editor/lib
