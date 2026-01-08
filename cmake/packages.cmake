@@ -279,7 +279,7 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
     set(SLANG_INSTALL_DIR "${CMAKE_BINARY_DIR}/slang-install")
     set(SLANG_INSTALLED_LIB "${SLANG_INSTALL_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}")
     # slang-llvm is downloaded by Slang's build to a version-specific subdirectory
-    set(SLANG_BUILD_DIR "${CMAKE_BINARY_DIR}/slang_src_build-prefix/src/slang_src_build-build")
+    set(SLANG_BUILD_DIR "${CMAKE_BINARY_DIR}/slang_src_build-prefix/src/slang_src_build-build" CACHE INTERNAL "Slang build directory")
 
     ExternalProject_Add(slang_src_build
         GIT_REPOSITORY https://github.com/shader-slang/slang.git
