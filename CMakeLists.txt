@@ -385,12 +385,13 @@ if(SKBUILD)
             endif()
         else()
             if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
-                # Install built slang libraries from install prefix
+                # Install built slang libraries from install prefix (exclude slang-llvm which is in build dir)
                 install(DIRECTORY "${Slang_SOURCE_DIR}/lib/"
                     DESTINATION nanovdb_editor/lib
                     COMPONENT python_libs
                     FILES_MATCHING
                         PATTERN "libslang*.so*"
+                        PATTERN "libslang-llvm*" EXCLUDE
                 )
                 # Also install slang-llvm which is downloaded to the build directory
                 # Pattern: slang_src_build-prefix/src/slang_src_build-build/slang-VERSION-linux-x86_64/lib/libslang-llvm.so*
