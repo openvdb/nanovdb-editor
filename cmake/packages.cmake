@@ -595,17 +595,14 @@ if(Slang_ADDED)
     endif()
 
     # Check if slang-llvm exists and set variable for later use
+    set(SLANG_LLVM_EXISTS FALSE)
     if(WIN32)
         if(EXISTS ${Slang_SOURCE_DIR}/bin/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX})
             set(SLANG_LLVM_EXISTS TRUE)
-        else()
-            set(SLANG_LLVM_EXISTS FALSE)
         endif()
     else()
         if(EXISTS ${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX})
             set(SLANG_LLVM_EXISTS TRUE)
-        else()
-            set(SLANG_LLVM_EXISTS FALSE)
         endif()
     endif()
 
