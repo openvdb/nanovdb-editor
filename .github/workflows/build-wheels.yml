@@ -92,7 +92,7 @@ jobs:
       uses: pypa/cibuildwheel@v2.21.3
       env:
         CIBW_BUILD: ${{ matrix.cibw_build }}
-        CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_28_x86_64:latest
+        CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_34_x86_64:latest
         CIBW_MANYLINUX_AARCH64_IMAGE: quay.io/pypa/manylinux_2_34_aarch64:latest
         CIBW_BUILD_VERBOSITY: 1
         CIBW_ARCHS: ${{ matrix.os == 'ubuntu-24.04-arm' && 'aarch64' || 'auto' }}
@@ -119,7 +119,7 @@ jobs:
           if [[ "{wheel}" == *"aarch64"* ]]; then
             auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_34_aarch64
           else
-            auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs
+            auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_34_x86_64
           fi
 
         # Install test dependencies before testing
