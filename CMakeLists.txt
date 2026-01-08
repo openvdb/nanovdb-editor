@@ -394,13 +394,13 @@ if(SKBUILD)
                 )
                 # Also install slang-llvm which is downloaded to the build directory
                 # Pattern: slang_src_build-prefix/src/slang_src_build-build/slang-VERSION-linux-x86_64/lib/libslang-llvm.so*
-                install(DIRECTORY "${SLANG_BUILD_DIR}/"
-                    DESTINATION nanovdb_editor/lib
-                    COMPONENT python_libs
-                    FILES_MATCHING
-                        PATTERN "*/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}"
-                        PATTERN "*/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}.*"
-                )
+                install(CODE "
+                    file(GLOB_RECURSE SLANG_LLVM_LIBS
+                        \"${SLANG_BUILD_DIR}/*/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}*\")
+                    foreach(lib \${SLANG_LLVM_LIBS})
+                        file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                    endforeach()
+                " COMPONENT python_libs)
             else()
                 # Note: libslang-compiler and libslang-glslang have version suffix in filename
                 install(FILES
