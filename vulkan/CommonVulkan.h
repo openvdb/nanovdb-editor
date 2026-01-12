@@ -19,6 +19,7 @@
 #    define VK_USE_PLATFORM_METAL_EXT 1
 #else
 #    define VK_KHR_XCB_SURFACE_EXTENSION_NAME "VK_KHR_xcb_surface"
+#    define VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME "VK_KHR_wayland_surface"
 #endif
 
 #include <vulkan/vulkan.h>

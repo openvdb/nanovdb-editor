@@ -34,6 +34,7 @@ typedef struct pnanovdb_vulkan_enabled_instance_extensions_t
     pnanovdb_bool_t VK_EXT_METAL_SURFACE;
     pnanovdb_bool_t VK_MVK_MACOS_SURFACE;
     pnanovdb_bool_t VK_KHR_XCB_SURFACE;
+    pnanovdb_bool_t VK_KHR_WAYLAND_SURFACE;
     pnanovdb_bool_t VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2;
     pnanovdb_bool_t VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES;
     pnanovdb_bool_t VK_KHR_EXTERNAL_FENCE_CAPABILITIES;
