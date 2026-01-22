@@ -276,6 +276,54 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
     endif()
 
     include(ExternalProject)
+
+    # When building Slang from source, also build LLVM from source and have Slang
+    # use it (instead of downloading a prebuilt slang-llvm binary).
+    #
+    # Slang upstream currently expects LLVM 21.1.x for USE_SYSTEM_LLVM.
+    set(NANOVDB_EDITOR_LLVM_VERSION "21.1.8" CACHE STRING "LLVM version to build from source when building Slang from source")
+    set(LLVM_INSTALL_DIR "${CMAKE_BINARY_DIR}/llvm-install")
+    set(LLVM_INSTALLED_CONFIG "${LLVM_INSTALL_DIR}/lib/cmake/llvm/LLVMConfig.cmake")
+
+    ExternalProject_Add(llvm_src_build
+        GIT_REPOSITORY https://github.com/llvm/llvm-project.git
+        GIT_TAG llvmorg-${NANOVDB_EDITOR_LLVM_VERSION}
+        GIT_SHALLOW TRUE
+        UPDATE_DISCONNECTED TRUE
+        SOURCE_SUBDIR llvm
+        CMAKE_ARGS
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_INSTALL_PREFIX=${LLVM_INSTALL_DIR}
+            -DCMAKE_INSTALL_LIBDIR=lib
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+            -DLLVM_ENABLE_PROJECTS=clang
+            -DLLVM_TARGETS_TO_BUILD=X86
+            -DLLVM_ENABLE_ASSERTIONS=OFF
+            -DLLVM_INCLUDE_TESTS=OFF
+            -DLLVM_BUILD_TESTS=OFF
+            -DLLVM_INCLUDE_EXAMPLES=OFF
+            -DLLVM_BUILD_EXAMPLES=OFF
+            -DLLVM_INCLUDE_DOCS=OFF
+            -DCLANG_INCLUDE_TESTS=OFF
+            # Avoid a dynamic libLLVM.so to reduce the risk of multiple LLVM
+            # versions being loaded at runtime (Slang upstream warns about this).
+            -DLLVM_BUILD_LLVM_DYLIB=OFF
+            -DLLVM_LINK_LLVM_DYLIB=OFF
+            # Keep optional system deps off for more reproducible wheel builds.
+            -DLLVM_ENABLE_TERMINFO=OFF
+            -DLLVM_ENABLE_ZLIB=OFF
+            -DLLVM_ENABLE_ZSTD=OFF
+            -DLLVM_ENABLE_LIBXML2=OFF
+        BUILD_BYPRODUCTS
+            ${LLVM_INSTALLED_CONFIG}
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
+        INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target install
+    )
+
+    # Create the config dirs up-front so SLANG's configure step can resolve LLVM_DIR/Clang_DIR.
+    file(MAKE_DIRECTORY "${LLVM_INSTALL_DIR}/lib/cmake/llvm")
+    file(MAKE_DIRECTORY "${LLVM_INSTALL_DIR}/lib/cmake/clang")
+
     set(SLANG_INSTALL_DIR "${CMAKE_BINARY_DIR}/slang-install")
     set(SLANG_INSTALLED_LIB "${SLANG_INSTALL_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}")
     set(SLANG_EP_INSTALL_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/slang_ep_install.cmake")
@@ -285,6 +333,7 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
         GIT_TAG v${SLANG_VERSION}
         GIT_SHALLOW TRUE
         UPDATE_DISCONNECTED TRUE
+        DEPENDS llvm_src_build
         CMAKE_ARGS
             -DCMAKE_BUILD_TYPE=Release
             -DCMAKE_INSTALL_PREFIX=${SLANG_INSTALL_DIR}
@@ -295,6 +344,10 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
             -DSLANG_ENABLE_EXAMPLES=OFF
             -DSLANG_ENABLE_SLANG_RHI=OFF
             -DSLANG_ENABLE_GFX=OFF
+            -DSLANG_SLANG_LLVM_FLAVOR=USE_SYSTEM_LLVM
+            -DLLVM_DIR=${LLVM_INSTALL_DIR}/lib/cmake/llvm
+            -DClang_DIR=${LLVM_INSTALL_DIR}/lib/cmake/clang
+            -DCMAKE_PREFIX_PATH=${LLVM_INSTALL_DIR}
         BUILD_BYPRODUCTS
             ${SLANG_INSTALLED_LIB}
         BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release

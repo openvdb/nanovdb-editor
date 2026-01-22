@@ -138,6 +138,8 @@ function build_python_module() {
 
     cd ./pymodule || exit 1
 
+    local -a PIP_ARGS=()
+
     if $clean_build; then
         echo "-- Cleaning up old python module builds..."
         rm -rf build/ _skbuild/ dist/ *.egg-info/
@@ -163,6 +165,8 @@ function build_python_module() {
 
     # This is needed for the incremental builds to work without reinstalling the dependencies
     PIP_ARGS+=(--no-build-isolation)
+
+    PIP_ARGS+=(--config-settings=cmake.define.NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=ON)
 
     if $editable_mode; then
         echo "-- Installing NanoVDB editor in editable mode..."
