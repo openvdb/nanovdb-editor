@@ -33,6 +33,7 @@ class EditorScene;
 constexpr const char* s_default_editor_shader = "editor/editor.slang";
 constexpr const char* s_raster2d_shader_group = "raster/raster2d_group";
 constexpr const char* s_raster2d_gaussian_shader = "raster/gaussian_rasterize_2d.slang";
+constexpr const char* s_raster3d_gaussian_shader = "raster/gaussian_rasterize_3d.slang";
 }
 
 // Thread Synchronization Model
@@ -67,7 +68,6 @@ struct pnanovdb_editor_impl_t
     pnanovdb_raster_context_t* raster_ctx;
     std::string shader_name = pnanovdb_editor::s_default_editor_shader;
     void* shader_params;
-    const pnanovdb_reflect_data_type_t* shader_params_data_type;
 
     // Deferred gaussian data destruction (to avoid GPU accessing freed memory)
     std::shared_ptr<pnanovdb_raster_gaussian_data_t> gaussian_data_old;
@@ -163,7 +163,6 @@ struct EditorWorker
     PendingData<pnanovdb_camera_view_t> pending_camera_view[32];
     std::atomic<uint32_t> pending_camera_view_idx;
     PendingData<void> pending_shader_params;
-    ConstPendingData<pnanovdb_reflect_data_type_t> pending_shader_params_data_type;
 
     // Track last added view to auto-select after sync
     std::atomic<uint64_t> last_added_scene_token_id{ 0 };

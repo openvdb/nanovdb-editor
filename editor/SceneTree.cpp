@@ -561,8 +561,8 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
             }
 
             // Show other scene items
-            auto renderSceneItems = [this, ptr, indentSpacing](const auto& /*itemMap*/, const char* treeLabel,
-                                                               auto& pendingField, ViewType viewType)
+            auto renderSceneItems = [this, ptr, indentSpacing](
+                                        const auto& /*itemMap*/, const char* treeLabel, ViewType viewType)
             {
                 if (renderTreeNodeHeader(treeLabel))
                 {
@@ -584,7 +584,7 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
 
                             if (renderSceneItem(name, isSelected, indentSpacing, false, nullptr, &deleteRequested))
                             {
-                                pendingField = name;
+                                ptr->editor_scene->select_view(name);
                             }
 
                             if (deleteRequested)
@@ -630,15 +630,13 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                 const auto& nanovdb_views = ptr->editor_scene->get_nanovdb_views();
                 if (!nanovdb_views.empty())
                 {
-                    renderSceneItems(
-                        nanovdb_views, "NanoVDB Views", ptr->pending.viewport_nanovdb_array, ViewType::NanoVDBs);
+                    renderSceneItems(nanovdb_views, "NanoVDB Views", ViewType::NanoVDBs);
                 }
 
                 const auto& gaussian_views = ptr->editor_scene->get_gaussian_views();
                 if (!gaussian_views.empty())
                 {
-                    renderSceneItems(gaussian_views, "Gaussian Views", ptr->pending.viewport_gaussian_view,
-                                     ViewType::GaussianScenes);
+                    renderSceneItems(gaussian_views, "Gaussian Views", ViewType::GaussianScenes);
                 }
             }
 

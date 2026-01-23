@@ -80,16 +80,11 @@ struct PendingState
     std::atomic<bool> update_shader = true; // needs to be initialized with true to map the shader after init
     std::atomic<bool> update_generated = false;
     bool print_slice = false;
-    bool load_nvdb = false;
-    bool save_nanovdb = false;
     bool find_raster_file = false;
     bool find_callable_file = false;
     bool open_file = false;
     bool save_file = false;
-    std::string viewport_gaussian_view = "";
-    std::string viewport_nanovdb_array = "";
     bool update_memory_stats = false;
-    bool update_raster = false;
     bool find_shader_directory = false;
     ShaderSelectionMode shader_selection_mode = ShaderSelectionMode::UseViewportShader;
 };
@@ -151,6 +146,15 @@ struct Instance
     std::string raster_filepath = "";
     float raster_voxels_per_unit = 128.f;
     bool raster_to_nanovdb = false; // User choice: false=raster2d, true=raster3d
+
+    // Shader override for import (allows custom shaders per pipeline)
+    // Non-empty path means override is enabled
+    std::string custom_render_shader_path; // Custom shader path for render pipeline
+    std::string custom_raster3d_shader_path; // Custom shader path for raster3d pipeline
+
+    // Pending shader override application (applied via editor API after import completes)
+    // Non-empty name means override is pending
+    std::string pending_shader_override_object_name;
 
     // shader params window selection
     std::string shader_group = "";

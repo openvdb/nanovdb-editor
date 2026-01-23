@@ -12,6 +12,7 @@
 #include "EditorWindows.h"
 
 #include "ImguiInstance.h"
+#include "Editor.h"
 #include "EditorScene.h"
 #include "EditorSceneManager.h"
 #include "EditorToken.h"
@@ -989,6 +990,63 @@ static bool gaussianImportSidePane(const char* /*vFilter*/, IGFDUserDatas vUserD
         {
             ImGui::SetTooltip("Voxels per unit (higher = finer resolution)");
         }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Text("Shader:");
+
+        bool use_custom_raster3d = !ptr->custom_raster3d_shader_path.empty();
+        if (ImGui::Checkbox("Use Custom Shader##Raster3D", &use_custom_raster3d))
+        {
+            if (use_custom_raster3d)
+                ptr->custom_raster3d_shader_path = pnanovdb_editor::s_raster3d_gaussian_shader;
+            else
+                ptr->custom_raster3d_shader_path.clear();
+        }
+        if (use_custom_raster3d)
+        {
+            ImGui::SetNextItemWidth(200.0f);
+            char buf[256];
+            strncpy(buf, ptr->custom_raster3d_shader_path.c_str(), sizeof(buf) - 1);
+            buf[sizeof(buf) - 1] = '\0';
+            if (ImGui::InputText("##Raster3DShader", buf, sizeof(buf)))
+            {
+                ptr->custom_raster3d_shader_path = buf;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Path to custom shader");
+            }
+        }
+    }
+    else
+    {
+        ImGui::Separator();
+        ImGui::Text("Shader:");
+
+        bool use_custom_render = !ptr->custom_render_shader_path.empty();
+        if (ImGui::Checkbox("Use Custom Shader##Render", &use_custom_render))
+        {
+            if (use_custom_render)
+                ptr->custom_render_shader_path = pnanovdb_editor::s_raster2d_gaussian_shader;
+            else
+                ptr->custom_render_shader_path.clear();
+        }
+        if (use_custom_render)
+        {
+            ImGui::SetNextItemWidth(200.0f);
+            char buf[256];
+            strncpy(buf, ptr->custom_render_shader_path.c_str(), sizeof(buf) - 1);
+            buf[sizeof(buf) - 1] = '\0';
+            if (ImGui::InputText("##RenderShader", buf, sizeof(buf)))
+            {
+                ptr->custom_render_shader_path = buf;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Path to custom shader");
+            }
+        }
     }
 
     return true;
@@ -1049,8 +1107,10 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
             if (ImGuiFileDialog::Instance()->IsOk())
             {
                 ptr->nanovdb_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
-                pnanovdb_editor::Console::getInstance().addLog("Opening file '%s'", ptr->nanovdb_filepath.c_str());
-                ptr->pending.load_nvdb = true;
+                if (ptr->editor_scene)
+                {
+                    ptr->editor_scene->import_file(ptr->nanovdb_filepath, false, nullptr);
+                }
             }
             ImGuiFileDialog::Instance()->Close();
         }
@@ -1059,13 +1119,16 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
             if (ImGuiFileDialog::Instance()->IsOk())
             {
                 ptr->raster_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
-                pnanovdb_editor::Console::getInstance().addLog(
-                    "Importing Gaussian file '%s' as %s%s", ptr->raster_filepath.c_str(),
-                    ptr->raster_to_nanovdb ? "Raster3D" : "Raster2D",
-                    ptr->raster_to_nanovdb ?
-                        (" (voxel size: " + std::to_string(ptr->raster_voxels_per_unit) + ")").c_str() :
-                        "");
-                ptr->pending.update_raster = true;
+                if (ptr->editor_scene)
+                {
+                    // Build pipeline settings with voxel_size
+                    pnanovdb_pipeline_param_t params[] = { { "voxel_size", ptr->raster_voxels_per_unit } };
+                    pnanovdb_pipeline_settings_t settings = { 0 };
+                    settings.params = params;
+                    settings.param_count = 1;
+
+                    ptr->editor_scene->import_file(ptr->raster_filepath, ptr->raster_to_nanovdb, &settings);
+                }
                 ptr->pending.find_raster_file = false;
             }
             ImGuiFileDialog::Instance()->Close();
@@ -1075,8 +1138,10 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
             if (ImGuiFileDialog::Instance()->IsOk())
             {
                 ptr->nanovdb_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
-                pnanovdb_editor::Console::getInstance().addLog("Saving file '%s'...", ptr->nanovdb_filepath.c_str());
-                ptr->pending.save_nanovdb = true;
+                if (ptr->editor_scene)
+                {
+                    ptr->editor_scene->export_nanovdb(ptr->nanovdb_filepath);
+                }
             }
             ImGuiFileDialog::Instance()->Close();
         }

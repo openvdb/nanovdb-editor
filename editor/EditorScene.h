@@ -244,6 +244,34 @@ public:
     // Sync current scene's viewport camera from editor's camera (for properties display)
     void sync_scene_camera_from_editor();
 
+    /*!
+        \brief Import a file directly (replaces pending.update_raster / pending.load_nvdb)
+
+        \param filepath Path to file to import
+        \param rasterize_to_nanovdb For Gaussian: true = Raster3D, false = Raster2D
+        \param settings Optional pipeline settings (voxel_size, shader_path)
+        \return true if import started successfully
+    */
+    bool import_file(const std::string& filepath,
+                     bool rasterize_to_nanovdb,
+                     const pnanovdb_pipeline_settings_t* settings = nullptr);
+
+    /*!
+        \brief Export current NanoVDB to file (replaces pending.save_nanovdb)
+
+        \param filepath Output file path
+        \return true on success
+    */
+    bool export_nanovdb(const std::string& filepath);
+
+    /*!
+        \brief Select a view for rendering (replaces pending.viewport_* strings)
+
+        \param view_name Name of the view to select
+        \return true if view was found and selected
+    */
+    bool select_view(const std::string& view_name);
+
     // Generic iteration over views of any type
     // Callback signature: void(const std::string& name, const auto& view_data)
     template <typename Callback>
@@ -275,13 +303,11 @@ private:
     void sync_current_view_state(SyncDirection sync_direction);
     void clear_editor_view_state();
     void load_view_into_editor_and_ui(SceneObject* scene_obj);
-    bool handle_pending_view_changes();
 
     // Sync editor's camera from current scene's viewport camera
     void sync_editor_camera_from_scene();
 
     // NanoVDB file operations
-    void load_nanovdb_to_editor();
     void save_editor_nanovdb();
 
     // Helper methods for internal use

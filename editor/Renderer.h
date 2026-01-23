@@ -15,11 +15,9 @@
 #include "nanovdb_editor/putil/Editor.h"
 #include "nanovdb_editor/putil/Raster.h"
 #include "nanovdb_editor/putil/Compute.h"
-#include "nanovdb_editor/putil/WorkerThread.hpp"
 #include "../imgui/UploadBuffer.h"
 
 #include <string>
-#include <mutex>
 
 namespace imgui_instance_user
 {
@@ -193,50 +191,6 @@ public:
                                                  EditorScene* editor_scene,
                                                  EditorSceneManager* scene_manager);
 
-    /*!
-        \brief Start rasterization task
-
-        \param raster_filepath Path to file to rasterize
-        \param voxels_per_unit Voxels per unit for rasterization
-        \param rasterize_to_nanovdb Whether to rasterize to NanoVDB or Gaussian
-        \param editor_scene Scene manager for handling results
-        \param scene_manager Scene manager for shader params
-        \param compute_queue Compute queue for NanoVDB rasterization
-        \param device_queue Device queue for Gaussian rasterization
-        \return true if rasterization was started successfully
-    */
-    bool start_rasterization(const char* raster_filepath,
-                             float voxels_per_unit,
-                             bool rasterize_to_nanovdb,
-                             EditorScene* editor_scene,
-                             class EditorSceneManager* scene_manager);
-
-    /*!
-        \brief Check if rasterization is in progress
-
-        \return true if a rasterization task is running
-    */
-    bool is_rasterizing();
-
-    /*!
-        \brief Get rasterization progress
-
-        \param progress_text Output text describing progress
-        \param progress_value Output progress value (0.0 to 1.0)
-        \return true if rasterization is in progress
-    */
-    bool get_rasterization_progress(std::string& progress_text, float& progress_value);
-
-    /*!
-        \brief Check and handle rasterization completion
-
-        \param editor_scene Scene manager for handling results
-        \param old_gaussian_data_ptr Output parameter for old gaussian data (for deferred destruction)
-        \return true if a task completed this frame (successful or not)
-    */
-    bool handle_rasterization_completion(EditorScene* editor_scene,
-                                         std::shared_ptr<pnanovdb_raster_gaussian_data_t>& old_gaussian_data_ptr);
-
 private:
     // Internal structure for camera/editor parameters (mirrored from shader)
     struct EditorParams
@@ -261,21 +215,6 @@ private:
     pnanovdb_compute_upload_buffer_t m_compute_upload_buffer;
     pnanovdb_compute_upload_buffer_t m_shader_params_upload_buffer;
     bool m_dispatch_shader = true;
-
-    // Rasterization worker thread
-    pnanovdb_util::WorkerThread m_raster_worker;
-    pnanovdb_util::WorkerThread::TaskId m_raster_task_id = pnanovdb_util::WorkerThread::invalidTaskId();
-
-    // Rasterization state
-    std::string m_pending_raster_filepath;
-    float m_pending_voxel_size = 1.f / 128.f;
-    pnanovdb_raster_gaussian_data_t* m_pending_gaussian_data = nullptr;
-    pnanovdb_raster_context_t* m_pending_raster_ctx = nullptr;
-    pnanovdb_raster_shader_params_t* m_pending_raster_params = nullptr;
-    pnanovdb_compute_array_t* m_pending_nanovdb_array = nullptr;
-    pnanovdb_compute_array_t* m_pending_shader_params_arrays[pnanovdb_raster::shader_param_count];
-    pnanovdb_raster_shader_params_t m_init_raster_shader_params;
-    const pnanovdb_reflect_data_type_t* m_raster_shader_params_data_type = nullptr;
 };
 
 } // namespace pnanovdb_editor
