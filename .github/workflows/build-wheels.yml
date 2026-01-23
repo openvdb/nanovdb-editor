@@ -88,10 +88,6 @@ jobs:
         sed -i 's/name = "nanovdb-editor"/name = "nanovdb-editor-dev"/' pymodule/pyproject.toml
         cat pymodule/pyproject.toml | grep "name ="
 
-    - name: Install libminiz
-      if: runner.os == 'Linux'
-      run: sudo apt-get update && sudo apt-get install -y libminiz3
-
     - name: Build wheels
       uses: pypa/cibuildwheel@v2.21.3
       env:

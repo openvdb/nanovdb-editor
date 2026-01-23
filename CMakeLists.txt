@@ -392,6 +392,14 @@ if(SKBUILD)
                         message(STATUS \"Installing: \${lib}\")
                         file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
                     endforeach()
+
+                    # Install miniz dependency (required by Slang for ZIP/compression)
+                    # miniz is built as a separate CPM dependency
+                    file(GLOB MINIZ_LIBS \"${miniz_BINARY_DIR}/libminiz.so*\")
+                    foreach(lib \${MINIZ_LIBS})
+                        message(STATUS \"Installing miniz: \${lib}\")
+                        file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                    endforeach()
                 " COMPONENT python_libs)
             else()
                 # Note: libslang-compiler and libslang-glslang have version suffix in filename

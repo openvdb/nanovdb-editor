@@ -56,6 +56,29 @@ if(zlib_ADDED)
     set(ZLIB_INCLUDE_DIR "${zlib_SOURCE_DIR};${zlib_BINARY_DIR}" CACHE STRING "ZLIB include directory" FORCE)
 endif()
 
+# miniz - required by Slang for ZIP/compression functionality when building Slang from source
+if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
+    set(MINIZ_VERSION 3.1.0)
+    CPMAddPackage(
+        NAME miniz
+        GITHUB_REPOSITORY richgel999/miniz
+        GIT_TAG ${MINIZ_VERSION}
+        VERSION ${MINIZ_VERSION}
+        OPTIONS
+            "BUILD_EXAMPLES OFF"
+            "BUILD_HEADER_ONLY OFF"
+            "BUILD_SHARED_LIBS ON"
+            "CMAKE_POSITION_INDEPENDENT_CODE ON"
+    )
+
+    if(miniz_ADDED)
+        # Ensure miniz target is available
+        if(TARGET miniz)
+            set_target_properties(miniz PROPERTIES POSITION_INDEPENDENT_CODE ON)
+        endif()
+    endif()
+endif()
+
 set(BLOSC_VERSION 1.21.4)
 CPMAddPackage(
     NAME blosc
@@ -326,6 +349,7 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
 
     set(SLANG_INSTALL_DIR "${CMAKE_BINARY_DIR}/slang-install")
     set(SLANG_INSTALLED_LIB "${SLANG_INSTALL_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}")
+    set(SLANG_BUILD_DIR "${CMAKE_BINARY_DIR}/slang_src_build-prefix/src/slang_src_build-build" CACHE INTERNAL "Slang build directory")
     set(SLANG_EP_INSTALL_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/slang_ep_install.cmake")
 
     ExternalProject_Add(slang_src_build
