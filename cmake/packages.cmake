@@ -56,6 +56,29 @@ if(zlib_ADDED)
     set(ZLIB_INCLUDE_DIR "${zlib_SOURCE_DIR};${zlib_BINARY_DIR}" CACHE STRING "ZLIB include directory" FORCE)
 endif()
 
+# miniz - required by Slang for ZIP/compression functionality when building Slang from source
+if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
+    set(MINIZ_VERSION 3.1.0)
+    CPMAddPackage(
+        NAME miniz
+        GITHUB_REPOSITORY richgel999/miniz
+        GIT_TAG ${MINIZ_VERSION}
+        VERSION ${MINIZ_VERSION}
+        OPTIONS
+            "BUILD_EXAMPLES OFF"
+            "BUILD_HEADER_ONLY OFF"
+            "BUILD_SHARED_LIBS ON"
+            "CMAKE_POSITION_INDEPENDENT_CODE ON"
+    )
+
+    if(miniz_ADDED)
+        # Ensure miniz target is available
+        if(TARGET miniz)
+            set_target_properties(miniz PROPERTIES POSITION_INDEPENDENT_CODE ON)
+        endif()
+    endif()
+endif()
+
 set(BLOSC_VERSION 1.21.4)
 CPMAddPackage(
     NAME blosc
@@ -268,47 +291,153 @@ CPMAddPackage(
 
 # Shader compilation
 set(SLANG_VERSION 2025.24)
-if(WIN32)
-    set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-windows-x86_64.zip)
-elseif(APPLE)
-    if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
-        set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-macos-arm64.zip)
-    else()
-        set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-macos-x86_64.zip)
-    endif()
-elseif(UNIX AND NOT APPLE)
-    if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
-        set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-linux-aarch64.zip)
-    else()
-        # Detect GLIBC version to choose appropriate Slang build
-        execute_process(
-            COMMAND ldd --version
-            OUTPUT_VARIABLE GLIBC_VERSION_OUTPUT
-            ERROR_QUIET
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-        )
 
-        # Extract GLIBC version number (e.g., "2.28" from "ldd (GNU libc) 2.28")
-        string(REGEX MATCH "([0-9]+\\.[0-9]+)" GLIBC_VERSION "${GLIBC_VERSION_OUTPUT}")
-
-        # Use glibc-2.17 compatible build for older systems (GLIBC < 2.29)
-        if(GLIBC_VERSION AND GLIBC_VERSION VERSION_LESS "2.29")
-            message(STATUS "Detected GLIBC ${GLIBC_VERSION}, using compatibility Slang build")
-            set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-linux-x86_64-glibc-2.17.zip)
-        else()
-            message(STATUS "Using standard Slang build (GLIBC ${GLIBC_VERSION})")
-            set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-linux-x86_64.zip)
-        endif()
+if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
+    if(NOT (UNIX AND NOT APPLE) OR CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
+        message(FATAL_ERROR "NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE is only supported on Linux x86_64")
     endif()
+    if(NOT SKBUILD)
+        message(FATAL_ERROR "NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE is currently intended for wheel builds (SKBUILD=ON)")
+    endif()
+
+    include(ExternalProject)
+
+    # When building Slang from source, also build LLVM from source and have Slang
+    # use it (instead of downloading a prebuilt slang-llvm binary).
+    #
+    # Slang upstream currently expects LLVM 21.1.x for USE_SYSTEM_LLVM.
+    set(NANOVDB_EDITOR_LLVM_VERSION "21.1.8" CACHE STRING "LLVM version to build from source when building Slang from source")
+    set(LLVM_INSTALL_DIR "${CMAKE_BINARY_DIR}/llvm-install")
+    set(LLVM_INSTALLED_CONFIG "${LLVM_INSTALL_DIR}/lib/cmake/llvm/LLVMConfig.cmake")
+
+    ExternalProject_Add(llvm_src_build
+        GIT_REPOSITORY https://github.com/llvm/llvm-project.git
+        GIT_TAG llvmorg-${NANOVDB_EDITOR_LLVM_VERSION}
+        GIT_SHALLOW TRUE
+        UPDATE_DISCONNECTED TRUE
+        SOURCE_SUBDIR llvm
+        CMAKE_ARGS
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_INSTALL_PREFIX=${LLVM_INSTALL_DIR}
+            -DCMAKE_INSTALL_LIBDIR=lib
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+            -DLLVM_ENABLE_PROJECTS=clang
+            -DLLVM_TARGETS_TO_BUILD=X86
+            -DLLVM_ENABLE_ASSERTIONS=OFF
+            -DLLVM_INCLUDE_TESTS=OFF
+            -DLLVM_BUILD_TESTS=OFF
+            -DLLVM_INCLUDE_EXAMPLES=OFF
+            -DLLVM_BUILD_EXAMPLES=OFF
+            -DLLVM_INCLUDE_DOCS=OFF
+            -DCLANG_INCLUDE_TESTS=OFF
+            # Avoid a dynamic libLLVM.so to reduce the risk of multiple LLVM
+            # versions being loaded at runtime (Slang upstream warns about this).
+            -DLLVM_BUILD_LLVM_DYLIB=OFF
+            -DLLVM_LINK_LLVM_DYLIB=OFF
+            # Keep optional system deps off for more reproducible wheel builds.
+            -DLLVM_ENABLE_TERMINFO=OFF
+            -DLLVM_ENABLE_ZLIB=OFF
+            -DLLVM_ENABLE_ZSTD=OFF
+            -DLLVM_ENABLE_LIBXML2=OFF
+        BUILD_BYPRODUCTS
+            ${LLVM_INSTALLED_CONFIG}
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
+        INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target install
+    )
+
+    # Create the config dirs up-front so SLANG's configure step can resolve LLVM_DIR/Clang_DIR.
+    file(MAKE_DIRECTORY "${LLVM_INSTALL_DIR}/lib/cmake/llvm")
+    file(MAKE_DIRECTORY "${LLVM_INSTALL_DIR}/lib/cmake/clang")
+
+    set(SLANG_INSTALL_DIR "${CMAKE_BINARY_DIR}/slang-install")
+    set(SLANG_INSTALLED_LIB "${SLANG_INSTALL_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}")
+    set(SLANG_BUILD_DIR "${CMAKE_BINARY_DIR}/slang_src_build-prefix/src/slang_src_build-build" CACHE INTERNAL "Slang build directory")
+    set(SLANG_EP_INSTALL_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/slang_ep_install.cmake")
+
+    ExternalProject_Add(slang_src_build
+        GIT_REPOSITORY https://github.com/shader-slang/slang.git
+        GIT_TAG v${SLANG_VERSION}
+        GIT_SHALLOW TRUE
+        UPDATE_DISCONNECTED TRUE
+        DEPENDS llvm_src_build
+        CMAKE_ARGS
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_INSTALL_PREFIX=${SLANG_INSTALL_DIR}
+            -DCMAKE_INSTALL_LIBDIR=lib
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+            -DBUILD_SHARED_LIBS=ON
+            -DSLANG_ENABLE_TESTS=OFF
+            -DSLANG_ENABLE_EXAMPLES=OFF
+            -DSLANG_ENABLE_SLANG_RHI=OFF
+            -DSLANG_ENABLE_GFX=OFF
+            -DSLANG_SLANG_LLVM_FLAVOR=USE_SYSTEM_LLVM
+            -DLLVM_DIR=${LLVM_INSTALL_DIR}/lib/cmake/llvm
+            -DClang_DIR=${LLVM_INSTALL_DIR}/lib/cmake/clang
+            -DCMAKE_PREFIX_PATH=${LLVM_INSTALL_DIR}
+        BUILD_BYPRODUCTS
+            ${SLANG_INSTALLED_LIB}
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
+        INSTALL_COMMAND ${CMAKE_COMMAND} -DSLANG_EP_BINARY_DIR=<BINARY_DIR> -P ${SLANG_EP_INSTALL_SCRIPT}
+    )
+
+    # Match existing variable naming used throughout the project.
+    set(Slang_SOURCE_DIR "${SLANG_INSTALL_DIR}")
+    set(Slang_ADDED TRUE)
+
+    # The imported target 'slang' uses ${Slang_SOURCE_DIR}/include as an
+    # INTERFACE_INCLUDE_DIRECTORIES entry. CMake requires that include
+    # directory to exist at generate time, but ExternalProject installs it
+    # later during the build.
+    file(MAKE_DIRECTORY "${Slang_SOURCE_DIR}/include")
+    file(MAKE_DIRECTORY "${Slang_SOURCE_DIR}/lib")
+    file(MAKE_DIRECTORY "${Slang_SOURCE_DIR}/bin")
 else()
-    message(WARNING "Unsupported platform for Slang. Please manually specify Slang package.")
-endif()
+    if(WIN32)
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64")
+            set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-windows-aarch64.zip)
+        else()
+            set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-windows-x86_64.zip)
+        endif()
+    elseif(APPLE)
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
+            set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-macos-arm64.zip)
+        else()
+            set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-macos-x86_64.zip)
+        endif()
+    elseif(UNIX AND NOT APPLE)
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
+            set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-linux-aarch64.zip)
+        else()
+            # Detect GLIBC version to choose appropriate Slang build
+            execute_process(
+                COMMAND ldd --version
+                OUTPUT_VARIABLE GLIBC_VERSION_OUTPUT
+                ERROR_QUIET
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+            )
 
-CPMAddPackage(
-    NAME Slang
-    URL ${SLANG_URL}
-    VERSION ${SLANG_VERSION}
-)
+            # Extract GLIBC version number (e.g., "2.28" from "ldd (GNU libc) 2.28")
+            string(REGEX MATCH "([0-9]+\\.[0-9]+)" GLIBC_VERSION "${GLIBC_VERSION_OUTPUT}")
+
+            # Use compatibility build for older systems
+            if(GLIBC_VERSION AND GLIBC_VERSION VERSION_LESS "2.29")
+                message(STATUS "Detected GLIBC ${GLIBC_VERSION}, using compatibility Slang build")
+                set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-linux-x86_64-glibc-2.27.zip)
+            else()
+                message(STATUS "Using standard Slang build (GLIBC ${GLIBC_VERSION})")
+                set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-linux-x86_64.zip)
+            endif()
+        endif()
+    else()
+        message(WARNING "Unsupported platform for Slang. Please manually specify Slang package.")
+    endif()
+
+    CPMAddPackage(
+        NAME Slang
+        URL ${SLANG_URL}
+        VERSION ${SLANG_VERSION}
+    )
+endif()
 
 # File handling and utilities
 CPMAddPackage(
@@ -545,21 +674,6 @@ if(Slang_ADDED)
         )
     endif()
 
-    # Check if slang-llvm exists and set variable for later use
-    if(WIN32)
-        if(EXISTS ${Slang_SOURCE_DIR}/bin/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX})
-            set(SLANG_LLVM_EXISTS TRUE)
-        else()
-            set(SLANG_LLVM_EXISTS FALSE)
-        endif()
-    else()
-        if(EXISTS ${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX})
-            set(SLANG_LLVM_EXISTS TRUE)
-        else()
-            set(SLANG_LLVM_EXISTS FALSE)
-        endif()
-    endif()
-
     # SKBUILD installs the library directly via install() rules.
     if(NOT SKBUILD)
         add_custom_target(copy_slang_libs
@@ -580,7 +694,7 @@ if(Slang_ADDED)
                     ${CMAKE_BINARY_DIR}/$<CONFIG>/slang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}
             )
             # Copy slang-llvm only if it exists
-            if(SLANG_LLVM_EXISTS)
+            if(EXISTS ${Slang_SOURCE_DIR}/bin/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX})
                 add_custom_command(TARGET copy_slang_libs POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
                         ${Slang_SOURCE_DIR}/bin/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}
@@ -603,7 +717,7 @@ if(Slang_ADDED)
                     ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang-glslang-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}
             )
             # Copy slang-llvm only if it exists
-            if(SLANG_LLVM_EXISTS)
+            if(EXISTS ${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX})
                 add_custom_command(TARGET copy_slang_libs POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
                         ${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}
