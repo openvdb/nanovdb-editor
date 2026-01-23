@@ -18,5 +18,6 @@ namespace pnanovdb_shader
 void remove_shader(const char* filePath);
 bool save_shader(const char* filePath, pnanovdb_shader::ShaderData& shader);
 bool get_shader(const char* filePath, pnanovdb_shader::ShaderDesc& shader);
+bool get_shader_data(const char* filePath, pnanovdb_shader::ShaderData& shader);
 bool has_shader(const char* filePath, pnanovdb_compiler_settings_t** settings);
 }

@@ -54,18 +54,6 @@ void Renderer::init(const RendererConfig& config)
         pnanovdb_compute_upload_buffer_init(compute_interface, compute_context, &m_shader_params_upload_buffer,
                                             PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT, PNANOVDB_COMPUTE_FORMAT_UNKNOWN, 0u);
     }
-
-    // Initialize raster shader params arrays
-    for (pnanovdb_uint32_t idx = 0u; idx < pnanovdb_raster::shader_param_count; idx++)
-    {
-        m_pending_shader_params_arrays[idx] = nullptr;
-    }
-
-    // Initialize raster shader params data type
-    m_raster_shader_params_data_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t);
-    const pnanovdb_raster_shader_params_t* default_raster_shader_params =
-        (const pnanovdb_raster_shader_params_t*)m_raster_shader_params_data_type->default_value;
-    m_init_raster_shader_params = *default_raster_shader_params;
 }
 
 void Renderer::cleanup()
@@ -276,117 +264,6 @@ ShaderDispatchResult Renderer::dispatch_nanovdb_shader(pnanovdb_compute_array_t*
                        upload_transient, shader_upload_transient, &m_nanovdb_buffer, &m_uploaded_nanovdb_array);
 
     return success ? ShaderDispatchResult::Success : ShaderDispatchResult::Skipped;
-}
-
-bool Renderer::start_rasterization(const char* raster_filepath,
-                                   float voxels_per_unit,
-                                   bool rasterize_to_nanovdb,
-                                   EditorScene* editor_scene,
-                                   EditorSceneManager* scene_manager)
-{
-    if (!m_initialized || !m_config.raster || !raster_filepath)
-    {
-        return false;
-    }
-
-    if (m_raster_worker.hasRunningTask())
-    {
-        Console::getInstance().addLog("Error: Rasterization already in progress");
-        return false;
-    }
-
-    m_pending_raster_filepath = raster_filepath;
-    m_pending_voxel_size = 1.f / voxels_per_unit;
-
-    // Get user params for the raster shader
-    m_config.compute->destroy_array(m_pending_shader_params_arrays[pnanovdb_raster::gaussian_frag_color_slang]);
-
-    m_pending_shader_params_arrays[pnanovdb_raster::gaussian_frag_color_slang] =
-        scene_manager->shader_params.get_compute_array_for_shader("raster/gaussian_frag_color.slang", m_config.compute);
-
-    // Create new default params
-    m_pending_raster_params = &m_init_raster_shader_params;
-    m_pending_raster_params->name = nullptr;
-    m_pending_raster_params->data_type = m_raster_shader_params_data_type;
-
-    pnanovdb_compute_queue_t* worker_queue = rasterize_to_nanovdb ? m_config.compute_queue : m_config.device_queue;
-
-    m_raster_task_id = m_raster_worker.enqueue(
-        [&](pnanovdb_raster_t* raster, const pnanovdb_compute_t* compute, pnanovdb_compute_queue_t* queue,
-            const char* filepath, float voxel_size, pnanovdb_compute_array_t** nanovdb_array,
-            pnanovdb_raster_gaussian_data_t** gaussian_data, pnanovdb_raster_context_t** raster_context,
-            pnanovdb_compute_array_t** shader_params_arrays, pnanovdb_raster_shader_params_t* raster_params,
-            pnanovdb_profiler_report_t profiler) -> bool
-        {
-            return raster->raster_file(raster, compute, queue, filepath, voxel_size, nanovdb_array, gaussian_data,
-                                       raster_context, shader_params_arrays, raster_params, profiler,
-                                       (void*)(&m_raster_worker));
-        },
-        m_config.raster, m_config.compute, worker_queue, m_pending_raster_filepath.c_str(), m_pending_voxel_size,
-        rasterize_to_nanovdb ? &m_pending_nanovdb_array : nullptr,
-        rasterize_to_nanovdb ? nullptr : &m_pending_gaussian_data, rasterize_to_nanovdb ? nullptr : &m_pending_raster_ctx,
-        m_pending_shader_params_arrays, m_pending_raster_params, pnanovdb_editor::Profiler::report_callback);
-
-    Console::getInstance().addLog("Running rasterization: '%s'...", m_pending_raster_filepath.c_str());
-    return true;
-}
-
-bool Renderer::is_rasterizing()
-{
-    return m_raster_worker.isTaskRunning(m_raster_task_id);
-}
-
-bool Renderer::get_rasterization_progress(std::string& progress_text, float& progress_value)
-{
-    if (m_raster_worker.isTaskRunning(m_raster_task_id))
-    {
-        progress_text = m_raster_worker.getTaskProgressText(m_raster_task_id);
-        progress_value = m_raster_worker.getTaskProgress(m_raster_task_id);
-        return true;
-    }
-    return false;
-}
-
-bool Renderer::handle_rasterization_completion(EditorScene* editor_scene,
-                                               std::shared_ptr<pnanovdb_raster_gaussian_data_t>& old_gaussian_data_ptr)
-{
-    if (!m_raster_worker.isTaskCompleted(m_raster_task_id))
-    {
-        return false;
-    }
-
-    if (m_raster_worker.isTaskSuccessful(m_raster_task_id))
-    {
-        if (m_pending_nanovdb_array)
-        {
-            editor_scene->handle_nanovdb_data_load(m_pending_nanovdb_array, m_pending_raster_filepath.c_str());
-        }
-        else if (m_pending_gaussian_data)
-        {
-            editor_scene->handle_gaussian_data_load(m_pending_gaussian_data, m_pending_raster_params,
-                                                    m_pending_raster_filepath.c_str(), old_gaussian_data_ptr);
-        }
-        Console::getInstance().addLog("Rasterization of '%s' was successful", m_pending_raster_filepath.c_str());
-
-        // Re-sync to pick up the newly selected view for immediate rendering
-        editor_scene->sync_selected_view_with_current();
-    }
-    else
-    {
-        Console::getInstance().addLog("Rasterization of '%s' failed", m_pending_raster_filepath.c_str());
-    }
-
-    // Clean up temporary worker thread raster context (if created during rasterization)
-    if (m_pending_raster_ctx)
-    {
-        m_config.raster->destroy_context(m_config.compute, m_config.device_queue, m_pending_raster_ctx);
-        m_pending_raster_ctx = nullptr;
-    }
-
-    m_pending_raster_filepath = "";
-    m_raster_worker.removeCompletedTask(m_raster_task_id);
-
-    return true;
 }
 
 } // namespace pnanovdb_editor

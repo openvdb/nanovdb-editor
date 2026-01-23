@@ -113,7 +113,9 @@ void test_raster_2d(pnanovdb_editor_t* editor,
                     pnanovdb_compute_t* compute,
                     pnanovdb_editor_token_t* scene_token,
                     const char* raster_file,
-                    const char* gaussian_name)
+                    const char* gaussian_name,
+                    float eps2d_override = -1.f,
+                    int sh_degree_override = -1)
 {
     printf("Testing raster2d with file: %s\n", raster_file);
 
@@ -135,6 +137,27 @@ void test_raster_2d(pnanovdb_editor_t* editor,
         editor->add_gaussian_data_2(editor, scene_token, gaussian_token, &desc);
 
         printf("Gaussian data '%s' added to scene\n", gaussian_name);
+
+        if (eps2d_override >= 0.f || sh_degree_override >= 0)
+        {
+            const pnanovdb_reflect_data_type_t* data_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t);
+            pnanovdb_raster_shader_params_t* shader_params =
+                (pnanovdb_raster_shader_params_t*)editor->map_params(editor, scene_token, gaussian_token, data_type);
+            if (shader_params)
+            {
+                if (eps2d_override >= 0.f)
+                {
+                    shader_params->eps2d = eps2d_override;
+                    printf("  Set eps2d to %f\n", eps2d_override);
+                }
+                if (sh_degree_override >= 0)
+                {
+                    shader_params->sh_degree_override = sh_degree_override;
+                    printf("  Set sh_degree_override to %d\n", sh_degree_override);
+                }
+                editor->unmap_params(editor, scene_token, gaussian_token);
+            }
+        }
 
         for (int ai = 0; ai < 6; ++ai)
         {
@@ -380,7 +403,7 @@ int main(int argc, char* argv[])
     editor.add_camera_view_2(&editor, scene_main, &default_camera);
 #    endif
 
-#    ifdef TEST_RASTER_3D
+#    ifdef TEST_RASTER_2D
     pnanovdb_camera_t camera;
     pnanovdb_camera_init(&camera);
     // values are copy pasted from imgui.ini
@@ -388,19 +411,27 @@ int main(int argc, char* argv[])
     camera.state.eye_direction = { -0.022936, 0.760122, -0.649375 };
     camera.state.eye_up = { 0.000000, 1.000000, 0.000000 };
     camera.state.eye_distance_from_position = -0.072589;
-    editor.update_camera_2(&editor, &camera);
-
-    pnanovdb_camera_t camera;
-    pnanovdb_camera_init(&camera);
 
     const char* raster_file = "./data/ficus.ply";
     const char* raster_file_garden = "./data/garden.ply";
 
-    // Test Ficus
-    test_raster_2d(&editor, &fileformat, &compute, scene_main, raster_file, "ficus");
+    // Test Ficus - with custom eps2d parameter
+    test_raster_2d(&editor, &fileformat, &compute, scene_main, raster_file, "ficus", 0.5f, -1);
 
-    // Test Garden
-    test_raster_2d(&editor, &fileformat, &compute, scene_secondary, raster_file_garden, "garden");
+    // Test Garden - with custom sh_degree_override
+    test_raster_2d(&editor, &fileformat, &compute, scene_secondary, raster_file_garden, "garden", -1.f, 2);
+
+    // Test get_named_array
+    pnanovdb_editor_token_t* ficus_token = editor.get_token("ficus");
+    pnanovdb_editor_token_t* means_token = editor.get_token("means");
+    pnanovdb_compute_array_t* means_array = editor.get_named_array(&editor, scene_main, ficus_token, means_token);
+    if (means_array)
+    {
+        printf("Ficus 'means' named array: %llu elements\n", (unsigned long long)means_array->element_count);
+    }
+
+    editor.update_camera_2(&editor, scene_main, &camera);
+    editor.update_camera_2(&editor, scene_secondary, &camera);
 #    endif
 
 #    ifdef TEST_RASTER_3D
@@ -476,7 +507,7 @@ int main(int argc, char* argv[])
 
 #    ifdef TEST_RASTER_2D
     const char* raster_file = "./data/ficus.ply";
-    test_raster_2d(&editor, &fileformat, &compute, scene_token, raster_file, "ficus");
+    test_raster_2d(&editor, &fileformat, &compute, scene_token, raster_file, "ficus", 0.3f);
 #    endif
 
 #    ifdef TEST_RASTER_3D

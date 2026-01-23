@@ -161,8 +161,22 @@ void EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
     obj.nanovdb_array = array;
     obj.shader_params_array = params_array;
     obj.shader_params = params_array ? params_array->data : nullptr;
-    obj.shader_params_data_type = nullptr;
     obj.shader_name.shader_name = shader_name;
+
+    // Auto-initialize default pipelines if this is the first time data is added
+    if (!object_exists || old_array == nullptr)
+    {
+        // Create default pipelines for NanoVDB (null conversion + render pipeline)
+        pipeline_manager.create_default_pipelines(SceneObjectType::NanoVDB, compute);
+        SCENEMANAGER_LOG("[SceneManager] Created default pipelines for NanoVDB object '%s'\n", name->str);
+    }
+
+    // Mark pipelines dirty if input data changed
+    if (array != old_array)
+    {
+        pipeline_manager.mark_all_dirty();
+        SCENEMANAGER_LOG("[SceneManager] Marked pipelines dirty for NanoVDB object '%s' (new input data)\n", name->str);
+    }
 
     // Set up ownership for nanovdb_array
     if (compute && array)
@@ -170,45 +184,18 @@ void EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
         // Only create new shared_ptr if this is a different array than what we already own
         if (array != old_array)
         {
-            // CRITICAL: Check if ANY other object already owns this array pointer!
-            // If another scene has the same array, we must share the ownership (not create a new shared_ptr)
-            std::shared_ptr<pnanovdb_compute_array_t> existing_owner;
-            for (const auto& pair : m_objects)
-            {
-                // Skip the current object we're modifying
-                if (pair.first != key && pair.second.nanovdb_array_owner && pair.second.nanovdb_array_owner.get() == array)
+            obj.nanovdb_array_owner = std::shared_ptr<pnanovdb_compute_array_t>(
+                array,
+                [destroy_fn = compute->destroy_array](pnanovdb_compute_array_t* ptr)
                 {
-                    existing_owner = pair.second.nanovdb_array_owner;
-                    SCENEMANAGER_LOG(
-                        "[SceneManager] Found existing owner for array %p, sharing ownership\n", (void*)array);
-                    break;
-                }
-            }
-
-            if (existing_owner)
-            {
-                // Share the existing ownership
-                obj.nanovdb_array_owner = existing_owner;
-                SCENEMANAGER_LOG("[SceneManager] Shared owner for array %p, ref_count now %ld\n", (void*)array,
-                                 existing_owner.use_count());
-            }
-            else
-            {
-                // Create new ownership
-                obj.nanovdb_array_owner = std::shared_ptr<pnanovdb_compute_array_t>(
-                    array,
-                    [destroy_fn = compute->destroy_array](pnanovdb_compute_array_t* ptr)
+                    if (ptr)
                     {
-                        if (ptr)
-                        {
-                            SCENEMANAGER_LOG("[SceneManager] Destroying nanovdb array %p (data=%p)\n", (void*)ptr,
-                                             (void*)(ptr->data));
-                            destroy_fn(ptr);
-                        }
-                    });
-                SCENEMANAGER_LOG("[SceneManager] Created new owner for array %p, ref_count %ld\n", (void*)array,
-                                 obj.nanovdb_array_owner.use_count());
-            }
+                        SCENEMANAGER_LOG(
+                            "[SceneManager] Destroying nanovdb array %p (data=%p)\n", (void*)ptr, (void*)(ptr->data));
+                        destroy_fn(ptr);
+                    }
+                });
+            SCENEMANAGER_LOG("[SceneManager] Created owner for array %p\n", (void*)array);
         }
     }
     else if (!array)
@@ -223,46 +210,18 @@ void EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
         // Only create new shared_ptr if this is a different array than what we already own
         if (params_array != old_params)
         {
-            // CRITICAL: Check if ANY other object already owns this array pointer!
-            // If another scene has the same params array, we must share the ownership
-            std::shared_ptr<pnanovdb_compute_array_t> existing_owner;
-            for (const auto& pair : m_objects)
-            {
-                // Skip the current object we're modifying
-                if (pair.first != key && pair.second.shader_params_array_owner &&
-                    pair.second.shader_params_array_owner.get() == params_array)
+            obj.shader_params_array_owner = std::shared_ptr<pnanovdb_compute_array_t>(
+                params_array,
+                [destroy_fn = compute->destroy_array](pnanovdb_compute_array_t* ptr)
                 {
-                    existing_owner = pair.second.shader_params_array_owner;
-                    SCENEMANAGER_LOG("[SceneManager] Found existing owner for params array %p, sharing ownership\n",
-                                     (void*)params_array);
-                    break;
-                }
-            }
-
-            if (existing_owner)
-            {
-                // Share the existing ownership
-                obj.shader_params_array_owner = existing_owner;
-                SCENEMANAGER_LOG("[SceneManager] Shared owner for params array %p, ref_count now %ld\n",
-                                 (void*)params_array, existing_owner.use_count());
-            }
-            else
-            {
-                // Create new ownership
-                obj.shader_params_array_owner = std::shared_ptr<pnanovdb_compute_array_t>(
-                    params_array,
-                    [destroy_fn = compute->destroy_array](pnanovdb_compute_array_t* ptr)
+                    if (ptr)
                     {
-                        if (ptr)
-                        {
-                            SCENEMANAGER_LOG("[SceneManager] Destroying params array %p (data=%p)\n", (void*)ptr,
-                                             (void*)(ptr->data));
-                            destroy_fn(ptr);
-                        }
-                    });
-                SCENEMANAGER_LOG("[SceneManager] Created new owner for params array %p, ref_count %ld\n",
-                                 (void*)params_array, obj.shader_params_array_owner.use_count());
-            }
+                        SCENEMANAGER_LOG(
+                            "[SceneManager] Destroying params array %p (data=%p)\n", (void*)ptr, (void*)(ptr->data));
+                        destroy_fn(ptr);
+                    }
+                });
+            SCENEMANAGER_LOG("[SceneManager] Created owner for params array %p\n", (void*)params_array);
         }
     }
     else if (!params_array)
@@ -275,51 +234,88 @@ void EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
 void EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,
                                            pnanovdb_editor_token_t* name,
                                            pnanovdb_raster_gaussian_data_t* gaussian_data,
-                                           pnanovdb_compute_array_t* params_array,
-                                           const pnanovdb_reflect_data_type_t* shader_params_data_type,
                                            const pnanovdb_compute_t* compute,
                                            const pnanovdb_raster_t* raster,
                                            pnanovdb_compute_queue_t* queue,
                                            const char* shader_name,
-                                           std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_owner_out)
+                                           DeferredDestroyQueue deferred_destroy)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     uint64_t key = make_key(scene, name);
 
-    // Store old pointers BEFORE potentially moving them out
+    // Store old gaussian pointer BEFORE potentially moving it out
     pnanovdb_raster_gaussian_data_t* old_gaussian = nullptr;
-    pnanovdb_compute_array_t* old_params = nullptr;
+    GaussianDataPtr old_owner;
 
     auto it = m_objects.find(key);
     if (it != m_objects.end())
     {
         old_gaussian = it->second.gaussian_data_owner ? it->second.gaussian_data_owner.get() : nullptr;
-        old_params = it->second.shader_params_array_owner ? it->second.shader_params_array_owner.get() : nullptr;
 
-        // Extract the old owner for deferred destruction if requested
-        if (it->second.type == SceneObjectType::GaussianData && old_owner_out)
+        // Extract the old owner for deferred destruction
+        if (it->second.type == SceneObjectType::GaussianData)
         {
-            *old_owner_out = std::move(it->second.gaussian_data_owner);
+            old_owner = std::move(it->second.gaussian_data_owner);
         }
     }
 
+    // Handle deferred destruction of old gaussian data
+    if (old_owner)
+    {
+        deferred_destroy.push(std::move(old_owner));
+    }
+
     auto& obj = m_objects[key];
+
+    bool was_existing = (it != m_objects.end());
 
     obj.type = SceneObjectType::GaussianData;
     obj.scene_token = scene;
     obj.name_token = name;
     obj.gaussian_data = gaussian_data;
-    obj.shader_params_array = params_array;
-    obj.shader_params = params_array ? params_array->data : nullptr;
-    obj.shader_params_data_type = shader_params_data_type;
     obj.shader_name.shader_name = EditorToken::getInstance().getToken(shader_name);
+
+    // Auto-initialize default pipelines if this is the first time data is added
+    if (!was_existing || old_gaussian == nullptr)
+    {
+        // Create default pipelines for Gaussian data (render pipeline)
+        pipeline_manager.create_default_pipelines(SceneObjectType::GaussianData, compute);
+
+        // Initialize JSON-based params for render pipeline (if it uses dynamic params)
+        // The pipeline now owns the params array and data type
+        PipelineConfig* render_config = pipeline_manager.get_render_pipeline(nullptr);
+        if (render_config && render_config->uses_dynamic_params())
+        {
+            PipelineManager::initialize_params_from_json(*render_config, shader_params, compute);
+            SCENEMANAGER_LOG("[SceneManager] Initialized JSON params for render pipeline (json='%s')\n",
+                             render_config->params_json_name.c_str());
+
+            // Share ownership of params array between pipeline and scene object
+            // Either can outlive the other safely
+            obj.shader_params_array_owner = render_config->params_array_owner;
+            obj.shader_params_array = render_config->params_array;
+            obj.shader_params = render_config->params;
+            obj.shader_params_json_name = render_config->params_json_name;
+            // Track reflect type for backward-compatible copy
+            obj.shader_params_reflect_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t);
+        }
+
+        SCENEMANAGER_LOG("[SceneManager] Created default pipelines for Gaussian object '%s'\n", name->str);
+    }
+
+    // Mark pipelines dirty if input data changed
+    if (gaussian_data != old_gaussian)
+    {
+        pipeline_manager.mark_all_dirty();
+        SCENEMANAGER_LOG("[SceneManager] Marked pipelines dirty for Gaussian object '%s' (new input data)\n", name->str);
+    }
 
     // Set up ownership for gaussian_data
     // Only create new shared_ptr if this is a different object than what we already own
     if (raster && compute && queue && gaussian_data && gaussian_data != old_gaussian)
     {
         // CRITICAL: Check if ANY other object already owns this gaussian data pointer!
-        std::shared_ptr<pnanovdb_raster_gaussian_data_t> existing_owner;
+        GaussianDataPtr existing_owner;
         for (const auto& pair : m_objects)
         {
             if (pair.first != key && pair.second.gaussian_data_owner &&
@@ -340,60 +336,19 @@ void EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,
         }
         else
         {
-            obj.gaussian_data_owner = std::shared_ptr<pnanovdb_raster_gaussian_data_t>(
-                gaussian_data,
-                [destroy_fn = raster->destroy_gaussian_data, compute_ptr = compute,
-                 queue_ptr = queue](pnanovdb_raster_gaussian_data_t* ptr)
-                {
-                    if (ptr)
-                    {
-                        SCENEMANAGER_LOG("[SceneManager] Destroying gaussian data %p\n", (void*)ptr);
-                        destroy_fn(compute_ptr, queue_ptr, ptr);
-                    }
-                });
+            obj.gaussian_data_owner =
+                GaussianDataPtr(gaussian_data,
+                                [destroy_fn = raster->destroy_gaussian_data, compute_ptr = compute,
+                                 queue_ptr = queue](pnanovdb_raster_gaussian_data_t* ptr)
+                                {
+                                    if (ptr)
+                                    {
+                                        SCENEMANAGER_LOG("[SceneManager] Destroying gaussian data %p\n", (void*)ptr);
+                                        destroy_fn(compute_ptr, queue_ptr, ptr);
+                                    }
+                                });
             SCENEMANAGER_LOG("[SceneManager] Created new owner for gaussian data %p, ref_count %ld\n",
                              (void*)gaussian_data, obj.gaussian_data_owner.use_count());
-        }
-    }
-
-    // Set up ownership for shader_params_array
-    // Only create new shared_ptr if this is a different array than what we already own
-    if (compute && params_array && params_array != old_params)
-    {
-        // CRITICAL: Check if ANY other object already owns this params array pointer!
-        std::shared_ptr<pnanovdb_compute_array_t> existing_owner;
-        for (const auto& pair : m_objects)
-        {
-            if (pair.first != key && pair.second.shader_params_array_owner &&
-                pair.second.shader_params_array_owner.get() == params_array)
-            {
-                existing_owner = pair.second.shader_params_array_owner;
-                SCENEMANAGER_LOG("[SceneManager] Found existing owner for params array %p (gaussian), sharing ownership\n",
-                                 (void*)params_array);
-                break;
-            }
-        }
-
-        if (existing_owner)
-        {
-            obj.shader_params_array_owner = existing_owner;
-            SCENEMANAGER_LOG("[SceneManager] Shared owner for params array %p (gaussian), ref_count now %ld\n",
-                             (void*)params_array, existing_owner.use_count());
-        }
-        else
-        {
-            obj.shader_params_array_owner = std::shared_ptr<pnanovdb_compute_array_t>(
-                params_array,
-                [destroy_fn = compute->destroy_array](pnanovdb_compute_array_t* ptr)
-                {
-                    if (ptr)
-                    {
-                        SCENEMANAGER_LOG("[SceneManager] Destroying params array %p (gaussian)\n", (void*)ptr);
-                        destroy_fn(ptr);
-                    }
-                });
-            SCENEMANAGER_LOG("[SceneManager] Created new owner for params array %p (gaussian), ref_count %ld\n",
-                             (void*)params_array, obj.shader_params_array_owner.use_count());
         }
     }
 }
@@ -594,6 +549,267 @@ void EditorSceneManager::set_params_array(pnanovdb_editor_token_t* scene,
                 }
             });
     }
+}
+
+// ============================================================================
+// Named Component Management
+// ============================================================================
+
+void EditorSceneManager::add_named_array(pnanovdb_editor_token_t* scene,
+                                         pnanovdb_editor_token_t* object_name,
+                                         pnanovdb_editor_token_t* array_name,
+                                         pnanovdb_compute_array_t* array,
+                                         const pnanovdb_compute_t* compute,
+                                         const char* description,
+                                         const pnanovdb_reflect_data_type_t* data_type)
+{
+    if (!scene || !object_name || !array_name || !array)
+    {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    uint64_t key = make_key(scene, object_name);
+
+    auto& obj = m_objects[key];
+
+    // If object was just created, set basic info
+    if (obj.type == SceneObjectType::Array || obj.scene_token == nullptr)
+    {
+        obj.type = SceneObjectType::Array;
+        obj.scene_token = scene;
+        obj.name_token = object_name;
+    }
+
+    // Create named component
+    NamedComponent component;
+    component.name_token = array_name;
+    component.array = array;
+    component.data_type = data_type;
+    if (description)
+    {
+        component.description = description;
+    }
+
+    // Set up ownership
+    if (compute)
+    {
+        component.array_owner = std::shared_ptr<pnanovdb_compute_array_t>(
+            array,
+            [destroy_fn = compute->destroy_array](pnanovdb_compute_array_t* ptr)
+            {
+                if (ptr)
+                {
+                    SCENEMANAGER_LOG("[SceneManager] Destroying named array %p\n", (void*)ptr);
+                    destroy_fn(ptr);
+                }
+            });
+    }
+
+    obj.named_arrays[array_name->id] = std::move(component);
+
+    SCENEMANAGER_LOG("[SceneManager] Added named array '%s' to object '%s' in scene '%s'\n", array_name->str,
+                     object_name->str, scene->str);
+}
+
+pnanovdb_compute_array_t* EditorSceneManager::get_named_array(pnanovdb_editor_token_t* scene,
+                                                              pnanovdb_editor_token_t* object_name,
+                                                              pnanovdb_editor_token_t* array_name)
+{
+    if (!scene || !object_name || !array_name)
+    {
+        return nullptr;
+    }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    uint64_t key = make_key(scene, object_name);
+
+    auto it = m_objects.find(key);
+    if (it == m_objects.end())
+    {
+        return nullptr;
+    }
+
+    auto& named_arrays = it->second.named_arrays;
+    auto array_it = named_arrays.find(array_name->id);
+    if (array_it == named_arrays.end())
+    {
+        return nullptr;
+    }
+
+    return array_it->second.array;
+}
+
+bool EditorSceneManager::remove_named_array(pnanovdb_editor_token_t* scene,
+                                            pnanovdb_editor_token_t* object_name,
+                                            pnanovdb_editor_token_t* array_name)
+{
+    if (!scene || !object_name || !array_name)
+    {
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    uint64_t key = make_key(scene, object_name);
+
+    auto it = m_objects.find(key);
+    if (it == m_objects.end())
+    {
+        return false;
+    }
+
+    auto& named_arrays = it->second.named_arrays;
+    size_t erased = named_arrays.erase(array_name->id);
+
+    if (erased > 0)
+    {
+        SCENEMANAGER_LOG("[SceneManager] Removed named array '%s' from object '%s'\n", array_name->str, object_name->str);
+    }
+
+    return erased > 0;
+}
+
+// ============================================================================
+// Pipeline Management
+// ============================================================================
+
+void EditorSceneManager::set_conversion_pipeline(pnanovdb_editor_token_t* scene,
+                                                 pnanovdb_editor_token_t* object_name,
+                                                 PipelineType type,
+                                                 const PipelineConfig& config,
+                                                 pnanovdb_editor_token_t* pipeline_name)
+{
+    if (!scene || !object_name)
+    {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    uint64_t key = make_key(scene, object_name);
+
+    // Get or create the scene object
+    auto& obj = m_objects[key];
+
+    // Set basic info if object was just created
+    if (obj.scene_token == nullptr)
+    {
+        obj.scene_token = scene;
+        obj.name_token = object_name;
+    }
+
+    // Configure pipeline via central manager
+    pipeline_manager.set_object_conversion_pipeline(scene, object_name, type, config, pipeline_name);
+
+    SCENEMANAGER_LOG("[SceneManager] Set conversion pipeline (type=%d) for object '%s' in scene '%s'\n", (int)type,
+                     object_name->str, scene->str);
+}
+
+void EditorSceneManager::set_render_pipeline(pnanovdb_editor_token_t* scene,
+                                             pnanovdb_editor_token_t* object_name,
+                                             const PipelineConfig& config,
+                                             pnanovdb_editor_token_t* pipeline_name)
+{
+    if (!scene || !object_name)
+    {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    uint64_t key = make_key(scene, object_name);
+
+    auto& obj = m_objects[key];
+
+    if (obj.scene_token == nullptr)
+    {
+        obj.scene_token = scene;
+        obj.name_token = object_name;
+    }
+
+    // Configure pipeline via central manager
+    pipeline_manager.set_object_render_pipeline(scene, object_name, config, pipeline_name);
+
+    SCENEMANAGER_LOG("[SceneManager] Set render pipeline for object '%s' in scene '%s'\n", object_name->str, scene->str);
+}
+
+PipelineConfig* EditorSceneManager::get_pipeline(pnanovdb_editor_token_t* scene,
+                                                 pnanovdb_editor_token_t* object_name,
+                                                 PipelineType type,
+                                                 pnanovdb_editor_token_t* pipeline_name)
+{
+    if (!scene || !object_name)
+    {
+        return nullptr;
+    }
+
+    // Use central pipeline manager with object-scoped lookup
+    return pipeline_manager.get_object_pipeline(scene, object_name, type, pipeline_name);
+}
+
+PipelineStatus EditorSceneManager::execute_pipeline(pnanovdb_editor_token_t* scene,
+                                                    pnanovdb_editor_token_t* object_name,
+                                                    PipelineType type,
+                                                    PipelineExecutionContext* context,
+                                                    pnanovdb_editor_token_t* pipeline_name)
+{
+    if (!scene || !object_name || !context)
+    {
+        return PipelineStatus::Failed;
+    }
+
+    // Use central pipeline manager with object-scoped execution
+    return pipeline_manager.execute_object_pipeline(scene, object_name, type, context, pipeline_name);
+}
+
+void EditorSceneManager::mark_pipeline_dirty(pnanovdb_editor_token_t* scene,
+                                             pnanovdb_editor_token_t* object_name,
+                                             PipelineType type,
+                                             pnanovdb_editor_token_t* pipeline_name)
+{
+    if (!scene || !object_name)
+    {
+        return;
+    }
+
+    // Use central pipeline manager
+    pipeline_manager.mark_object_dirty(scene, object_name, type, pipeline_name);
+}
+
+void EditorSceneManager::execute_all_dirty_pipelines(PipelineExecutionContext* context)
+{
+    if (!context)
+    {
+        return;
+    }
+
+    // Use central pipeline manager to execute all dirty pipelines
+    pipeline_manager.execute_dirty_pipelines(context);
+}
+
+pnanovdb_compute_array_t* EditorSceneManager::get_output(pnanovdb_editor_token_t* scene,
+                                                         pnanovdb_editor_token_t* object_name)
+{
+    if (!scene || !object_name)
+    {
+        return nullptr;
+    }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    uint64_t key = make_key(scene, object_name);
+
+    auto it = m_objects.find(key);
+    if (it == m_objects.end())
+    {
+        return nullptr;
+    }
+
+    // For Null pipeline (pass-through), return input nanovdb_array directly
+    SceneObject& obj = it->second;
+    if (obj.nanovdb_array)
+    {
+        return obj.nanovdb_array;
+    }
+
+    return obj.output_nanovdb_array;
 }
 
 } // namespace pnanovdb_editor

@@ -74,6 +74,17 @@ bool get_shader(const char* relFilePath, ShaderDesc& shader)
     return true;
 }
 
+bool get_shader_data(const char* relFilePath, ShaderData& shader)
+{
+    nlohmann::json json = loadShaderJson(relFilePath);
+    if (json.empty())
+    {
+        return false;
+    }
+    shader = json.get<ShaderData>();
+    return true;
+}
+
 bool has_shader(const char* relFilePath, pnanovdb_compiler_settings_t** settings)
 {
     ShaderDesc shader;
