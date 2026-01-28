@@ -1,11 +1,11 @@
-// voxelbvh_gaussians_to_ijkl.slang
+// voxelbvh_gaussians_bbox_reduce1.slang
 
 struct constants_t
 {
     uint point_count;
     uint workgroup_count;
-    uint pad2;
-    uint pad3;
+    uint voxel_count;
+    uint voxel_workgroup_count;
 };
 
 ConstantBuffer<constants_t> constants;

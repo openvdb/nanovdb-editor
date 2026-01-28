@@ -154,12 +154,14 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
     {
         pnanovdb_uint32_t point_count;
         pnanovdb_uint32_t workgroup_count;
-        pnanovdb_uint32_t pad2;
-        pnanovdb_uint32_t pad3;
+        pnanovdb_uint32_t voxel_count;
+        pnanovdb_uint32_t voxel_workgroup_count;
     };
     constants_t constants = {};
     constants.point_count = (pnanovdb_uint32_t)gaussian_count;
     constants.workgroup_count = (constants.point_count + 255u) / 256u;
+    constants.voxel_count = 8u * constants.point_count;
+    constants.voxel_workgroup_count = (constants.voxel_count + 255u) / 256u;
 
     // constants
     pnanovdb_compute_buffer_desc_t buf_desc = {};
@@ -187,7 +189,7 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
     buf_desc.size_in_bytes = 6u * 4u;
     pnanovdb_compute_buffer_t* bbox_reduce2_buffer =
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
-    buf_desc.size_in_bytes = 8u * 4u * constants.workgroup_count;
+    buf_desc.size_in_bytes = 4u * constants.voxel_count;
     pnanovdb_compute_buffer_t* keys_low_buffer =
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
     pnanovdb_compute_buffer_t* keys_high_buffer =
@@ -252,15 +254,60 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
     {
         ctx->parallel_primitives.radix_sort_dual_key(compute, queue, ctx->parallel_primitives_ctx,
                                                      keys_low_buffer, keys_high_buffer,
-                                                     bbox_ids_buffer, 8u * constants.point_count,
-                                                     8u * constants.point_count, 32u, 32u);
+                                                     bbox_ids_buffer, constants.voxel_count,
+                                                     constants.voxel_count, 32u, 32u);
     }
+
+    buf_desc.size_in_bytes = 4u * constants.voxel_count;
+    pnanovdb_compute_buffer_t* range_starts_buffer =
+        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+    pnanovdb_compute_buffer_t* range_scan_buffer =
+        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+    buf_desc.size_in_bytes = 2u * 4u * constants.voxel_count;
+    pnanovdb_compute_buffer_t* range_headers_buffer =
+        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+
+    pnanovdb_compute_buffer_transient_t* range_starts_transient =
+        compute_interface->register_buffer_as_transient(context, range_starts_buffer);
+    pnanovdb_compute_buffer_transient_t* range_scan_transient =
+        compute_interface->register_buffer_as_transient(context, range_scan_buffer);
+    pnanovdb_compute_buffer_transient_t* range_headers_transient =
+        compute_interface->register_buffer_as_transient(context, range_headers_buffer);
 
     // identify range starts
     // voxelbvh_find_range_starts.slang
+    {
+        pnanovdb_compute_resource_t resources[5u] = {};
+        resources[0u].buffer_transient = constant_transient;
+        resources[1u].buffer_transient = keys_low_transient;
+        resources[2u].buffer_transient = keys_high_transient;
+        resources[3u].buffer_transient = range_starts_transient;
+        resources[4u].buffer_transient = range_headers_transient;
+
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_find_range_starts_slang], resources,
+                                 constants.voxel_workgroup_count, 1u, 1u, "voxelbvh_find_range_starts");
+    }
+
     // global scan to allocate range headers
+    {
+        ctx->parallel_primitives.global_scan(compute, queue, ctx->parallel_primitives_ctx, range_starts_buffer,
+                                             range_scan_buffer, constants.voxel_count, 1u);
+    }
+
     // scatter range headers
     // voxelbvh_scatter_range_headers.slang
+    {
+        pnanovdb_compute_resource_t resources[6u] = {};
+        resources[0u].buffer_transient = constant_transient;
+        resources[1u].buffer_transient = keys_low_transient;
+        resources[2u].buffer_transient = keys_high_transient;
+        resources[3u].buffer_transient = range_starts_transient;
+        resources[4u].buffer_transient = range_scan_transient;
+        resources[5u].buffer_transient = range_headers_transient;
+
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_scatter_range_headers_slang], resources,
+                                 constants.voxel_workgroup_count, 1u, 1u, "voxelbvh_scatter_range_headers");
+    }
 
     // form grid header, tree, root, upper from template
     // voxelbvh_init_grid.slang
@@ -293,6 +340,10 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
     compute_interface->destroy_buffer(context, keys_low_buffer);
     compute_interface->destroy_buffer(context, keys_high_buffer);
     compute_interface->destroy_buffer(context, bbox_ids_buffer);
+
+    compute_interface->destroy_buffer(context, range_starts_buffer);
+    compute_interface->destroy_buffer(context, range_scan_buffer);
+    compute_interface->destroy_buffer(context, range_headers_buffer);
 }
 
 }
