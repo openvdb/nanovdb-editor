@@ -106,20 +106,13 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         return;
     }
 
-    float scale = 1.f;
-    float3 offset = float3(0.f, 0.f, 0.f);
-
     const uint integer_space_max = 4095;
     float3 g_aabb_min = float3(bbox_in[0], bbox_in[1], bbox_in[2]);
     float3 g_aabb_max = float3(bbox_in[3], bbox_in[4], bbox_in[5]);
     float3 g_aabb_delta = g_aabb_max - g_aabb_min;
     float g_aabb_delta_max = max(g_aabb_delta.x, max(g_aabb_delta.y, g_aabb_delta.z));
     float scale = float(integer_space_max) / (g_aabb_delta_max);
-    float offset[3] = {
-        -world_bbox_min[0] * scale,
-        -world_bbox_min[1] * scale,
-        -world_bbox_min[2] * scale
-    };
+    float3 offset = -g_aabb_min * scale;
 
     float3 meansf = float3(
         means_in[3u * idx + 0u],
@@ -200,7 +193,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                 for (int k = ijk_min_level.z; k <= ijk_max_level.z; k += (1u << level))
                 {
                     int3 ijk = int3(i,j,k);
-                    bool is_overlap = voxel_ellipsoid_overlap(idx, ijk, level);
+                    bool is_overlap = voxel_ellipsoid_overlap(idx, scale, offset, ijk, level);
                     if (is_overlap)
                     {
                         overlap_count++;
@@ -208,8 +201,8 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                         {
                             uint64_t key = (uint64_t(level) << 48u) | (uint64_t(i) << 32u) |
                                 (uint64_t(j) << 16u) | uint64_t(k);
-                            keys_low_out[8u * idx + write_subidx] = uint(j) << 16u) | uint(k);
-                            keys_high_out[8u * idx + write_subidx] = uint(level) << 16u) | uint(i);
+                            keys_low_out[8u * idx + write_subidx] = (uint(j) << 16u) | uint(k);
+                            keys_high_out[8u * idx + write_subidx] = (uint(level) << 16u) | uint(i);
                             bbox_ids_out[8u * idx + write_subidx] = idx;
                             write_subidx++;
                         }
