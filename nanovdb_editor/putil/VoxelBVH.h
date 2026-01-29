@@ -41,6 +41,11 @@ typedef struct pnanovdb_voxelbvh_t
                                                 pnanovdb_compute_buffer_t* nanovdb_out,
                                                 pnanovdb_uint64_t nanovdb_word_count);
 
+    void(PNANOVDB_ABI* voxelbvh_from_gaussians_file)(const pnanovdb_compute_t* compute,
+                                                pnanovdb_compute_queue_t* queue,
+                                                pnanovdb_voxelbvh_context_t* context,
+                                                const char* filename);
+
 } pnanovdb_voxelbvh_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_voxelbvh_t
@@ -48,6 +53,8 @@ PNANOVDB_REFLECT_BEGIN()
 PNANOVDB_REFLECT_POINTER(pnanovdb_compute_t, compute, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(create_context, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(destroy_context, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(voxelbvh_from_gaussians, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(voxelbvh_from_gaussians_file, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE

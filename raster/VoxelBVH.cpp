@@ -14,6 +14,7 @@
 #include "nanovdb_editor/putil/ParallelPrimitives.h"
 #include "nanovdb_editor/putil/VoxelBVH.h"
 #include "nanovdb_editor/putil/ThreadPool.hpp"
+#include "nanovdb_editor/putil/FileFormat.h"
 
 #include <stdlib.h>
 #include <math.h>
@@ -309,6 +310,36 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
                                  constants.voxel_workgroup_count, 1u, 1u, "voxelbvh_scatter_range_headers");
     }
 
+    pnanovdb_compute_array_t* debug_array = compute->create_array(4u, 2u * constants.voxel_count, nullptr);
+    compute_gpu_array_t* debug_gpu_array = gpu_array_create();
+    gpu_array_alloc_device(compute, queue, debug_gpu_array, debug_array);
+
+    gpu_array_copy(compute, queue, debug_gpu_array, range_headers_buffer, 0llu, 4u * 2u * constants.voxel_count);
+
+    gpu_array_readback(compute, queue, debug_gpu_array, debug_array);
+
+    pnanovdb_uint64_t flushed_frame = 0llu;
+    compute->device_interface.flush(queue, &flushed_frame, nullptr, nullptr);
+
+    compute->device_interface.wait_idle(queue);
+
+    gpu_array_map(compute, queue, debug_gpu_array, debug_array);
+
+    pnanovdb_uint64_t all_count = 0llu;
+    pnanovdb_uint64_t valid_count = 0llu;
+    pnanovdb_uint32_t* mapped_debug = (pnanovdb_uint32_t*)debug_array->data;
+    for (uint64_t idx = 0llu; idx < constants.voxel_count; idx++)
+    {
+        pnanovdb_uint32_t range_first = mapped_debug[2u * idx + 0u];
+        pnanovdb_uint32_t range_last = mapped_debug[2u * idx + 1u];
+        all_count++;
+        if (range_first < range_last) {valid_count++;}
+    }
+
+    printf("all_count(%zu) valid_count(%zu)\n", all_count, valid_count);
+
+    gpu_array_destroy(compute, queue, debug_gpu_array);
+
     // form grid header, tree, root, upper from template
     // voxelbvh_init_grid.slang
 
@@ -346,6 +377,64 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
     compute_interface->destroy_buffer(context, range_headers_buffer);
 }
 
+void voxelbvh_from_gaussians_file(const pnanovdb_compute_t* compute,
+                                            pnanovdb_compute_queue_t* queue,
+                                            pnanovdb_voxelbvh_context_t* voxelbvh_context,
+                                            const char* filename)
+{
+
+    pnanovdb_fileformat_t fileformat = {};
+    pnanovdb_fileformat_load(&fileformat, compute);
+
+    const char* array_names_gaussian[] = { "means", "opacities", "quaternions", "scales", "sh_0", "sh_n" };
+    pnanovdb_compute_array_t* arrays_gaussian[6] = {};
+
+    pnanovdb_bool_t loaded_gaussian = fileformat.load_file(filename, 6, array_names_gaussian, arrays_gaussian);
+    if (loaded_gaussian == PNANOVDB_TRUE)
+    {
+        compute_gpu_array_t* means_gpu_array = gpu_array_create();
+        compute_gpu_array_t* opacities_gpu_array = gpu_array_create();
+        compute_gpu_array_t* quaternions_gpu_array = gpu_array_create();
+        compute_gpu_array_t* scales_gpu_array = gpu_array_create();
+        compute_gpu_array_t* sh_0_gpu_array = gpu_array_create();
+        compute_gpu_array_t* sh_n_gpu_array = gpu_array_create();
+
+        gpu_array_upload(compute, queue, means_gpu_array, arrays_gaussian[0]);
+        gpu_array_upload(compute, queue, opacities_gpu_array, arrays_gaussian[1]);
+        gpu_array_upload(compute, queue, quaternions_gpu_array, arrays_gaussian[2]);
+        gpu_array_upload(compute, queue, scales_gpu_array, arrays_gaussian[3]);
+        gpu_array_upload(compute, queue, sh_0_gpu_array, arrays_gaussian[4]);
+        gpu_array_upload(compute, queue, sh_n_gpu_array, arrays_gaussian[5]);
+
+        pnanovdb_uint64_t gaussian_count = arrays_gaussian[1]->element_count;
+
+        pnanovdb_compute_buffer_t* gpu_buffers[6u] = {
+            means_gpu_array->device_buffer,
+            opacities_gpu_array->device_buffer,
+            quaternions_gpu_array->device_buffer,
+            scales_gpu_array->device_buffer,
+            sh_0_gpu_array->device_buffer,
+            sh_n_gpu_array->device_buffer
+        };
+
+        voxelbvh_from_gaussians(compute,
+                             queue,
+                             voxelbvh_context,
+                             gpu_buffers,
+                             6u,
+                             gaussian_count,
+                             nullptr,
+                             0llu);
+
+        gpu_array_destroy(compute, queue, means_gpu_array);
+        gpu_array_destroy(compute, queue, opacities_gpu_array);
+        gpu_array_destroy(compute, queue, quaternions_gpu_array);
+        gpu_array_destroy(compute, queue, scales_gpu_array);
+        gpu_array_destroy(compute, queue, sh_0_gpu_array);
+        gpu_array_destroy(compute, queue, sh_n_gpu_array);
+    }
+}
+
 }
 
 pnanovdb_voxelbvh_t* pnanovdb_get_voxelbvh()
@@ -355,6 +444,7 @@ pnanovdb_voxelbvh_t* pnanovdb_get_voxelbvh()
     iface.create_context = create_context;
     iface.destroy_context = destroy_context;
     iface.voxelbvh_from_gaussians = voxelbvh_from_gaussians;
+    iface.voxelbvh_from_gaussians_file = voxelbvh_from_gaussians_file;
 
     return &iface;
 }

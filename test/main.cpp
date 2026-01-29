@@ -14,6 +14,8 @@
 #include <nanovdb_editor/putil/FileFormat.h>
 #include <nanovdb_editor/putil/Reflect.h>
 
+#include <nanovdb_editor/putil/VoxelBVH.h>
+
 #include <nanovdb/io/IO.h>
 
 #include <cstdarg>
@@ -191,8 +193,44 @@ void test_image_2d(pnanovdb_editor_t* editor,
     printf("Image2d '%s' added to scene\n", image_name);
 }
 
+void voxelbvh_test()
+{
+    // load compiler and compute
+    pnanovdb_compiler_t compiler = {};
+    pnanovdb_compiler_load(&compiler);
+    pnanovdb_compute_t compute = {};
+    pnanovdb_compute_load(&compute, &compiler);
+
+    // create device
+    pnanovdb_compute_device_desc_t device_desc = {};
+    device_desc.log_print = pnanovdb_compute_log_print;
+    pnanovdb_compute_device_manager_t* device_manager = compute.device_interface.create_device_manager(PNANOVDB_FALSE);
+    pnanovdb_compute_device_t* device = compute.device_interface.create_device(device_manager, &device_desc);
+    pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
+
+    pnanovdb_voxelbvh_t voxel_bvh = {};
+    pnanovdb_voxelbvh_load(&voxel_bvh, &compute);
+
+    auto voxelbvh_ctx = voxel_bvh.create_context(&compute, queue);
+
+    voxel_bvh.voxelbvh_from_gaussians_file(&compute, queue, voxelbvh_ctx, "./data/splats.npz");
+
+    voxel_bvh.destroy_context(&compute, queue, voxelbvh_ctx);
+
+    pnanovdb_voxelbvh_free(&voxel_bvh);
+
+    compute.device_interface.destroy_device(device_manager, device);
+    compute.device_interface.destroy_device_manager(device_manager);
+
+    pnanovdb_compute_free(&compute);
+    pnanovdb_compiler_free(&compiler);
+}
+
 int main(int argc, char* argv[])
 {
+    voxelbvh_test();
+    return 0;
+
     auto args = argparse::parse<NanoVDBEditorArgs>(argc, argv);
 
 #if TEST_NODE2
