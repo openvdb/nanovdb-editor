@@ -45,21 +45,14 @@ enum shader
 };
 
 static const char* s_shader_names[shader_count] = {
-    "raster/voxelbvh_allocate_leaves.slang",
-    "raster/voxelbvh_allocate_lowers.slang",
-    "raster/voxelbvh_allocate_range_headers.slang",
-    "raster/voxelbvh_count_lower_masks.slang",
-    "raster/voxelbvh_count_voxel_masks.slang",
-    "raster/voxelbvh_find_range_starts.slang",
-    "raster/voxelbvh_gaussians_bbox_reduce1.slang",
-    "raster/voxelbvh_gaussians_bbox_reduce2.slang",
-    "raster/voxelbvh_gaussians_to_ijkl.slang",
-    "raster/voxelbvh_init_grid.slang",
-    "raster/voxelbvh_scatter_range_headers.slang",
-    "raster/voxelbvh_set_lower_masks.slang",
-    "raster/voxelbvh_set_upper_masks.slang",
-    "raster/voxelbvh_set_voxel_masks.slang"
- };
+    "raster/voxelbvh_allocate_leaves.slang",        "raster/voxelbvh_allocate_lowers.slang",
+    "raster/voxelbvh_allocate_range_headers.slang", "raster/voxelbvh_count_lower_masks.slang",
+    "raster/voxelbvh_count_voxel_masks.slang",      "raster/voxelbvh_find_range_starts.slang",
+    "raster/voxelbvh_gaussians_bbox_reduce1.slang", "raster/voxelbvh_gaussians_bbox_reduce2.slang",
+    "raster/voxelbvh_gaussians_to_ijkl.slang",      "raster/voxelbvh_init_grid.slang",
+    "raster/voxelbvh_scatter_range_headers.slang",  "raster/voxelbvh_set_lower_masks.slang",
+    "raster/voxelbvh_set_upper_masks.slang",        "raster/voxelbvh_set_voxel_masks.slang"
+};
 
 struct voxelbvh_context_t
 {
@@ -127,7 +120,8 @@ static void destroy_context(const pnanovdb_compute_t* compute,
 void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
                              pnanovdb_compute_queue_t* queue,
                              pnanovdb_voxelbvh_context_t* voxelbvh_context,
-                             pnanovdb_compute_buffer_t** gaussian_array_buffers, // means, opacities, quats, scales, sh0, shn
+                             pnanovdb_compute_buffer_t** gaussian_array_buffers, // means, opacities, quats, scales,
+                                                                                 // sh0, shn
                              pnanovdb_uint32_t gaussian_array_count,
                              pnanovdb_uint64_t gaussian_count,
                              pnanovdb_compute_buffer_t* nanovdb_out,
@@ -222,17 +216,18 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
         resources[4u].buffer_transient = scales_transient;
         resources[5u].buffer_transient = bbox_reduce1_transient;
 
-        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_gaussians_bbox_reduce1_slang], resources,
-                                 constants.workgroup_count, 1u, 1u, "voxelbvh_gaussians_bbox_reduce1");
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_gaussians_bbox_reduce1_slang],
+                                 resources, constants.workgroup_count, 1u, 1u, "voxelbvh_gaussians_bbox_reduce1");
     }
     {
         pnanovdb_compute_resource_t resources[3u] = {};
         resources[0u].buffer_transient = constant_transient;
         resources[1u].buffer_transient = bbox_reduce1_transient;
-        resources[2u].buffer_transient = bbox_reduce2_transient;;
+        resources[2u].buffer_transient = bbox_reduce2_transient;
+        ;
 
-        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_gaussians_bbox_reduce2_slang], resources,
-                                 1u, 1u, 1u, "voxelbvh_gaussians_bbox_reduce2");
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_gaussians_bbox_reduce2_slang],
+                                 resources, 1u, 1u, 1u, "voxelbvh_gaussians_bbox_reduce2");
     }
     {
         pnanovdb_compute_resource_t resources[9u] = {};
@@ -246,16 +241,15 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
         resources[7u].buffer_transient = keys_high_transient;
         resources[8u].buffer_transient = bbox_ids_transient;
 
-        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_gaussians_to_ijkl_slang], resources,
-                                 constants.workgroup_count, 1u, 1u, "voxelbvh_gaussians_to_ijkl");
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_gaussians_to_ijkl_slang],
+                                 resources, constants.workgroup_count, 1u, 1u, "voxelbvh_gaussians_to_ijkl");
     }
 
     // sort ijk-level requests to bring requests together
     // radix sort
     {
-        ctx->parallel_primitives.radix_sort_dual_key(compute, queue, ctx->parallel_primitives_ctx,
-                                                     keys_low_buffer, keys_high_buffer,
-                                                     bbox_ids_buffer, constants.voxel_count,
+        ctx->parallel_primitives.radix_sort_dual_key(compute, queue, ctx->parallel_primitives_ctx, keys_low_buffer,
+                                                     keys_high_buffer, bbox_ids_buffer, constants.voxel_count,
                                                      constants.voxel_count, 32u, 32u);
     }
 
@@ -285,8 +279,8 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
         resources[3u].buffer_transient = range_starts_transient;
         resources[4u].buffer_transient = range_headers_transient;
 
-        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_find_range_starts_slang], resources,
-                                 constants.voxel_workgroup_count, 1u, 1u, "voxelbvh_find_range_starts");
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_find_range_starts_slang],
+                                 resources, constants.voxel_workgroup_count, 1u, 1u, "voxelbvh_find_range_starts");
     }
 
     // global scan to allocate range headers
@@ -306,8 +300,8 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
         resources[4u].buffer_transient = range_scan_transient;
         resources[5u].buffer_transient = range_headers_transient;
 
-        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_scatter_range_headers_slang], resources,
-                                 constants.voxel_workgroup_count, 1u, 1u, "voxelbvh_scatter_range_headers");
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_scatter_range_headers_slang],
+                                 resources, constants.voxel_workgroup_count, 1u, 1u, "voxelbvh_scatter_range_headers");
     }
 
     pnanovdb_compute_array_t* debug_array = compute->create_array(4u, 2u * constants.voxel_count, nullptr);
@@ -333,7 +327,10 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
         pnanovdb_uint32_t range_first = mapped_debug[2u * idx + 0u];
         pnanovdb_uint32_t range_last = mapped_debug[2u * idx + 1u];
         all_count++;
-        if (range_first < range_last) {valid_count++;}
+        if (range_first < range_last)
+        {
+            valid_count++;
+        }
     }
 
     printf("all_count(%zu) valid_count(%zu)\n", all_count, valid_count);
@@ -378,9 +375,9 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
 }
 
 void voxelbvh_from_gaussians_file(const pnanovdb_compute_t* compute,
-                                            pnanovdb_compute_queue_t* queue,
-                                            pnanovdb_voxelbvh_context_t* voxelbvh_context,
-                                            const char* filename)
+                                  pnanovdb_compute_queue_t* queue,
+                                  pnanovdb_voxelbvh_context_t* voxelbvh_context,
+                                  const char* filename)
 {
 
     pnanovdb_fileformat_t fileformat = {};
@@ -409,22 +406,11 @@ void voxelbvh_from_gaussians_file(const pnanovdb_compute_t* compute,
         pnanovdb_uint64_t gaussian_count = arrays_gaussian[1]->element_count;
 
         pnanovdb_compute_buffer_t* gpu_buffers[6u] = {
-            means_gpu_array->device_buffer,
-            opacities_gpu_array->device_buffer,
-            quaternions_gpu_array->device_buffer,
-            scales_gpu_array->device_buffer,
-            sh_0_gpu_array->device_buffer,
-            sh_n_gpu_array->device_buffer
+            means_gpu_array->device_buffer,  opacities_gpu_array->device_buffer, quaternions_gpu_array->device_buffer,
+            scales_gpu_array->device_buffer, sh_0_gpu_array->device_buffer,      sh_n_gpu_array->device_buffer
         };
 
-        voxelbvh_from_gaussians(compute,
-                             queue,
-                             voxelbvh_context,
-                             gpu_buffers,
-                             6u,
-                             gaussian_count,
-                             nullptr,
-                             0llu);
+        voxelbvh_from_gaussians(compute, queue, voxelbvh_context, gpu_buffers, 6u, gaussian_count, nullptr, 0llu);
 
         gpu_array_destroy(compute, queue, means_gpu_array);
         gpu_array_destroy(compute, queue, opacities_gpu_array);
