@@ -171,9 +171,11 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     int3 ijk_min = int3(floor(scale * aabb_min + offset));
     int3 ijk_max = int3(floor(scale * aabb_max + offset));
 
+    const uint level_step = 1u;
+
     uint write_subidx = 0u;
     bool hit_max = false;
-    for (uint level = 15u; level < 16u; level--)
+    for (uint level = 12u; level < 13u; level-=level_step)
     {
         int3 ijk_min_level = ijk_min & ~((1 << level) - 1);
         int3 ijk_max_level = ijk_max & ~((1 << level) - 1);
@@ -206,7 +208,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         {
             if (overlap_count > 8u)
             {
-                level += 2u;
+                level += 1u + level_step;
                 hit_max = true;
             }
             else if (level == 0u)
