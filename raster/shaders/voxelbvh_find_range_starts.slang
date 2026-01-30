@@ -21,7 +21,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
     uint idx = group_idx.x * 256u + thread_idx.x;
 
-    if (idx >= constants.point_count)
+    if (idx >= constants.voxel_count)
     {
         return;
     }

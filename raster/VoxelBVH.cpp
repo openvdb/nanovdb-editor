@@ -306,14 +306,14 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
                                  resources, constants.voxel_workgroup_count, 1u, 1u, "voxelbvh_scatter_range_headers");
     }
 
-    pnanovdb_compute_array_t* debug_array = compute->create_array(4u, constants.voxel_count, nullptr);
+    pnanovdb_compute_array_t* debug_array = compute->create_array(4u, 2u * constants.voxel_count, nullptr);
     pnanovdb_compute_array_t* debug_array2 = compute->create_array(4u, 6u, nullptr);
     compute_gpu_array_t* debug_gpu_array = gpu_array_create();
     compute_gpu_array_t* debug_gpu_array2 = gpu_array_create();
     gpu_array_alloc_device(compute, queue, debug_gpu_array, debug_array);
     gpu_array_alloc_device(compute, queue, debug_gpu_array2, debug_array2);
 
-    gpu_array_copy(compute, queue, debug_gpu_array, keys_high_buffer, 0llu, 4u * constants.voxel_count);
+    gpu_array_copy(compute, queue, debug_gpu_array, range_headers_buffer, 0llu, 4u * 2u * constants.voxel_count);
     gpu_array_copy(compute, queue, debug_gpu_array2, bbox_reduce2_buffer, 0llu, 4u * 6u);
 
     gpu_array_readback(compute, queue, debug_gpu_array, debug_array);
@@ -327,40 +327,27 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
     gpu_array_map(compute, queue, debug_gpu_array, debug_array);
     gpu_array_map(compute, queue, debug_gpu_array2, debug_array2);
 
-    std::map<uint32_t, uint32_t> levels_count;
-
-    pnanovdb_uint32_t old_key = ~0u;
-    pnanovdb_uint64_t unique_count = 0u;
+    pnanovdb_uint64_t valid_count = 0u;
     pnanovdb_uint64_t invalid_count = 0u;
     pnanovdb_uint32_t* mapped_debug = (pnanovdb_uint32_t*)debug_array->data;
     for (uint64_t idx = 0llu; idx < constants.voxel_count; idx++)
     {
-        levels_count[(mapped_debug[idx] >> 16u)]++;
-        if (mapped_debug[idx] != old_key)
+        if (mapped_debug[2u * idx + 0u] < mapped_debug[2u * idx + 1u])
         {
-            unique_count++;
-            old_key = mapped_debug[idx];
+            valid_count++;
         }
-        if (mapped_debug[idx] == 0xFFFFFFFF)
+        else
         {
             invalid_count++;
         }
-        if (idx < 32u || idx >= (constants.voxel_count - 32u))
-        {
-            printf("key[%zu] 0x%x\n", idx, mapped_debug[idx]);
-        }
-    }
-
-    for (auto it = levels_count.begin(); it != levels_count.end(); it++)
-    {
-        printf("level(%u) count(%u)\n", it->first, it->second);
     }
 
     float* mapped_debug2 = (float*)debug_array2->data;
     printf("bbox{(%f,%f,%f), (%f,%f,%f)}\n", mapped_debug2[0], mapped_debug2[1], mapped_debug2[2], mapped_debug2[3],
            mapped_debug2[4], mapped_debug2[5]);
 
-    printf("unique_count(%zu) invalid_count(%zu) voxel_count(%u)\n", unique_count, invalid_count, constants.voxel_count);
+    printf("valid_count(%zu) invalid_count(%zu) voxel_count(%u)\n",
+        valid_count, invalid_count, constants.voxel_count);
 
     gpu_array_destroy(compute, queue, debug_gpu_array);
     gpu_array_destroy(compute, queue, debug_gpu_array2);
