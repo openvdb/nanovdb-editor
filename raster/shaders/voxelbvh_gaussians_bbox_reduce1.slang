@@ -76,16 +76,8 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
             cube_pos_world.y = cube_pos.x * rot1.x + cube_pos.y * rot1.y + cube_pos.z * rot1.z + meansf.y;
             cube_pos_world.z = cube_pos.x * rot2.x + cube_pos.y * rot2.y + cube_pos.z * rot2.z + meansf.z;
 
-            if (vert_idx == 0u)
-            {
-                aabb_min = cube_pos_world;
-                aabb_max = cube_pos_world;
-            }
-            else
-            {
-                aabb_min = min(aabb_min, cube_pos_world);
-                aabb_max = max(aabb_max, cube_pos_world);
-            }
+            aabb_min = min(aabb_min, cube_pos_world);
+            aabb_max = max(aabb_max, cube_pos_world);
         }
     }
 
