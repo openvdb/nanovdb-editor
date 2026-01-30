@@ -209,6 +209,11 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                 level += 2u;
                 hit_max = true;
             }
+            else if (level == 0u)
+            {
+                level += 1u;
+                hit_max = true;
+            }
             continue;
         }
         break;
