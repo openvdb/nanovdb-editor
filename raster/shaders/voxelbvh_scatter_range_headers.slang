@@ -51,6 +51,6 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     {
         uint alloc_idx = range_scan_in[idx] - 1u;
 
-        range_headers_out[2u * alloc_idx + 1u] = idx;
+        range_headers_out[2u * alloc_idx + 1u] = idx + 1u;
     }
 }
