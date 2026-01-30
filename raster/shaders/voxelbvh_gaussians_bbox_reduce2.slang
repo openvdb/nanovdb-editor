@@ -45,7 +45,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                 bbox_in[6u * bbox_idx + 5u]);
 
             aabb_min = min(aabb_min, local_aabb_min);
-            aabb_max = min(aabb_max, local_aabb_max);
+            aabb_max = max(aabb_max, local_aabb_max);
         }
     }
 
