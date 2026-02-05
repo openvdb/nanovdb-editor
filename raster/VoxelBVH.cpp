@@ -209,58 +209,28 @@ pnanovdb_compute_array_t* voxelbvh_generate_node_mask_array(const pnanovdb_compu
     uint64_t nanovdb_word_count = (buf_size + 3u) / 4u;
     uint64_t node_mask_uint64_count = (node_mask_size + 7u) / 8u;
 
-    pnanovdb_compute_buffer_desc_t buf_desc = {};
-    buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_SRC;
-    buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
-    buf_desc.structure_stride = 8u;
-    buf_desc.size_in_bytes = buf_size;
-    pnanovdb_compute_buffer_t* nanovdb_upload_buffer =
-        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &buf_desc);
+    pnanovdb_compute_array_t* node_mask_array = compute->create_array(8u, node_mask_uint64_count, nullptr);
 
-    buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED |
-                     PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_SRC | PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_DST;
-    pnanovdb_compute_buffer_t* nanovdb_device_buffer =
-        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+    compute_gpu_array_t* nanovdb_gpu_array = gpu_array_create();
+    compute_gpu_array_t* node_mask_gpu_array = gpu_array_create();
 
-    buf_desc.size_in_bytes = node_mask_size;
-    pnanovdb_compute_buffer_t* node_mask_buffer =
-        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+    gpu_array_upload(compute, queue, nanovdb_gpu_array, nanovdb_array);
+    gpu_array_alloc_device(compute, queue, node_mask_gpu_array, node_mask_array);
 
-    buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_DST;
-    pnanovdb_compute_buffer_t* node_mask_readback_buffer =
-        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_READBACK, &buf_desc);
+    voxelbvh_generate_node_mask(compute, queue, voxelbvh_context, nanovdb_gpu_array->device_buffer, nanovdb_word_count,
+                                node_mask_gpu_array->device_buffer, node_mask_uint64_count);
 
-    void* mapped = compute_interface->map_buffer(context, nanovdb_upload_buffer);
-    memcpy(mapped, nanovdb_array->data, buf_size);
-    compute_interface->unmap_buffer(context, nanovdb_upload_buffer);
-
-    pnanovdb_compute_copy_buffer_params_t copy_params = {};
-    copy_params.src = compute_interface->register_buffer_as_transient(context, nanovdb_upload_buffer);
-    copy_params.dst = compute_interface->register_buffer_as_transient(context, nanovdb_device_buffer);
-    copy_params.num_bytes = buf_size;
-    compute_interface->copy_buffer(context, &copy_params);
-
-    voxelbvh_generate_node_mask(compute, queue, voxelbvh_context, nanovdb_device_buffer, nanovdb_word_count,
-                                node_mask_buffer, node_mask_uint64_count);
-
-    copy_params.src = compute_interface->register_buffer_as_transient(context, node_mask_buffer);
-    copy_params.dst = compute_interface->register_buffer_as_transient(context, node_mask_readback_buffer);
-    copy_params.num_bytes = node_mask_size;
-    compute_interface->copy_buffer(context, &copy_params);
+    gpu_array_readback(compute, queue, node_mask_gpu_array, node_mask_array);
 
     pnanovdb_uint64_t flushed_frame = 0llu;
     compute->device_interface.flush(queue, &flushed_frame, nullptr, nullptr);
 
     compute->device_interface.wait_idle(queue);
 
-    mapped = compute_interface->map_buffer(context, node_mask_readback_buffer);
-    pnanovdb_compute_array_t* node_mask_array = compute->create_array(8u, node_mask_uint64_count, mapped);
-    compute_interface->unmap_buffer(context, node_mask_readback_buffer);
+    gpu_array_map(compute, queue, node_mask_gpu_array, node_mask_array);
 
-    compute_interface->destroy_buffer(context, nanovdb_upload_buffer);
-    compute_interface->destroy_buffer(context, nanovdb_device_buffer);
-    compute_interface->destroy_buffer(context, node_mask_buffer);
-    compute_interface->destroy_buffer(context, node_mask_readback_buffer);
+    gpu_array_destroy(compute, queue, nanovdb_gpu_array);
+    gpu_array_destroy(compute, queue, node_mask_gpu_array);
 
     return node_mask_array;
 }
