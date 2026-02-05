@@ -20,6 +20,7 @@
 
 #include <cstdarg>
 
+#include <cstdint>
 #include <slang.h>
 
 #define SLANG_PRELUDE_NAMESPACE CPPPrelude
@@ -214,6 +215,30 @@ void voxelbvh_test()
     auto voxelbvh_ctx = voxel_bvh.create_context(&compute, queue);
 
     voxel_bvh.voxelbvh_from_gaussians_file(&compute, queue, voxelbvh_ctx, "./data/splats.npz");
+
+    pnanovdb_compute_array_t* nanovdb_arr = compute.load_nanovdb("./data/dragon.nvdb");
+
+    pnanovdb_compute_array_t* node_mask_arr =
+        voxel_bvh.voxelbvh_generate_node_mask_array(&compute, queue, voxelbvh_ctx, nanovdb_arr);
+
+    uint32_t node_type_count[16u] = {};
+    uint64_t node_type_max[16u] = {};
+    for (uint64_t idx = 0u; idx < node_mask_arr->element_count; idx++)
+    {
+        uint64_t type_raw = ((uint64_t*)node_mask_arr->data)[idx];
+        for (uint32_t sub_idx = 0u; sub_idx < 16u; sub_idx++)
+        {
+            uint32_t type = uint32_t(type_raw >> (sub_idx << 2)) & 15;
+            node_type_count[type]++;
+            node_type_max[type] = 32u * (16u * idx + sub_idx);
+        }
+    }
+    for (uint32_t type = 0u; type < 16u; type++)
+    {
+        printf("type[%d] count(%d) max(%zu)\n", type, node_type_count[type], node_type_max[type]);
+    }
+    compute.destroy_array(node_mask_arr);
+    compute.destroy_array(nanovdb_arr);
 
     voxel_bvh.destroy_context(&compute, queue, voxelbvh_ctx);
 

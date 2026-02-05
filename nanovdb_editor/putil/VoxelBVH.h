@@ -32,6 +32,42 @@ typedef struct pnanovdb_voxelbvh_t
                                         pnanovdb_compute_queue_t* queue,
                                         pnanovdb_voxelbvh_context_t* context);
 
+    void(PNANOVDB_ABI* voxelbvh_generate_node_mask)(const pnanovdb_compute_t* compute,
+                                                    pnanovdb_compute_queue_t* queue,
+                                                    pnanovdb_voxelbvh_context_t* context,
+                                                    pnanovdb_compute_buffer_t* nanovdb_inout,
+                                                    pnanovdb_uint64_t nanovdb_word_count,
+                                                    pnanovdb_compute_buffer_t* node_mask_out,
+                                                    pnanovdb_uint64_t node_mask_uint64_count);
+
+    pnanovdb_compute_array_t*(PNANOVDB_ABI* voxelbvh_generate_node_mask_array)(const pnanovdb_compute_t* compute,
+                                                                               pnanovdb_compute_queue_t* queue,
+                                                                               pnanovdb_voxelbvh_context_t* context,
+                                                                               pnanovdb_compute_array_t* nanovdb_array);
+
+    void(PNANOVDB_ABI* voxelbvh_nanovdb_init)(const pnanovdb_compute_t* compute,
+                                              pnanovdb_compute_queue_t* queue,
+                                              pnanovdb_voxelbvh_context_t* context,
+                                              pnanovdb_compute_buffer_t* nanovdb_inout,
+                                              pnanovdb_uint64_t nanovdb_word_count,
+                                              const pnanovdb_coord_t* root_tile_coords,
+                                              pnanovdb_uint32_t root_tile_count,
+                                              pnanovdb_bool_t allocate_node_pairs);
+
+    void(PNANOVDB_ABI* voxelbvh_nanovdb_add_nodes)(const pnanovdb_compute_t* compute,
+                                                   pnanovdb_compute_queue_t* queue,
+                                                   pnanovdb_voxelbvh_context_t* context,
+                                                   pnanovdb_compute_buffer_t* nanovdb_inout,
+                                                   pnanovdb_uint64_t nanovdb_word_count,
+                                                   pnanovdb_bool_t allocate_node_pairs);
+
+    void(PNANOVDB_ABI* voxelbvh_nanovdb_prune_nodes)(const pnanovdb_compute_t* compute,
+                                                     pnanovdb_compute_queue_t* queue,
+                                                     pnanovdb_voxelbvh_context_t* context,
+                                                     pnanovdb_compute_buffer_t* nanovdb_inout,
+                                                     pnanovdb_uint64_t nanovdb_word_count,
+                                                     pnanovdb_bool_t retain_node_pairs);
+
     void(PNANOVDB_ABI* voxelbvh_from_gaussians)(const pnanovdb_compute_t* compute,
                                                 pnanovdb_compute_queue_t* queue,
                                                 pnanovdb_voxelbvh_context_t* context,
@@ -55,6 +91,11 @@ PNANOVDB_REFLECT_BEGIN()
 PNANOVDB_REFLECT_POINTER(pnanovdb_compute_t, compute, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(create_context, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(destroy_context, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(voxelbvh_generate_node_mask, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(voxelbvh_generate_node_mask_array, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(voxelbvh_nanovdb_init, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(voxelbvh_nanovdb_add_nodes, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(voxelbvh_nanovdb_prune_nodes, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(voxelbvh_from_gaussians, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(voxelbvh_from_gaussians_file, 0, 0)
 PNANOVDB_REFLECT_END(0)
