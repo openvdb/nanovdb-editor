@@ -73,7 +73,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                     pnanovdb_root_handle_t root = {uint64_t(chunk_idx) << 5u};
 
                     max_current_addr = max(max_current_addr,
-                        root.address_byte_offset + PNANOVDB_GRID_TYPE_GET(grid_type, root_size));
+                        root.address.byte_offset + PNANOVDB_GRID_TYPE_GET(grid_type, root_size));
 
                     pnanovdb_uint32_t count = pnanovdb_root_get_tile_count(buf, root);
                     for (uint tile_idx = thread_idx.x; tile_idx < count; tile_idx += 256u)
@@ -94,7 +94,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                     pnanovdb_upper_handle_t upper = {uint64_t(chunk_idx) << 5u};
 
                     max_current_addr = max(max_current_addr,
-                        upper.address_byte_offset + PNANOVDB_GRID_TYPE_GET(grid_type, upper_size));
+                        upper.address.byte_offset + PNANOVDB_GRID_TYPE_GET(grid_type, upper_size));
 
                     for (uint n = thread_idx.x; n < PNANOVDB_UPPER_TABLE_COUNT; n+= 256u)
                     {
@@ -113,7 +113,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                     pnanovdb_lower_handle_t lower = {uint64_t(chunk_idx) << 5u};
 
                     max_current_addr = max(max_current_addr,
-                        lower.address_byte_offset + PNANOVDB_GRID_TYPE_GET(grid_type, lower_size));
+                        lower.address.byte_offset + PNANOVDB_GRID_TYPE_GET(grid_type, lower_size));
 
                     for (uint n = thread_idx.x; n < PNANOVDB_LOWER_TABLE_COUNT; n+= 256u)
                     {
@@ -132,7 +132,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                     pnanovdb_leaf_handle_t leaf = {uint64_t(chunk_idx) << 5u};
 
                     max_current_addr = max(max_current_addr,
-                        leaf.address_byte_offset + PNANOVDB_GRID_TYPE_GET(grid_type, leaf_size));
+                        leaf.address.byte_offset + PNANOVDB_GRID_TYPE_GET(grid_type, leaf_size));
                 }
             }
         }
