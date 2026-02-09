@@ -8,7 +8,7 @@
 struct constants_t
 {
     uint nanovdb_word_count;
-    uint node_mask_element_count;
+    uint pad0;
     uint nanovdb_chunk_count;
     uint node_mask_uint64_count;
 };
@@ -23,7 +23,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
     uint tidx = group_idx.x * 256u + thread_idx.x;
 
-    for (uint idx = tidx; idx < constants.node_mask_element_count; idx += 65536u)
+    for (uint idx = tidx; idx < constants.node_mask_uint64_count; idx += 65536u)
     {
         node_mask_inout[idx] = uint2(0u, 0u);
     }

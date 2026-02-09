@@ -141,13 +141,12 @@ void voxelbvh_generate_node_mask(const pnanovdb_compute_t* compute,
     struct constants_t
     {
         pnanovdb_uint32_t nanovdb_word_count;
-        pnanovdb_uint32_t node_mask_element_count;
+        pnanovdb_uint32_t pad0;
         pnanovdb_uint32_t nanovdb_chunk_count;
         pnanovdb_uint32_t node_mask_uint64_count;
     };
     constants_t constants = {};
     constants.nanovdb_word_count = nanovdb_word_count;
-    constants.node_mask_element_count = (nanovdb_word_count >> 3u) >> 4u;
     constants.nanovdb_chunk_count = nanovdb_word_count >> 3u;
     constants.node_mask_uint64_count = node_mask_uint64_count;
 
@@ -349,9 +348,100 @@ void voxelbvh_nanovdb_add_nodes(const pnanovdb_compute_t* compute,
     pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
     pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
 
+    uint64_t buf_size = nanovdb_word_count * 4u;
+    uint64_t node_mask_size = (buf_size + 63u) / 64u;
+    uint64_t node_mask_uint64_count = (node_mask_size + 7u) / 8u;
+
+    pnanovdb_compute_buffer_desc_t buf_desc = {};
+    buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED;
+    buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+    buf_desc.structure_stride = 8u;
+    buf_desc.size_in_bytes = node_mask_uint64_count * 8u;
+    pnanovdb_compute_buffer_t* node_mask_buffer =
+        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+
+    voxelbvh_generate_node_mask(
+        compute, queue, voxelbvh_context, nanovdb_inout, nanovdb_word_count, node_mask_buffer, node_mask_uint64_count);
+
+    // allocate workgroup counters
+    buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED;
+    buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+    buf_desc.structure_stride = 8u;
+    buf_desc.size_in_bytes = 4u * 256u * 8u;
+    pnanovdb_compute_buffer_t* workgroup_count_buffer =
+        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+
+    struct constants_t
+    {
+        pnanovdb_uint32_t nanovdb_word_count;
+        pnanovdb_uint32_t pad0;
+        pnanovdb_uint32_t nanovdb_chunk_count;
+        pnanovdb_uint32_t node_mask_uint64_count;
+    };
+    constants_t constants = {};
+    constants.nanovdb_word_count = nanovdb_word_count;
+    constants.nanovdb_chunk_count = nanovdb_word_count >> 3u;
+    constants.node_mask_uint64_count = node_mask_uint64_count;
+
+    // constants
+    buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT;
+    buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+    buf_desc.structure_stride = 0u;
+    buf_desc.size_in_bytes = sizeof(constants_t);
+    pnanovdb_compute_buffer_t* constant_buffer =
+        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &buf_desc);
+
+    // copy constants
+    void* mapped_constants = compute_interface->map_buffer(context, constant_buffer);
+    memcpy(mapped_constants, &constants, sizeof(constants_t));
+    compute_interface->unmap_buffer(context, constant_buffer);
+
+    pnanovdb_compute_buffer_transient_t* constant_transient =
+        compute_interface->register_buffer_as_transient(context, constant_buffer);
+    pnanovdb_compute_buffer_transient_t* nanovdb_transient =
+        compute_interface->register_buffer_as_transient(context, nanovdb_inout);
+    pnanovdb_compute_buffer_transient_t* node_mask_transient =
+        compute_interface->register_buffer_as_transient(context, node_mask_buffer);
+    pnanovdb_compute_buffer_transient_t* workgroup_count_transient =
+        compute_interface->register_buffer_as_transient(context, workgroup_count_buffer);
+
     // voxelbvh_nanovdb_add_count.slang
+    {
+        pnanovdb_compute_resource_t resources[4u] = {};
+        resources[0u].buffer_transient = constant_transient;
+        resources[1u].buffer_transient = nanovdb_transient;
+        resources[2u].buffer_transient = node_mask_transient;
+        resources[3u].buffer_transient = workgroup_count_transient;
+
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_add_count_slang],
+                                 resources, 256u, 1u, 1u, "voxelbvh_nanovdb_add_count");
+    }
     // voxelbvh_nanovdb_add_scan.slang
+    {
+        pnanovdb_compute_resource_t resources[4u] = {};
+        resources[0u].buffer_transient = constant_transient;
+        resources[1u].buffer_transient = nanovdb_transient;
+        resources[2u].buffer_transient = node_mask_transient;
+        resources[3u].buffer_transient = workgroup_count_transient;
+
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_add_scan_slang],
+                                 resources, 256u, 1u, 1u, "voxelbvh_nanovdb_add_scan");
+    }
     // voxelbvh_nanovdb_add_link.slang
+    {
+        pnanovdb_compute_resource_t resources[4u] = {};
+        resources[0u].buffer_transient = constant_transient;
+        resources[1u].buffer_transient = nanovdb_transient;
+        resources[2u].buffer_transient = node_mask_transient;
+        resources[3u].buffer_transient = workgroup_count_transient;
+
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_add_link_slang],
+                                 resources, 256u, 1u, 1u, "voxelbvh_nanovdb_add_link");
+    }
+
+    compute_interface->destroy_buffer(context, node_mask_buffer);
+    compute_interface->destroy_buffer(context, workgroup_count_buffer);
+    compute_interface->destroy_buffer(context, constant_buffer);
 }
 
 void voxelbvh_nanovdb_prune_nodes(const pnanovdb_compute_t* compute,

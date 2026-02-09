@@ -8,7 +8,7 @@
 struct constants_t
 {
     uint nanovdb_word_count;
-    uint node_mask_element_count;
+    uint pad0;
     uint nanovdb_chunk_count;
     uint node_mask_uint64_count;
 };
@@ -71,7 +71,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                 pnanovdb_grid_handle_t grid = { pnanovdb_address_null() };
                 pnanovdb_uint32_t grid_type = pnanovdb_grid_get_grid_type(buf, grid);
 
-                pnanovdb_lower_handle_t lower = {chunk_idx << 5u};
+                pnanovdb_lower_handle_t lower = {uint64_t(chunk_idx) << 5u};
 
                 for (uint n = thread_idx.x; n < PNANOVDB_LOWER_TABLE_COUNT; n+= 256u)
                 {

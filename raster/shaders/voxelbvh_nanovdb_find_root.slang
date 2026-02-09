@@ -8,7 +8,7 @@
 struct constants_t
 {
     uint nanovdb_word_count;
-    uint node_mask_element_count;
+    uint pad0;
     uint nanovdb_chunk_count;
     uint node_mask_uint64_count;
 };
