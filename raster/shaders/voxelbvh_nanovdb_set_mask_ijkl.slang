@@ -61,26 +61,26 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 
     pnanovdb_uint32_t level = 0u;
     pnanovdb_address_t address =
-        pnanovdb_readaccessor_get_value_address_and_level(grid_type, buf, PNANOVDB_REF(acc), ijk, level);
+        pnanovdb_readaccessor_get_value_address_and_level(grid_type, buf, PNANOVDB_REF(acc), ijkl.xyz, level);
 
     if (level == 0u && ijkl.w < 3) // leaf
     {
         pnanovdb_leaf_handle_t leaf = acc.leaf;
-        pnanovdb_address_t addr = pnanovdb_address_offset(p.address, PNANOVDB_LEAF_OFF_VALUE_MASK);
+        pnanovdb_address_t addr = pnanovdb_address_offset(leaf.address, PNANOVDB_LEAF_OFF_VALUE_MASK);
         pnanovdb_uint32_t n = pnanovdb_leaf_coord_to_offset(ijkl.xyz);
         nanovdb_set_bit(addr, n);
     }
     else if (level == 1u && ijkl.w < 7) // lower
     {
         pnanovdb_lower_handle_t lower = acc.lower;
-        pnanovdb_address_t addr = pnanovdb_address_offset(p.address, PNANOVDB_LOWER_OFF_CHILD_MASK);
+        pnanovdb_address_t addr = pnanovdb_address_offset(lower.address, PNANOVDB_LOWER_OFF_CHILD_MASK);
         pnanovdb_uint32_t n = pnanovdb_lower_coord_to_offset(ijkl.xyz);
         nanovdb_set_bit(addr, n);
     }
     else if (level == 2u && ijkl.w < 12) // upper
     {
         pnanovdb_upper_handle_t upper = acc.upper;
-        pnanovdb_address_t addr = pnanovdb_address_offset(p.address, PNANOVDB_UPPER_OFF_CHILD_MASK);
+        pnanovdb_address_t addr = pnanovdb_address_offset(upper.address, PNANOVDB_UPPER_OFF_CHILD_MASK);
         pnanovdb_uint32_t n = pnanovdb_upper_coord_to_offset(ijkl.xyz);
         nanovdb_set_bit(addr, n);
     }

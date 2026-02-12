@@ -531,6 +531,8 @@ pnanovdb_compute_array_t* voxelbvh_nanovdb_add_nodes_from_key_array(const pnanov
     uint64_t buf_size = 1024llu * 1024llu * 1024llu;
     uint64_t nanovdb_uint64_count = (buf_size + 7u) / 8u;
 
+    pnanovdb_coord_t root_coords[1u] = {};
+
     uint64_t ijkl_count = (ijkl_in->element_size * ijkl_in->element_count) / 8u;
 
     pnanovdb_compute_array_t* nanovdb_array = compute->create_array(8u, nanovdb_uint64_count, nullptr);
@@ -540,6 +542,9 @@ pnanovdb_compute_array_t* voxelbvh_nanovdb_add_nodes_from_key_array(const pnanov
 
     gpu_array_upload(compute, queue, ijkl_gpu_array, ijkl_in);
     gpu_array_alloc_device(compute, queue, nanovdb_gpu_array, nanovdb_array);
+
+    voxelbvh_nanovdb_init(compute, queue, voxelbvh_context, nanovdb_gpu_array->device_buffer, 2u * nanovdb_uint64_count,
+                          root_coords, 1u, PNANOVDB_FALSE);
 
     voxelbvh_nanovdb_add_nodes_from_key_buffer(compute, queue, voxelbvh_context, nanovdb_gpu_array->device_buffer,
                                                2u * nanovdb_uint64_count, allocate_node_pairs,

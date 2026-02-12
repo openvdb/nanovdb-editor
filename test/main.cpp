@@ -240,6 +240,19 @@ void voxelbvh_test()
     compute.destroy_array(node_mask_arr);
     compute.destroy_array(nanovdb_arr);
 
+    uint64_t ijkl_count = 16u * 1024u;
+    pnanovdb_compute_array_t* ijkl_array = compute.create_array(8u, ijkl_count, nullptr);
+    uint64_t* mapped_ijkl = (uint64_t*)compute.map_array(ijkl_array);
+    for (uint64_t idx = 0u; idx < ijkl_count; idx++)
+    {
+        mapped_ijkl[idx] = uint64_t(rand() & 4095) | (uint64_t(rand() & 4095) << 16u) | (uint64_t(rand() & 4095) << 32u);
+    }
+
+    pnanovdb_compute_array_t* built_nanovdb_array =
+        voxel_bvh.voxelbvh_nanovdb_add_nodes_from_key_array(&compute, queue, voxelbvh_ctx, PNANOVDB_FALSE, ijkl_array);
+
+    compute.destroy_array(ijkl_array);
+
     voxel_bvh.destroy_context(&compute, queue, voxelbvh_ctx);
 
     pnanovdb_voxelbvh_free(&voxel_bvh);
