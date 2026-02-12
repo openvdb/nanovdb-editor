@@ -58,8 +58,8 @@ static const char* s_shader_names[shader_count] = {
     "raster/voxelbvh_nanovdb_add_link.slang",       "raster/voxelbvh_nanovdb_add_scan.slang",
     "raster/voxelbvh_nanovdb_find_clear.slang",     "raster/voxelbvh_nanovdb_find_leaves.slang",
     "raster/voxelbvh_nanovdb_find_lowers.slang",    "raster/voxelbvh_nanovdb_find_root.slang",
-    "raster/voxelbvh_nanovdb_find_uppers.slang",    "raster/voxelbvh_nanovdb_set_mask_ijkl.slang",
-    "raster/voxelbvh_nanovdb_init.slang",           "raster/voxelbvh_scatter_range_headers.slang",
+    "raster/voxelbvh_nanovdb_find_uppers.slang",    "raster/voxelbvh_nanovdb_init.slang",
+    "raster/voxelbvh_nanovdb_set_mask_ijkl.slang",  "raster/voxelbvh_scatter_range_headers.slang",
     "raster/voxelbvh_set_lower_masks.slang",        "raster/voxelbvh_set_upper_masks.slang",
     "raster/voxelbvh_set_voxel_masks.slang"
 };
@@ -502,8 +502,8 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
 
             pnanovdb_uint32_t workgroup_count = (ijkl_count + 255u) / 256u;
 
-            compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_add_count_slang],
-                                     resources, workgroup_count, 1u, 1u, "voxelbvh_nanovdb_add_count");
+            compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_set_mask_ijkl_slang],
+                                     resources, workgroup_count, 1u, 1u, "voxelbvh_nanovdb_set_mask_ijkl");
         }
 
         if (pass_id == 3u)
