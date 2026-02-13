@@ -14,8 +14,6 @@
 #include <nanovdb_editor/putil/FileFormat.h>
 #include <nanovdb_editor/putil/Reflect.h>
 
-#include <nanovdb_editor/putil/VoxelBVH.h>
-
 #include <nanovdb/io/IO.h>
 
 #include <cstdarg>
@@ -194,75 +192,7 @@ void test_image_2d(pnanovdb_editor_t* editor,
     printf("Image2d '%s' added to scene\n", image_name);
 }
 
-void voxelbvh_test()
-{
-    // load compiler and compute
-    pnanovdb_compiler_t compiler = {};
-    pnanovdb_compiler_load(&compiler);
-    pnanovdb_compute_t compute = {};
-    pnanovdb_compute_load(&compute, &compiler);
-
-    // create device
-    pnanovdb_compute_device_desc_t device_desc = {};
-    device_desc.log_print = pnanovdb_compute_log_print;
-    pnanovdb_compute_device_manager_t* device_manager = compute.device_interface.create_device_manager(PNANOVDB_FALSE);
-    pnanovdb_compute_device_t* device = compute.device_interface.create_device(device_manager, &device_desc);
-    pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
-
-    pnanovdb_voxelbvh_t voxel_bvh = {};
-    pnanovdb_voxelbvh_load(&voxel_bvh, &compute);
-
-    auto voxelbvh_ctx = voxel_bvh.create_context(&compute, queue);
-
-    voxel_bvh.voxelbvh_from_gaussians_file(&compute, queue, voxelbvh_ctx, "./data/splats.npz");
-
-    pnanovdb_compute_array_t* nanovdb_arr = compute.load_nanovdb("./data/dragon.nvdb");
-
-    pnanovdb_compute_array_t* node_mask_arr =
-        voxel_bvh.voxelbvh_generate_node_mask_array(&compute, queue, voxelbvh_ctx, nanovdb_arr);
-
-    uint32_t node_type_count[16u] = {};
-    uint64_t node_type_max[16u] = {};
-    for (uint64_t idx = 0u; idx < node_mask_arr->element_count; idx++)
-    {
-        uint64_t type_raw = ((uint64_t*)node_mask_arr->data)[idx];
-        for (uint32_t sub_idx = 0u; sub_idx < 16u; sub_idx++)
-        {
-            uint32_t type = uint32_t(type_raw >> (sub_idx << 2)) & 15;
-            node_type_count[type]++;
-            node_type_max[type] = 32u * (16u * idx + sub_idx);
-        }
-    }
-    for (uint32_t type = 0u; type < 16u; type++)
-    {
-        printf("type[%d] count(%d) max(%zu)\n", type, node_type_count[type], node_type_max[type]);
-    }
-    compute.destroy_array(node_mask_arr);
-    compute.destroy_array(nanovdb_arr);
-
-    uint64_t ijkl_count = 16u * 1024u;
-    pnanovdb_compute_array_t* ijkl_array = compute.create_array(8u, ijkl_count, nullptr);
-    uint64_t* mapped_ijkl = (uint64_t*)compute.map_array(ijkl_array);
-    for (uint64_t idx = 0u; idx < ijkl_count; idx++)
-    {
-        mapped_ijkl[idx] = uint64_t(rand() & 4095) | (uint64_t(rand() & 4095) << 16u) | (uint64_t(rand() & 4095) << 32u);
-    }
-
-    pnanovdb_compute_array_t* built_nanovdb_array =
-        voxel_bvh.voxelbvh_nanovdb_add_nodes_from_key_array(&compute, queue, voxelbvh_ctx, PNANOVDB_FALSE, ijkl_array);
-
-    compute.destroy_array(ijkl_array);
-
-    voxel_bvh.destroy_context(&compute, queue, voxelbvh_ctx);
-
-    pnanovdb_voxelbvh_free(&voxel_bvh);
-
-    compute.device_interface.destroy_device(device_manager, device);
-    compute.device_interface.destroy_device_manager(device_manager);
-
-    pnanovdb_compute_free(&compute);
-    pnanovdb_compiler_free(&compiler);
-}
+void voxelbvh_test();
 
 int main(int argc, char* argv[])
 {

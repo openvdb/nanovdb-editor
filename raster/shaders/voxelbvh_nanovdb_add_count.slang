@@ -72,8 +72,11 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                 {
                     pnanovdb_root_handle_t root = {uint64_t(chunk_idx) << 5u};
 
+                    pnanovdb_uint32_t root_tile_count = pnanovdb_root_get_tile_count(buf, root);
+
                     max_current_addr = max(max_current_addr,
-                        root.address.byte_offset + PNANOVDB_GRID_TYPE_GET(grid_type, root_size));
+                        root.address.byte_offset + PNANOVDB_GRID_TYPE_GET(grid_type, root_size) +
+                        root_tile_count * PNANOVDB_GRID_TYPE_GET(grid_type, root_tile_size));
 
                     pnanovdb_uint32_t count = pnanovdb_root_get_tile_count(buf, root);
                     for (uint tile_idx = thread_idx.x; tile_idx < count; tile_idx += 256u)

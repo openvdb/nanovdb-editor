@@ -305,7 +305,7 @@ void voxelbvh_nanovdb_init(const pnanovdb_compute_t* compute,
 
     pnanovdb_tree_handle_t tree = pnanovdb_grid_get_tree(buf, grid);
 
-    pnanovdb_root_handle_t root = { pnanovdb_address_offset(tree.address, PNANOVDB_GRID_SIZE + PNANOVDB_TREE_SIZE) };
+    pnanovdb_root_handle_t root = { pnanovdb_address_offset(tree.address, PNANOVDB_TREE_SIZE) };
 
     pnanovdb_tree_set_first_root(buf, tree, root);
 
