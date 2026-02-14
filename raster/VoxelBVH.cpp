@@ -497,8 +497,8 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
         {
             pnanovdb_compute_resource_t resources[3u] = {};
             resources[0u].buffer_transient = constant_transient;
-            resources[1u].buffer_transient = nanovdb_transient;
-            resources[2u].buffer_transient = ijkl_transient;
+            resources[1u].buffer_transient = ijkl_transient;
+            resources[2u].buffer_transient = nanovdb_transient;
 
             pnanovdb_uint32_t workgroup_count = (ijkl_count + 255u) / 256u;
 

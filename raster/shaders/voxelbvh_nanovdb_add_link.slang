@@ -59,7 +59,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         for (uint s_idx = 0u; s_idx < 256u; s_idx++)
         {
             type = s_types[s_idx];
-            if (type == 1u || type == 2u || type == 3u)
+            if (type >= 1u && type <= 4u)
             {
                 chunk_idx = pass_idx * 65536u + group_idx.x + 256u * s_idx;
 
@@ -75,13 +75,10 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                     for (uint tile_idx = thread_idx.x; tile_idx < count; tile_idx += 256u)
                     {
                         pnanovdb_root_tile_handle_t tile = pnanovdb_root_get_tile(grid_type, root, tile_idx);
-                        if (pnanovdb_root_tile_get_child_mask(buf, tile))
+                        int64_t child_off = pnanovdb_root_tile_get_child(buf, tile);
+                        if (child_off == 1)
                         {
-                            pnanovdb_upper_handle_t child = pnanovdb_root_get_child(grid_type, buf, root, tile);
-                            if (child.address.byte_offset == uint64_t(1u))
-                            {
-                                total_new_bytes += PNANOVDB_GRID_TYPE_GET(grid_type, upper_size);
-                            }
+                            total_new_bytes += PNANOVDB_GRID_TYPE_GET(grid_type, upper_size);
                         }
                     }
                 }
@@ -94,7 +91,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                         if (pnanovdb_upper_get_child_mask(buf, upper, n))
                         {
                             pnanovdb_lower_handle_t child = pnanovdb_upper_get_child(grid_type, buf, upper, n);
-                            if (pnanovdb_address_is_null(child.address))
+                            if (child.address.byte_offset == upper.address.byte_offset)
                             {
                                 total_new_bytes += PNANOVDB_GRID_TYPE_GET(grid_type, lower_size);
                             }
@@ -110,7 +107,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                         if (pnanovdb_lower_get_child_mask(buf, lower, n))
                         {
                             pnanovdb_leaf_handle_t child = pnanovdb_lower_get_child(grid_type, buf, lower, n);
-                            if (pnanovdb_address_is_null(child.address))
+                            if (child.address.byte_offset == lower.address.byte_offset)
                             {
                                 total_new_bytes += PNANOVDB_GRID_TYPE_GET(grid_type, leaf_size);
                             }
@@ -160,7 +157,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         for (uint s_idx = 0u; s_idx < 256u; s_idx++)
         {
             type = s_types[s_idx];
-            if (type == 1u || type == 2u || type == 3u)
+            if (type >= 1u && type <= 4u)
             {
                 chunk_idx = pass_idx * 65536u + group_idx.x + 256u * s_idx;
 
@@ -176,15 +173,12 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                     for (uint tile_idx = thread_idx.x; tile_idx < count; tile_idx += 256u)
                     {
                         pnanovdb_root_tile_handle_t tile = pnanovdb_root_get_tile(grid_type, root, tile_idx);
-                        if (pnanovdb_root_tile_get_child_mask(buf, tile))
+                        int64_t child_off = pnanovdb_root_tile_get_child(buf, tile);
+                        if (child_off == 1)
                         {
-                            pnanovdb_upper_handle_t child = pnanovdb_root_get_child(grid_type, buf, root, tile);
-                            if (child.address.byte_offset == uint64_t(1u))
-                            {
-                                child.address.byte_offset = allocation_offset;
-                                pnanovdb_root_set_child(grid_type, buf, root, tile, child);
-                                allocation_offset += PNANOVDB_GRID_TYPE_GET(grid_type, upper_size);
-                            }
+                            pnanovdb_upper_handle_t child = {allocation_offset};
+                            pnanovdb_root_set_child(grid_type, buf, root, tile, child);
+                            allocation_offset += PNANOVDB_GRID_TYPE_GET(grid_type, upper_size);
                         }
                     }
                 }
@@ -197,7 +191,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                         if (pnanovdb_upper_get_child_mask(buf, upper, n))
                         {
                             pnanovdb_lower_handle_t child = pnanovdb_upper_get_child(grid_type, buf, upper, n);
-                            if (pnanovdb_address_is_null(child.address))
+                            if (child.address.byte_offset == upper.address.byte_offset)
                             {
                                 child.address.byte_offset = allocation_offset;
                                 pnanovdb_upper_set_child(grid_type, buf, upper, n, child);
@@ -215,7 +209,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                         if (pnanovdb_lower_get_child_mask(buf, lower, n))
                         {
                             pnanovdb_leaf_handle_t child = pnanovdb_lower_get_child(grid_type, buf, lower, n);
-                            if (pnanovdb_address_is_null(child.address))
+                            if (child.address.byte_offset == lower.address.byte_offset)
                             {
                                 child.address.byte_offset = allocation_offset;
                                 pnanovdb_lower_set_child(grid_type, buf, lower, n, child);

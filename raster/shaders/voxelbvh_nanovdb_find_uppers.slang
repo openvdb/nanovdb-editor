@@ -77,13 +77,11 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                 for (uint tile_idx = thread_idx.x; tile_idx < count; tile_idx += 256u)
                 {
                     pnanovdb_root_tile_handle_t tile = pnanovdb_root_get_tile(grid_type, root, tile_idx);
-                    if (pnanovdb_root_tile_get_child_mask(buf, tile))
+                    int64_t child_off = pnanovdb_root_tile_get_child(buf, tile);
+                    if (child_off != 0 && child_off != 1)
                     {
                         pnanovdb_upper_handle_t child = pnanovdb_root_get_child(grid_type, buf, root, tile);
-                        if (!pnanovdb_address_is_null(child.address))
-                        {
-                            set_mask(child.address, 2u);
-                        }
+                        set_mask(child.address, 2u);
                     }
                 }
             }

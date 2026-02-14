@@ -123,13 +123,68 @@ void voxelbvh_test()
 
     // list out root tiles
     pnanovdb_uint32_t root_tile_count = pnanovdb_root_get_tile_count(buf, root);
-    printf("root_tile_count(%u)\n", root_tile_count);
-    for (pnanovdb_uint32_t n = 0u; n < root_tile_count; n++)
+    pnanovdb_uint32_t upper_count = 0u;
+    pnanovdb_uint32_t lower_count = 0u;
+    pnanovdb_uint32_t leaf_count = 0u;
+    pnanovdb_uint32_t upper_count_bad = 0u;
+    pnanovdb_uint32_t lower_count_bad = 0u;
+    pnanovdb_uint32_t leaf_count_bad = 0u;
+    for (pnanovdb_uint32_t root_n = 0u; root_n < root_tile_count; root_n++)
     {
-        pnanovdb_root_tile_handle_t tile = pnanovdb_root_get_tile(grid_type, root, n);
+        pnanovdb_root_tile_handle_t tile = pnanovdb_root_get_tile(grid_type, root, root_n);
         pnanovdb_int64_t child = pnanovdb_root_tile_get_child(buf, tile);
-        printf("root_tile[%u] child(%zu)\n", n, child);
+        printf("root_tile[%u] child(%zu)\n", root_n, child);
+        if (child)
+        {
+            pnanovdb_upper_handle_t upper = pnanovdb_root_get_child(grid_type, buf, root, tile);
+            if (upper.address.byte_offset == root.address.byte_offset)
+            {
+                upper_count_bad++;
+                continue;
+            }
+            upper_count++;
+            if (upper_count < 16u)
+            {
+                printf("upper[%zu]\n", upper.address.byte_offset);
+            }
+            for (pnanovdb_uint32_t upper_n = 0u; upper_n < PNANOVDB_UPPER_TABLE_COUNT; upper_n++)
+            {
+                if (pnanovdb_upper_get_child_mask(buf, upper, upper_n))
+                {
+                    pnanovdb_lower_handle_t lower = pnanovdb_upper_get_child(grid_type, buf, upper, upper_n);
+                    if (lower.address.byte_offset == upper.address.byte_offset)
+                    {
+                        lower_count_bad++;
+                        continue;
+                    }
+                    lower_count++;
+                    if (lower_count < 16u)
+                    {
+                        printf("lower[%zu]\n", lower.address.byte_offset);
+                    }
+                    for (pnanovdb_uint32_t lower_n = 0u; lower_n < PNANOVDB_LOWER_TABLE_COUNT; lower_n++)
+                    {
+                        if (pnanovdb_lower_get_child_mask(buf, lower, lower_n))
+                        {
+                            pnanovdb_leaf_handle_t leaf = pnanovdb_lower_get_child(grid_type, buf, lower, lower_n);
+                            if (leaf.address.byte_offset == lower.address.byte_offset)
+                            {
+                                leaf_count_bad++;
+                                continue;
+                            }
+                            leaf_count++;
+                            if (leaf_count < 16u)
+                            {
+                                printf("leaf[%zu]\n", leaf.address.byte_offset);
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
+    printf("node_counts: root(%u) upper(%u) lower(%u) leaf(%u)\n", root_tile_count, upper_count, lower_count, leaf_count);
+    printf("bad node_counts: upper(%u) lower(%u) leaf(%u)\n", upper_count_bad, lower_count_bad, leaf_count_bad);
 
     uint64_t unique_count = 0llu;
     pnanovdb_address_t addr_old = {};

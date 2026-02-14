@@ -78,7 +78,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                     if (pnanovdb_lower_get_child_mask(buf, lower, n))
                     {
                         pnanovdb_leaf_handle_t child = pnanovdb_lower_get_child(grid_type, buf, lower, n);
-                        if (!pnanovdb_address_is_null(child.address))
+                        if (child.address.byte_offset != lower.address.byte_offset)
                         {
                             set_mask(child.address, 4u);
                         }
