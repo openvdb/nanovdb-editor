@@ -242,8 +242,7 @@ void voxelbvh_nanovdb_init(const pnanovdb_compute_t* compute,
                            pnanovdb_compute_buffer_t* nanovdb_inout,
                            pnanovdb_uint64_t nanovdb_word_count,
                            const pnanovdb_coord_t* root_tile_coords,
-                           pnanovdb_uint32_t root_tile_count,
-                           pnanovdb_bool_t allocate_node_pairs)
+                           pnanovdb_uint32_t root_tile_count)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -342,8 +341,7 @@ void voxelbvh_nanovdb_add_nodes(const pnanovdb_compute_t* compute,
                                 pnanovdb_compute_queue_t* queue,
                                 pnanovdb_voxelbvh_context_t* voxelbvh_context,
                                 pnanovdb_compute_buffer_t* nanovdb_inout,
-                                pnanovdb_uint64_t nanovdb_word_count,
-                                pnanovdb_bool_t allocate_node_pairs)
+                                pnanovdb_uint64_t nanovdb_word_count)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -451,7 +449,6 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
                                                 pnanovdb_voxelbvh_context_t* voxelbvh_context,
                                                 pnanovdb_compute_buffer_t* nanovdb_inout,
                                                 pnanovdb_uint64_t nanovdb_word_count,
-                                                pnanovdb_bool_t allocate_node_pairs,
                                                 pnanovdb_compute_buffer_t* ijkl_in,
                                                 pnanovdb_uint64_t ijkl_count)
 {
@@ -512,14 +509,13 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
         }
 
         voxelbvh_nanovdb_add_nodes(
-            compute, queue, voxelbvh_context, nanovdb_inout, nanovdb_word_count, allocate_node_pairs);
+            compute, queue, voxelbvh_context, nanovdb_inout, nanovdb_word_count);
     }
 }
 
 pnanovdb_compute_array_t* voxelbvh_nanovdb_add_nodes_from_key_array(const pnanovdb_compute_t* compute,
                                                                     pnanovdb_compute_queue_t* queue,
                                                                     pnanovdb_voxelbvh_context_t* voxelbvh_context,
-                                                                    pnanovdb_bool_t allocate_node_pairs,
                                                                     pnanovdb_compute_array_t* ijkl_in)
 {
     auto ctx = cast(voxelbvh_context);
@@ -544,10 +540,10 @@ pnanovdb_compute_array_t* voxelbvh_nanovdb_add_nodes_from_key_array(const pnanov
     gpu_array_alloc_device(compute, queue, nanovdb_gpu_array, nanovdb_array);
 
     voxelbvh_nanovdb_init(compute, queue, voxelbvh_context, nanovdb_gpu_array->device_buffer, 2u * nanovdb_uint64_count,
-                          root_coords, 1u, PNANOVDB_FALSE);
+                          root_coords, 1u);
 
     voxelbvh_nanovdb_add_nodes_from_key_buffer(compute, queue, voxelbvh_context, nanovdb_gpu_array->device_buffer,
-                                               2u * nanovdb_uint64_count, allocate_node_pairs,
+                                               2u * nanovdb_uint64_count,
                                                ijkl_gpu_array->device_buffer, ijkl_count);
 
     gpu_array_readback(compute, queue, nanovdb_gpu_array, nanovdb_array);

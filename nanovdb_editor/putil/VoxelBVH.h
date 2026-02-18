@@ -51,22 +51,19 @@ typedef struct pnanovdb_voxelbvh_t
                                               pnanovdb_compute_buffer_t* nanovdb_inout,
                                               pnanovdb_uint64_t nanovdb_word_count,
                                               const pnanovdb_coord_t* root_tile_coords,
-                                              pnanovdb_uint32_t root_tile_count,
-                                              pnanovdb_bool_t allocate_node_pairs);
+                                              pnanovdb_uint32_t root_tile_count);
 
     void(PNANOVDB_ABI* voxelbvh_nanovdb_add_nodes)(const pnanovdb_compute_t* compute,
                                                    pnanovdb_compute_queue_t* queue,
                                                    pnanovdb_voxelbvh_context_t* context,
                                                    pnanovdb_compute_buffer_t* nanovdb_inout,
-                                                   pnanovdb_uint64_t nanovdb_word_count,
-                                                   pnanovdb_bool_t allocate_node_pairs);
+                                                   pnanovdb_uint64_t nanovdb_word_count);
 
     void(PNANOVDB_ABI* voxelbvh_nanovdb_add_nodes_from_key_buffer)(const pnanovdb_compute_t* compute,
                                                                    pnanovdb_compute_queue_t* queue,
                                                                    pnanovdb_voxelbvh_context_t* context,
                                                                    pnanovdb_compute_buffer_t* nanovdb_inout,
                                                                    pnanovdb_uint64_t nanovdb_word_count,
-                                                                   pnanovdb_bool_t allocate_node_pairs,
                                                                    pnanovdb_compute_buffer_t* ijkl_in,
                                                                    pnanovdb_uint64_t ijkl_count);
 
@@ -74,7 +71,6 @@ typedef struct pnanovdb_voxelbvh_t
         const pnanovdb_compute_t* compute,
         pnanovdb_compute_queue_t* queue,
         pnanovdb_voxelbvh_context_t* context,
-        pnanovdb_bool_t allocate_node_pairs,
         pnanovdb_compute_array_t* ijkl_in);
 
     void(PNANOVDB_ABI* voxelbvh_from_gaussians)(const pnanovdb_compute_t* compute,

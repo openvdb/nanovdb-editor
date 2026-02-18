@@ -103,7 +103,7 @@ void voxelbvh_test()
     }
 
     pnanovdb_compute_array_t* built_nanovdb_array =
-        voxel_bvh.voxelbvh_nanovdb_add_nodes_from_key_array(&compute, queue, voxelbvh_ctx, PNANOVDB_FALSE, ijkl_array);
+        voxel_bvh.voxelbvh_nanovdb_add_nodes_from_key_array(&compute, queue, voxelbvh_ctx, ijkl_array);
 
     pnanovdb_buf_t buf = pnanovdb_make_buf(
         (uint32_t*)built_nanovdb_array->data,
