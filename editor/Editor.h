@@ -11,7 +11,7 @@
 
 #include "nanovdb_editor/putil/Reflect.h"
 #include "nanovdb_editor/putil/Editor.h"
-
+#include "PipelineTypes.h"
 
 #include <thread>
 #include <atomic>
@@ -156,6 +156,8 @@ struct EditorWorker
     std::atomic<bool> params_dirty{ false };
     std::atomic<bool> views_need_sync{ false }; // Signal that views need to sync from scene_manager
     std::recursive_mutex shader_params_mutex; // TODO: Use mutex per map_params()/unmap_params() call
+    std::recursive_mutex pipeline_params_mutex; // Protects pipeline stage params during map/unmap
+    std::atomic<bool> pipeline_params_dirty{ false }; // Signal that pipeline params were modified
     PendingData<pnanovdb_compute_array_t> pending_nanovdb;
     PendingData<pnanovdb_compute_array_t> pending_data_array;
     PendingData<pnanovdb_raster_gaussian_data_t> pending_gaussian_data;
@@ -209,7 +211,16 @@ static inline pnanovdb_bool_t pnanovdb_editor_token_is_valid(const pnanovdb_edit
 }
 // -----------------------------------------------------------
 
+// ------------------------------------------------ Shader Parameter Provider Priorities
+constexpr uint32_t kShaderParamPriorityDefaults = 0;    // Shader JSON defaults (lowest)
+constexpr uint32_t kShaderParamPriorityValues   = 100;  // Scene object values
+constexpr uint32_t kShaderParamPriorityPanel    = 200;  // Properties panel overrides (highest)
+// -----------------------------------------------------------
+
 // Forward declaration for execute_removal function
 void execute_removal(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
+
+// View selection
+void select_render_view(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
 
 } // namespace pnanovdb_editor

@@ -15,6 +15,124 @@
 #include "nanovdb_editor/putil/Compute.h"
 #include "nanovdb_editor/putil/Raster.h"
 
+// ------------------------------------------------ Pipeline Types
+
+enum pnanovdb_pipeline_stage_t
+{
+    pnanovdb_pipeline_stage_load = 0,
+    pnanovdb_pipeline_stage_process = 1,
+    pnanovdb_pipeline_stage_render = 2,
+    pnanovdb_pipeline_stage_count
+};
+
+typedef pnanovdb_uint32_t pnanovdb_pipeline_type_t;
+
+// ------------------------------------------------ Pipeline Parameters
+
+typedef struct pnanovdb_pipeline_params_t
+{
+    void* data;
+    pnanovdb_uint64_t size;
+    const pnanovdb_reflect_data_type_t* type;
+} pnanovdb_pipeline_params_t;
+
+// ------------------------------------------------ Pipeline Descriptors
+
+typedef struct pnanovdb_pipeline_shader_entry_t
+{
+    const char* shader_name;
+    const char* shader_group;
+    pnanovdb_bool_t overridable;
+} pnanovdb_pipeline_shader_entry_t;
+
+typedef struct pnanovdb_scene_object_t pnanovdb_scene_object_t;
+
+typedef enum pnanovdb_pipeline_result_t
+{
+    pnanovdb_pipeline_result_success = 0,
+    pnanovdb_pipeline_result_skipped = 1,
+    pnanovdb_pipeline_result_no_data = 2,
+    pnanovdb_pipeline_result_error = 3,
+    pnanovdb_pipeline_result_pending = 4
+} pnanovdb_pipeline_result_t;
+
+typedef enum pnanovdb_pipeline_render_method_t
+{
+    pnanovdb_pipeline_render_method_none = 0,
+    pnanovdb_pipeline_render_method_nanovdb = 1,
+    pnanovdb_pipeline_render_method_raster2d = 2
+} pnanovdb_pipeline_render_method_t;
+
+typedef struct pnanovdb_pipeline_context_t pnanovdb_pipeline_context_t;
+
+typedef void (*pnanovdb_pipeline_init_params_fn)(pnanovdb_pipeline_params_t* params);
+typedef pnanovdb_pipeline_result_t (*pnanovdb_pipeline_execute_fn)(pnanovdb_scene_object_t* obj,
+                                                                   pnanovdb_pipeline_context_t* ctx);
+typedef pnanovdb_pipeline_render_method_t (*pnanovdb_pipeline_get_render_method_fn)(void);
+typedef void* (*pnanovdb_pipeline_map_params_fn)(pnanovdb_scene_object_t* obj);
+
+typedef struct pnanovdb_pipeline_param_field_t pnanovdb_pipeline_param_field_t;
+
+typedef struct pnanovdb_pipeline_descriptor_t
+{
+    pnanovdb_pipeline_type_t type;
+    pnanovdb_pipeline_stage_t stage;
+    const char* name;
+
+    const pnanovdb_pipeline_shader_entry_t* shaders;
+    pnanovdb_uint32_t shader_count;
+
+    pnanovdb_uint64_t params_size;
+    const char* params_type_name;
+
+    pnanovdb_pipeline_init_params_fn init_params;
+    pnanovdb_pipeline_execute_fn execute;
+    pnanovdb_pipeline_get_render_method_fn get_render_method;
+    pnanovdb_pipeline_map_params_fn map_params;
+
+    const pnanovdb_pipeline_param_field_t* param_fields;
+    pnanovdb_uint32_t param_field_count;
+} pnanovdb_pipeline_descriptor_t;
+
+struct pnanovdb_shader_params_desc_t
+{
+    void* data;
+    pnanovdb_uint64_t data_size;
+
+    const char* shader_name;
+
+    const char** element_names;
+    const char** element_typenames;
+    pnanovdb_uint64_t* element_offsets;
+    pnanovdb_uint64_t element_count;
+};
+typedef struct pnanovdb_shader_params_desc_t pnanovdb_shader_params_desc_t;
+
+// ------------------------------------------------ Shader Parameter Provider Callback Interface
+
+typedef struct pnanovdb_shader_param_provider_ctx_t pnanovdb_shader_param_provider_ctx_t;
+
+typedef struct pnanovdb_shader_param_value_t
+{
+    const void* data;
+    pnanovdb_uint64_t size;
+    pnanovdb_uint64_t element_count;
+    pnanovdb_uint32_t type; // ImGuiDataType-compatible type
+} pnanovdb_shader_param_value_t;
+
+// Provider callback function type - called to retrieve a parameter value by name
+typedef pnanovdb_bool_t (*pnanovdb_shader_param_provider_fn)(pnanovdb_shader_param_provider_ctx_t* ctx,
+                                                             const char* shader_name,
+                                                             const char* param_name,
+                                                             pnanovdb_shader_param_value_t* out_value);
+
+// Provider descriptor - can be registered to provide shader parameters
+typedef struct pnanovdb_shader_param_provider_t
+{
+    pnanovdb_shader_param_provider_ctx_t* ctx; // User context passed to callback
+    pnanovdb_shader_param_provider_fn get_value; // Get parameter value callback
+} pnanovdb_shader_param_provider_t;
+
 // ------------------------------------------------ Editor -----------------------------------------------------------
 
 struct pnanovdb_editor_t;
@@ -136,6 +254,65 @@ typedef struct pnanovdb_editor_t
     void(PNANOVDB_ABI* unmap_params)(pnanovdb_editor_t* editor,
                                      pnanovdb_editor_token_t* scene,
                                      pnanovdb_editor_token_t* name);
+
+    void(PNANOVDB_ABI* set_pipeline)(pnanovdb_editor_t* editor,
+                                     pnanovdb_editor_token_t* scene,
+                                     pnanovdb_editor_token_t* name,
+                                     pnanovdb_pipeline_stage_t stage,
+                                     pnanovdb_pipeline_type_t type);
+
+    pnanovdb_pipeline_type_t(PNANOVDB_ABI* get_pipeline)(pnanovdb_editor_t* editor,
+                                                         pnanovdb_editor_token_t* scene,
+                                                         pnanovdb_editor_token_t* name,
+                                                         pnanovdb_pipeline_stage_t stage);
+
+    void(PNANOVDB_ABI* mark_pipeline_dirty)(pnanovdb_editor_t* editor,
+                                            pnanovdb_editor_token_t* scene,
+                                            pnanovdb_editor_token_t* name);
+
+    void(PNANOVDB_ABI* add_nanovdb_3)(pnanovdb_editor_t* editor,
+                                      pnanovdb_editor_token_t* scene,
+                                      pnanovdb_editor_token_t* name,
+                                      pnanovdb_compute_array_t* array,
+                                      pnanovdb_pipeline_type_t process_pipeline,
+                                      pnanovdb_pipeline_type_t render_pipeline);
+    void(PNANOVDB_ABI* add_gaussian_data_3)(pnanovdb_editor_t* editor,
+                                            pnanovdb_editor_token_t* scene,
+                                            pnanovdb_editor_token_t* name,
+                                            const pnanovdb_editor_gaussian_data_desc_t* desc,
+                                            pnanovdb_pipeline_type_t process_pipeline,
+                                            pnanovdb_pipeline_type_t render_pipeline);
+
+    void(PNANOVDB_ABI* set_visible)(pnanovdb_editor_t* editor,
+                                    pnanovdb_editor_token_t* scene,
+                                    pnanovdb_editor_token_t* name,
+                                    pnanovdb_bool_t visible);
+    pnanovdb_bool_t(PNANOVDB_ABI* get_visible)(pnanovdb_editor_t* editor,
+                                               pnanovdb_editor_token_t* scene,
+                                               pnanovdb_editor_token_t* name);
+
+    // Named arrays - multiple arrays per scene object, identified by name
+    void(PNANOVDB_ABI* add_named_array)(pnanovdb_editor_t* editor,
+                                        pnanovdb_editor_token_t* scene,
+                                        pnanovdb_editor_token_t* object_name,
+                                        const char* array_name,
+                                        pnanovdb_compute_array_t* array);
+    pnanovdb_compute_array_t*(PNANOVDB_ABI* get_named_array)(pnanovdb_editor_t* editor,
+                                                             pnanovdb_editor_token_t* scene,
+                                                             pnanovdb_editor_token_t* object_name,
+                                                             const char* array_name);
+
+    // Per-stage pipeline parameters. Call unmap_pipeline_params after every map_pipeline_params (even if map returned null).
+    pnanovdb_pipeline_params_t*(PNANOVDB_ABI* map_pipeline_params)(pnanovdb_editor_t* editor,
+                                                                   pnanovdb_editor_token_t* scene,
+                                                                   pnanovdb_editor_token_t* name,
+                                                                   pnanovdb_pipeline_stage_t stage);
+
+    // Releases lock and marks stage dirty. Must be called after every map_pipeline_params.
+    void(PNANOVDB_ABI* unmap_pipeline_params)(pnanovdb_editor_t* editor,
+                                              pnanovdb_editor_token_t* scene,
+                                              pnanovdb_editor_token_t* name,
+                                              pnanovdb_pipeline_stage_t stage);
 } pnanovdb_editor_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_editor_t
@@ -167,6 +344,17 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(update_camera_2, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(remove, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(map_params, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(unmap_params, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(set_pipeline, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(get_pipeline, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(mark_pipeline_dirty, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(add_nanovdb_3, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(add_gaussian_data_3, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(set_visible, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(get_visible, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(add_named_array, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(get_named_array, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(map_pipeline_params, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(unmap_pipeline_params, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE

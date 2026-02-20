@@ -12,7 +12,9 @@
 #include "SceneTree.h"
 #include "ImguiInstance.h"
 #include "EditorScene.h"
+#include "EditorSceneManager.h"
 #include "EditorToken.h"
+#include "Editor.h"
 #include "Console.h"
 
 #include <vector>
@@ -562,12 +564,22 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
 
             // Show other scene items
             auto renderSceneItems = [this, ptr, indentSpacing](const auto& /*itemMap*/, const char* treeLabel,
-                                                               auto& pendingField, ViewType viewType)
+                                                               ViewType viewType)
             {
                 if (renderTreeNodeHeader(treeLabel))
                 {
                     // Collect items to delete (can't delete while iterating)
                     std::vector<std::string> itemsToDelete;
+
+                    pnanovdb_editor_t* editor = ptr->editor_scene->get_editor();
+                    pnanovdb_editor_token_t* current_scene = ptr->editor_scene->get_current_scene_token();
+                    auto* scene_manager = ptr->editor_scene->get_scene_manager();
+
+                    // If no scene token, use default scene
+                    if (!current_scene && editor)
+                    {
+                        current_scene = editor->get_token(DEFAULT_SCENE_NAME);
+                    }
 
                     ptr->editor_scene->for_each_view(
                         viewType,
@@ -582,9 +594,51 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                             bool isSelected = isSelectedInCurrentScene(name, ptr, viewType);
                             bool deleteRequested = false;
 
-                            if (renderSceneItem(name, isSelected, indentSpacing, false, nullptr, &deleteRequested))
+                            // Get visibility from SceneObject
+                            pnanovdb_bool_t isVisible = PNANOVDB_TRUE;
+                            if (scene_manager)
                             {
-                                pendingField = name;
+                                scene_manager->with_object(current_scene, token,
+                                    [&isVisible](pnanovdb_editor::SceneObject* obj)
+                                    {
+                                        if (obj)
+                                            isVisible = obj->visible ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+                                    });
+                            }
+
+                            pnanovdb_bool_t prevVisible = isVisible;
+                            if (renderSceneItem(name, isSelected, indentSpacing, false, &isVisible, &deleteRequested))
+                            {
+                                if (editor && current_scene)
+                                {
+                                    // Set pending viewport so handle_pending_view_changes processes the selection
+                                    if (viewType == ViewType::NanoVDBs)
+                                        ptr->pending.viewport_nanovdb_array = name;
+                                    else if (viewType == ViewType::GaussianScenes)
+                                        ptr->pending.viewport_gaussian_view = name;
+                                    pnanovdb_editor::select_render_view(editor, current_scene, token);
+                                }
+                            }
+
+                            // Update visibility if changed
+                            if (isVisible != prevVisible && scene_manager)
+                            {
+                                scene_manager->with_object(current_scene, token,
+                                    [&isVisible](pnanovdb_editor::SceneObject* obj)
+                                    {
+                                        if (obj)
+                                            obj->visible = (isVisible == PNANOVDB_TRUE);
+                                    });
+
+                                // When making an object visible, auto-switch render view to it
+                                if (isVisible == PNANOVDB_TRUE && editor && current_scene)
+                                {
+                                    if (viewType == ViewType::NanoVDBs)
+                                        ptr->pending.viewport_nanovdb_array = name;
+                                    else if (viewType == ViewType::GaussianScenes)
+                                        ptr->pending.viewport_gaussian_view = name;
+                                    pnanovdb_editor::select_render_view(editor, current_scene, token);
+                                }
                             }
 
                             if (deleteRequested)
@@ -596,15 +650,6 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                     // Process deletions after iteration
                     if (!itemsToDelete.empty() && ptr->editor_scene)
                     {
-                        pnanovdb_editor_t* editor = ptr->editor_scene->get_editor();
-                        pnanovdb_editor_token_t* current_scene = ptr->editor_scene->get_current_scene_token();
-
-                        // If no scene token, use default scene
-                        if (!current_scene && editor)
-                        {
-                            current_scene = editor->get_token(DEFAULT_SCENE_NAME);
-                        }
-
                         for (const auto& itemName : itemsToDelete)
                         {
                             pnanovdb_editor_token_t* name_token = EditorToken::getInstance().getToken(itemName.c_str());
@@ -630,15 +675,13 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                 const auto& nanovdb_views = ptr->editor_scene->get_nanovdb_views();
                 if (!nanovdb_views.empty())
                 {
-                    renderSceneItems(
-                        nanovdb_views, "NanoVDB Views", ptr->pending.viewport_nanovdb_array, ViewType::NanoVDBs);
+                    renderSceneItems(nanovdb_views, "NanoVDB Views", ViewType::NanoVDBs);
                 }
 
                 const auto& gaussian_views = ptr->editor_scene->get_gaussian_views();
                 if (!gaussian_views.empty())
                 {
-                    renderSceneItems(gaussian_views, "Gaussian Views", ptr->pending.viewport_gaussian_view,
-                                     ViewType::GaussianScenes);
+                    renderSceneItems(gaussian_views, "Gaussian Views", ViewType::GaussianScenes);
                 }
             }
 

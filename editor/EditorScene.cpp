@@ -17,6 +17,7 @@
 #include "ShaderMonitor.h"
 #include "ShaderCompileUtils.h"
 #include "Console.h"
+#include "Pipeline.h"
 
 #include "raster/Raster.h"
 
@@ -137,7 +138,7 @@ SceneObject* EditorScene::get_render_scene_object() const
 void EditorScene::sync_current_view_state(SyncDirection sync_direction)
 {
     // Copy scene object data while holding the mutex to avoid UAF if worker thread replaces map entry
-    SceneObjectType obj_type = SceneObjectType::NanoVDB;
+    pnanovdb_pipeline_render_method_t render_method = pnanovdb_pipeline_render_method_nanovdb;
     void* obj_shader_params = nullptr;
     std::string obj_shader_name;
 
@@ -145,22 +146,27 @@ void EditorScene::sync_current_view_state(SyncDirection sync_direction)
         [&](SceneObject* scene_obj)
         {
             if (!scene_obj)
+            {
                 return true;
+            }
 
             // Check if this is the render view object
             if (!m_render_view_selection.is_valid())
-                return false; // Stop iteration
+            {
+                return false;
+            }
 
             pnanovdb_editor_token_t* scene_token = get_current_scene_token();
             if (scene_obj->scene_token == scene_token && scene_obj->name_token == m_render_view_selection.name_token)
             {
-                // Found it - copy the fields we need
-                obj_type = scene_obj->type;
-                obj_shader_params = scene_obj->shader_params;
-                obj_shader_name = token_to_string(scene_obj->shader_name.shader_name);
-                return false; // Stop iteration
+                // Use render pipeline to determine params type (handles Gaussian->NanoVDB conversion)
+                render_method = pipeline_get_render_method(scene_obj->pipeline.render().type);
+                obj_shader_params = scene_obj->params.shader_params;
+                const char* shader = pipeline_get_shader(scene_obj);
+                obj_shader_name = shader ? shader : "";
+                return false;
             }
-            return true; // Continue iteration
+            return true;
         });
 
     // Now process with the copied data (no longer holding mutex)
@@ -173,7 +179,7 @@ void EditorScene::sync_current_view_state(SyncDirection sync_direction)
             m_imgui_instance->pending.update_shader = true;
         }
 
-        copy_shader_params(obj_type, obj_shader_params, obj_shader_name, sync_direction);
+        copy_shader_params(render_method, obj_shader_params, obj_shader_name, sync_direction);
     }
 }
 
@@ -182,6 +188,8 @@ void EditorScene::clear_editor_view_state()
     // Clear all view-related pointers before switching to a new view
     m_editor->impl->nanovdb_array = nullptr;
     m_editor->impl->gaussian_data = nullptr;
+    m_editor->impl->shader_params = nullptr;
+    m_editor->impl->shader_params_data_type = nullptr;
 }
 
 void EditorScene::copy_editor_shader_params_to_ui(SceneShaderParams* params)
@@ -240,7 +248,7 @@ void EditorScene::copy_ui_shader_params_from_to_editor(SceneShaderParams* params
     }
 }
 
-void EditorScene::copy_shader_params(SceneObjectType obj_type,
+void EditorScene::copy_shader_params(pnanovdb_pipeline_render_method_t render_method,
                                      void* obj_shader_params,
                                      const std::string& obj_shader_name,
                                      SyncDirection sync_direction,
@@ -249,12 +257,13 @@ void EditorScene::copy_shader_params(SceneObjectType obj_type,
     SceneShaderParams* params = nullptr;
     void* view_params = nullptr;
 
-    if (obj_type == SceneObjectType::GaussianData)
+    // Use render_method to determine which params struct to use (raster2d vs nanovdb)
+    if (render_method == pnanovdb_pipeline_render_method_raster2d)
     {
         params = &m_raster2d_params;
         view_params = get_view_params_with_fallback(m_raster2d_params, obj_shader_params);
     }
-    else if (obj_type == SceneObjectType::NanoVDB)
+    else if (render_method == pnanovdb_pipeline_render_method_nanovdb)
     {
         params = &m_nanovdb_params;
         view_params = get_view_params_with_fallback(m_nanovdb_params, obj_shader_params);
@@ -293,21 +302,27 @@ void EditorScene::load_view_into_editor_and_ui(SceneObject* scene_obj)
     clear_editor_view_state();
 
     // Load selected view's pointers into the editor state so rendering uses the active selection
-    SceneObjectType obj_type = scene_obj->type;
-    void* obj_shader_params = scene_obj->shader_params;
-    std::string obj_shader_name = token_to_string(scene_obj->shader_name.shader_name);
+    auto render_method = pipeline_get_render_method(scene_obj->pipeline.render().type);
+    void* obj_shader_params = scene_obj->params.shader_params;
+    const char* shader = pipeline_get_shader(scene_obj);
+    std::string obj_shader_name = shader ? shader : "";
 
-    if (obj_type == SceneObjectType::GaussianData)
+    if (render_method == pnanovdb_pipeline_render_method_nanovdb)
     {
-        m_editor->impl->gaussian_data = scene_obj->gaussian_data;
-        m_editor->impl->shader_params = obj_shader_params;
-        m_editor->impl->shader_params_data_type = m_raster_shader_params_data_type;
-    }
-    else if (obj_type == SceneObjectType::NanoVDB)
-    {
-        m_editor->impl->nanovdb_array = scene_obj->nanovdb_array;
+        // NanoVDB rendering - use nanovdb_array or converted_nanovdb (Raster3D stores in both; fallback for robustness)
+        pnanovdb_compute_array_t* array = scene_obj->resources.nanovdb_array
+                                              ? scene_obj->resources.nanovdb_array
+                                              : scene_obj->resources.converted_nanovdb;
+        m_editor->impl->nanovdb_array = array;
         m_editor->impl->shader_params = obj_shader_params;
         m_editor->impl->shader_params_data_type = nullptr;
+    }
+    else if (render_method == pnanovdb_pipeline_render_method_raster2d)
+    {
+        // Gaussian 2D splatting - load gaussian_data
+        m_editor->impl->gaussian_data = scene_obj->resources.gaussian_data;
+        m_editor->impl->shader_params = obj_shader_params;
+        m_editor->impl->shader_params_data_type = m_raster_shader_params_data_type;
     }
 
     // Update the shader name if it differs from current, and trigger shader recompilation
@@ -317,7 +332,8 @@ void EditorScene::load_view_into_editor_and_ui(SceneObject* scene_obj)
         m_imgui_instance->pending.update_shader = true;
     }
 
-    copy_shader_params(obj_type, obj_shader_params, obj_shader_name, SyncDirection::EditorToUI);
+    // Use render method for shader param copying (determines param struct layout)
+    copy_shader_params(render_method, obj_shader_params, obj_shader_name, SyncDirection::EditorToUI);
 
     // Note: Camera sync is NOT done here - camera is per-scene, not per-view
     // Camera syncing happens when:
@@ -466,17 +482,7 @@ void EditorScene::process_pending_editor_changes()
 
 void EditorScene::process_pending_ui_changes()
 {
-    // update pending GUI states
-    if (m_imgui_instance->pending.load_nvdb)
-    {
-        m_imgui_instance->pending.load_nvdb = false;
-        load_nanovdb_to_editor();
-    }
-    if (m_imgui_instance->pending.save_nanovdb)
-    {
-        m_imgui_instance->pending.save_nanovdb = false;
-        save_editor_nanovdb();
-    }
+    // TODO: remove those
     if (m_imgui_instance->pending.print_slice)
     {
         m_imgui_instance->pending.print_slice = false;
@@ -622,41 +628,39 @@ void EditorScene::sync_views_from_scene_manager()
         {
             if (!obj || !obj->scene_token || !obj->name_token || !obj->name_token->str)
             {
-                return true; // Continue iteration
+                return true;
             }
 
-            switch (obj->type)
+            if (obj->type == SceneObjectType::Camera)
             {
-            case SceneObjectType::NanoVDB:
-                if (obj->nanovdb_array && obj->nanovdb_array_owner)
+                if (obj->resources.camera_view && obj->resources.camera_view_owner)
                 {
-                    NanoVDBContext ctx{ obj->nanovdb_array_owner, obj->shader_params, obj->shader_params_array_owner };
-                    m_scene_view.add_nanovdb(obj->scene_token, obj->name_token, ctx);
-                }
-                break;
-
-            case SceneObjectType::GaussianData:
-                if (obj->gaussian_data && obj->gaussian_data_owner)
-                {
-                    GaussianDataContext ctx{ obj->gaussian_data_owner,
-                                             (pnanovdb_raster_shader_params_t*)obj->shader_params };
-                    m_scene_view.add_gaussian(obj->scene_token, obj->name_token, ctx);
-                }
-                break;
-
-            case SceneObjectType::Camera:
-                if (obj->camera_view && obj->camera_view_owner)
-                {
-                    CameraViewContext ctx{ obj->camera_view_owner };
+                    CameraViewContext ctx{ obj->resources.camera_view_owner };
                     m_scene_view.add_camera(obj->scene_token, obj->name_token, ctx);
                 }
-                break;
-
-            default:
-                break;
+            }
+            else
+            {
+                auto render_method = pipeline_get_render_method(obj->pipeline.render().type);
+                bool has_nanovdb = (obj->resources.nanovdb_array && obj->resources.nanovdb_array_owner) ||
+                                   (obj->resources.converted_nanovdb && obj->resources.converted_nanovdb_owner);
+                if (render_method == pnanovdb_pipeline_render_method_nanovdb && has_nanovdb)
+                {
+                    const auto& owner = obj->resources.nanovdb_array_owner ? obj->resources.nanovdb_array_owner
+                                                                           : obj->resources.converted_nanovdb_owner;
+                    NanoVDBContext ctx{ owner, obj->params.shader_params, obj->params.shader_params_array_owner };
+                    m_scene_view.add_nanovdb(obj->scene_token, obj->name_token, ctx);
+                }
+                else if (render_method == pnanovdb_pipeline_render_method_raster2d &&
+                         obj->resources.gaussian_data && obj->resources.gaussian_data_owner)
+                {
+                    GaussianDataContext ctx{ obj->resources.gaussian_data_owner,
+                                             (pnanovdb_raster_shader_params_t*)obj->params.shader_params };
+                    m_scene_view.add_gaussian(obj->scene_token, obj->name_token, ctx);
+                }
             }
 
-            return true; // Continue iteration
+            return true;
         });
 
     // After syncing, if worker specified a view to select, do so
@@ -729,6 +733,36 @@ void EditorScene::sync_views_from_scene_manager()
 
 void EditorScene::reload_shader_params_for_current_view()
 {
+    pnanovdb_pipeline_render_method_t render_method = pnanovdb_pipeline_render_method_none;
+    if (m_render_view_selection.is_valid())
+    {
+        pnanovdb_editor_token_t* scene_token = get_current_scene_token();
+        m_scene_manager.with_object(
+            scene_token, m_render_view_selection.name_token,
+            [&](SceneObject* scene_obj)
+            {
+                if (scene_obj)
+                    render_method = pipeline_get_render_method(scene_obj->pipeline.render().type);
+            });
+    }
+
+    if (render_method == pnanovdb_pipeline_render_method_none)
+    {
+        if (m_render_view_selection.type == ViewType::GaussianScenes)
+        {
+            render_method = pnanovdb_pipeline_render_method_raster2d;
+        }
+        else if (m_render_view_selection.type == ViewType::NanoVDBs)
+        {
+            render_method = pnanovdb_pipeline_render_method_nanovdb;
+        }
+    }
+
+    reload_shader_params_for_current_view(render_method);
+}
+
+void EditorScene::reload_shader_params_for_current_view(pnanovdb_pipeline_render_method_t render_method)
+{
     auto destroy_default_array = [&](SceneShaderParams& params)
     {
         if (params.default_array)
@@ -738,15 +772,14 @@ void EditorScene::reload_shader_params_for_current_view()
         }
     };
 
-    // Handle based on active render view
-    if (m_render_view_selection.type == ViewType::GaussianScenes)
+    if (render_method == pnanovdb_pipeline_render_method_raster2d)
     {
         destroy_default_array(m_raster2d_params);
         m_raster2d_params.default_array = m_scene_manager.create_initialized_shader_params(
             m_compute, nullptr, pnanovdb_editor::s_raster2d_shader_group, m_raster2d_params.size,
             m_raster_shader_params_data_type);
     }
-    else if (m_render_view_selection.type == ViewType::NanoVDBs)
+    else if (render_method == pnanovdb_pipeline_render_method_nanovdb)
     {
         destroy_default_array(m_nanovdb_params);
         // Use the already-synced editor shader name to avoid nested locks
@@ -843,15 +876,16 @@ void EditorScene::get_shader_params_for_current_view(void* shader_params_data)
                 return;
             }
 
-            // Copy fields while holding mutex to avoid UAF
-            SceneObjectType obj_type = scene_obj->type;
-            void* obj_shader_params = scene_obj->shader_params;
-            std::string obj_shader_name = token_to_string(scene_obj->shader_name.shader_name);
+            auto render_method = pipeline_get_render_method(scene_obj->pipeline.render().type);
+            void* obj_shader_params = scene_obj->params.shader_params;
+            const char* shader = pipeline_get_shader(scene_obj);
+            std::string obj_shader_name = shader ? shader : "";
 
             void* view_params = nullptr;
-            size_t copy_size =
-                (obj_type == SceneObjectType::GaussianData) ? m_raster2d_params.size : m_nanovdb_params.size;
-            copy_shader_params(obj_type, obj_shader_params, obj_shader_name, SyncDirection::UiToView, &view_params);
+            size_t copy_size = (render_method == pnanovdb_pipeline_render_method_raster2d)
+                                   ? m_raster2d_params.size
+                                   : m_nanovdb_params.size;
+            copy_shader_params(render_method, obj_shader_params, obj_shader_name, SyncDirection::UiToView, &view_params);
 
             if (view_params && copy_size > 0)
             {
@@ -860,9 +894,84 @@ void EditorScene::get_shader_params_for_current_view(void* shader_params_data)
         });
 }
 
-void EditorScene::handle_nanovdb_data_load(pnanovdb_compute_array_t* nanovdb_array, const char* filename)
+void EditorScene::update_scene_tree_after_conversion(pnanovdb_editor_token_t* scene_token,
+                                                     pnanovdb_editor_token_t* name_token)
 {
-    if (!filename)
+    if (!scene_token || !name_token)
+    {
+        return;
+    }
+
+    bool entry_replaced = false;
+    m_scene_manager.with_object(
+        scene_token, name_token,
+        [&](SceneObject* obj)
+        {
+            if (!obj)
+            {
+                Console::getInstance().addLog(Console::LogLevel::Warning,
+                    "update_scene_tree: object not found for '%s'",
+                    name_token->str ? name_token->str : "?");
+                return;
+            }
+
+            const auto& owner = obj->resources.nanovdb_array_owner
+                                    ? obj->resources.nanovdb_array_owner
+                                    : obj->resources.converted_nanovdb_owner;
+            if (!owner)
+            {
+                Console::getInstance().addLog(Console::LogLevel::Warning,
+                    "update_scene_tree: no nanovdb owner for '%s' (nanovdb_array=%p, converted=%p)",
+                    name_token->str ? name_token->str : "?",
+                    (void*)obj->resources.nanovdb_array,
+                    (void*)obj->resources.converted_nanovdb);
+                return;
+            }
+
+            // Remove old entry (placeholder or Gaussian) and replace with real NanoVDB
+            m_scene_view.remove(scene_token, name_token);
+            NanoVDBContext ctx{ owner, obj->params.shader_params, obj->params.shader_params_array_owner };
+            m_scene_view.add_nanovdb(scene_token, name_token, ctx);
+            entry_replaced = true;
+
+            Console::getInstance().addLog(Console::LogLevel::Debug,
+                "update_scene_tree: replaced entry for '%s' (array=%p)",
+                name_token->str ? name_token->str : "?", (void*)owner.get());
+        });
+
+    // Update the render view selection to NanoVDB type so rendering picks it up correctly
+    if (entry_replaced && m_render_view_selection.is_valid() && m_render_view_selection.name_token == name_token)
+    {
+        set_render_view(ViewType::NanoVDBs, name_token, scene_token);
+    }
+
+    // Only update global editor pointers if this object IS the active render view.
+    if (entry_replaced && m_render_view_selection.is_valid() && m_render_view_selection.name_token == name_token)
+    {
+        m_scene_manager.with_object(
+            scene_token, name_token,
+            [&](SceneObject* obj)
+            {
+                if (obj)
+                    load_view_into_editor_and_ui(obj);
+            });
+    }
+}
+
+void EditorScene::add_nanovdb_placeholder(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token)
+{
+    if (!scene_token || !name_token)
+    {
+        return;
+    }
+
+    NanoVDBContext placeholder;
+    m_scene_view.add_nanovdb(scene_token, name_token, placeholder);
+}
+
+void EditorScene::handle_nanovdb_data_load(pnanovdb_editor_token_t* scene, pnanovdb_compute_array_t* nanovdb_array, const char* filename)
+{
+    if (!scene || !filename)
     {
         return;
     }
@@ -871,7 +980,7 @@ void EditorScene::handle_nanovdb_data_load(pnanovdb_compute_array_t* nanovdb_arr
     std::string view_name = fsPath.stem().string();
 
     // Store in SceneManager as the single source of truth
-    pnanovdb_editor_token_t* scene_token = get_current_scene_token();
+    pnanovdb_editor_token_t* scene_token = scene;
     pnanovdb_editor_token_t* name_token = EditorToken::getInstance().getToken(view_name.c_str());
 
     // Do not create per-object params now; use shared defaults until user edits (copy-on-write)
@@ -887,12 +996,16 @@ void EditorScene::handle_nanovdb_data_load(pnanovdb_compute_array_t* nanovdb_arr
         scene_token, name_token, nanovdb_array, params_array ? params_array->data : nullptr);
 }
 
-void EditorScene::handle_gaussian_data_load(pnanovdb_raster_gaussian_data_t* gaussian_data,
+void EditorScene::handle_gaussian_data_load(pnanovdb_editor_token_t* scene,
+                                            pnanovdb_raster_gaussian_data_t* gaussian_data,
                                             pnanovdb_raster_shader_params_t* raster_params,
                                             const char* filename,
-                                            std::shared_ptr<pnanovdb_raster_gaussian_data_t>& old_gaussian_data_ptr)
+                                            std::shared_ptr<pnanovdb_raster_gaussian_data_t>& old_gaussian_data_ptr,
+                                            pnanovdb_pipeline_type_t process_pipeline,
+                                            pnanovdb_pipeline_type_t render_pipeline,
+                                            const pnanovdb_pipeline_params_t* process_params)
 {
-    if (!filename)
+    if (!scene || !filename)
     {
         return;
     }
@@ -900,18 +1013,41 @@ void EditorScene::handle_gaussian_data_load(pnanovdb_raster_gaussian_data_t* gau
     std::filesystem::path fsPath(filename);
     std::string view_name = fsPath.stem().string();
 
-    // Store in SceneManager as the single source of truth
-    pnanovdb_editor_token_t* scene_token = get_current_scene_token();
+    // Use the scene token captured when the load was initiated (not current scene,
+    // which may have changed if the user switched scenes during async rasterization)
+    pnanovdb_editor_token_t* scene_token = scene;
     pnanovdb_editor_token_t* name_token = EditorToken::getInstance().getToken(view_name.c_str());
 
     // Do not create per-object params now; use shared defaults until user edits (copy-on-write)
     pnanovdb_compute_array_t* params_array = nullptr;
 
-    // Add with deferred destruction handling
+    // Add with explicit pipeline configuration
     std::shared_ptr<pnanovdb_raster_gaussian_data_t> old_owner;
     m_scene_manager.add_gaussian_data(scene_token, name_token, gaussian_data, params_array,
                                       m_raster_shader_params_data_type, m_compute, m_editor->impl->raster,
-                                      m_device_queue, pnanovdb_editor::s_raster2d_gaussian_shader, &old_owner);
+                                      m_device_queue, pnanovdb_editor::s_raster2d_gaussian_shader, process_pipeline,
+                                      render_pipeline, &old_owner);
+
+    // Store source filepath and copy process params for re-conversion
+    m_scene_manager.with_object(scene_token, name_token,
+                                [filename, process_params](SceneObject* obj)
+                                {
+                                    if (!obj)
+                                        return;
+                                    obj->resources.source_filepath = filename;
+                                    if (process_params && process_params->data && process_params->size > 0)
+                                    {
+                                        void* copy = malloc(process_params->size);
+                                        if (copy)
+                                        {
+                                            memcpy(copy, process_params->data, process_params->size);
+                                            free(obj->pipeline.process().params.data);
+                                            obj->pipeline.process().params.data = copy;
+                                            obj->pipeline.process().params.size = process_params->size;
+                                            obj->pipeline.process().params.type = process_params->type;
+                                        }
+                                    }
+                                });
 
     // Chain old data through gaussian_data_old for deferred destruction
     if (old_owner)
@@ -1095,10 +1231,17 @@ bool EditorScene::is_selection_valid(const SceneSelection& selection) const
                 return;
             }
 
-            // Check that the object type matches the requested ViewType
-            if (selection.type == ViewType::NanoVDBs && obj->type == SceneObjectType::NanoVDB)
+            // Check that the object type matches the requested ViewType.
+            if (selection.type == ViewType::NanoVDBs)
             {
-                is_valid = true;
+                if (obj->type == SceneObjectType::NanoVDB)
+                {
+                    is_valid = true;
+                }
+                else if (obj->type == SceneObjectType::GaussianData && obj->resources.nanovdb_array != nullptr)
+                {
+                    is_valid = true;
+                }
             }
             else if (selection.type == ViewType::GaussianScenes && obj->type == SceneObjectType::GaussianData)
             {
@@ -1112,9 +1255,6 @@ bool EditorScene::is_selection_valid(const SceneSelection& selection) const
 // Scene Selection Management
 // ============================================================================
 
-// update_selection() removed; logic migrated into set_properties_selection()
-
-// Scene management
 EditorSceneManager* EditorScene::get_scene_manager() const
 {
     return &m_scene_manager;
@@ -1271,7 +1411,7 @@ void EditorScene::set_properties_selection(ViewType type,
                 {
                     Console::getInstance().addLog(Console::LogLevel::Debug,
                                                   "set_properties_selection: object found, shader_name='%s'",
-                                                  token_to_string_log(obj->shader_name.shader_name));
+                                                  token_to_string_log(obj->params.shader_name.shader_name));
                 }
                 else
                 {
@@ -1316,8 +1456,10 @@ void EditorScene::set_render_view(ViewType type, pnanovdb_editor_token_t* name_t
                                     load_view_into_editor_and_ui(scene_obj);
 
                                     // Ensure default shader params for the selected view are ready even before
-                                    // (re)compile.
-                                    reload_shader_params_for_current_view();
+                                    // (re)compile.  Use the render_method overload since we're already inside
+                                    // with_object() and must not re-acquire the scene manager mutex.
+                                    auto rm = pipeline_get_render_method(scene_obj->pipeline.render().type);
+                                    reload_shader_params_for_current_view(rm);
                                 });
 }
 
@@ -1484,7 +1626,7 @@ void EditorScene::load_nanovdb_to_editor()
 
     m_editor->impl->nanovdb_array = m_compute->load_nanovdb(filepath);
 
-    handle_nanovdb_data_load(m_editor->impl->nanovdb_array, m_imgui_instance->nanovdb_filepath.c_str());
+    handle_nanovdb_data_load(get_current_scene_token(), m_editor->impl->nanovdb_array, m_imgui_instance->nanovdb_filepath.c_str());
 }
 
 void EditorScene::save_editor_nanovdb()
@@ -1508,6 +1650,119 @@ void EditorScene::save_editor_nanovdb()
     }
 }
 
+void EditorScene::select_render_view(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
+{
+    if (!scene || !name)
+    {
+        return;
+    }
+
+    // Set the current view in the specified scene
+    m_scene_view.set_current_view(scene, name);
+
+    // Sync the selection
+    sync_selected_view_with_current();
+}
+
+bool EditorScene::load_nanovdb_file(pnanovdb_editor_token_t* scene, const char* filepath)
+{
+    if (!scene || !filepath || !m_compute)
+    {
+        return false;
+    }
+
+    pnanovdb_compute_array_t* array = m_compute->load_nanovdb(filepath);
+    if (!array)
+    {
+        pnanovdb_editor::Console::getInstance().addLog(Console::LogLevel::Error, "Failed to load '%s'", filepath);
+        return false;
+    }
+
+    handle_nanovdb_data_load(scene, array, filepath);
+    pnanovdb_editor::Console::getInstance().addLog("Loaded NanoVDB from '%s'", filepath);
+    return true;
+}
+
+bool EditorScene::save_nanovdb_file(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name, const char* filepath)
+{
+    if (!scene || !name || !filepath || !m_compute)
+        return false;
+
+    pnanovdb_compute_array_t* array = nullptr;
+    m_scene_manager.with_object(scene, name,
+                                [&](SceneObject* obj)
+                                {
+                                    if (obj)
+                                    {
+                                        // Accept both native NanoVDB objects and GaussianData converted via Raster3D
+                                        array = obj->resources.nanovdb_array
+                                                    ? obj->resources.nanovdb_array
+                                                    : obj->resources.converted_nanovdb;
+                                    }
+                                });
+
+    if (!array)
+    {
+        pnanovdb_editor::Console::getInstance().addLog(
+            Console::LogLevel::Error, "No NanoVDB array found for '%s'", name->str);
+        return false;
+    }
+
+    pnanovdb_bool_t result = m_compute->save_nanovdb(array, filepath);
+    if (result == PNANOVDB_TRUE)
+    {
+        pnanovdb_editor::Console::getInstance().addLog("NanoVDB saved to '%s'", filepath);
+        return true;
+    }
+    else
+    {
+        pnanovdb_editor::Console::getInstance().addLog(
+            Console::LogLevel::Error, "Failed to save NanoVDB to '%s'", filepath);
+        return false;
+    }
+}
+
+bool EditorScene::load_gaussian_file(const char* filepath,
+                                     pnanovdb_pipeline_type_t process_pipeline,
+                                     pnanovdb_pipeline_type_t render_pipeline,
+                                     float voxels_per_unit)
+{
+    if (!filepath || !m_editor || !m_editor->impl)
+    {
+        return false;
+    }
+
+    pnanovdb_editor_token_t* scene_token = get_current_scene_token();
+    if (!scene_token)
+    {
+        Console::getInstance().addLog(Console::LogLevel::Error,
+                                      "load_gaussian_file: no active scene selected");
+        return false;
+    }
+
+    bool rasterize_to_nanovdb = (process_pipeline == pnanovdb_pipeline_type_raster3d);
+
+    // Build pipeline context from editor state
+    PipelineContext ctx;
+    ctx.compute = m_editor->impl->compute;
+    ctx.device = m_editor->impl->device;
+    ctx.queue = m_editor->impl->device_queue;
+    ctx.compute_queue = m_editor->impl->compute_queue;
+    ctx.raster = m_editor->impl->raster;
+    ctx.raster_ctx = m_editor->impl->raster_ctx;
+    ctx.renderer = m_editor->impl->renderer;
+    ctx.scene_manager = m_editor->impl->scene_manager;
+
+    if (!pipeline_start_rasterization(filepath, voxels_per_unit, rasterize_to_nanovdb,
+                                       process_pipeline, render_pipeline, this, &m_scene_manager,
+                                       scene_token, ctx))
+    {
+        return false;
+    }
+
+    return true;
+}
+
 std::string EditorScene::get_selected_object_shader_name() const
 {
     std::string shader_name;
@@ -1517,7 +1772,7 @@ std::string EditorScene::get_selected_object_shader_name() const
                                 {
                                     if (scene_obj)
                                     {
-                                        shader_name = token_to_string(scene_obj->shader_name.shader_name);
+                                        shader_name = token_to_string(scene_obj->params.shader_name.shader_name);
                                     }
                                 });
     return shader_name;
@@ -1531,7 +1786,7 @@ void EditorScene::set_selected_object_shader_name(const std::string& shader_name
                                 {
                                     if (scene_obj)
                                     {
-                                        scene_obj->shader_name.shader_name =
+                                        scene_obj->params.shader_name.shader_name =
                                             EditorToken::getInstance().getToken(shader_name.c_str());
                                         // Also update the editor->impl->shader_name to mirror it
                                         if (m_editor && m_editor->impl)

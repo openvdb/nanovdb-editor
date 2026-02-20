@@ -14,8 +14,13 @@
 #include "EditorScene.h"
 #include "EditorSceneManager.h"
 #include "EditorToken.h"
+#include "Pipeline.h"
+#include "Console.h"
 
 #include <cmath>
+#include <cctype>
+#include <string>
+#include <vector>
 
 #ifndef M_PI_2
 #    define M_PI_2 1.57079632679489661923
@@ -26,6 +31,310 @@ namespace pnanovdb_editor
 using namespace imgui_instance_user;
 
 const float EPSILON = 1e-6f;
+
+static void renderPipelineProcessParams(EditorSceneManager* scene_manager,
+                                        pnanovdb_editor_token_t* scene_token,
+                                        pnanovdb_editor_token_t* name_token,
+                                        pnanovdb_pipeline_type_t process_pipeline,
+                                        const char* suffix,
+                                        imgui_instance_user::Instance* ptr)
+{
+    const auto* desc = pnanovdb_pipeline_get_descriptor(process_pipeline);
+    if (!desc || desc->param_field_count == 0 || !desc->param_fields)
+        return;
+
+    void* params_data = nullptr;
+    size_t params_size = 0;
+    scene_manager->with_object(
+        scene_token, name_token,
+        [&](pnanovdb_editor::SceneObject* scene_obj)
+        {
+            if (!scene_obj)
+                return;
+            auto& pp = scene_obj->pipeline.process().params;
+            if ((!pp.data || pp.size < desc->params_size) && desc->init_params)
+            {
+                free(pp.data);
+                pp = {};
+                desc->init_params(&pp);
+            }
+            params_data = pp.data;
+            params_size = pp.size;
+        });
+
+    if (!params_data || params_size == 0)
+        return;
+
+    // Snapshot current source params so "New" can keep source object unchanged.
+    std::vector<unsigned char> original_params;
+    original_params.resize(params_size);
+    std::memcpy(original_params.data(), params_data, params_size);
+
+    constexpr pnanovdb_uint32_t MAX_FIELDS = 16;
+    pnanovdb_uint32_t field_count = desc->param_field_count;
+    if (field_count > MAX_FIELDS)
+        field_count = MAX_FIELDS;
+
+    float field_values[MAX_FIELDS];
+    for (pnanovdb_uint32_t i = 0; i < field_count; ++i)
+    {
+        const auto& field = desc->param_fields[i];
+        if (field.type == PNANOVDB_REFLECT_TYPE_FLOAT && field.offset + sizeof(float) <= params_size)
+            field_values[i] = *(const float*)((const char*)params_data + field.offset);
+        else
+            field_values[i] = field.default_value;
+    }
+
+    bool any_committed = false;
+    char id_buf[128];
+
+    for (pnanovdb_uint32_t i = 0; i < field_count; ++i)
+    {
+        const auto& field = desc->param_fields[i];
+        if (field.type != PNANOVDB_REFLECT_TYPE_FLOAT)
+            continue;
+
+        snprintf(id_buf, sizeof(id_buf), "%s%s", field.name, suffix);
+
+        ImGui::SetNextItemWidth(100.0f);
+        ImGui::InputFloat(id_buf, &field_values[i], field.step, field.step * 10.0f, "%.1f");
+        if (ImGui::IsItemHovered() && field.tooltip)
+            ImGui::SetTooltip("%s", field.tooltip);
+
+        if (field_values[i] < field.min_value)
+            field_values[i] = field.min_value;
+        if (field_values[i] > field.max_value)
+            field_values[i] = field.max_value;
+
+        if (ImGui::IsItemEdited())
+        {
+            float val = field_values[i];
+            pnanovdb_uint64_t off = field.offset;
+            scene_manager->with_object(
+                scene_token, name_token,
+                [val, off](pnanovdb_editor::SceneObject* scene_obj)
+                {
+                    if (scene_obj && scene_obj->pipeline.process().params.data)
+                        *(float*)((char*)scene_obj->pipeline.process().params.data + off) = val;
+                });
+        }
+
+        if (ImGui::IsItemDeactivatedAfterEdit())
+            any_committed = true;
+    }
+
+    // Apply and New buttons
+    char apply_id[64], new_id[64];
+    snprintf(apply_id, sizeof(apply_id), "Apply%s", suffix);
+    snprintf(new_id, sizeof(new_id), "New%s_new", suffix);
+
+    ImGui::SameLine();
+    bool apply_clicked = ImGui::Button(apply_id);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Re-run %s with current parameters", desc->name);
+    ImGui::SameLine();
+    bool new_clicked = ImGui::Button(new_id);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Create a new object with these parameters\n(keeps original unchanged)");
+
+    if (new_clicked)
+    {
+        // Build variant name: source name + abbreviated field name initials + int value
+        std::string name_suffix = "_";
+        bool at_word_start = true;
+        for (const char* p = desc->param_fields[0].name; *p; ++p)
+        {
+            if (isalpha((unsigned char)*p))
+            {
+                if (at_word_start)
+                {
+                    name_suffix += (char)tolower((unsigned char)*p);
+                    at_word_start = false;
+                }
+            }
+            else
+            {
+                at_word_start = true;
+            }
+        }
+        name_suffix += std::to_string((int)field_values[0]);
+
+        // Ensure we never overwrite an existing object when creating a variant.
+        std::string base_name = std::string(name_token->str) + name_suffix;
+        std::string new_name = base_name;
+        int suffix_index = 1;
+        for (;;)
+        {
+            bool exists = false;
+            auto* candidate_token = pnanovdb_editor::EditorToken::getInstance().getToken(new_name.c_str());
+            scene_manager->with_object(
+                scene_token, candidate_token,
+                [&](pnanovdb_editor::SceneObject* existing_obj)
+                {
+                    exists = (existing_obj != nullptr);
+                });
+
+            if (!exists)
+            {
+                break;
+            }
+
+            new_name = base_name + "_" + std::to_string(suffix_index++);
+        }
+
+        bool created = pnanovdb_editor::pipeline_create_variant(
+            scene_manager, scene_token, name_token, new_name.c_str());
+
+        // Revert source object params to preserve "source unchanged" semantics for New.
+        scene_manager->with_object(
+            scene_token, name_token,
+            [&](pnanovdb_editor::SceneObject* scene_obj)
+            {
+                if (!scene_obj)
+                    return;
+
+                auto& pp = scene_obj->pipeline.process().params;
+                if (pp.data && pp.size >= original_params.size() && !original_params.empty())
+                {
+                    std::memcpy(pp.data, original_params.data(), original_params.size());
+                }
+
+                // New should not trigger source object re-processing.
+                scene_obj->pipeline.process().dirty = false;
+            });
+
+        if (created)
+        {
+            auto* new_token = pnanovdb_editor::EditorToken::getInstance().getToken(new_name.c_str());
+            ptr->editor_scene->add_nanovdb_placeholder(scene_token, new_token);
+            ptr->editor_scene->select_render_view(scene_token, new_token);
+            pnanovdb_editor::Console::getInstance().addLog(
+                "Creating '%s' from '%s' (%s=%.0f)...",
+                new_name.c_str(),
+                name_token->str ? name_token->str : "?",
+                desc->param_fields[0].name, field_values[0]);
+        }
+    }
+    else if (apply_clicked)
+    {
+        scene_manager->with_object(
+            scene_token, name_token,
+            [desc](pnanovdb_editor::SceneObject* scene_obj)
+            {
+                if (scene_obj)
+                {
+                    scene_obj->pipeline.process().dirty = true;
+                    pnanovdb_editor::Console::getInstance().addLog(
+                        "Re-running %s...", desc->name);
+                }
+            });
+    }
+}
+
+static bool showPipelineSelector(const char* label, pnanovdb_pipeline_type_t* pipeline, pnanovdb_pipeline_stage_t stage)
+{
+    // Build filtered list: noop is always available, plus types matching the target stage
+    pnanovdb_pipeline_type_t types[pnanovdb_pipeline_type_count];
+    const char* names[pnanovdb_pipeline_type_count];
+    int count = 0;
+    int current_idx = 0;
+
+    for (int i = 0; i < pnanovdb_pipeline_type_count; ++i)
+    {
+        auto type = static_cast<pnanovdb_pipeline_type_t>(i);
+        const auto* desc = pnanovdb_pipeline_get_descriptor(type);
+        if (!desc)
+            continue;
+
+        // Include noop (always) or types matching the target stage
+        if (type != pnanovdb_pipeline_type_noop && desc->stage != stage)
+            continue;
+
+        if (type == *pipeline)
+            current_idx = count;
+
+        types[count] = type;
+        names[count] = desc->name;
+        count++;
+    }
+
+    bool changed = false;
+    if (ImGui::BeginCombo(label, (current_idx < count) ? names[current_idx] : "Unknown"))
+    {
+        for (int i = 0; i < count; ++i)
+        {
+            bool is_selected = (types[i] == *pipeline);
+            if (ImGui::Selectable(names[i], is_selected))
+            {
+                *pipeline = types[i];
+                changed = true;
+            }
+            if (is_selected)
+                ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+
+    return changed;
+}
+
+// Helper to show common visibility and pipeline UI for scene objects
+static void showVisibilityAndPipelineUI(EditorSceneManager* scene_manager,
+                                        pnanovdb_editor_token_t* scene_token,
+                                        pnanovdb_editor_token_t* name_token,
+                                        const char* suffix,
+                                        bool& is_visible,
+                                        pnanovdb_pipeline_type_t& process_pipeline,
+                                        pnanovdb_pipeline_type_t& render_pipeline,
+                                        EditorScene* editor_scene = nullptr)
+{
+    char visible_id[32], process_id[32], render_id[32];
+    snprintf(visible_id, sizeof(visible_id), "Visible%s", suffix);
+    snprintf(process_id, sizeof(process_id), "Process%s", suffix);
+    snprintf(render_id, sizeof(render_id), "Render%s", suffix);
+
+    if (ImGui::Checkbox(visible_id, &is_visible))
+    {
+        scene_manager->with_object(scene_token, name_token,
+                                   [is_visible](SceneObject* scene_obj)
+                                   {
+                                       if (scene_obj)
+                                           scene_obj->visible = is_visible;
+                                   });
+
+        // When making an object visible, auto-switch render view to it
+        if (is_visible && editor_scene)
+        {
+            editor_scene->select_render_view(scene_token, name_token);
+        }
+    }
+
+    ImGui::TextDisabled("Pipeline:");
+    bool pipeline_changed = false;
+    pipeline_changed |= showPipelineSelector(process_id, &process_pipeline, pnanovdb_pipeline_stage_process);
+    pipeline_changed |= showPipelineSelector(render_id, &render_pipeline, pnanovdb_pipeline_stage_render);
+
+    if (pipeline_changed)
+    {
+        scene_manager->with_object(scene_token, name_token,
+                                   [process_pipeline, render_pipeline](SceneObject* scene_obj)
+                                   {
+                                       if (scene_obj)
+                                       {
+                                           // Reinitialize process params when type changes so
+                                           // they match the new pipeline
+                                           if (scene_obj->pipeline.process().type != process_pipeline)
+                                           {
+                                               pnanovdb_pipeline_get_default_params(
+                                                   process_pipeline, &scene_obj->pipeline.process().params);
+                                           }
+                                           scene_obj->pipeline.process().type = process_pipeline;
+                                           scene_obj->pipeline.render().type = render_pipeline;
+                                           scene_obj->pipeline.process().dirty = true;
+                                       }
+                                   });
+    }
+}
 
 void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
 {
@@ -366,43 +675,78 @@ void Properties::render(imgui_instance_user::Instance* ptr)
             auto* scene_manager = ptr->editor_scene->get_scene_manager();
             if (scene_manager)
             {
+                char ui_suffix[64];
+                snprintf(ui_suffix, sizeof(ui_suffix), "##gs_%llu",
+                         (unsigned long long)(selection.name_token ? selection.name_token->id : 0ULL));
+
                 std::string properties_shader_name;
+                pnanovdb_pipeline_type_t process_pipeline = pnanovdb_pipeline_type_noop;
+                pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_raster2d;
+                bool is_visible = true;
                 auto* scene_token = ptr->editor_scene->get_current_scene_token();
+
                 scene_manager->with_object(scene_token, selection.name_token,
                                            [&](pnanovdb_editor::SceneObject* scene_obj)
                                            {
-                                               if (scene_obj && !token_is_empty(scene_obj->shader_name.shader_name))
+                                               if (scene_obj)
                                                {
-                                                   properties_shader_name = scene_obj->shader_name.shader_name->str;
+                                                   process_pipeline = scene_obj->pipeline.process().type;
+                                                   render_pipeline = scene_obj->pipeline.render().type;
+                                                   is_visible = scene_obj->visible;
+                                                   const char* shader = pipeline_get_shader(scene_obj);
+                                                   if (shader) properties_shader_name = shader;
                                                }
                                            });
+
+                showVisibilityAndPipelineUI(scene_manager, scene_token, selection.name_token, ui_suffix,
+                                            is_visible, process_pipeline, render_pipeline, ptr->editor_scene);
+
+                renderPipelineProcessParams(scene_manager, scene_token, selection.name_token,
+                                            process_pipeline, ui_suffix, ptr);
+
+                ImGui::Separator();
 
                 if (!properties_shader_name.empty())
                 {
                     scene_manager->shader_params.render(properties_shader_name.c_str());
                 }
-                else
-                {
-                    ImGui::TextDisabled("No shader assigned");
-                }
             }
         }
         else if (selection.type == pnanovdb_editor::ViewType::NanoVDBs)
         {
-            // Use with_object() to safely access shader_name while holding mutex
             auto* scene_manager = ptr->editor_scene->get_scene_manager();
             if (scene_manager)
             {
+                char ui_suffix[64];
+                snprintf(ui_suffix, sizeof(ui_suffix), "##nvdb_%llu",
+                         (unsigned long long)(selection.name_token ? selection.name_token->id : 0ULL));
+
                 std::string properties_shader_name;
+                pnanovdb_pipeline_type_t process_pipeline = pnanovdb_pipeline_type_noop;
+                pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_nanovdb_render;
+                bool is_visible = true;
                 auto* scene_token = ptr->editor_scene->get_current_scene_token();
+
                 scene_manager->with_object(scene_token, selection.name_token,
                                            [&](pnanovdb_editor::SceneObject* scene_obj)
                                            {
-                                               if (scene_obj && !token_is_empty(scene_obj->shader_name.shader_name))
+                                               if (scene_obj)
                                                {
-                                                   properties_shader_name = scene_obj->shader_name.shader_name->str;
+                                                   process_pipeline = scene_obj->pipeline.process().type;
+                                                   render_pipeline = scene_obj->pipeline.render().type;
+                                                   is_visible = scene_obj->visible;
+                                                   const char* shader = pipeline_get_shader(scene_obj);
+                                                   if (shader) properties_shader_name = shader;
                                                }
                                            });
+
+                showVisibilityAndPipelineUI(scene_manager, scene_token, selection.name_token, ui_suffix,
+                                            is_visible, process_pipeline, render_pipeline, ptr->editor_scene);
+
+                renderPipelineProcessParams(scene_manager, scene_token, selection.name_token,
+                                            process_pipeline, ui_suffix, ptr);
+
+                ImGui::Separator();
 
                 ImGui::TextDisabled("Shader:");
                 ImGui::SameLine();
@@ -421,10 +765,6 @@ void Properties::render(imgui_instance_user::Instance* ptr)
                 {
                     ImGui::Separator();
                     scene_manager->shader_params.render(properties_shader_name.c_str());
-                }
-                else
-                {
-                    ImGui::TextDisabled("No shader assigned");
                 }
             }
         }

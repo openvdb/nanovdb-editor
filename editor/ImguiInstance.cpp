@@ -65,6 +65,8 @@ PNANOVDB_INLINE float timestamp_diff(pnanovdb_uint64_t begin, pnanovdb_uint64_t 
     return (float)(((double)(end - begin) / (double)(freq)));
 }
 
+// ImGui context TLS - configured in cmake/patch_imgui.cmake via imconfig.h
+// GImGui is #defined to ImGuiTLS, so this must be defined for imgui to link
 thread_local ImGuiContext* ImGuiTLS = nullptr;
 
 namespace imgui_instance_user

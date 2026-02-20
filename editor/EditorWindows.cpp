@@ -1050,7 +1050,12 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
             {
                 ptr->nanovdb_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
                 pnanovdb_editor::Console::getInstance().addLog("Opening file '%s'", ptr->nanovdb_filepath.c_str());
-                ptr->pending.load_nvdb = true;
+
+                if (ptr->editor_scene)
+                {
+                    pnanovdb_editor_token_t* scene = ptr->editor_scene->get_current_scene_token();
+                    ptr->editor_scene->load_nanovdb_file(scene, ptr->nanovdb_filepath.c_str());
+                }
             }
             ImGuiFileDialog::Instance()->Close();
         }
@@ -1059,13 +1064,23 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
             if (ImGuiFileDialog::Instance()->IsOk())
             {
                 ptr->raster_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
+                std::string voxel_info = ptr->raster_to_nanovdb
+                    ? " (voxel size: " + std::to_string(ptr->raster_voxels_per_unit) + ")"
+                    : "";
                 pnanovdb_editor::Console::getInstance().addLog(
                     "Importing Gaussian file '%s' as %s%s", ptr->raster_filepath.c_str(),
                     ptr->raster_to_nanovdb ? "Raster3D" : "Raster2D",
-                    ptr->raster_to_nanovdb ?
-                        (" (voxel size: " + std::to_string(ptr->raster_voxels_per_unit) + ")").c_str() :
-                        "");
-                ptr->pending.update_raster = true;
+                    voxel_info.c_str());
+
+                if (ptr->editor_scene)
+                {
+                    pnanovdb_pipeline_type_t convert = ptr->raster_to_nanovdb
+                        ? pnanovdb_pipeline_type_raster3d : pnanovdb_pipeline_type_noop;
+                    pnanovdb_pipeline_type_t render = ptr->raster_to_nanovdb
+                        ? pnanovdb_pipeline_type_nanovdb_render : pnanovdb_pipeline_type_raster2d;
+                    ptr->editor_scene->load_gaussian_file(ptr->raster_filepath.c_str(),
+                        convert, render, ptr->raster_voxels_per_unit);
+                }
                 ptr->pending.find_raster_file = false;
             }
             ImGuiFileDialog::Instance()->Close();
@@ -1076,7 +1091,16 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
             {
                 ptr->nanovdb_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
                 pnanovdb_editor::Console::getInstance().addLog("Saving file '%s'...", ptr->nanovdb_filepath.c_str());
-                ptr->pending.save_nanovdb = true;
+
+                if (ptr->editor_scene)
+                {
+                    pnanovdb_editor_token_t* scene = ptr->editor_scene->get_current_scene_token();
+                    auto selection = ptr->editor_scene->get_render_view_selection();
+                    if (selection.is_valid())
+                    {
+                        ptr->editor_scene->save_nanovdb_file(scene, selection.name_token, ptr->nanovdb_filepath.c_str());
+                    }
+                }
             }
             ImGuiFileDialog::Instance()->Close();
         }
