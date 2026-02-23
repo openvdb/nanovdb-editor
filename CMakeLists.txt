@@ -99,6 +99,13 @@ create_nanovdb_library(pnanovdbcompiler
         SLANG_PROFILE=${NANOVDB_EDITOR_SLANG_PROFILE}
 )
 
+if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
+  add_dependencies(pnanovdbcompiler slang_src_build)
+    if(TARGET miniz)
+        add_dependencies(pnanovdbcompiler miniz)
+    endif()
+endif()
+
 if(NANOVDB_EDITOR_SLANG_DEBUG_OUTPUT)
   target_compile_definitions(pnanovdbcompiler PRIVATE USE_SLANG_DEBUG_OUTPUT)
 endif()
@@ -372,28 +379,69 @@ if(SKBUILD)
                 DESTINATION nanovdb_editor/lib
                 COMPONENT python_libs
             )
-            if(SLANG_LLVM_EXISTS)
-                install(FILES
-                    "${Slang_SOURCE_DIR}/bin/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            file(GLOB SLANG_LLVM_FILES "${Slang_SOURCE_DIR}/bin/slang-llvm*${CMAKE_SHARED_LIBRARY_SUFFIX}*")
+            if(SLANG_LLVM_FILES)
+                install(FILES ${SLANG_LLVM_FILES}
                     DESTINATION nanovdb_editor/lib
                     COMPONENT python_libs
                 )
             endif()
         else()
-            # Note: libslang-compiler and libslang-glslang have version suffix in filename
-            install(FILES
-                "${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
-                "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}.0.${SLANG_VERSION}"
-                "${Slang_SOURCE_DIR}/lib/libslang-glslang-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
-                DESTINATION nanovdb_editor/lib
-                COMPONENT python_libs
-            )
-            if(SLANG_LLVM_EXISTS)
+            if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
+                # Install all slang libraries using install(CODE) to avoid configure-time path resolution
+                install(CODE "
+                    file(GLOB SLANG_LIBS \"${Slang_SOURCE_DIR}/lib/libslang*.so*\")
+                    foreach(lib \${SLANG_LIBS})
+                        message(STATUS \"Installing: \${lib}\")
+                        file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                    endforeach()
+
+                    # Install miniz dependency (required by Slang for ZIP/compression)
+                    # miniz is built as a separate CPM dependency
+                    file(GLOB SLANG_MINIZ_LIBS \"${Slang_SOURCE_DIR}/lib/libminiz.so*\")
+                    foreach(lib \${SLANG_MINIZ_LIBS})
+                        message(STATUS \"Installing Slang miniz: \${lib}\")
+                        file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                    endforeach()
+
+                    file(GLOB MINIZ_LIBS \"${miniz_BINARY_DIR}/libminiz.so*\")
+                    foreach(lib \${MINIZ_LIBS})
+                        message(STATUS \"Installing miniz: \${lib}\")
+                        file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                    endforeach()
+
+                    # auditwheel resolves dependencies via the DT_NEEDED name (libminiz.so.3)
+                    # so ensure that filename exists in the wheel, even if CMake didn't create
+                    # a symlink (file(INSTALL) may also dereference symlinks).
+                    set(_miniz_dst \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                    if(NOT EXISTS \"\${_miniz_dst}/libminiz.so.3\")
+                        file(GLOB _miniz_v3 \"\${_miniz_dst}/libminiz.so.3.*\")
+                        if(_miniz_v3)
+                            list(GET _miniz_v3 0 _miniz_src)
+                            message(STATUS \"Creating libminiz.so.3 from \${_miniz_src}\")
+                            file(COPY_FILE \"\${_miniz_src}\" \"\${_miniz_dst}/libminiz.so.3\")
+                        elseif(EXISTS \"\${_miniz_dst}/libminiz.so\")
+                            message(STATUS \"Creating libminiz.so.3 from libminiz.so\")
+                            file(COPY_FILE \"\${_miniz_dst}/libminiz.so\" \"\${_miniz_dst}/libminiz.so.3\")
+                        endif()
+                    endif()
+                " COMPONENT python_libs)
+            else()
+                # Note: libslang-compiler and libslang-glslang have version suffix in filename
                 install(FILES
-                    "${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}"
+                    "${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
+                    "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}.0.${SLANG_VERSION}"
+                    "${Slang_SOURCE_DIR}/lib/libslang-glslang-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
                     DESTINATION nanovdb_editor/lib
                     COMPONENT python_libs
                 )
+                file(GLOB SLANG_LLVM_FILES "${Slang_SOURCE_DIR}/lib/libslang-llvm*${CMAKE_SHARED_LIBRARY_SUFFIX}*")
+                if(SLANG_LLVM_FILES)
+                    install(FILES ${SLANG_LLVM_FILES}
+                        DESTINATION nanovdb_editor/lib
+                        COMPONENT python_libs
+                    )
+                endif()
             endif()
         endif()
     endif()
