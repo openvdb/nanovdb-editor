@@ -127,6 +127,11 @@ public:
     // Copy current editor shader params from UI
     void get_shader_params_for_current_view(void* shader_params_data);
 
+    // Copy shader params for a specific scene object
+    void get_shader_params_for_object(pnanovdb_editor_token_t* scene_token,
+                                      pnanovdb_editor_token_t* name_token,
+                                      void* shader_params_data);
+
     // Scene management
     EditorSceneManager* get_scene_manager() const;
     void set_current_scene(pnanovdb_editor_token_t* scene_token);

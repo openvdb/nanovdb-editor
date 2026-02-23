@@ -891,6 +891,41 @@ void EditorScene::get_shader_params_for_current_view(void* shader_params_data)
         });
 }
 
+void EditorScene::get_shader_params_for_object(pnanovdb_editor_token_t* scene_token,
+                                               pnanovdb_editor_token_t* name_token,
+                                               void* shader_params_data)
+{
+    if (!shader_params_data || !scene_token || !name_token || !m_editor->impl->scene_manager)
+    {
+        return;
+    }
+
+    m_scene_manager.with_object(
+        scene_token, name_token,
+        [&](SceneObject* scene_obj)
+        {
+            if (!scene_obj)
+            {
+                return;
+            }
+
+            auto render_method = pipeline_get_render_method(scene_obj->pipeline.render().type);
+            void* obj_shader_params = scene_obj->params.shader_params;
+            const char* shader = pipeline_get_shader(scene_obj);
+            std::string obj_shader_name = shader ? shader : "";
+
+            void* view_params = nullptr;
+            size_t copy_size = (render_method == pnanovdb_pipeline_render_method_raster2d) ? m_raster2d_params.size :
+                                                                                             m_nanovdb_params.size;
+            copy_shader_params(render_method, obj_shader_params, obj_shader_name, SyncDirection::UiToView, &view_params);
+
+            if (view_params && copy_size > 0)
+            {
+                std::memcpy(shader_params_data, view_params, copy_size);
+            }
+        });
+}
+
 void EditorScene::update_scene_tree_after_conversion(pnanovdb_editor_token_t* scene_token,
                                                      pnanovdb_editor_token_t* name_token)
 {
@@ -900,6 +935,7 @@ void EditorScene::update_scene_tree_after_conversion(pnanovdb_editor_token_t* sc
     }
 
     bool entry_replaced = false;
+    bool need_params_init = false;
     m_scene_manager.with_object(
         scene_token, name_token,
         [&](SceneObject* obj)
@@ -923,6 +959,8 @@ void EditorScene::update_scene_tree_after_conversion(pnanovdb_editor_token_t* sc
                 return;
             }
 
+            need_params_init = (obj->params.shader_params == nullptr);
+
             // Remove old entry (placeholder or Gaussian) and replace with real NanoVDB
             m_scene_view.remove(scene_token, name_token);
             NanoVDBContext ctx{ owner, obj->params.shader_params, obj->params.shader_params_array_owner };
@@ -933,6 +971,36 @@ void EditorScene::update_scene_tree_after_conversion(pnanovdb_editor_token_t* sc
                                           "update_scene_tree: replaced entry for '%s' (array=%p)",
                                           name_token->str ? name_token->str : "?", (void*)owner.get());
         });
+
+    // Converted objects have null shader_params; give them a copy of default NanoVDB params so they display
+    if (entry_replaced && need_params_init && m_nanovdb_params.default_array && m_nanovdb_params.default_array->data)
+    {
+        pnanovdb_compute_array_t* params_copy = m_compute->create_array(m_nanovdb_params.default_array->element_size,
+                                                                        m_nanovdb_params.default_array->element_count,
+                                                                        m_nanovdb_params.default_array->data);
+        if (params_copy)
+        {
+            m_scene_manager.set_params_array(scene_token, name_token, params_copy, m_compute);
+            // Refresh scene view context so it points at the new params
+            m_scene_manager.with_object(scene_token, name_token,
+                                        [&](SceneObject* obj)
+                                        {
+                                            if (obj && obj->params.shader_params)
+                                            {
+                                                const auto& owner = obj->resources.nanovdb_array_owner ?
+                                                                        obj->resources.nanovdb_array_owner :
+                                                                        obj->resources.converted_nanovdb_owner;
+                                                if (owner)
+                                                {
+                                                    m_scene_view.remove(scene_token, name_token);
+                                                    NanoVDBContext ctx{ owner, obj->params.shader_params,
+                                                                        obj->params.shader_params_array_owner };
+                                                    m_scene_view.add_nanovdb(scene_token, name_token, ctx);
+                                                }
+                                            }
+                                        });
+        }
+    }
 
     // Update the render view selection to NanoVDB type so rendering picks it up correctly
     if (entry_replaced && m_render_view_selection.is_valid() && m_render_view_selection.name_token == name_token)
@@ -1037,7 +1105,10 @@ void EditorScene::handle_gaussian_data_load(pnanovdb_editor_token_t* scene,
                                         if (copy)
                                         {
                                             memcpy(copy, process_params->data, process_params->size);
-                                            free(obj->pipeline.process().params.data);
+                                            // pipeline.process().params.data is malloc-owned per PipelineStage contract (EditorSceneManager.h)
+                                            void* old_data = obj->pipeline.process().params.data;
+                                            if (old_data)
+                                                free(old_data);
                                             obj->pipeline.process().params.data = copy;
                                             obj->pipeline.process().params.size = process_params->size;
                                             obj->pipeline.process().params.type = process_params->type;
@@ -1234,8 +1305,10 @@ bool EditorScene::is_selection_valid(const SceneSelection& selection) const
                 {
                     is_valid = true;
                 }
-                else if (obj->type == SceneObjectType::GaussianData && obj->resources.nanovdb_array != nullptr)
+                else if (obj->type == SceneObjectType::GaussianData &&
+                         (obj->resources.nanovdb_array != nullptr || obj->resources.converted_nanovdb != nullptr))
                 {
+                    // Pipeline-converted Gaussian->NanoVDB stores result in converted_nanovdb
                     is_valid = true;
                 }
             }

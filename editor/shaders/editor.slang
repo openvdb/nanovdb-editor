@@ -27,7 +27,7 @@ struct EditorParams
 
     uint width;
     uint height;
-    uint pad1;
+    uint composite; // 0 = clear [0,0,0,1], 1 = read from texture_out (for multi-object compositing)
     uint pad2;
 };
 
@@ -969,5 +969,9 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
                     (uint(255.f * max(0.f, min(1.f, value.w))) << 24u);
     image_out[(editor_params.height - 1 - tidx.y) * editor_params.width + tidx.x] = rawValue;
 
-    texture_out[tidx] = value;
+    float4 background = (editor_params.composite != 0u) ? texture_out[tidx] : float4(0.f, 0.f, 0.f, 1.f);
+    float4 image_color;
+    image_color.rgb = value.rgb + value.a * background.rgb;
+    image_color.a = value.a * background.a;
+    texture_out[tidx] = image_color;
 }

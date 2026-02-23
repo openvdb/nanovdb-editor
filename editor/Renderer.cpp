@@ -170,7 +170,10 @@ ShaderDispatchResult Renderer::dispatch_nanovdb_shader(pnanovdb_compute_array_t*
                                                        uint32_t image_height,
                                                        imgui_instance_user::Instance* imgui_instance,
                                                        EditorScene* editor_scene,
-                                                       EditorSceneManager* scene_manager)
+                                                       EditorSceneManager* scene_manager,
+                                                       uint32_t composite,
+                                                       pnanovdb_editor_token_t* params_scene_token,
+                                                       pnanovdb_editor_token_t* params_name_token)
 {
     if (!m_initialized || !nanovdb_array || !background_image || !shader_name)
     {
@@ -244,6 +247,7 @@ ShaderDispatchResult Renderer::dispatch_nanovdb_shader(pnanovdb_compute_array_t*
     editor_params.projection = pnanovdb_camera_mat_transpose(projection);
     editor_params.width = image_width;
     editor_params.height = image_height;
+    editor_params.composite = composite;
 
     // Upload editor parameters
     EditorParams* mapped = (EditorParams*)pnanovdb_compute_upload_buffer_map(
@@ -251,10 +255,17 @@ ShaderDispatchResult Renderer::dispatch_nanovdb_shader(pnanovdb_compute_array_t*
     *mapped = editor_params;
     auto* upload_transient = pnanovdb_compute_upload_buffer_unmap(compute_context, &m_compute_upload_buffer);
 
-    // Upload shader parameters
+    // Upload shader parameters (per-object when compositing multiple visible NanoVDBs)
     void* shader_params_data = pnanovdb_compute_upload_buffer_map(
         compute_context, &m_shader_params_upload_buffer, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
-    editor_scene->get_shader_params_for_current_view(shader_params_data);
+    if (params_scene_token && params_name_token)
+    {
+        editor_scene->get_shader_params_for_object(params_scene_token, params_name_token, shader_params_data);
+    }
+    else
+    {
+        editor_scene->get_shader_params_for_current_view(shader_params_data);
+    }
     auto* shader_upload_transient = pnanovdb_compute_upload_buffer_unmap(compute_context, &m_shader_params_upload_buffer);
 
     // Render NanoVDB

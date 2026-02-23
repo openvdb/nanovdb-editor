@@ -179,6 +179,9 @@ public:
         \param imgui_instance ImGui instance for settings and state
         \param editor_scene Scene manager for shader params
         \param scene_manager Scene manager for shader refresh
+        \param composite If non-zero, shader composites over existing texture (for multi-object)
+        \param params_scene_token Optional scene token for per-object shader params (with params_name_token)
+        \param params_name_token Optional name token for per-object shader params (with params_scene_token)
         \return Result of shader dispatch operation
     */
     ShaderDispatchResult dispatch_nanovdb_shader(pnanovdb_compute_array_t* nanovdb_array,
@@ -190,7 +193,10 @@ public:
                                                  uint32_t image_height,
                                                  imgui_instance_user::Instance* imgui_instance,
                                                  EditorScene* editor_scene,
-                                                 EditorSceneManager* scene_manager);
+                                                 EditorSceneManager* scene_manager,
+                                                 uint32_t composite = 0,
+                                                 pnanovdb_editor_token_t* params_scene_token = nullptr,
+                                                 pnanovdb_editor_token_t* params_name_token = nullptr);
 
 private:
     // Internal structure for camera/editor parameters (mirrored from shader)
@@ -202,7 +208,7 @@ private:
         pnanovdb_camera_mat_t projection;
         uint32_t width;
         uint32_t height;
-        uint32_t pad1;
+        uint32_t composite;
         uint32_t pad2;
     };
 
