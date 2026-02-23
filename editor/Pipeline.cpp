@@ -108,17 +108,17 @@ bool start_conversion(pnanovdb_editor::SceneObject* scene_obj,
 {
     if (!scene_obj || !scene_manager || !ctx || !ctx->raster || !ctx->compute)
     {
-        pnanovdb_editor::Console::getInstance().addLog(pnanovdb_editor::Console::LogLevel::Error,
-            "start_conversion: null pointer (obj=%p, mgr=%p, ctx=%p, raster=%p, compute=%p)",
-            (void*)scene_obj, (void*)scene_manager, (void*)ctx,
-            ctx ? (void*)ctx->raster : nullptr, ctx ? (void*)ctx->compute : nullptr);
+        pnanovdb_editor::Console::getInstance().addLog(
+            pnanovdb_editor::Console::LogLevel::Error,
+            "start_conversion: null pointer (obj=%p, mgr=%p, ctx=%p, raster=%p, compute=%p)", (void*)scene_obj,
+            (void*)scene_manager, (void*)ctx, ctx ? (void*)ctx->raster : nullptr, ctx ? (void*)ctx->compute : nullptr);
         return false;
     }
 
     if (scene_obj->resources.source_filepath.empty())
     {
-        pnanovdb_editor::Console::getInstance().addLog(pnanovdb_editor::Console::LogLevel::Error,
-            "start_conversion: no source file path for re-conversion");
+        pnanovdb_editor::Console::getInstance().addLog(
+            pnanovdb_editor::Console::LogLevel::Error, "start_conversion: no source file path for re-conversion");
         return false;
     }
 
@@ -153,22 +153,22 @@ bool start_conversion(pnanovdb_editor::SceneObject* scene_obj,
     s_conversion_enqueued = true;
     s_conversion_task_id = s_conversion_worker.enqueue(
         [&](pnanovdb_raster_t* raster, const pnanovdb_compute_t* compute, pnanovdb_compute_queue_t* queue,
-            const char* filepath, pnanovdb_compute_array_t** out_nanovdb,
-            pnanovdb_compute_array_t** shader_arrays, pnanovdb_raster_shader_params_t* raster_params) -> bool
+            const char* filepath, pnanovdb_compute_array_t** out_nanovdb, pnanovdb_compute_array_t** shader_arrays,
+            pnanovdb_raster_shader_params_t* raster_params) -> bool
         {
             float voxel_sz = 1.0f / pnanovdb_pipeline_params_get_voxels_per_unit(&s_pending_conversion_params);
             return raster->raster_file(raster, compute, queue, filepath, voxel_sz,
-                                       out_nanovdb,      // NanoVDB output
-                                       nullptr,          // gaussian_data (not needed)
-                                       nullptr,          // raster_context (not needed)
-                                       shader_arrays,    // shader_params_arrays (needed by raster_file)
-                                       raster_params,    // raster_params
-                                       nullptr,          // profiler
+                                       out_nanovdb, // NanoVDB output
+                                       nullptr, // gaussian_data (not needed)
+                                       nullptr, // raster_context (not needed)
+                                       shader_arrays, // shader_params_arrays (needed by raster_file)
+                                       raster_params, // raster_params
+                                       nullptr, // profiler
                                        (void*)&s_conversion_worker);
         },
         const_cast<pnanovdb_raster_t*>(ctx->raster), ctx->compute, ctx->compute_queue,
-        s_pending_conversion_filepath.c_str(), &s_pending_nanovdb_array,
-        pipeline_get_shader_params_arrays(), pipeline_get_init_raster_params());
+        s_pending_conversion_filepath.c_str(), &s_pending_nanovdb_array, pipeline_get_shader_params_arrays(),
+        pipeline_get_init_raster_params());
 
     float vpu = pnanovdb_pipeline_params_get_voxels_per_unit(&s_pending_conversion_params);
     pnanovdb_editor::Console::getInstance().addLog(
@@ -184,14 +184,16 @@ bool handle_conversion_completion()
 
     bool success = s_conversion_worker.isTaskSuccessful(s_conversion_task_id);
 
-    pnanovdb_editor_token_t* scene_token = pnanovdb_editor::EditorToken::getInstance().getTokenById(s_pending_scene_token_id);
-    pnanovdb_editor_token_t* name_token = pnanovdb_editor::EditorToken::getInstance().getTokenById(s_pending_name_token_id);
+    pnanovdb_editor_token_t* scene_token =
+        pnanovdb_editor::EditorToken::getInstance().getTokenById(s_pending_scene_token_id);
+    pnanovdb_editor_token_t* name_token =
+        pnanovdb_editor::EditorToken::getInstance().getTokenById(s_pending_name_token_id);
 
-    pnanovdb_editor::Console::getInstance().addLog(pnanovdb_editor::Console::LogLevel::Debug,
+    pnanovdb_editor::Console::getInstance().addLog(
+        pnanovdb_editor::Console::LogLevel::Debug,
         "handle_conversion_completion: success=%d, scene_token=%p, name_token=%p ('%s'), "
         "scene_manager=%p, nanovdb_array=%p",
-        (int)success, (void*)scene_token, (void*)name_token,
-        (name_token && name_token->str) ? name_token->str : "<null>",
+        (int)success, (void*)scene_token, (void*)name_token, (name_token && name_token->str) ? name_token->str : "<null>",
         (void*)s_pending_scene_manager, (void*)s_pending_nanovdb_array);
 
     if (success && scene_token && name_token && s_pending_scene_manager && s_pending_nanovdb_array)
@@ -209,7 +211,8 @@ bool handle_conversion_completion()
                 // Store the converted NanoVDB in the scene object
                 std::shared_ptr<pnanovdb_compute_array_t> owner(
                     s_pending_nanovdb_array,
-                    [compute = s_pending_compute](pnanovdb_compute_array_t* arr) {
+                    [compute = s_pending_compute](pnanovdb_compute_array_t* arr)
+                    {
                         if (arr)
                             compute->destroy_array(arr);
                     });
@@ -220,20 +223,18 @@ bool handle_conversion_completion()
 
                 // Switch to NanoVDB rendering and initialize render params for the new pipeline
                 scene_obj->pipeline.render().type = pnanovdb_pipeline_type_nanovdb_render;
-                pnanovdb_pipeline_get_default_params(pnanovdb_pipeline_type_nanovdb_render,
-                                                     &scene_obj->pipeline.render().params);
+                pnanovdb_pipeline_get_default_params(
+                    pnanovdb_pipeline_type_nanovdb_render, &scene_obj->pipeline.render().params);
 
                 // Only clear dirty if params haven't changed since conversion started
                 float used_vpu = pnanovdb_pipeline_params_get_voxels_per_unit(&s_pending_conversion_params);
-                float current_vpu = pnanovdb_pipeline_params_get_voxels_per_unit(
-                    &scene_obj->pipeline.process().params);
+                float current_vpu = pnanovdb_pipeline_params_get_voxels_per_unit(&scene_obj->pipeline.process().params);
                 bool params_changed = (current_vpu != used_vpu);
                 if (!params_changed)
                     scene_obj->pipeline.process().dirty = false;
                 pnanovdb_editor::Console::getInstance().addLog(
                     pnanovdb_editor::Console::LogLevel::Debug,
-                    "Conversion complete: used_vpu=%.1f, current_vpu=%.1f, dirty=%s",
-                    used_vpu, current_vpu,
+                    "Conversion complete: used_vpu=%.1f, current_vpu=%.1f, dirty=%s", used_vpu, current_vpu,
                     params_changed ? "true (re-convert)" : "false");
 
                 scene_obj->params.shader_name.shader_name = nullptr;
@@ -253,8 +254,7 @@ bool handle_conversion_completion()
                 s_pending_compute->destroy_array(s_pending_nanovdb_array);
             }
             pnanovdb_editor::Console::getInstance().addLog(
-                pnanovdb_editor::Console::LogLevel::Warning,
-                "Conversion completed but scene object was removed");
+                pnanovdb_editor::Console::LogLevel::Warning, "Conversion completed but scene object was removed");
         }
     }
     else if (success && !s_pending_nanovdb_array)
@@ -270,13 +270,12 @@ bool handle_conversion_completion()
 
         if (scene_token && name_token && s_pending_scene_manager)
         {
-            s_pending_scene_manager->with_object(
-                scene_token, name_token,
-                [](pnanovdb_editor::SceneObject* scene_obj)
-                {
-                    if (scene_obj)
-                        scene_obj->pipeline.process().dirty = false;
-                });
+            s_pending_scene_manager->with_object(scene_token, name_token,
+                                                 [](pnanovdb_editor::SceneObject* scene_obj)
+                                                 {
+                                                     if (scene_obj)
+                                                         scene_obj->pipeline.process().dirty = false;
+                                                 });
         }
     }
 
@@ -426,10 +425,9 @@ static pnanovdb_pipeline_result_t execute_raster3d(pnanovdb_scene_object_t* obj,
     auto* scene_obj = cast(obj);
     if (!scene_obj || scene_obj->resources.source_filepath.empty())
     {
-        Console::getInstance().addLog(Console::LogLevel::Debug,
-            "execute_raster3d: early exit (scene_obj=%p, source_filepath='%s')",
-            (void*)scene_obj,
-            scene_obj ? scene_obj->resources.source_filepath.c_str() : "<null>");
+        Console::getInstance().addLog(
+            Console::LogLevel::Debug, "execute_raster3d: early exit (scene_obj=%p, source_filepath='%s')",
+            (void*)scene_obj, scene_obj ? scene_obj->resources.source_filepath.c_str() : "<null>");
         return pnanovdb_pipeline_result_no_data;
     }
 
@@ -437,8 +435,7 @@ static pnanovdb_pipeline_result_t execute_raster3d(pnanovdb_scene_object_t* obj,
 
     if (!scene_manager)
     {
-        Console::getInstance().addLog(
-            Console::LogLevel::Error, "Raster3D processing failed: missing scene_manager");
+        Console::getInstance().addLog(Console::LogLevel::Error, "Raster3D processing failed: missing scene_manager");
         return pnanovdb_pipeline_result_error;
     }
 
@@ -446,8 +443,7 @@ static pnanovdb_pipeline_result_t execute_raster3d(pnanovdb_scene_object_t* obj,
     auto& process_params = scene_obj->pipeline.process().params;
     if (!process_params.data || process_params.size < sizeof(Raster3DParams))
     {
-        Console::getInstance().addLog(Console::LogLevel::Debug,
-            "execute_raster3d: initializing missing Raster3DParams");
+        Console::getInstance().addLog(Console::LogLevel::Debug, "execute_raster3d: initializing missing Raster3DParams");
         free(process_params.data);
         process_params.data = nullptr;
         process_params.size = 0;
@@ -461,9 +457,10 @@ static pnanovdb_pipeline_result_t execute_raster3d(pnanovdb_scene_object_t* obj,
         float requested_vpu = pnanovdb_pipeline_params_get_voxels_per_unit(&process_params);
         if (requested_vpu != running_vpu)
         {
-            Console::getInstance().addLog(Console::LogLevel::Debug,
-                "Raster3D: conversion running (vpu=%.1f), will re-convert with vpu=%.1f when done",
-                running_vpu, requested_vpu);
+            Console::getInstance().addLog(
+                Console::LogLevel::Debug,
+                "Raster3D: conversion running (vpu=%.1f), will re-convert with vpu=%.1f when done", running_vpu,
+                requested_vpu);
         }
         return pnanovdb_pipeline_result_pending;
     }
@@ -476,8 +473,8 @@ static pnanovdb_pipeline_result_t execute_raster3d(pnanovdb_scene_object_t* obj,
         return pnanovdb_pipeline_result_pending;
 
     // start_conversion failed - do NOT clear dirty so it can retry next frame
-    Console::getInstance().addLog(Console::LogLevel::Error,
-        "execute_raster3d: start_conversion failed (keeping dirty for retry)");
+    Console::getInstance().addLog(
+        Console::LogLevel::Error, "execute_raster3d: start_conversion failed (keeping dirty for retry)");
     return pnanovdb_pipeline_result_pending;
 }
 
@@ -565,11 +562,8 @@ PNANOVDB_DEFINE_PIPELINE_SHADERS(s_raster3d_shaders,
 
 // Field descriptors for Raster3DParams (voxels_per_unit)
 static const pnanovdb_pipeline_param_field_t s_raster3d_param_fields[] = {
-    { "Voxels/Unit",
-      "Higher = finer detail, more memory",
-      PNANOVDB_REFLECT_TYPE_FLOAT,
-      offsetof(Raster3DParams, voxels_per_unit),
-      128.0f, 1.0f, 512.0f, 1.0f }
+    { "Voxels/Unit", "Higher = finer detail, more memory", PNANOVDB_REFLECT_TYPE_FLOAT,
+      offsetof(Raster3DParams, voxels_per_unit), 128.0f, 1.0f, 512.0f, 1.0f }
 };
 
 // Complete pipeline descriptors with all function pointers
@@ -585,7 +579,8 @@ static const pnanovdb_pipeline_descriptor_t s_noop_descriptor = {
     execute_noop, // execute
     get_render_method_none, // get_render_method
     nullptr, // map_params
-    nullptr, 0 // param_fields
+    nullptr,
+    0 // param_fields
 };
 
 static const pnanovdb_pipeline_descriptor_t s_nanovdb_render_descriptor = {
@@ -600,7 +595,8 @@ static const pnanovdb_pipeline_descriptor_t s_nanovdb_render_descriptor = {
     execute_nanovdb_render,
     get_render_method_nanovdb,
     map_nanovdb_render_params,
-    nullptr, 0 // param_fields
+    nullptr,
+    0 // param_fields
 };
 
 static const pnanovdb_pipeline_descriptor_t s_raster2d_descriptor = {
@@ -615,24 +611,26 @@ static const pnanovdb_pipeline_descriptor_t s_raster2d_descriptor = {
     execute_raster2d,
     get_render_method_raster2d,
     nullptr,
-    nullptr, 0 // param_fields
+    nullptr,
+    0 // param_fields
 };
 
-static const pnanovdb_pipeline_descriptor_t s_raster3d_descriptor = {
-    pnanovdb_pipeline_type_raster3d,
-    pnanovdb_pipeline_stage_process,
-    "Gaussian to NanoVDB",
-    s_raster3d_shaders,
-    1,
-    sizeof(Raster3DParams),
-    "Raster3DParams",
-    init_raster3d_params,
-    execute_raster3d,
-    get_render_method_nanovdb, // raster3d converts to nanovdb, then renders as nanovdb
-    map_raster3d_params,
-    s_raster3d_param_fields,
-    sizeof(s_raster3d_param_fields) / sizeof(s_raster3d_param_fields[0])
-};
+static const pnanovdb_pipeline_descriptor_t s_raster3d_descriptor = { pnanovdb_pipeline_type_raster3d,
+                                                                      pnanovdb_pipeline_stage_process,
+                                                                      "Gaussian to NanoVDB",
+                                                                      s_raster3d_shaders,
+                                                                      1,
+                                                                      sizeof(Raster3DParams),
+                                                                      "Raster3DParams",
+                                                                      init_raster3d_params,
+                                                                      execute_raster3d,
+                                                                      get_render_method_nanovdb, // raster3d converts to
+                                                                                                 // nanovdb, then
+                                                                                                 // renders as nanovdb
+                                                                      map_raster3d_params,
+                                                                      s_raster3d_param_fields,
+                                                                      sizeof(s_raster3d_param_fields) /
+                                                                          sizeof(s_raster3d_param_fields[0]) };
 
 // ============================================================================
 // Pipeline Registry Functions
@@ -961,8 +959,8 @@ pnanovdb_bool_t pnanovdb_shader_param_get(const char* shader_name,
             active.push_back(&s_providers[i]);
     }
 
-    std::sort(active.begin(), active.end(), [](const RegisteredProvider* a, const RegisteredProvider* b)
-              { return a->priority > b->priority; });
+    std::sort(active.begin(), active.end(),
+              [](const RegisteredProvider* a, const RegisteredProvider* b) { return a->priority > b->priority; });
 
     // Query providers in priority order
     for (auto* p : active)
@@ -1010,8 +1008,9 @@ pnanovdb_pipeline_result_t pipeline_execute_process(SceneObject* obj, const Pipe
     if (!obj->pipeline.process().dirty)
         return pnanovdb_pipeline_result_skipped;
 
-    pnanovdb_pipeline_context_t pipeline_ctx = { ctx.compute,       ctx.device,  ctx.queue,
-                                                 ctx.compute_queue, ctx.raster,  ctx.raster_ctx,
+    pnanovdb_pipeline_context_t pipeline_ctx = { ctx.compute,        ctx.device,
+                                                 ctx.queue,          ctx.compute_queue,
+                                                 ctx.raster,         ctx.raster_ctx,
                                                  cast(ctx.renderer), cast(ctx.scene_manager) };
     return pnanovdb_pipeline_execute(obj->pipeline.process().type, cast(obj), &pipeline_ctx);
 }
@@ -1055,21 +1054,21 @@ const char* pipeline_get_shader(const SceneObject* obj)
     {
         return nullptr;
     }
-    
+
     // Priority 1: Check obj->params.shader_name (user-set via Properties panel)
     if (obj->params.shader_name.shader_name && obj->params.shader_name.shader_name->str &&
         obj->params.shader_name.shader_name->str[0] != '\0')
     {
         return obj->params.shader_name.shader_name->str;
     }
-    
+
     // Priority 2: Check render stage shader overrides
     const auto& render_stage = obj->pipeline.render();
     if (!render_stage.shader_overrides.empty() && render_stage.shader_overrides[0].has_shader_override())
     {
         return render_stage.shader_overrides[0].shader_name.c_str();
     }
-    
+
     // Priority 3: Fall back to pipeline's default shader
     return pnanovdb_pipeline_get_shader_name(render_stage.type);
 }
@@ -1131,8 +1130,7 @@ bool pipeline_start_rasterization(const char* raster_filepath,
     s_pending_raster_params->name = nullptr;
     s_pending_raster_params->data_type = s_raster_shader_params_data_type;
 
-    bool needs_compute_queue = rasterize_to_nanovdb ||
-                               (s_pending_process_pipeline == pnanovdb_pipeline_type_raster3d);
+    bool needs_compute_queue = rasterize_to_nanovdb || (s_pending_process_pipeline == pnanovdb_pipeline_type_raster3d);
     pnanovdb_compute_queue_t* worker_queue = needs_compute_queue ? s_raster_compute_queue : s_raster_device_queue;
 
     s_raster_task_id = s_raster_worker.enqueue(
@@ -1148,8 +1146,7 @@ bool pipeline_start_rasterization(const char* raster_filepath,
         },
         s_raster_raster, s_raster_compute, worker_queue, s_pending_raster_filepath.c_str(), s_pending_voxel_size,
         rasterize_to_nanovdb ? &s_pending_raster_nanovdb_array : nullptr,
-        rasterize_to_nanovdb ? nullptr : &s_pending_gaussian_data,
-        rasterize_to_nanovdb ? nullptr : &s_pending_raster_ctx,
+        rasterize_to_nanovdb ? nullptr : &s_pending_gaussian_data, rasterize_to_nanovdb ? nullptr : &s_pending_raster_ctx,
         s_pending_shader_params_arrays, s_pending_raster_params, pnanovdb_editor::Profiler::report_callback);
 
     Console::getInstance().addLog("Running rasterization: '%s'...", s_pending_raster_filepath.c_str());
@@ -1207,8 +1204,8 @@ bool pipeline_handle_rasterization_completion(EditorScene* editor_scene,
 
         if (s_pending_raster_nanovdb_array)
         {
-            editor_scene->handle_nanovdb_data_load(scene_token, s_pending_raster_nanovdb_array,
-                                                   s_pending_raster_filepath.c_str());
+            editor_scene->handle_nanovdb_data_load(
+                scene_token, s_pending_raster_nanovdb_array, s_pending_raster_filepath.c_str());
 
             if (s_pending_process_pipeline == pnanovdb_pipeline_type_raster3d)
             {
@@ -1230,8 +1227,8 @@ bool pipeline_handle_rasterization_completion(EditorScene* editor_scene,
                             obj->resources.source_filepath = s_pending_raster_filepath;
                             obj->pipeline.process().type = s_pending_process_pipeline;
                             obj->pipeline.process().dirty = false; // Already converted
-                            pnanovdb_pipeline_get_default_params(s_pending_process_pipeline,
-                                                                 &obj->pipeline.process().params);
+                            pnanovdb_pipeline_get_default_params(
+                                s_pending_process_pipeline, &obj->pipeline.process().params);
                             if (s_pending_process_params.data && s_pending_process_params.size > 0)
                             {
                                 void* params_copy = malloc(s_pending_process_params.size);
@@ -1245,12 +1242,11 @@ bool pipeline_handle_rasterization_completion(EditorScene* editor_scene,
                                 }
                             }
 
-                            float pending_vpu =
-                                pnanovdb_pipeline_params_get_voxels_per_unit(&s_pending_process_params);
-                            Console::getInstance().addLog(Console::LogLevel::Debug,
+                            float pending_vpu = pnanovdb_pipeline_params_get_voxels_per_unit(&s_pending_process_params);
+                            Console::getInstance().addLog(
+                                Console::LogLevel::Debug,
                                 "Rasterization: set raster3d pipeline on '%s' (vpu=%.1f, filepath='%s')",
-                                view_name.c_str(), pending_vpu,
-                                s_pending_raster_filepath.c_str());
+                                view_name.c_str(), pending_vpu, s_pending_raster_filepath.c_str());
                         });
                 }
             }
@@ -1346,8 +1342,7 @@ bool pipeline_create_variant(EditorSceneManager* scene_manager,
 {
     if (!scene_manager || !scene_token || !source_name || !new_name)
     {
-        Console::getInstance().addLog(Console::LogLevel::Error,
-            "pipeline_create_variant: null argument");
+        Console::getInstance().addLog(Console::LogLevel::Error, "pipeline_create_variant: null argument");
         return false;
     }
 
@@ -1358,30 +1353,28 @@ bool pipeline_create_variant(EditorSceneManager* scene_manager,
     const pnanovdb_reflect_data_type_t* params_copy_type = nullptr;
     bool source_found = false;
 
-    scene_manager->with_object(
-        scene_token, source_name,
-        [&](SceneObject* src)
-        {
-            if (!src)
-                return;
-            source_found = true;
-            source_filepath = src->resources.source_filepath;
-            source_process_type = src->pipeline.process().type;
-            auto& sp = src->pipeline.process().params;
-            if (sp.data && sp.size > 0)
-            {
-                params_copy = malloc(sp.size);
-                memcpy(params_copy, sp.data, sp.size);
-                params_copy_size = sp.size;
-                params_copy_type = sp.type;
-            }
-        });
+    scene_manager->with_object(scene_token, source_name,
+                               [&](SceneObject* src)
+                               {
+                                   if (!src)
+                                       return;
+                                   source_found = true;
+                                   source_filepath = src->resources.source_filepath;
+                                   source_process_type = src->pipeline.process().type;
+                                   auto& sp = src->pipeline.process().params;
+                                   if (sp.data && sp.size > 0)
+                                   {
+                                       params_copy = malloc(sp.size);
+                                       memcpy(params_copy, sp.data, sp.size);
+                                       params_copy_size = sp.size;
+                                       params_copy_type = sp.type;
+                                   }
+                               });
 
     if (!source_found)
     {
-        Console::getInstance().addLog(Console::LogLevel::Error,
-            "Cannot create variant: source object '%s' not found",
-            source_name->str ? source_name->str : "?");
+        Console::getInstance().addLog(Console::LogLevel::Error, "Cannot create variant: source object '%s' not found",
+                                      source_name->str ? source_name->str : "?");
         free(params_copy);
         return false;
     }
@@ -1389,43 +1382,38 @@ bool pipeline_create_variant(EditorSceneManager* scene_manager,
     if (source_filepath.empty())
     {
         Console::getInstance().addLog(Console::LogLevel::Error,
-            "Cannot create variant: source object '%s' has no source file path",
-            source_name->str ? source_name->str : "?");
+                                      "Cannot create variant: source object '%s' has no source file path",
+                                      source_name->str ? source_name->str : "?");
         free(params_copy);
         return false;
     }
 
-    pnanovdb_editor_token_t* new_name_token =
-        pnanovdb_editor::EditorToken::getInstance().getToken(new_name);
+    pnanovdb_editor_token_t* new_name_token = pnanovdb_editor::EditorToken::getInstance().getToken(new_name);
 
-    scene_manager->add_nanovdb(scene_token, new_name_token, nullptr, nullptr,
-                               s_raster_compute, nullptr,
-                               source_process_type,
-                               pnanovdb_pipeline_type_nanovdb_render);
+    scene_manager->add_nanovdb(scene_token, new_name_token, nullptr, nullptr, s_raster_compute, nullptr,
+                               source_process_type, pnanovdb_pipeline_type_nanovdb_render);
 
     bool configured = false;
-    scene_manager->with_object(
-        scene_token, new_name_token,
-        [&](SceneObject* obj)
-        {
-            if (!obj)
-                return;
-            obj->resources.source_filepath = source_filepath;
-            free(obj->pipeline.process().params.data);
-            obj->pipeline.process().params.data = params_copy;
-            obj->pipeline.process().params.size = params_copy_size;
-            obj->pipeline.process().params.type = params_copy_type;
-            params_copy = nullptr; // ownership transferred
-            obj->pipeline.process().dirty = true;
-            configured = true;
-        });
+    scene_manager->with_object(scene_token, new_name_token,
+                               [&](SceneObject* obj)
+                               {
+                                   if (!obj)
+                                       return;
+                                   obj->resources.source_filepath = source_filepath;
+                                   free(obj->pipeline.process().params.data);
+                                   obj->pipeline.process().params.data = params_copy;
+                                   obj->pipeline.process().params.size = params_copy_size;
+                                   obj->pipeline.process().params.type = params_copy_type;
+                                   params_copy = nullptr; // ownership transferred
+                                   obj->pipeline.process().dirty = true;
+                                   configured = true;
+                               });
 
     free(params_copy); // cleanup if ownership was not transferred
 
     if (!configured)
     {
-        Console::getInstance().addLog(Console::LogLevel::Error,
-            "Failed to configure variant '%s'", new_name);
+        Console::getInstance().addLog(Console::LogLevel::Error, "Failed to configure variant '%s'", new_name);
         return false;
     }
 

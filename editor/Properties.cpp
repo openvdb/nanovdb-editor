@@ -45,22 +45,21 @@ static void renderPipelineProcessParams(EditorSceneManager* scene_manager,
 
     void* params_data = nullptr;
     size_t params_size = 0;
-    scene_manager->with_object(
-        scene_token, name_token,
-        [&](pnanovdb_editor::SceneObject* scene_obj)
-        {
-            if (!scene_obj)
-                return;
-            auto& pp = scene_obj->pipeline.process().params;
-            if ((!pp.data || pp.size < desc->params_size) && desc->init_params)
-            {
-                free(pp.data);
-                pp = {};
-                desc->init_params(&pp);
-            }
-            params_data = pp.data;
-            params_size = pp.size;
-        });
+    scene_manager->with_object(scene_token, name_token,
+                               [&](pnanovdb_editor::SceneObject* scene_obj)
+                               {
+                                   if (!scene_obj)
+                                       return;
+                                   auto& pp = scene_obj->pipeline.process().params;
+                                   if ((!pp.data || pp.size < desc->params_size) && desc->init_params)
+                                   {
+                                       free(pp.data);
+                                       pp = {};
+                                       desc->init_params(&pp);
+                                   }
+                                   params_data = pp.data;
+                                   params_size = pp.size;
+                               });
 
     if (!params_data || params_size == 0)
         return;
@@ -110,13 +109,12 @@ static void renderPipelineProcessParams(EditorSceneManager* scene_manager,
         {
             float val = field_values[i];
             pnanovdb_uint64_t off = field.offset;
-            scene_manager->with_object(
-                scene_token, name_token,
-                [val, off](pnanovdb_editor::SceneObject* scene_obj)
-                {
-                    if (scene_obj && scene_obj->pipeline.process().params.data)
-                        *(float*)((char*)scene_obj->pipeline.process().params.data + off) = val;
-                });
+            scene_manager->with_object(scene_token, name_token,
+                                       [val, off](pnanovdb_editor::SceneObject* scene_obj)
+                                       {
+                                           if (scene_obj && scene_obj->pipeline.process().params.data)
+                                               *(float*)((char*)scene_obj->pipeline.process().params.data + off) = val;
+                                       });
         }
 
         if (ImGui::IsItemDeactivatedAfterEdit())
@@ -167,12 +165,9 @@ static void renderPipelineProcessParams(EditorSceneManager* scene_manager,
         {
             bool exists = false;
             auto* candidate_token = pnanovdb_editor::EditorToken::getInstance().getToken(new_name.c_str());
-            scene_manager->with_object(
-                scene_token, candidate_token,
-                [&](pnanovdb_editor::SceneObject* existing_obj)
-                {
-                    exists = (existing_obj != nullptr);
-                });
+            scene_manager->with_object(scene_token, candidate_token,
+                                       [&](pnanovdb_editor::SceneObject* existing_obj)
+                                       { exists = (existing_obj != nullptr); });
 
             if (!exists)
             {
@@ -182,52 +177,46 @@ static void renderPipelineProcessParams(EditorSceneManager* scene_manager,
             new_name = base_name + "_" + std::to_string(suffix_index++);
         }
 
-        bool created = pnanovdb_editor::pipeline_create_variant(
-            scene_manager, scene_token, name_token, new_name.c_str());
+        bool created = pnanovdb_editor::pipeline_create_variant(scene_manager, scene_token, name_token, new_name.c_str());
 
         // Revert source object params to preserve "source unchanged" semantics for New.
-        scene_manager->with_object(
-            scene_token, name_token,
-            [&](pnanovdb_editor::SceneObject* scene_obj)
-            {
-                if (!scene_obj)
-                    return;
+        scene_manager->with_object(scene_token, name_token,
+                                   [&](pnanovdb_editor::SceneObject* scene_obj)
+                                   {
+                                       if (!scene_obj)
+                                           return;
 
-                auto& pp = scene_obj->pipeline.process().params;
-                if (pp.data && pp.size >= original_params.size() && !original_params.empty())
-                {
-                    std::memcpy(pp.data, original_params.data(), original_params.size());
-                }
+                                       auto& pp = scene_obj->pipeline.process().params;
+                                       if (pp.data && pp.size >= original_params.size() && !original_params.empty())
+                                       {
+                                           std::memcpy(pp.data, original_params.data(), original_params.size());
+                                       }
 
-                // New should not trigger source object re-processing.
-                scene_obj->pipeline.process().dirty = false;
-            });
+                                       // New should not trigger source object re-processing.
+                                       scene_obj->pipeline.process().dirty = false;
+                                   });
 
         if (created)
         {
             auto* new_token = pnanovdb_editor::EditorToken::getInstance().getToken(new_name.c_str());
             ptr->editor_scene->add_nanovdb_placeholder(scene_token, new_token);
             ptr->editor_scene->select_render_view(scene_token, new_token);
-            pnanovdb_editor::Console::getInstance().addLog(
-                "Creating '%s' from '%s' (%s=%.0f)...",
-                new_name.c_str(),
-                name_token->str ? name_token->str : "?",
-                desc->param_fields[0].name, field_values[0]);
+            pnanovdb_editor::Console::getInstance().addLog("Creating '%s' from '%s' (%s=%.0f)...", new_name.c_str(),
+                                                           name_token->str ? name_token->str : "?",
+                                                           desc->param_fields[0].name, field_values[0]);
         }
     }
     else if (apply_clicked)
     {
-        scene_manager->with_object(
-            scene_token, name_token,
-            [desc](pnanovdb_editor::SceneObject* scene_obj)
-            {
-                if (scene_obj)
-                {
-                    scene_obj->pipeline.process().dirty = true;
-                    pnanovdb_editor::Console::getInstance().addLog(
-                        "Re-running %s...", desc->name);
-                }
-            });
+        scene_manager->with_object(scene_token, name_token,
+                                   [desc](pnanovdb_editor::SceneObject* scene_obj)
+                                   {
+                                       if (scene_obj)
+                                       {
+                                           scene_obj->pipeline.process().dirty = true;
+                                           pnanovdb_editor::Console::getInstance().addLog("Re-running %s...", desc->name);
+                                       }
+                                   });
     }
 }
 
@@ -694,15 +683,16 @@ void Properties::render(imgui_instance_user::Instance* ptr)
                                                    render_pipeline = scene_obj->pipeline.render().type;
                                                    is_visible = scene_obj->visible;
                                                    const char* shader = pipeline_get_shader(scene_obj);
-                                                   if (shader) properties_shader_name = shader;
+                                                   if (shader)
+                                                       properties_shader_name = shader;
                                                }
                                            });
 
-                showVisibilityAndPipelineUI(scene_manager, scene_token, selection.name_token, ui_suffix,
-                                            is_visible, process_pipeline, render_pipeline, ptr->editor_scene);
+                showVisibilityAndPipelineUI(scene_manager, scene_token, selection.name_token, ui_suffix, is_visible,
+                                            process_pipeline, render_pipeline, ptr->editor_scene);
 
-                renderPipelineProcessParams(scene_manager, scene_token, selection.name_token,
-                                            process_pipeline, ui_suffix, ptr);
+                renderPipelineProcessParams(
+                    scene_manager, scene_token, selection.name_token, process_pipeline, ui_suffix, ptr);
 
                 ImGui::Separator();
 
@@ -736,15 +726,16 @@ void Properties::render(imgui_instance_user::Instance* ptr)
                                                    render_pipeline = scene_obj->pipeline.render().type;
                                                    is_visible = scene_obj->visible;
                                                    const char* shader = pipeline_get_shader(scene_obj);
-                                                   if (shader) properties_shader_name = shader;
+                                                   if (shader)
+                                                       properties_shader_name = shader;
                                                }
                                            });
 
-                showVisibilityAndPipelineUI(scene_manager, scene_token, selection.name_token, ui_suffix,
-                                            is_visible, process_pipeline, render_pipeline, ptr->editor_scene);
+                showVisibilityAndPipelineUI(scene_manager, scene_token, selection.name_token, ui_suffix, is_visible,
+                                            process_pipeline, render_pipeline, ptr->editor_scene);
 
-                renderPipelineProcessParams(scene_manager, scene_token, selection.name_token,
-                                            process_pipeline, ui_suffix, ptr);
+                renderPipelineProcessParams(
+                    scene_manager, scene_token, selection.name_token, process_pipeline, ui_suffix, ptr);
 
                 ImGui::Separator();
 

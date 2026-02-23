@@ -1064,22 +1064,20 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
             if (ImGuiFileDialog::Instance()->IsOk())
             {
                 ptr->raster_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
-                std::string voxel_info = ptr->raster_to_nanovdb
-                    ? " (voxel size: " + std::to_string(ptr->raster_voxels_per_unit) + ")"
-                    : "";
+                std::string voxel_info =
+                    ptr->raster_to_nanovdb ? " (voxel size: " + std::to_string(ptr->raster_voxels_per_unit) + ")" : "";
                 pnanovdb_editor::Console::getInstance().addLog(
                     "Importing Gaussian file '%s' as %s%s", ptr->raster_filepath.c_str(),
-                    ptr->raster_to_nanovdb ? "Raster3D" : "Raster2D",
-                    voxel_info.c_str());
+                    ptr->raster_to_nanovdb ? "Raster3D" : "Raster2D", voxel_info.c_str());
 
                 if (ptr->editor_scene)
                 {
-                    pnanovdb_pipeline_type_t convert = ptr->raster_to_nanovdb
-                        ? pnanovdb_pipeline_type_raster3d : pnanovdb_pipeline_type_noop;
-                    pnanovdb_pipeline_type_t render = ptr->raster_to_nanovdb
-                        ? pnanovdb_pipeline_type_nanovdb_render : pnanovdb_pipeline_type_raster2d;
-                    ptr->editor_scene->load_gaussian_file(ptr->raster_filepath.c_str(),
-                        convert, render, ptr->raster_voxels_per_unit);
+                    pnanovdb_pipeline_type_t convert =
+                        ptr->raster_to_nanovdb ? pnanovdb_pipeline_type_raster3d : pnanovdb_pipeline_type_noop;
+                    pnanovdb_pipeline_type_t render = ptr->raster_to_nanovdb ? pnanovdb_pipeline_type_nanovdb_render :
+                                                                               pnanovdb_pipeline_type_raster2d;
+                    ptr->editor_scene->load_gaussian_file(
+                        ptr->raster_filepath.c_str(), convert, render, ptr->raster_voxels_per_unit);
                 }
                 ptr->pending.find_raster_file = false;
             }

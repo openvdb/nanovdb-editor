@@ -310,9 +310,8 @@ void EditorScene::load_view_into_editor_and_ui(SceneObject* scene_obj)
     if (render_method == pnanovdb_pipeline_render_method_nanovdb)
     {
         // NanoVDB rendering - use nanovdb_array or converted_nanovdb (Raster3D stores in both; fallback for robustness)
-        pnanovdb_compute_array_t* array = scene_obj->resources.nanovdb_array
-                                              ? scene_obj->resources.nanovdb_array
-                                              : scene_obj->resources.converted_nanovdb;
+        pnanovdb_compute_array_t* array = scene_obj->resources.nanovdb_array ? scene_obj->resources.nanovdb_array :
+                                                                               scene_obj->resources.converted_nanovdb;
         m_editor->impl->nanovdb_array = array;
         m_editor->impl->shader_params = obj_shader_params;
         m_editor->impl->shader_params_data_type = nullptr;
@@ -646,13 +645,13 @@ void EditorScene::sync_views_from_scene_manager()
                                    (obj->resources.converted_nanovdb && obj->resources.converted_nanovdb_owner);
                 if (render_method == pnanovdb_pipeline_render_method_nanovdb && has_nanovdb)
                 {
-                    const auto& owner = obj->resources.nanovdb_array_owner ? obj->resources.nanovdb_array_owner
-                                                                           : obj->resources.converted_nanovdb_owner;
+                    const auto& owner = obj->resources.nanovdb_array_owner ? obj->resources.nanovdb_array_owner :
+                                                                             obj->resources.converted_nanovdb_owner;
                     NanoVDBContext ctx{ owner, obj->params.shader_params, obj->params.shader_params_array_owner };
                     m_scene_view.add_nanovdb(obj->scene_token, obj->name_token, ctx);
                 }
-                else if (render_method == pnanovdb_pipeline_render_method_raster2d &&
-                         obj->resources.gaussian_data && obj->resources.gaussian_data_owner)
+                else if (render_method == pnanovdb_pipeline_render_method_raster2d && obj->resources.gaussian_data &&
+                         obj->resources.gaussian_data_owner)
                 {
                     GaussianDataContext ctx{ obj->resources.gaussian_data_owner,
                                              (pnanovdb_raster_shader_params_t*)obj->params.shader_params };
@@ -737,13 +736,12 @@ void EditorScene::reload_shader_params_for_current_view()
     if (m_render_view_selection.is_valid())
     {
         pnanovdb_editor_token_t* scene_token = get_current_scene_token();
-        m_scene_manager.with_object(
-            scene_token, m_render_view_selection.name_token,
-            [&](SceneObject* scene_obj)
-            {
-                if (scene_obj)
-                    render_method = pipeline_get_render_method(scene_obj->pipeline.render().type);
-            });
+        m_scene_manager.with_object(scene_token, m_render_view_selection.name_token,
+                                    [&](SceneObject* scene_obj)
+                                    {
+                                        if (scene_obj)
+                                            render_method = pipeline_get_render_method(scene_obj->pipeline.render().type);
+                                    });
     }
 
     if (render_method == pnanovdb_pipeline_render_method_none)
@@ -882,9 +880,8 @@ void EditorScene::get_shader_params_for_current_view(void* shader_params_data)
             std::string obj_shader_name = shader ? shader : "";
 
             void* view_params = nullptr;
-            size_t copy_size = (render_method == pnanovdb_pipeline_render_method_raster2d)
-                                   ? m_raster2d_params.size
-                                   : m_nanovdb_params.size;
+            size_t copy_size = (render_method == pnanovdb_pipeline_render_method_raster2d) ? m_raster2d_params.size :
+                                                                                             m_nanovdb_params.size;
             copy_shader_params(render_method, obj_shader_params, obj_shader_name, SyncDirection::UiToView, &view_params);
 
             if (view_params && copy_size > 0)
@@ -909,21 +906,19 @@ void EditorScene::update_scene_tree_after_conversion(pnanovdb_editor_token_t* sc
         {
             if (!obj)
             {
-                Console::getInstance().addLog(Console::LogLevel::Warning,
-                    "update_scene_tree: object not found for '%s'",
-                    name_token->str ? name_token->str : "?");
+                Console::getInstance().addLog(Console::LogLevel::Warning, "update_scene_tree: object not found for '%s'",
+                                              name_token->str ? name_token->str : "?");
                 return;
             }
 
-            const auto& owner = obj->resources.nanovdb_array_owner
-                                    ? obj->resources.nanovdb_array_owner
-                                    : obj->resources.converted_nanovdb_owner;
+            const auto& owner = obj->resources.nanovdb_array_owner ? obj->resources.nanovdb_array_owner :
+                                                                     obj->resources.converted_nanovdb_owner;
             if (!owner)
             {
-                Console::getInstance().addLog(Console::LogLevel::Warning,
+                Console::getInstance().addLog(
+                    Console::LogLevel::Warning,
                     "update_scene_tree: no nanovdb owner for '%s' (nanovdb_array=%p, converted=%p)",
-                    name_token->str ? name_token->str : "?",
-                    (void*)obj->resources.nanovdb_array,
+                    name_token->str ? name_token->str : "?", (void*)obj->resources.nanovdb_array,
                     (void*)obj->resources.converted_nanovdb);
                 return;
             }
@@ -935,8 +930,8 @@ void EditorScene::update_scene_tree_after_conversion(pnanovdb_editor_token_t* sc
             entry_replaced = true;
 
             Console::getInstance().addLog(Console::LogLevel::Debug,
-                "update_scene_tree: replaced entry for '%s' (array=%p)",
-                name_token->str ? name_token->str : "?", (void*)owner.get());
+                                          "update_scene_tree: replaced entry for '%s' (array=%p)",
+                                          name_token->str ? name_token->str : "?", (void*)owner.get());
         });
 
     // Update the render view selection to NanoVDB type so rendering picks it up correctly
@@ -948,13 +943,12 @@ void EditorScene::update_scene_tree_after_conversion(pnanovdb_editor_token_t* sc
     // Only update global editor pointers if this object IS the active render view.
     if (entry_replaced && m_render_view_selection.is_valid() && m_render_view_selection.name_token == name_token)
     {
-        m_scene_manager.with_object(
-            scene_token, name_token,
-            [&](SceneObject* obj)
-            {
-                if (obj)
-                    load_view_into_editor_and_ui(obj);
-            });
+        m_scene_manager.with_object(scene_token, name_token,
+                                    [&](SceneObject* obj)
+                                    {
+                                        if (obj)
+                                            load_view_into_editor_and_ui(obj);
+                                    });
     }
 }
 
@@ -969,7 +963,9 @@ void EditorScene::add_nanovdb_placeholder(pnanovdb_editor_token_t* scene_token, 
     m_scene_view.add_nanovdb(scene_token, name_token, placeholder);
 }
 
-void EditorScene::handle_nanovdb_data_load(pnanovdb_editor_token_t* scene, pnanovdb_compute_array_t* nanovdb_array, const char* filename)
+void EditorScene::handle_nanovdb_data_load(pnanovdb_editor_token_t* scene,
+                                           pnanovdb_compute_array_t* nanovdb_array,
+                                           const char* filename)
 {
     if (!scene || !filename)
     {
@@ -1626,7 +1622,8 @@ void EditorScene::load_nanovdb_to_editor()
 
     m_editor->impl->nanovdb_array = m_compute->load_nanovdb(filepath);
 
-    handle_nanovdb_data_load(get_current_scene_token(), m_editor->impl->nanovdb_array, m_imgui_instance->nanovdb_filepath.c_str());
+    handle_nanovdb_data_load(
+        get_current_scene_token(), m_editor->impl->nanovdb_array, m_imgui_instance->nanovdb_filepath.c_str());
 }
 
 void EditorScene::save_editor_nanovdb()
@@ -1695,9 +1692,8 @@ bool EditorScene::save_nanovdb_file(pnanovdb_editor_token_t* scene, pnanovdb_edi
                                     if (obj)
                                     {
                                         // Accept both native NanoVDB objects and GaussianData converted via Raster3D
-                                        array = obj->resources.nanovdb_array
-                                                    ? obj->resources.nanovdb_array
-                                                    : obj->resources.converted_nanovdb;
+                                        array = obj->resources.nanovdb_array ? obj->resources.nanovdb_array :
+                                                                               obj->resources.converted_nanovdb;
                                     }
                                 });
 
@@ -1735,8 +1731,7 @@ bool EditorScene::load_gaussian_file(const char* filepath,
     pnanovdb_editor_token_t* scene_token = get_current_scene_token();
     if (!scene_token)
     {
-        Console::getInstance().addLog(Console::LogLevel::Error,
-                                      "load_gaussian_file: no active scene selected");
+        Console::getInstance().addLog(Console::LogLevel::Error, "load_gaussian_file: no active scene selected");
         return false;
     }
 
@@ -1753,9 +1748,8 @@ bool EditorScene::load_gaussian_file(const char* filepath,
     ctx.renderer = m_editor->impl->renderer;
     ctx.scene_manager = m_editor->impl->scene_manager;
 
-    if (!pipeline_start_rasterization(filepath, voxels_per_unit, rasterize_to_nanovdb,
-                                       process_pipeline, render_pipeline, this, &m_scene_manager,
-                                       scene_token, ctx))
+    if (!pipeline_start_rasterization(filepath, voxels_per_unit, rasterize_to_nanovdb, process_pipeline,
+                                      render_pipeline, this, &m_scene_manager, scene_token, ctx))
     {
         return false;
     }

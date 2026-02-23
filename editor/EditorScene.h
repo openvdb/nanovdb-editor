@@ -207,10 +207,11 @@ public:
     int get_camera_frustum_index(pnanovdb_editor_token_t* camera_name_token) const;
     void set_camera_frustum_index(pnanovdb_editor_token_t* camera_name_token, int index);
 
-    void update_scene_tree_after_conversion(pnanovdb_editor_token_t* scene_token,
-                                            pnanovdb_editor_token_t* name_token);
+    void update_scene_tree_after_conversion(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token);
 
-    void handle_nanovdb_data_load(pnanovdb_editor_token_t* scene, pnanovdb_compute_array_t* nanovdb_array, const char* filename);
+    void handle_nanovdb_data_load(pnanovdb_editor_token_t* scene,
+                                  pnanovdb_compute_array_t* nanovdb_array,
+                                  const char* filename);
 
     void handle_gaussian_data_load(pnanovdb_editor_token_t* scene,
                                    pnanovdb_raster_gaussian_data_t* gaussian_data,
@@ -279,8 +280,10 @@ public:
     void select_render_view(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
     bool load_nanovdb_file(pnanovdb_editor_token_t* scene, const char* filepath);
     bool save_nanovdb_file(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name, const char* filepath);
-    bool load_gaussian_file(const char* filepath, pnanovdb_pipeline_type_t process_pipeline,
-                            pnanovdb_pipeline_type_t render_pipeline, float voxels_per_unit);
+    bool load_gaussian_file(const char* filepath,
+                            pnanovdb_pipeline_type_t process_pipeline,
+                            pnanovdb_pipeline_type_t render_pipeline,
+                            float voxels_per_unit);
 
 private:
     void copy_shader_params(pnanovdb_pipeline_render_method_t render_method,

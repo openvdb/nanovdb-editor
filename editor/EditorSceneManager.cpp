@@ -140,8 +140,8 @@ void EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
 {
     // Use default pipelines for NanoVDB
     std::lock_guard<std::mutex> lock(m_mutex);
-    add_nanovdb_impl(scene, name, array, params_array, compute, shader_name,
-                     pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_nanovdb_render);
+    add_nanovdb_impl(scene, name, array, params_array, compute, shader_name, pnanovdb_pipeline_type_noop,
+                     pnanovdb_pipeline_type_nanovdb_render);
 }
 
 void EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
@@ -155,8 +155,7 @@ void EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
 {
     // Atomic: acquire mutex once for both object creation and pipeline config
     std::lock_guard<std::mutex> lock(m_mutex);
-    add_nanovdb_impl(scene, name, array, params_array, compute, shader_name,
-                     process_pipeline, render_pipeline);
+    add_nanovdb_impl(scene, name, array, params_array, compute, shader_name, process_pipeline, render_pipeline);
 }
 
 void EditorSceneManager::add_nanovdb_impl(pnanovdb_editor_token_t* scene,
@@ -183,7 +182,8 @@ void EditorSceneManager::add_nanovdb_impl(pnanovdb_editor_token_t* scene,
     if (object_exists)
     {
         old_array = it->second.resources.nanovdb_array_owner ? it->second.resources.nanovdb_array_owner.get() : nullptr;
-        old_params = it->second.params.shader_params_array_owner ? it->second.params.shader_params_array_owner.get() : nullptr;
+        old_params =
+            it->second.params.shader_params_array_owner ? it->second.params.shader_params_array_owner.get() : nullptr;
         old_visible = it->second.visible;
     }
 
@@ -222,7 +222,8 @@ void EditorSceneManager::add_nanovdb_impl(pnanovdb_editor_token_t* scene,
             for (const auto& pair : m_objects)
             {
                 // Skip the current object we're modifying
-                if (pair.first != key && pair.second.resources.nanovdb_array_owner && pair.second.resources.nanovdb_array_owner.get() == array)
+                if (pair.first != key && pair.second.resources.nanovdb_array_owner &&
+                    pair.second.resources.nanovdb_array_owner.get() == array)
                 {
                     existing_owner = pair.second.resources.nanovdb_array_owner;
                     SCENEMANAGER_LOG(
@@ -331,9 +332,8 @@ void EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,
 {
     // Use default pipelines for Gaussian data: raster2d (no process, 2D splatting)
     std::lock_guard<std::mutex> lock(m_mutex);
-    add_gaussian_data_impl(scene, name, gaussian_data, params_array, shader_params_data_type,
-                           compute, raster, queue, shader_name,
-                           pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_raster2d, old_owner_out);
+    add_gaussian_data_impl(scene, name, gaussian_data, params_array, shader_params_data_type, compute, raster, queue,
+                           shader_name, pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_raster2d, old_owner_out);
 }
 
 void EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,
@@ -351,9 +351,8 @@ void EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,
 {
     // Atomic: acquire mutex once for both object creation and pipeline config
     std::lock_guard<std::mutex> lock(m_mutex);
-    add_gaussian_data_impl(scene, name, gaussian_data, params_array, shader_params_data_type,
-                           compute, raster, queue, shader_name,
-                           process_pipeline, render_pipeline, old_owner_out);
+    add_gaussian_data_impl(scene, name, gaussian_data, params_array, shader_params_data_type, compute, raster, queue,
+                           shader_name, process_pipeline, render_pipeline, old_owner_out);
 }
 
 void EditorSceneManager::add_gaussian_data_impl(pnanovdb_editor_token_t* scene,
@@ -382,8 +381,10 @@ void EditorSceneManager::add_gaussian_data_impl(pnanovdb_editor_token_t* scene,
     if (it != m_objects.end())
     {
         object_exists = true;
-        old_gaussian = it->second.resources.gaussian_data_owner ? it->second.resources.gaussian_data_owner.get() : nullptr;
-        old_params = it->second.params.shader_params_array_owner ? it->second.params.shader_params_array_owner.get() : nullptr;
+        old_gaussian =
+            it->second.resources.gaussian_data_owner ? it->second.resources.gaussian_data_owner.get() : nullptr;
+        old_params =
+            it->second.params.shader_params_array_owner ? it->second.params.shader_params_array_owner.get() : nullptr;
         old_visible = it->second.visible;
 
         // Extract the old owner for deferred destruction if requested
@@ -411,13 +412,20 @@ void EditorSceneManager::add_gaussian_data_impl(pnanovdb_editor_token_t* scene,
         if (gd)
         {
             obj.resources.named_arrays.clear();
-            if (gd->means_cpu_array) obj.resources.named_arrays["means"] = gd->means_cpu_array;
-            if (gd->opacities_cpu_array) obj.resources.named_arrays["opacities"] = gd->opacities_cpu_array;
-            if (gd->quaternions_cpu_array) obj.resources.named_arrays["quaternions"] = gd->quaternions_cpu_array;
-            if (gd->scales_cpu_array) obj.resources.named_arrays["scales"] = gd->scales_cpu_array;
-            if (gd->sh_0_cpu_array) obj.resources.named_arrays["sh_0"] = gd->sh_0_cpu_array;
-            if (gd->sh_n_cpu_array) obj.resources.named_arrays["sh_n"] = gd->sh_n_cpu_array;
-            if (gd->colors_cpu_array) obj.resources.named_arrays["colors"] = gd->colors_cpu_array;
+            if (gd->means_cpu_array)
+                obj.resources.named_arrays["means"] = gd->means_cpu_array;
+            if (gd->opacities_cpu_array)
+                obj.resources.named_arrays["opacities"] = gd->opacities_cpu_array;
+            if (gd->quaternions_cpu_array)
+                obj.resources.named_arrays["quaternions"] = gd->quaternions_cpu_array;
+            if (gd->scales_cpu_array)
+                obj.resources.named_arrays["scales"] = gd->scales_cpu_array;
+            if (gd->sh_0_cpu_array)
+                obj.resources.named_arrays["sh_0"] = gd->sh_0_cpu_array;
+            if (gd->sh_n_cpu_array)
+                obj.resources.named_arrays["sh_n"] = gd->sh_n_cpu_array;
+            if (gd->colors_cpu_array)
+                obj.resources.named_arrays["colors"] = gd->colors_cpu_array;
         }
     }
 
@@ -578,15 +586,15 @@ void EditorSceneManager::add_camera(pnanovdb_editor_token_t* scene,
 
     obj.resources.camera_view = camera_copy;
     obj.resources.camera_view_owner = std::shared_ptr<pnanovdb_camera_view_t>(camera_copy,
-                                                                    [](pnanovdb_camera_view_t* ptr)
-                                                                    {
-                                                                        if (ptr)
-                                                                        {
-                                                                            delete[] ptr->states;
-                                                                            delete[] ptr->configs;
-                                                                            delete ptr;
-                                                                        }
-                                                                    });
+                                                                              [](pnanovdb_camera_view_t* ptr)
+                                                                              {
+                                                                                  if (ptr)
+                                                                                  {
+                                                                                      delete[] ptr->states;
+                                                                                      delete[] ptr->configs;
+                                                                                      delete ptr;
+                                                                                  }
+                                                                              });
 }
 
 void EditorSceneManager::register_camera(pnanovdb_editor_token_t* scene,
@@ -623,14 +631,16 @@ bool EditorSceneManager::remove(pnanovdb_editor_token_t* scene, pnanovdb_editor_
         // Log what shared_ptrs will be destroyed
         if (it->second.resources.nanovdb_array_owner)
             SCENEMANAGER_LOG("[SceneManager]   - nanovdb_array %p, ref_count %ld\n",
-                             (void*)it->second.resources.nanovdb_array_owner.get(), it->second.resources.nanovdb_array_owner.use_count());
+                             (void*)it->second.resources.nanovdb_array_owner.get(),
+                             it->second.resources.nanovdb_array_owner.use_count());
         if (it->second.params.shader_params_array_owner)
             SCENEMANAGER_LOG("[SceneManager]   - params_array %p, ref_count %ld\n",
                              (void*)it->second.params.shader_params_array_owner.get(),
                              it->second.params.shader_params_array_owner.use_count());
         if (it->second.resources.gaussian_data_owner)
             SCENEMANAGER_LOG("[SceneManager]   - gaussian_data %p, ref_count %ld\n",
-                             (void*)it->second.resources.gaussian_data_owner.get(), it->second.resources.gaussian_data_owner.use_count());
+                             (void*)it->second.resources.gaussian_data_owner.get(),
+                             it->second.resources.gaussian_data_owner.use_count());
     }
 
     bool result = m_objects.erase(key) > 0;

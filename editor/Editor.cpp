@@ -657,8 +657,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
         // Handle async operations (rasterization + pipeline conversion) - single entry point in pipeline
         bool async_in_progress = pnanovdb_editor::pipeline_update_async_progress(
-            editor->impl->editor_scene, imgui_user_instance->progress.text,
-            imgui_user_instance->progress.value, old_gaussian_data_ptr);
+            editor->impl->editor_scene, imgui_user_instance->progress.text, imgui_user_instance->progress.value,
+            old_gaussian_data_ptr);
 
         if (!async_in_progress)
         {
@@ -973,9 +973,8 @@ void add_nanovdb_2(pnanovdb_editor_t* editor,
     pnanovdb_compute_array_t* array = editor->impl->compute->duplicate_array(array_in);
     if (!array)
     {
-        Console::getInstance().addLog(
-            Console::LogLevel::Error, "add_nanovdb_2: failed to duplicate input array for '%s'",
-            token_to_string_log(name));
+        Console::getInstance().addLog(Console::LogLevel::Error, "add_nanovdb_2: failed to duplicate input array for '%s'",
+                                      token_to_string_log(name));
         return;
     }
 
@@ -1088,9 +1087,9 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
 
     // Add with deferred destruction handling (use local device_queue in case we waited for worker init)
     std::shared_ptr<pnanovdb_raster_gaussian_data_t> old_owner;
-    editor->impl->scene_manager->add_gaussian_data(
-        scene, name, gaussian_data, raster_params_array, raster_params_dt, editor->impl->compute, editor->impl->raster,
-        device_queue, pnanovdb_editor::s_raster2d_gaussian_shader, &old_owner);
+    editor->impl->scene_manager->add_gaussian_data(scene, name, gaussian_data, raster_params_array, raster_params_dt,
+                                                   editor->impl->compute, editor->impl->raster, device_queue,
+                                                   pnanovdb_editor::s_raster2d_gaussian_shader, &old_owner);
 
     // Chain old data through gaussian_data_old for deferred destruction
     if (old_owner)
@@ -1158,9 +1157,8 @@ void add_nanovdb_3(pnanovdb_editor_t* editor,
     pnanovdb_compute_array_t* array = editor->impl->compute->duplicate_array(array_in);
     if (!array)
     {
-        Console::getInstance().addLog(
-            Console::LogLevel::Error, "add_nanovdb_3: failed to duplicate input array for '%s'",
-            token_to_string_log(name));
+        Console::getInstance().addLog(Console::LogLevel::Error, "add_nanovdb_3: failed to duplicate input array for '%s'",
+                                      token_to_string_log(name));
         return;
     }
 
@@ -1259,8 +1257,7 @@ void add_gaussian_data_3(pnanovdb_editor_t* editor,
     std::shared_ptr<pnanovdb_raster_gaussian_data_t> old_owner;
     editor->impl->scene_manager->add_gaussian_data(
         scene, name, gaussian_data, raster_params_array, raster_params_dt, editor->impl->compute, editor->impl->raster,
-        device_queue, pnanovdb_editor::s_raster2d_gaussian_shader, process_pipeline, render_pipeline,
-        &old_owner);
+        device_queue, pnanovdb_editor::s_raster2d_gaussian_shader, process_pipeline, render_pipeline, &old_owner);
 
     if (old_owner)
     {
@@ -1771,8 +1768,8 @@ void* map_params(pnanovdb_editor_t* editor,
                 Console::getInstance().addLog(Console::LogLevel::Debug, "map_params: Found params in scene manager");
                 result = obj->params.shader_params;
             }
-            else if (
-                obj && pnanovdb_reflect_layout_compare(PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t), data_type))
+            else if (obj && pnanovdb_reflect_layout_compare(
+                                PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t), data_type))
             {
                 Console::getInstance().addLog(Console::LogLevel::Debug, "map_params: Found params in scene manager");
                 result = &obj->params.shader_name;

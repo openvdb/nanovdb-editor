@@ -49,16 +49,16 @@ struct SceneObjectResources
     pnanovdb_compute_array_t* nanovdb_array = nullptr;
     pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr;
     pnanovdb_camera_view_t* camera_view = nullptr;
-    
+
     // Named arrays - multiple arrays identified by name
     std::map<std::string, pnanovdb_compute_array_t*> named_arrays;
-    
+
     // Converted/processed data (output of process pipeline)
     pnanovdb_compute_array_t* converted_nanovdb = nullptr;
-    
+
     // Source file path (for re-conversion from file with different parameters)
     std::string source_filepath;
-    
+
     // Ownership handles for automatic cleanup
     std::shared_ptr<pnanovdb_compute_array_t> nanovdb_array_owner;
     std::shared_ptr<pnanovdb_raster_gaussian_data_t> gaussian_data_owner;
@@ -74,11 +74,11 @@ struct SceneObjectParams
     // GPU-backed shader params storage
     pnanovdb_compute_array_t* shader_params_array = nullptr;
     std::shared_ptr<pnanovdb_compute_array_t> shader_params_array_owner;
-    
+
     // Typed params pointer and reflection info
     void* shader_params = nullptr;
     const pnanovdb_reflect_data_type_t* shader_params_data_type = nullptr;
-    
+
     // Associated shader name
     pnanovdb_editor_shader_name_t shader_name = {};
 };
@@ -88,14 +88,23 @@ struct SceneObjectParams
 */
 struct ShaderOverride
 {
-    std::string shader_name;  // Override shader name (empty = use pipeline default)
-    
+    std::string shader_name; // Override shader name (empty = use pipeline default)
+
     // Dynamic parameter overrides: param_name -> serialized value
     std::map<std::string, std::vector<uint8_t>> param_overrides;
-    
-    bool has_shader_override() const { return !shader_name.empty(); }
-    bool has_param_overrides() const { return !param_overrides.empty(); }
-    bool is_empty() const { return !has_shader_override() && !has_param_overrides(); }
+
+    bool has_shader_override() const
+    {
+        return !shader_name.empty();
+    }
+    bool has_param_overrides() const
+    {
+        return !param_overrides.empty();
+    }
+    bool is_empty() const
+    {
+        return !has_shader_override() && !has_param_overrides();
+    }
 };
 
 /*!
@@ -106,12 +115,12 @@ struct ShaderOverride
 struct PipelineStage
 {
     pnanovdb_pipeline_type_t type = pnanovdb_pipeline_type_noop;
-    pnanovdb_pipeline_params_t params = {};  // Heap-allocated stage params (data owned by this struct)
-    
+    pnanovdb_pipeline_params_t params = {}; // Heap-allocated stage params (data owned by this struct)
+
     // Per-shader overrides (indexed by shader position in pipeline descriptor)
     std::vector<ShaderOverride> shader_overrides;
-    
-    bool dirty = true;  // Needs re-execution
+
+    bool dirty = true; // Needs re-execution
 
     PipelineStage() = default;
 
@@ -159,8 +168,7 @@ struct PipelineStage
     }
 
     PipelineStage(PipelineStage&& other) noexcept
-        : type(other.type), params(other.params),
-          shader_overrides(std::move(other.shader_overrides)), dirty(other.dirty)
+        : type(other.type), params(other.params), shader_overrides(std::move(other.shader_overrides)), dirty(other.dirty)
     {
         other.params = {};
     }
@@ -186,14 +194,32 @@ struct PipelineStage
 struct SceneObjectPipeline
 {
     PipelineStage stages[pnanovdb_pipeline_stage_count];
-    
+
     // Convenience accessors
-    PipelineStage& load() { return stages[pnanovdb_pipeline_stage_load]; }
-    PipelineStage& process() { return stages[pnanovdb_pipeline_stage_process]; }
-    PipelineStage& render() { return stages[pnanovdb_pipeline_stage_render]; }
-    const PipelineStage& load() const { return stages[pnanovdb_pipeline_stage_load]; }
-    const PipelineStage& process() const { return stages[pnanovdb_pipeline_stage_process]; }
-    const PipelineStage& render() const { return stages[pnanovdb_pipeline_stage_render]; }
+    PipelineStage& load()
+    {
+        return stages[pnanovdb_pipeline_stage_load];
+    }
+    PipelineStage& process()
+    {
+        return stages[pnanovdb_pipeline_stage_process];
+    }
+    PipelineStage& render()
+    {
+        return stages[pnanovdb_pipeline_stage_render];
+    }
+    const PipelineStage& load() const
+    {
+        return stages[pnanovdb_pipeline_stage_load];
+    }
+    const PipelineStage& process() const
+    {
+        return stages[pnanovdb_pipeline_stage_process];
+    }
+    const PipelineStage& render() const
+    {
+        return stages[pnanovdb_pipeline_stage_render];
+    }
 };
 
 /*!
@@ -207,31 +233,73 @@ struct SceneObject
     pnanovdb_editor_token_t* scene_token; ///< Scene identifier token
     pnanovdb_editor_token_t* name_token; ///< Object name token
 
-    SceneObjectResources resources;  ///< Binary data (files)
-    SceneObjectParams params;        ///< Compile-time schemas (JSON)
-    SceneObjectPipeline pipeline;    ///< Dynamic overrides (JSON overs)
-    
+    SceneObjectResources resources; ///< Binary data (files)
+    SceneObjectParams params; ///< Compile-time schemas (JSON)
+    SceneObjectPipeline pipeline; ///< Dynamic overrides (JSON overs)
+
     bool visible = true;
-    
+
     // Resources
-    pnanovdb_compute_array_t*& nanovdb_array() { return resources.nanovdb_array; }
-    pnanovdb_raster_gaussian_data_t*& gaussian_data() { return resources.gaussian_data; }
-    pnanovdb_camera_view_t*& camera_view() { return resources.camera_view; }
-    std::map<std::string, pnanovdb_compute_array_t*>& named_arrays() { return resources.named_arrays; }
-    
+    pnanovdb_compute_array_t*& nanovdb_array()
+    {
+        return resources.nanovdb_array;
+    }
+    pnanovdb_raster_gaussian_data_t*& gaussian_data()
+    {
+        return resources.gaussian_data;
+    }
+    pnanovdb_camera_view_t*& camera_view()
+    {
+        return resources.camera_view;
+    }
+    std::map<std::string, pnanovdb_compute_array_t*>& named_arrays()
+    {
+        return resources.named_arrays;
+    }
+
     // Params
-    void*& shader_params() { return params.shader_params; }
-    const pnanovdb_reflect_data_type_t*& shader_params_data_type() { return params.shader_params_data_type; }
-    pnanovdb_editor_shader_name_t& shader_name() { return params.shader_name; }
-    
+    void*& shader_params()
+    {
+        return params.shader_params;
+    }
+    const pnanovdb_reflect_data_type_t*& shader_params_data_type()
+    {
+        return params.shader_params_data_type;
+    }
+    pnanovdb_editor_shader_name_t& shader_name()
+    {
+        return params.shader_name;
+    }
+
     // Pipeline shortcuts
-    pnanovdb_pipeline_type_t& load_pipeline() { return pipeline.load().type; }
-    pnanovdb_pipeline_type_t& process_pipeline() { return pipeline.process().type; }
-    pnanovdb_pipeline_type_t& render_pipeline() { return pipeline.render().type; }
-    pnanovdb_pipeline_params_t& load_params() { return pipeline.load().params; }
-    pnanovdb_pipeline_params_t& process_params() { return pipeline.process().params; }
-    pnanovdb_pipeline_params_t& render_params() { return pipeline.render().params; }
-    bool& process_dirty() { return pipeline.process().dirty; }
+    pnanovdb_pipeline_type_t& load_pipeline()
+    {
+        return pipeline.load().type;
+    }
+    pnanovdb_pipeline_type_t& process_pipeline()
+    {
+        return pipeline.process().type;
+    }
+    pnanovdb_pipeline_type_t& render_pipeline()
+    {
+        return pipeline.render().type;
+    }
+    pnanovdb_pipeline_params_t& load_params()
+    {
+        return pipeline.load().params;
+    }
+    pnanovdb_pipeline_params_t& process_params()
+    {
+        return pipeline.process().params;
+    }
+    pnanovdb_pipeline_params_t& render_params()
+    {
+        return pipeline.render().params;
+    }
+    bool& process_dirty()
+    {
+        return pipeline.process().dirty;
+    }
 };
 
 /*!

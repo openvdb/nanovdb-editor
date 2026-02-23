@@ -563,8 +563,8 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
             }
 
             // Show other scene items
-            auto renderSceneItems = [this, ptr, indentSpacing](const auto& /*itemMap*/, const char* treeLabel,
-                                                               ViewType viewType)
+            auto renderSceneItems = [this, ptr, indentSpacing](
+                                        const auto& /*itemMap*/, const char* treeLabel, ViewType viewType)
             {
                 if (renderTreeNodeHeader(treeLabel))
                 {
@@ -599,11 +599,12 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                             if (scene_manager)
                             {
                                 scene_manager->with_object(current_scene, token,
-                                    [&isVisible](pnanovdb_editor::SceneObject* obj)
-                                    {
-                                        if (obj)
-                                            isVisible = obj->visible ? PNANOVDB_TRUE : PNANOVDB_FALSE;
-                                    });
+                                                           [&isVisible](pnanovdb_editor::SceneObject* obj)
+                                                           {
+                                                               if (obj)
+                                                                   isVisible =
+                                                                       obj->visible ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+                                                           });
                             }
 
                             pnanovdb_bool_t prevVisible = isVisible;
@@ -624,11 +625,11 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                             if (isVisible != prevVisible && scene_manager)
                             {
                                 scene_manager->with_object(current_scene, token,
-                                    [&isVisible](pnanovdb_editor::SceneObject* obj)
-                                    {
-                                        if (obj)
-                                            obj->visible = (isVisible == PNANOVDB_TRUE);
-                                    });
+                                                           [&isVisible](pnanovdb_editor::SceneObject* obj)
+                                                           {
+                                                               if (obj)
+                                                                   obj->visible = (isVisible == PNANOVDB_TRUE);
+                                                           });
 
                                 // When making an object visible, auto-switch render view to it
                                 if (isVisible == PNANOVDB_TRUE && editor && current_scene)

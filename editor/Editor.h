@@ -212,9 +212,9 @@ static inline pnanovdb_bool_t pnanovdb_editor_token_is_valid(const pnanovdb_edit
 // -----------------------------------------------------------
 
 // ------------------------------------------------ Shader Parameter Provider Priorities
-constexpr uint32_t kShaderParamPriorityDefaults = 0;    // Shader JSON defaults (lowest)
-constexpr uint32_t kShaderParamPriorityValues   = 100;  // Scene object values
-constexpr uint32_t kShaderParamPriorityPanel    = 200;  // Properties panel overrides (highest)
+constexpr uint32_t kShaderParamPriorityDefaults = 0; // Shader JSON defaults (lowest)
+constexpr uint32_t kShaderParamPriorityValues = 100; // Scene object values
+constexpr uint32_t kShaderParamPriorityPanel = 200; // Properties panel overrides (highest)
 // -----------------------------------------------------------
 
 // Forward declaration for execute_removal function

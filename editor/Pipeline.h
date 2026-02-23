@@ -24,8 +24,8 @@ typedef struct pnanovdb_pipeline_param_field_t
 {
     const char* name;
     const char* tooltip;
-    pnanovdb_uint32_t type;        // PNANOVDB_REFLECT_TYPE_FLOAT, _INT32, etc.
-    pnanovdb_uint64_t offset;      // offsetof() within params data
+    pnanovdb_uint32_t type; // PNANOVDB_REFLECT_TYPE_FLOAT, _INT32, etc.
+    pnanovdb_uint64_t offset; // offsetof() within params data
     float default_value;
     float min_value;
     float max_value;
@@ -188,7 +188,9 @@ bool pipeline_start_rasterization(const char* raster_filepath,
                                   pnanovdb_editor_token_t* scene_token,
                                   const PipelineContext& ctx);
 
-void pipeline_set_pending_pipelines(pnanovdb_pipeline_type_t process, pnanovdb_pipeline_type_t render, float voxels_per_unit);
+void pipeline_set_pending_pipelines(pnanovdb_pipeline_type_t process,
+                                    pnanovdb_pipeline_type_t render,
+                                    float voxels_per_unit);
 pnanovdb_pipeline_type_t pipeline_get_pending_process_pipeline();
 pnanovdb_pipeline_type_t pipeline_get_pending_render_pipeline();
 float pipeline_get_pending_process_voxels_per_unit();
@@ -232,13 +234,13 @@ bool pipeline_is_async_running();
 
 /*!
     \brief Create a new scene object for re-conversion with different parameters.
-    
+
     Copies the source filepath, pipeline type, and a deep copy of the process
     params from the source object. The new object is marked dirty so the
     pipeline picks it up for conversion. The caller should write desired
     parameter values into the source object BEFORE calling this function
     (the generic Properties UI does this on every edit).
-    
+
     \param scene_manager Scene manager to create the object in
     \param scene_token   Scene token for the new object
     \param source_name   Name token of the existing object to copy source from
@@ -256,7 +258,7 @@ bool pipeline_create_variant(EditorSceneManager* scene_manager,
 
 /*!
  * \brief RAII wrapper for registering a shader parameter provider
- * 
+ *
  * Usage:
  *   ShaderParamProviderScope provider(100, ctx, get_fn);
  *   // Provider is registered while in scope
@@ -269,18 +271,24 @@ public:
                              pnanovdb_shader_param_provider_ctx_t* ctx,
                              pnanovdb_shader_param_provider_fn get_fn);
     ~ShaderParamProviderScope();
-    
+
     // Non-copyable
     ShaderParamProviderScope(const ShaderParamProviderScope&) = delete;
     ShaderParamProviderScope& operator=(const ShaderParamProviderScope&) = delete;
-    
+
     // Movable
     ShaderParamProviderScope(ShaderParamProviderScope&& other) noexcept;
     ShaderParamProviderScope& operator=(ShaderParamProviderScope&& other) noexcept;
-    
-    uint32_t handle() const { return m_handle; }
-    bool valid() const { return m_handle != 0; }
-    
+
+    uint32_t handle() const
+    {
+        return m_handle;
+    }
+    bool valid() const
+    {
+        return m_handle != 0;
+    }
+
 private:
     uint32_t m_handle = 0;
 };
@@ -298,8 +306,10 @@ PNANOVDB_CAST_PAIR(pnanovdb_scene_manager_t, pnanovdb_editor::EditorSceneManager
 // ============================================================================
 
 // Helper to define a pipeline in a single block
-#define PNANOVDB_DEFINE_PIPELINE_SHADERS(name, ...) \
+#define PNANOVDB_DEFINE_PIPELINE_SHADERS(name, ...)                                                                    \
     static const pnanovdb_pipeline_shader_entry_t name[] = { __VA_ARGS__ }
 
-#define PNANOVDB_PIPELINE_SHADER(shader, group, overridable) \
-    { shader, group, overridable }
+#define PNANOVDB_PIPELINE_SHADER(shader, group, overridable)                                                           \
+    {                                                                                                                  \
+        shader, group, overridable                                                                                     \
+    }

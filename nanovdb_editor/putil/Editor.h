@@ -302,7 +302,8 @@ typedef struct pnanovdb_editor_t
                                                              pnanovdb_editor_token_t* object_name,
                                                              const char* array_name);
 
-    // Per-stage pipeline parameters. Call unmap_pipeline_params after every map_pipeline_params (even if map returned null).
+    // Per-stage pipeline parameters. Call unmap_pipeline_params after every map_pipeline_params (even if map returned
+    // null).
     pnanovdb_pipeline_params_t*(PNANOVDB_ABI* map_pipeline_params)(pnanovdb_editor_t* editor,
                                                                    pnanovdb_editor_token_t* scene,
                                                                    pnanovdb_editor_token_t* name,
