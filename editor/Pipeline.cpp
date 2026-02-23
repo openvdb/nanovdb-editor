@@ -615,22 +615,14 @@ static const pnanovdb_pipeline_descriptor_t s_raster2d_descriptor = {
     0 // param_fields
 };
 
-static const pnanovdb_pipeline_descriptor_t s_raster3d_descriptor = { pnanovdb_pipeline_type_raster3d,
-                                                                      pnanovdb_pipeline_stage_process,
-                                                                      "Gaussian to NanoVDB",
-                                                                      s_raster3d_shaders,
-                                                                      1,
-                                                                      sizeof(Raster3DParams),
-                                                                      "Raster3DParams",
-                                                                      init_raster3d_params,
-                                                                      execute_raster3d,
-                                                                      get_render_method_nanovdb, // raster3d converts to
-                                                                                                 // nanovdb, then
-                                                                                                 // renders as nanovdb
-                                                                      map_raster3d_params,
-                                                                      s_raster3d_param_fields,
-                                                                      sizeof(s_raster3d_param_fields) /
-                                                                          sizeof(s_raster3d_param_fields[0]) };
+static const pnanovdb_pipeline_descriptor_t s_raster3d_descriptor = {
+    pnanovdb_pipeline_type_raster3d, pnanovdb_pipeline_stage_process, "Gaussian to NanoVDB", s_raster3d_shaders, 1,
+    sizeof(Raster3DParams), "Raster3DParams", init_raster3d_params, execute_raster3d,
+    get_render_method_nanovdb, // raster3d converts to
+                               // nanovdb, then
+                               // renders as nanovdb
+    map_raster3d_params, s_raster3d_param_fields, sizeof(s_raster3d_param_fields) / sizeof(s_raster3d_param_fields[0])
+};
 
 // ============================================================================
 // Pipeline Registry Functions
