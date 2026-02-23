@@ -163,8 +163,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
           sudo apt-get install -y libxcb1-dev libxcb-keysyms1-dev libxcb-randr0-dev libxcb-xinerama0-dev libx11-xcb-dev libxrandr-dev libwayland-dev wayland-protocols libdirectfb-dev
-          # Ensure lavapipe is available
-          export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.aarch64.json
+          
+          # Find lavapipe ICD file (name varies by distro/arch)
+          echo "Available Vulkan ICD files:"
+          ls -la /usr/share/vulkan/icd.d/ || true
+          
+          # Try to find lavapipe ICD
+          LVP_ICD=$(find /usr/share/vulkan/icd.d -name "lvp_icd*.json" 2>/dev/null | head -1)
+          if [ -n "$LVP_ICD" ]; then
+              echo "Found lavapipe ICD: $LVP_ICD"
+              export VK_DRIVER_FILES="$LVP_ICD"
+          fi
           vulkaninfo --summary || true
 
       - name: Build NanoVDB Editor (GLFW disabled)
@@ -191,23 +200,26 @@ jobs:
         run: |
           set -e
 
+          # Find lavapipe ICD file dynamically (name varies: lvp_icd.aarch64.json, lvp_icd.arm64.json, etc.)
+          LVP_ICD=$(find /usr/share/vulkan/icd.d -name "lvp_icd*.json" 2>/dev/null | head -1)
+          
+          if [ -z "$LVP_ICD" ]; then
+              echo "ERROR: No lavapipe ICD file found"
+              echo "Available ICD files:"
+              ls -la /usr/share/vulkan/icd.d/ || true
+              exit 1
+          fi
+          
+          echo "Found lavapipe ICD: $LVP_ICD"
+          
           # Configure lavapipe for software rendering
-          export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.aarch64.json
-          export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.aarch64.json
+          export VK_ICD_FILENAMES="$LVP_ICD"
+          export VK_DRIVER_FILES="$LVP_ICD"
 
           # Additional lavapipe configuration
           export LP_NUM_THREADS=1
           export LIBGL_ALWAYS_SOFTWARE=1
           export GALLIUM_DRIVER=llvmpipe
-
-          # Verify ICD file exists
-          if [ -f "$VK_ICD_FILENAMES" ]; then
-              echo "ICD file found: $VK_ICD_FILENAMES"
-          else
-              echo "ERROR: ICD file not found: $VK_ICD_FILENAMES"
-              ls -la /usr/share/vulkan/icd.d/ || true
-              exit 1
-          fi
 
           echo "Using Vulkan driver: $VK_DRIVER_FILES"
           echo "LP_NUM_THREADS: $LP_NUM_THREADS"
