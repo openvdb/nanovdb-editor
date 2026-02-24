@@ -1,0 +1,24 @@
+name: Build Wheels (PR)
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - 'CODEOWNERS'
+      - '**.md'
+      - 'dev_utils/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build wheels and sdist
+    uses: ./.github/workflows/build-wheels.yml
+    with:
+      is_dev: false
