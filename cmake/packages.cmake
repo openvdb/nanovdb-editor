@@ -355,25 +355,20 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
     set(SLANG_EP_INSTALL_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/slang_ep_install.cmake")
 
     # On Linux, slang-embed (run during Slang build) needs libminiz.so.3 on LD_LIBRARY_PATH.
-    # Use a shell wrapper so the env is inherited by the build backend and all custom commands.
+    # Use a wrapper script so the env is exported in a shell and inherited by all child processes.
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        set(_ep_ld_path
-            "<BINARY_DIR>/Release"
-            "<BINARY_DIR>/Release/lib"
-            "<BINARY_DIR>/Release/bin"
-            "<BINARY_DIR>/generators/Release"
-            "<BINARY_DIR>/generators/Release/bin"
-            "<BINARY_DIR>/lib"
-            "<BINARY_DIR>/bin"
-            "<BINARY_DIR>/external/miniz"
-            "<BINARY_DIR>/external/miniz/Release"
-            "<BINARY_DIR>/external/miniz/Release/lib"
-            "<BINARY_DIR>"
-        )
-        string(REPLACE ";" ":" _ep_ld_path "${_ep_ld_path}")
+        set(_ep_wrapper "${CMAKE_BINARY_DIR}/slang_ep_build_linux.sh")
+        file(WRITE "${_ep_wrapper}" [[
+#!/bin/bash
+set -e
+B="$1"
+shift
+export LD_LIBRARY_PATH="${B}/Release:${B}/Release/lib:${B}/Release/bin:${B}/generators/Release:${B}/generators/Release/bin:${B}/lib:${B}/bin:${B}/external/miniz:${B}/external/miniz/Release:${B}/external/miniz/Release/lib:${B}"
+exec "$@"
+]])
         set(SLANG_EP_BUILD_CMD
-            ${CMAKE_COMMAND} -E env
-            "LD_LIBRARY_PATH=${_ep_ld_path}"
+            /bin/bash ${_ep_wrapper}
+            <BINARY_DIR>
             ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
         )
     else()
