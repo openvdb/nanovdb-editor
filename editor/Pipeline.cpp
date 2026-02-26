@@ -1122,8 +1122,19 @@ bool pipeline_start_rasterization(const char* raster_filepath,
     s_pending_raster_params->name = nullptr;
     s_pending_raster_params->data_type = s_raster_shader_params_data_type;
 
-    bool needs_compute_queue = rasterize_to_nanovdb || (s_pending_process_pipeline == pnanovdb_pipeline_type_raster3d);
-    pnanovdb_compute_queue_t* worker_queue = needs_compute_queue ? s_raster_compute_queue : s_raster_device_queue;
+    pnanovdb_compute_queue_t* worker_queue = s_raster_compute_queue ? s_raster_compute_queue : s_raster_device_queue;
+
+    pnanovdb_compute_interface_t* log_iface =
+        s_raster_compute->device_interface.get_compute_interface(s_raster_device_queue);
+    pnanovdb_compute_context_t* log_ctx = s_raster_compute->device_interface.get_compute_context(s_raster_device_queue);
+    auto log_print = log_iface ? log_iface->get_log_print(log_ctx) : nullptr;
+    if (log_print)
+    {
+        log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO,
+                  "pipeline_start_rasterization: worker_queue=%p (compute=%p device=%p) using_%s_queue",
+                  (void*)worker_queue, (void*)s_raster_compute_queue, (void*)s_raster_device_queue,
+                  (worker_queue == s_raster_compute_queue) ? "compute" : "device");
+    }
 
     s_raster_task_id = s_raster_worker.enqueue(
         [&](pnanovdb_raster_t* raster, const pnanovdb_compute_t* compute, pnanovdb_compute_queue_t* queue,
@@ -1260,10 +1271,12 @@ bool pipeline_handle_rasterization_completion(EditorScene* editor_scene,
         Console::getInstance().addLog("Rasterization of '%s' failed", s_pending_raster_filepath.c_str());
     }
 
-    // Clean up temporary worker thread raster context (if created during rasterization)
+    // Clean up temporary worker thread raster context (if created during rasterization).
+    // Must use the same queue it was created on (compute_queue from the worker thread).
     if (s_pending_raster_ctx)
     {
-        s_raster_raster->destroy_context(s_raster_compute, s_raster_device_queue, s_pending_raster_ctx);
+        pnanovdb_compute_queue_t* cleanup_queue = s_raster_compute_queue ? s_raster_compute_queue : s_raster_device_queue;
+        s_raster_raster->destroy_context(s_raster_compute, cleanup_queue, s_pending_raster_ctx);
         s_pending_raster_ctx = nullptr;
     }
 

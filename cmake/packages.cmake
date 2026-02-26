@@ -357,7 +357,7 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(SLANG_EP_BUILD_CMD
         ${CMAKE_COMMAND} -E env
-        "LD_LIBRARY_PATH=<BINARY_DIR>/Release:<BINARY_DIR>/generators/Release:<BINARY_DIR>/external/miniz:<BINARY_DIR>/external/miniz/Release:<BINARY_DIR>$${LD_LIBRARY_PATH}"
+        "LD_LIBRARY_PATH=<BINARY_DIR>/Release:<BINARY_DIR>/generators/Release:<BINARY_DIR>/external/miniz:<BINARY_DIR>/external/miniz/Release:<BINARY_DIR>:$ENV{LD_LIBRARY_PATH}"
         ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
     )
     else()
@@ -388,7 +388,7 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
             -DCMAKE_PREFIX_PATH=${LLVM_INSTALL_DIR}
         BUILD_BYPRODUCTS
             ${SLANG_INSTALLED_LIB}
-        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
+        BUILD_COMMAND ${SLANG_EP_BUILD_CMD}
         INSTALL_COMMAND ${CMAKE_COMMAND} -DSLANG_EP_BINARY_DIR=<BINARY_DIR> -P ${SLANG_EP_INSTALL_SCRIPT}
     )
 
