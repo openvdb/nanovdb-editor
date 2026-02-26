@@ -28,7 +28,6 @@ namespace
 
 enum shader
 {
-    voxelbvh_allocate_range_headers_slang,
     voxelbvh_find_range_starts_slang,
     voxelbvh_gaussians_bbox_reduce1_slang,
     voxelbvh_gaussians_bbox_reduce2_slang,
@@ -44,24 +43,19 @@ enum shader
     voxelbvh_nanovdb_init_slang,
     voxelbvh_nanovdb_set_mask_ijkl_slang,
     voxelbvh_scatter_range_headers_slang,
-    voxelbvh_set_lower_masks_slang,
-    voxelbvh_set_upper_masks_slang,
-    voxelbvh_set_voxel_masks_slang,
 
     shader_count
 };
 
 static const char* s_shader_names[shader_count] = {
-    "raster/voxelbvh_allocate_range_headers.slang", "raster/voxelbvh_find_range_starts.slang",
-    "raster/voxelbvh_gaussians_bbox_reduce1.slang", "raster/voxelbvh_gaussians_bbox_reduce2.slang",
-    "raster/voxelbvh_gaussians_to_ijkl.slang",      "raster/voxelbvh_nanovdb_add_count.slang",
-    "raster/voxelbvh_nanovdb_add_link.slang",       "raster/voxelbvh_nanovdb_add_scan.slang",
-    "raster/voxelbvh_nanovdb_find_clear.slang",     "raster/voxelbvh_nanovdb_find_leaves.slang",
-    "raster/voxelbvh_nanovdb_find_lowers.slang",    "raster/voxelbvh_nanovdb_find_root.slang",
-    "raster/voxelbvh_nanovdb_find_uppers.slang",    "raster/voxelbvh_nanovdb_init.slang",
-    "raster/voxelbvh_nanovdb_set_mask_ijkl.slang",  "raster/voxelbvh_scatter_range_headers.slang",
-    "raster/voxelbvh_set_lower_masks.slang",        "raster/voxelbvh_set_upper_masks.slang",
-    "raster/voxelbvh_set_voxel_masks.slang"
+    "raster/voxelbvh_find_range_starts.slang",      "raster/voxelbvh_gaussians_bbox_reduce1.slang",
+    "raster/voxelbvh_gaussians_bbox_reduce2.slang", "raster/voxelbvh_gaussians_to_ijkl.slang",
+    "raster/voxelbvh_nanovdb_add_count.slang",      "raster/voxelbvh_nanovdb_add_link.slang",
+    "raster/voxelbvh_nanovdb_add_scan.slang",       "raster/voxelbvh_nanovdb_find_clear.slang",
+    "raster/voxelbvh_nanovdb_find_leaves.slang",    "raster/voxelbvh_nanovdb_find_lowers.slang",
+    "raster/voxelbvh_nanovdb_find_root.slang",      "raster/voxelbvh_nanovdb_find_uppers.slang",
+    "raster/voxelbvh_nanovdb_init.slang",           "raster/voxelbvh_nanovdb_set_mask_ijkl.slang",
+    "raster/voxelbvh_scatter_range_headers.slang",
 };
 
 struct voxelbvh_context_t
@@ -508,8 +502,7 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
             break;
         }
 
-        voxelbvh_nanovdb_add_nodes(
-            compute, queue, voxelbvh_context, nanovdb_inout, nanovdb_word_count);
+        voxelbvh_nanovdb_add_nodes(compute, queue, voxelbvh_context, nanovdb_inout, nanovdb_word_count);
     }
 }
 
@@ -539,12 +532,11 @@ pnanovdb_compute_array_t* voxelbvh_nanovdb_add_nodes_from_key_array(const pnanov
     gpu_array_upload(compute, queue, ijkl_gpu_array, ijkl_in);
     gpu_array_alloc_device(compute, queue, nanovdb_gpu_array, nanovdb_array);
 
-    voxelbvh_nanovdb_init(compute, queue, voxelbvh_context, nanovdb_gpu_array->device_buffer, 2u * nanovdb_uint64_count,
-                          root_coords, 1u);
+    voxelbvh_nanovdb_init(
+        compute, queue, voxelbvh_context, nanovdb_gpu_array->device_buffer, 2u * nanovdb_uint64_count, root_coords, 1u);
 
     voxelbvh_nanovdb_add_nodes_from_key_buffer(compute, queue, voxelbvh_context, nanovdb_gpu_array->device_buffer,
-                                               2u * nanovdb_uint64_count,
-                                               ijkl_gpu_array->device_buffer, ijkl_count);
+                                               2u * nanovdb_uint64_count, ijkl_gpu_array->device_buffer, ijkl_count);
 
     gpu_array_readback(compute, queue, nanovdb_gpu_array, nanovdb_array);
 

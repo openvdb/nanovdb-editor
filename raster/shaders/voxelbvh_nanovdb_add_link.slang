@@ -28,6 +28,14 @@ uint2 uint64_t_to_uint2(uint64_t v)
     return uint2(uint(v), uint(v >> 32u));
 }
 
+pnanovdb_coord_t key_to_coord(pnanovdb_uint64_t key)
+{
+    pnanovdb_coord_t ijk = { pnanovdb_uint32_as_int32(pnanovdb_uint64_to_uint32_lsr(key, 42u) << 12u),
+                             pnanovdb_uint32_as_int32(pnanovdb_uint64_to_uint32_lsr(key, 21u) << 12u),
+                             pnanovdb_uint32_as_int32(pnanovdb_uint64_to_uint32_lsr(key, 0u) << 12u) };
+    return ijk;
+}
+
 groupshared uint s_types[256u];
 
 #include <workgroup_scan_uint64.slang>
@@ -179,6 +187,13 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                             pnanovdb_upper_handle_t child = {allocation_offset};
                             pnanovdb_root_set_child(grid_type, buf, root, tile, child);
                             allocation_offset += PNANOVDB_GRID_TYPE_GET(grid_type, upper_size);
+
+                            // use root key to initialize upper bbox
+                            pnanovdb_uint64_t key = pnanovdb_root_tile_get_key(buf, tile);
+                            pnanovdb_coord_t ijk = key_to_coord(key);
+                            pnanovdb_coord_t ijk_max = ijk + int3(4095, 4095, 4095);
+                            pnanovdb_upper_set_bbox_min(buf, child, ijk);
+                            pnanovdb_upper_set_bbox_max(buf, child, ijk_max);
                         }
                     }
                 }
@@ -196,6 +211,15 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                                 child.address.byte_offset = allocation_offset;
                                 pnanovdb_upper_set_child(grid_type, buf, upper, n, child);
                                 allocation_offset += PNANOVDB_GRID_TYPE_GET(grid_type, lower_size);
+
+                                // use upper bbox to initialize lower bbox
+                                pnanovdb_coord_t ijk = pnanovdb_upper_get_bbox_min(buf, upper);
+                                ijk.x += int(((n >> 10u) & 31) << 7u);
+                                ijk.y += int(((n >> 5u) & 31) << 7u);
+                                ijk.z += int((n & 31) << 7u);
+                                pnanovdb_coord_t ijk_max = ijk + int3(127, 127, 127);
+                                pnanovdb_lower_set_bbox_min(buf, child, ijk);
+                                pnanovdb_lower_set_bbox_max(buf, child, ijk_max);
                             }
                         }
                     }
@@ -214,6 +238,15 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                                 child.address.byte_offset = allocation_offset;
                                 pnanovdb_lower_set_child(grid_type, buf, lower, n, child);
                                 allocation_offset += PNANOVDB_GRID_TYPE_GET(grid_type, leaf_size);
+
+                                // use lower bbox to initialize leaf bbox
+                                pnanovdb_coord_t ijk = pnanovdb_lower_get_bbox_min(buf, lower);
+                                ijk.x += int(((n >> 8u) & 15) << 3u);
+                                ijk.y += int(((n >> 4u) & 15) << 3u);
+                                ijk.z += int((n & 15) << 3u);
+                                uint dif_and_flags = 0x00070707;
+                                pnanovdb_leaf_set_bbox_min(buf, child, ijk);
+                                pnanovdb_leaf_set_bbox_dif_and_flags(buf, child, dif_and_flags);
                             }
                         }
                     }

@@ -105,9 +105,8 @@ void voxelbvh_test()
     pnanovdb_compute_array_t* built_nanovdb_array =
         voxel_bvh.voxelbvh_nanovdb_add_nodes_from_key_array(&compute, queue, voxelbvh_ctx, ijkl_array);
 
-    pnanovdb_buf_t buf = pnanovdb_make_buf(
-        (uint32_t*)built_nanovdb_array->data,
-        built_nanovdb_array->element_size * built_nanovdb_array->element_count / 4u);
+    pnanovdb_buf_t buf = pnanovdb_make_buf((uint32_t*)built_nanovdb_array->data,
+                                           built_nanovdb_array->element_size * built_nanovdb_array->element_count / 4u);
 
     pnanovdb_grid_handle_t grid = {};
     pnanovdb_tree_handle_t tree = pnanovdb_grid_get_tree(buf, grid);
@@ -186,20 +185,30 @@ void voxelbvh_test()
     printf("node_counts: root(%u) upper(%u) lower(%u) leaf(%u)\n", root_tile_count, upper_count, lower_count, leaf_count);
     printf("bad node_counts: upper(%u) lower(%u) leaf(%u)\n", upper_count_bad, lower_count_bad, leaf_count_bad);
 
+    pnanovdb_readaccessor_t acc;
+    pnanovdb_readaccessor_init(PNANOVDB_REF(acc), root);
+
     uint64_t unique_count = 0llu;
     pnanovdb_address_t addr_old = {};
     for (uint64_t idx = 0u; idx < ijkl_count; idx++)
     {
         uint64_t ijkl_raw = mapped_ijkl[idx];
-        pnanovdb_coord_t ijk = {
-            int(ijkl_raw >> 32u) & 0xFFFF,
-            int(ijkl_raw >> 16u) & 0xFFFF,
-            int(ijkl_raw) & 0xFFFF
-        };
-        pnanovdb_address_t addr = pnanovdb_root_get_value_address(grid_type, buf, root, PNANOVDB_REF(ijk));
+        pnanovdb_coord_t ijk = { int(ijkl_raw >> 32u) & 0xFFFF, int(ijkl_raw >> 16u) & 0xFFFF, int(ijkl_raw) & 0xFFFF };
+        pnanovdb_uint32_t level = 0u;
+        pnanovdb_address_t addr = pnanovdb_readaccessor_get_value_address_and_level(
+            grid_type, buf, PNANOVDB_REF(acc), PNANOVDB_REF(ijk), PNANOVDB_REF(level));
         if (addr.byte_offset != addr_old.byte_offset)
         {
             unique_count++;
+        }
+        if (level == 0u)
+        {
+            if (idx < 64u)
+            {
+                pnanovdb_coord_t leaf_ijk = pnanovdb_leaf_get_bbox_min(buf, acc.leaf);
+                printf("leaf ijk(%d,%d,%d) vs point ijk(%d,%d,%d)\n", leaf_ijk.x, leaf_ijk.y, leaf_ijk.z, ijk.x, ijk.y,
+                       ijk.z);
+            }
         }
         addr_old = addr;
     }
