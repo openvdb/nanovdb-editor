@@ -103,9 +103,11 @@ jobs:
           if command -v dnf &> /dev/null; then
             dnf install -y cmake git
             dnf install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel wayland-protocols-devel
+            dnf install -y miniz miniz-devel
           else
             yum install -y cmake git
             yum install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel
+            yum install -y miniz miniz-devel
           fi
           cmake --version
 
