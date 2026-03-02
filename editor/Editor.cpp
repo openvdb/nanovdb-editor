@@ -694,110 +694,87 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             pnanovdb_editor_token_t* scene_token = render_selection.scene_token ?
                                                        render_selection.scene_token :
                                                        editor->impl->editor_scene->get_current_scene_token();
-
-            SceneObject* selected_obj =
-                editor->impl->editor_scene->get_scene_object(render_selection.name_token, render_selection.type);
-
-            auto selected_render_method = selected_obj && selected_obj->visible
-                                              ? pnanovdb_editor::pipeline_get_render_method(
-                                                    selected_obj->pipeline.render().type)
-                                              : pnanovdb_pipeline_render_method_nanovdb;
-
-            if (selected_render_method == pnanovdb_pipeline_render_method_raster2d &&
-                editor->impl->gaussian_data && editor->impl->raster_ctx)
+            struct VisibleNanovdb
             {
-                pnanovdb_raster_shader_params_t raster_params = {};
-                editor->impl->editor_scene->get_shader_params_for_current_view(&raster_params);
-
-                rendered = editor->impl->renderer->render_gaussian(editor->impl->gaussian_data,
-                                                                   background_image, view, projection,
-                                                                   image_width, image_height, &raster_params);
-            }
-
-            if (!rendered)
+                pnanovdb_compute_array_t* nanovdb_array = nullptr;
+                pnanovdb_editor_token_t* scene_token = nullptr;
+                pnanovdb_editor_token_t* name_token = nullptr;
+                std::string shader_name;
+            };
+            struct VisibleGaussian
             {
-                struct VisibleNanovdb
+                pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr;
+                pnanovdb_editor_token_t* scene_token = nullptr;
+                pnanovdb_editor_token_t* name_token = nullptr;
+            };
+
+            std::vector<VisibleNanovdb> visible_nanovdbs;
+            std::vector<VisibleGaussian> visible_gaussians;
+            editor->impl->scene_manager->for_each_object(
+                [&](SceneObject* obj)
                 {
-                    pnanovdb_compute_array_t* nanovdb_array = nullptr;
-                    pnanovdb_editor_token_t* scene_token = nullptr;
-                    pnanovdb_editor_token_t* name_token = nullptr;
-                    std::string shader_name;
-                };
-                std::vector<VisibleNanovdb> visible_nanovdbs;
-                editor->impl->scene_manager->for_each_object(
-                    [&](SceneObject* obj)
+                    if (!obj || !obj->visible || obj->scene_token != scene_token)
                     {
-                        if (!obj || !obj->visible || obj->scene_token != scene_token)
-                        {
-                            return true;
-                        }
-                        auto render_method =
-                            pnanovdb_editor::pipeline_get_render_method(obj->pipeline.render().type);
-                        if (render_method != pnanovdb_pipeline_render_method_nanovdb)
-                        {
-                            return true;
-                        }
-                        pnanovdb_compute_array_t* array = obj->resources.nanovdb_array
-                                                              ? obj->resources.nanovdb_array
-                                                              : obj->resources.converted_nanovdb;
+                        return true;
+                    }
+                    auto render_method = pnanovdb_editor::pipeline_get_render_method(obj->pipeline.render().type);
+                    if (render_method == pnanovdb_pipeline_render_method_nanovdb)
+                    {
+                        pnanovdb_compute_array_t* array = obj->resources.nanovdb_array ?
+                                                              obj->resources.nanovdb_array :
+                                                              obj->resources.converted_nanovdb;
                         if (!array)
                         {
                             return true;
                         }
                         const char* shader = pnanovdb_editor::pipeline_get_shader(obj);
-                        visible_nanovdbs.push_back({ array, obj->scene_token, obj->name_token,
-                                                     shader ? shader : "" });
-                        return true;
-                    });
-
-                if (!visible_nanovdbs.empty())
-                {
-                    for (size_t i = 0; i < visible_nanovdbs.size(); ++i)
-                    {
-                        const auto& v = visible_nanovdbs[i];
-                        const char* shader_name = v.shader_name.empty()
-                                                      ? editor->impl->shader_name.c_str()
-                                                      : v.shader_name.c_str();
-                        uint32_t composite = (i > 0) ? 1u : 0u;
-                        auto result = editor->impl->renderer->dispatch_nanovdb_shader(
-                            v.nanovdb_array, shader_name, background_image, view, projection, image_width,
-                            image_height, imgui_user_instance, editor->impl->editor_scene,
-                            editor->impl->scene_manager, composite, v.scene_token, v.name_token);
-
-                        if (result == ShaderDispatchResult::CompilationFailed)
-                        {
-                            cleanup_background();
-                            break;
-                        }
-                        if (result == ShaderDispatchResult::Success)
-                        {
-                            rendered = true;
-                        }
+                        visible_nanovdbs.push_back({ array, obj->scene_token, obj->name_token, shader ? shader : "" });
                     }
+                    else if (render_method == pnanovdb_pipeline_render_method_raster2d && obj->resources.gaussian_data)
+                    {
+                        visible_gaussians.push_back({ obj->resources.gaussian_data, obj->scene_token, obj->name_token });
+                    }
+                    return true;
+                });
+
+            for (size_t i = 0; i < visible_nanovdbs.size(); ++i)
+            {
+                const auto& v = visible_nanovdbs[i];
+                const char* shader_name =
+                    v.shader_name.empty() ? editor->impl->shader_name.c_str() : v.shader_name.c_str();
+                uint32_t composite = rendered ? 1u : 0u;
+                auto result = editor->impl->renderer->dispatch_nanovdb_shader(
+                    v.nanovdb_array, shader_name, background_image, view, projection, image_width, image_height,
+                    imgui_user_instance, editor->impl->editor_scene, editor->impl->scene_manager, composite,
+                    v.scene_token, v.name_token);
+
+                if (result == ShaderDispatchResult::CompilationFailed)
+                {
+                    cleanup_background();
+                    break;
+                }
+                if (result == ShaderDispatchResult::Success)
+                {
+                    rendered = true;
                 }
             }
 
-            if (!rendered)
+            if (editor->impl->raster_ctx)
             {
-                editor->impl->scene_manager->for_each_object(
-                    [&](SceneObject* obj)
+                for (size_t i = 0; i < visible_gaussians.size(); ++i)
+                {
+                    const auto& g = visible_gaussians[i];
+                    pnanovdb_raster_shader_params_t raster_params = {};
+                    editor->impl->editor_scene->get_shader_params_for_object(g.scene_token, g.name_token, &raster_params);
+                    uint32_t composite = rendered ? 1u : 0u;
+                    bool success =
+                        editor->impl->renderer->render_gaussian(g.gaussian_data, background_image, view, projection,
+                                                                image_width, image_height, &raster_params, composite);
+                    if (success)
                     {
-                        if (rendered || !obj || !obj->visible || obj->scene_token != scene_token)
-                            return true;
-                        auto rm =
-                            pnanovdb_editor::pipeline_get_render_method(obj->pipeline.render().type);
-                        if (rm == pnanovdb_pipeline_render_method_raster2d &&
-                            obj->resources.gaussian_data && editor->impl->raster_ctx)
-                        {
-                            pnanovdb_raster_shader_params_t raster_params = {};
-                            editor->impl->editor_scene->get_shader_params_for_current_view(&raster_params);
-                            rendered = editor->impl->renderer->render_gaussian(
-                                obj->resources.gaussian_data, background_image, view, projection,
-                                image_width, image_height, &raster_params);
-                            return false;
-                        }
-                        return true;
-                    });
+                        rendered = true;
+                    }
+                }
             }
         }
 

@@ -144,7 +144,8 @@ public:
                          const pnanovdb_camera_mat_t& projection,
                          uint32_t image_width,
                          uint32_t image_height,
-                         const pnanovdb_raster_shader_params_t* raster_params);
+                         const pnanovdb_raster_shader_params_t* raster_params,
+                         uint32_t composite = 0);
 
     /*!
         \brief Check if renderer is initialized

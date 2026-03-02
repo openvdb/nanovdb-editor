@@ -147,7 +147,8 @@ bool Renderer::render_gaussian(pnanovdb_raster_gaussian_data_t* gaussian_data,
                                const pnanovdb_camera_mat_t& projection,
                                uint32_t image_width,
                                uint32_t image_height,
-                               const pnanovdb_raster_shader_params_t* raster_params)
+                               const pnanovdb_raster_shader_params_t* raster_params,
+                               uint32_t composite)
 {
     if (!m_initialized || !gaussian_data || !background_image || !m_config.raster || !m_config.raster_ctx)
     {
@@ -156,7 +157,7 @@ bool Renderer::render_gaussian(pnanovdb_raster_gaussian_data_t* gaussian_data,
 
     m_config.raster->raster_gaussian_2d(m_config.raster->compute, m_config.device_queue, m_config.raster_ctx,
                                         gaussian_data, background_image, image_width, image_height, &view, &projection,
-                                        raster_params);
+                                        raster_params, composite);
 
     return true;
 }

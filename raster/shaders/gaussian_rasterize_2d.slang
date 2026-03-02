@@ -124,10 +124,12 @@ void volume_render_tile(uint3 group_idx,
 
     if (write_pixel)
     {
-        float3 background = float3(0.f, 0.f, 0.f);
-
-        color_2d_out[int2(j, constants.image_height - 1u - i)] =
-            float4(pix_out + accum_transmittance * background, 1.f - accum_transmittance);
+        int2 pix = int2(j, constants.image_height - 1u - i);
+        float4 background = (constants.composite != 0u) ? color_2d_out[pix] : float4(0.f, 0.f, 0.f, 1.f);
+        float4 out_color = float4(0.f, 0.f, 0.f, 0.f);
+        out_color.rgb = pix_out + accum_transmittance * background.rgb;
+        out_color.a = accum_transmittance * background.a;
+        color_2d_out[pix] = out_color;
         // render_alphas_out[pix_id] = 1.f - accum_transmittance;
         // render_colors_out[pix_id] = pix_out + accum_transmittance * background;
         // last_ids_out[pix_id] = int(cur_idx);

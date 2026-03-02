@@ -1105,10 +1105,11 @@ void EditorScene::handle_gaussian_data_load(pnanovdb_editor_token_t* scene,
                                         if (copy)
                                         {
                                             memcpy(copy, process_params->data, process_params->size);
-                                            // pipeline.process().params.data is malloc-owned per PipelineStage contract (EditorSceneManager.h)
                                             void* old_data = obj->pipeline.process().params.data;
                                             if (old_data)
+                                            {
                                                 free(old_data);
+                                            }
                                             obj->pipeline.process().params.data = copy;
                                             obj->pipeline.process().params.size = process_params->size;
                                             obj->pipeline.process().params.type = process_params->type;
