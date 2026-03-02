@@ -16,6 +16,7 @@
 #include "EditorToken.h"
 #include "Editor.h"
 #include "Console.h"
+#include "Pipeline.h"
 
 #include <vector>
 
@@ -134,8 +135,14 @@ bool SceneTree::renderSceneItem(const char* name,
                                 bool isSelected,
                                 float indentSpacing,
                                 bool useIndent,
-                                pnanovdb_bool_t* visibilityCheckbox,
-                                bool* deleteRequested)
+                                bool* deleteRequested,
+                                bool* moveUpRequested,
+                                bool* moveDownRequested,
+                                const char* leftBadge,
+                                bool badgeVisible,
+                                bool* visibilityToggle,
+                                uint64_t* dragPayloadId,
+                                uint64_t* droppedSourceId)
 {
     bool clicked = false;
     if (useIndent)
@@ -145,15 +152,20 @@ bool SceneTree::renderSceneItem(const char* name,
 
     ImGui::AlignTextToFramePadding();
 
-    // Save position for bullet and reserve space without drawing
-    ImVec2 bulletPosScreen = ImGui::GetCursorScreenPos();
-    float bulletWidth = ImGui::GetTextLineHeight();
-    ImGui::Dummy(ImVec2(bulletWidth, 0));
-    ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x + 8.f);
+    // Draw left-side item badge
+    if (leftBadge && leftBadge[0] != '\0')
+    {
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() - 4.0f);
+        ImU32 badgeColor = badgeVisible ? ImGui::GetColorU32(ImGuiCol_Text) : ImGui::GetColorU32(ImGuiCol_TextDisabled);
+        ImGui::PushStyleColor(ImGuiCol_Text, badgeColor);
+        ImGui::TextUnformatted(leftBadge);
+        ImGui::PopStyleColor();
+        ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x + 6.0f);
+    }
 
-    // Calculate selectable width to account for buttons on the right
+    // Calculate selectable width to account for right-side visibility icon
     float rightPadding = ImGui::GetStyle().ItemSpacing.x;
-    if (visibilityCheckbox)
+    if (visibilityToggle)
     {
         rightPadding += ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
     }
@@ -164,9 +176,41 @@ bool SceneTree::renderSceneItem(const char* name,
         clicked = true;
     }
 
+    // Bind drag/drop to the selectable row item itself
+    if (dragPayloadId && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+    {
+        const uint64_t payload_id = *dragPayloadId;
+        ImGui::SetDragDropPayload("SCENE_TREE_OBJECT_ID", &payload_id, sizeof(payload_id));
+        ImGui::TextUnformatted(name);
+        ImGui::EndDragDropSource();
+    }
+    if (droppedSourceId && ImGui::BeginDragDropTarget())
+    {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCENE_TREE_OBJECT_ID"))
+        {
+            if (payload->Data && payload->DataSize == sizeof(uint64_t))
+            {
+                *droppedSourceId = *(const uint64_t*)payload->Data;
+            }
+        }
+        ImGui::EndDragDropTarget();
+    }
+
     // Right-click context menu (only if deletion is allowed)
     if (deleteRequested && ImGui::BeginPopupContextItem())
     {
+        if (moveUpRequested && ImGui::MenuItem("Move Up"))
+        {
+            *moveUpRequested = true;
+        }
+        if (moveDownRequested && ImGui::MenuItem("Move Down"))
+        {
+            *moveDownRequested = true;
+        }
+        if ((moveUpRequested || moveDownRequested))
+        {
+            ImGui::Separator();
+        }
         if (ImGui::MenuItem("Remove"))
         {
             *deleteRequested = true;
@@ -174,24 +218,19 @@ bool SceneTree::renderSceneItem(const char* name,
         ImGui::EndPopup();
     }
 
-    // Draw bullet on top of selectable background
-    ImVec2 itemMin = ImGui::GetItemRectMin();
-    float bulletY = itemMin.y + ImGui::GetTextLineHeight() * 0.5f + 2.0f;
-    ImGui::GetWindowDrawList()->AddCircleFilled(
-        ImVec2(bulletPosScreen.x + 4.0f, bulletY), 2.0f, ImGui::GetColorU32(ImGuiCol_Text));
-
-    // Add visibility checkbox
-    if (visibilityCheckbox)
+    // Add right-side eye icon for visibility
+    if (visibilityToggle)
     {
-        // Position checkbox at fixed distance from right edge of window (same as tree node headers)
-        float checkboxXPos = ImGui::GetWindowContentRegionMax().x - ImGui::GetFrameHeight();
-        ImGui::SameLine(checkboxXPos);
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 3.0f);
-
-        // Make checkbox smaller with reduced frame padding
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(1.0f, 1.0f));
-        IMGUI_CHECKBOX_SYNC((std::string("##Visible") + name).c_str(), *visibilityCheckbox);
-        ImGui::PopStyleVar();
+        float iconSize = ImGui::GetFrameHeight();
+        float iconXPos = ImGui::GetWindowContentRegionMax().x - iconSize;
+        ImGui::SameLine(iconXPos);
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 1.0f);
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        bool isVisible = *visibilityToggle;
+        if (drawEyeIcon(drawList, ImGui::GetCursorScreenPos(), iconSize, isVisible, "##EyeSceneItem"))
+        {
+            *visibilityToggle = !isVisible;
+        }
     }
 
     if (useIndent)
@@ -562,127 +601,145 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                 }
             }
 
-            // Show other scene items
-            auto renderSceneItems = [this, ptr, indentSpacing](
-                                        const auto& /*itemMap*/, const char* treeLabel, ViewType viewType)
+            // Show all renderable objects in a single list with right-side type badge
+            auto renderSceneItems = [this, ptr, indentSpacing]()
             {
-                if (renderTreeNodeHeader(treeLabel))
+                // Collect items to delete (can't delete while iterating)
+                std::vector<std::string> itemsToDelete;
+
+                pnanovdb_editor_t* editor = ptr->editor_scene->get_editor();
+                pnanovdb_editor_token_t* current_scene = ptr->editor_scene->get_current_scene_token();
+                auto* scene_manager = ptr->editor_scene->get_scene_manager();
+
+                // If no scene token, use default scene
+                if (!current_scene && editor)
                 {
-                    // Collect items to delete (can't delete while iterating)
-                    std::vector<std::string> itemsToDelete;
+                    current_scene = editor->get_token(DEFAULT_SCENE_NAME);
+                }
 
-                    pnanovdb_editor_t* editor = ptr->editor_scene->get_editor();
-                    pnanovdb_editor_token_t* current_scene = ptr->editor_scene->get_current_scene_token();
-                    auto* scene_manager = ptr->editor_scene->get_scene_manager();
+                std::vector<pnanovdb_editor_token_t*> ordered_tokens =
+                    ptr->editor_scene->get_ordered_renderable_views(current_scene);
 
-                    // If no scene token, use default scene
-                    if (!current_scene && editor)
+                for (auto* token : ordered_tokens)
+                {
+                    if (!token || !token->str)
                     {
-                        current_scene = editor->get_token(DEFAULT_SCENE_NAME);
+                        continue;
                     }
+                    const char* name = token->str;
+                    bool deleteRequested = false;
+                    bool moveUpRequested = false;
+                    bool moveDownRequested = false;
+                    ViewType itemViewType = ViewType::None;
+                    const char* badge = nullptr;
+                    bool isVisible = true;
 
-                    ptr->editor_scene->for_each_view(
-                        viewType,
-                        [&](uint64_t name_id, const auto& /*view_data*/)
-                        {
-                            pnanovdb_editor_token_t* token = EditorToken::getInstance().getTokenById(name_id);
-                            if (!token || !token->str)
-                            {
-                                return;
-                            }
-                            const char* name = token->str;
-                            bool isSelected = isSelectedInCurrentScene(name, ptr, viewType);
-                            bool deleteRequested = false;
-
-                            // Get visibility from SceneObject
-                            pnanovdb_bool_t isVisible = PNANOVDB_TRUE;
-                            if (scene_manager)
-                            {
-                                scene_manager->with_object(current_scene, token,
-                                                           [&isVisible](pnanovdb_editor::SceneObject* obj)
-                                                           {
-                                                               if (obj)
-                                                                   isVisible =
-                                                                       obj->visible ? PNANOVDB_TRUE : PNANOVDB_FALSE;
-                                                           });
-                            }
-
-                            pnanovdb_bool_t prevVisible = isVisible;
-                            if (renderSceneItem(name, isSelected, indentSpacing, false, &isVisible, &deleteRequested))
-                            {
-                                if (editor && current_scene)
-                                {
-                                    // Set pending viewport so handle_pending_view_changes processes the selection
-                                    if (viewType == ViewType::NanoVDBs)
-                                        ptr->pending.viewport_nanovdb_array = name;
-                                    else if (viewType == ViewType::GaussianScenes)
-                                        ptr->pending.viewport_gaussian_view = name;
-                                    pnanovdb_editor::select_render_view(editor, current_scene, token);
-                                }
-                            }
-
-                            // Update visibility if changed
-                            if (isVisible != prevVisible && scene_manager)
-                            {
-                                scene_manager->with_object(current_scene, token,
-                                                           [&isVisible](pnanovdb_editor::SceneObject* obj)
-                                                           {
-                                                               if (obj)
-                                                                   obj->visible = (isVisible == PNANOVDB_TRUE);
-                                                           });
-
-                                // When making an object visible, auto-switch render view to it
-                                if (isVisible == PNANOVDB_TRUE && editor && current_scene)
-                                {
-                                    if (viewType == ViewType::NanoVDBs)
-                                        ptr->pending.viewport_nanovdb_array = name;
-                                    else if (viewType == ViewType::GaussianScenes)
-                                        ptr->pending.viewport_gaussian_view = name;
-                                    pnanovdb_editor::select_render_view(editor, current_scene, token);
-                                }
-                            }
-
-                            if (deleteRequested)
-                            {
-                                itemsToDelete.push_back(name);
-                            }
-                        });
-
-                    // Process deletions after iteration
-                    if (!itemsToDelete.empty() && ptr->editor_scene)
+                    if (scene_manager)
                     {
-                        for (const auto& itemName : itemsToDelete)
+                        scene_manager->with_object(
+                            current_scene, token,
+                            [&](pnanovdb_editor::SceneObject* obj)
+                            {
+                                if (obj)
+                                {
+                                    isVisible = obj->visible;
+                                    auto rm = pnanovdb_editor::pipeline_get_render_method(obj->pipeline.render().type);
+                                    if (rm == pnanovdb_pipeline_render_method_nanovdb)
+                                    {
+                                        itemViewType = ViewType::NanoVDBs;
+                                        badge = "N";
+                                    }
+                                    else if (rm == pnanovdb_pipeline_render_method_raster2d)
+                                    {
+                                        itemViewType = ViewType::GaussianScenes;
+                                        badge = "G";
+                                    }
+                                }
+                            });
+                    }
+                    if (itemViewType == ViewType::None)
+                    {
+                        continue;
+                    }
+                    bool isSelected = isSelectedInCurrentScene(name, ptr, itemViewType);
+                    uint64_t droppedSourceId = 0;
+
+                    ImGui::PushID((int)token->id);
+                    if (renderSceneItem(name, isSelected, indentSpacing, false, &deleteRequested, &moveUpRequested,
+                                        &moveDownRequested, badge, isVisible, &isVisible, &token->id, &droppedSourceId))
+                    {
+                        if (editor && current_scene)
                         {
-                            pnanovdb_editor_token_t* name_token = EditorToken::getInstance().getToken(itemName.c_str());
-                            if (editor && current_scene && name_token)
-                            {
-                                editor->remove(editor, current_scene, name_token);
-                            }
-                            else
-                            {
-                                Console::getInstance().addLog(
-                                    "Error: Failed to delete '%s': editor=%p, scene=%p, token=%p", itemName.c_str(),
-                                    (void*)editor, (void*)current_scene, (void*)name_token);
-                            }
+                            // Set pending viewport so handle_pending_view_changes processes the selection
+                            if (itemViewType == ViewType::NanoVDBs)
+                                ptr->pending.viewport_nanovdb_array = name;
+                            else if (itemViewType == ViewType::GaussianScenes)
+                                ptr->pending.viewport_gaussian_view = name;
+                            pnanovdb_editor::select_render_view(editor, current_scene, token);
                         }
                     }
+                    if (droppedSourceId != 0 && droppedSourceId != token->id)
+                    {
+                        pnanovdb_editor_token_t* source_token = EditorToken::getInstance().getTokenById(droppedSourceId);
+                        if (source_token)
+                        {
+                            ptr->editor_scene->move_renderable_before(current_scene, source_token, token);
+                        }
+                    }
+                    if (scene_manager)
+                    {
+                        scene_manager->with_object(current_scene, token,
+                                                   [&](pnanovdb_editor::SceneObject* obj)
+                                                   {
+                                                       if (obj)
+                                                       {
+                                                           obj->visible = isVisible;
+                                                       }
+                                                   });
+                    }
 
-                    ImGui::TreePop();
+                    if (moveUpRequested)
+                    {
+                        ptr->editor_scene->move_renderable_order(current_scene, token, -1);
+                    }
+                    if (moveDownRequested)
+                    {
+                        ptr->editor_scene->move_renderable_order(current_scene, token, +1);
+                    }
+                    if (deleteRequested)
+                    {
+                        itemsToDelete.push_back(name);
+                    }
+                    ImGui::PopID();
+                }
+
+                // Process deletions after iteration
+                if (!itemsToDelete.empty() && ptr->editor_scene)
+                {
+                    for (const auto& itemName : itemsToDelete)
+                    {
+                        pnanovdb_editor_token_t* name_token = EditorToken::getInstance().getToken(itemName.c_str());
+                        if (editor && current_scene && name_token)
+                        {
+                            editor->remove(editor, current_scene, name_token);
+                        }
+                        else
+                        {
+                            Console::getInstance().addLog("Error: Failed to delete '%s': editor=%p, scene=%p, token=%p",
+                                                          itemName.c_str(), (void*)editor, (void*)current_scene,
+                                                          (void*)name_token);
+                        }
+                    }
                 }
             };
 
             if (ptr->editor_scene)
             {
-                const auto& nanovdb_views = ptr->editor_scene->get_nanovdb_views();
-                if (!nanovdb_views.empty())
+                std::vector<pnanovdb_editor_token_t*> ordered_renderables =
+                    ptr->editor_scene->get_ordered_renderable_views(current_scene);
+                if (!ordered_renderables.empty())
                 {
-                    renderSceneItems(nanovdb_views, "NanoVDB Views", ViewType::NanoVDBs);
-                }
-
-                const auto& gaussian_views = ptr->editor_scene->get_gaussian_views();
-                if (!gaussian_views.empty())
-                {
-                    renderSceneItems(gaussian_views, "Gaussian Views", ViewType::GaussianScenes);
+                    renderSceneItems();
                 }
             }
 

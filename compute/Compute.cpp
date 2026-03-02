@@ -15,7 +15,6 @@
 #include <nanovdb/io/IO.h>
 
 #include <stdio.h>
-#include <vector>
 
 namespace pnanovdb_compute
 {
@@ -311,9 +310,15 @@ pnanovdb_bool_t dispatch_shader_on_nanovdb_array(const pnanovdb_compute_t* compu
     auto* image_buffer = compute_interface->get_buffer_transient(compute_context, &image_buf_desc);
 
     const pnanovdb_uint32_t provided_count = 5u;
-    pnanovdb_uint32_t shader_count = shader->shader_build->descriptor_write_count;
-    pnanovdb_uint32_t resource_count = shader_count > provided_count ? shader_count : provided_count;
-    std::vector<pnanovdb_compute_resource_t> resources(resource_count, pnanovdb_compute_resource_t{});
+    const pnanovdb_uint32_t shader_count = shader->shader_build->descriptor_write_count;
+    if (shader_count > provided_count)
+    {
+        printf("Error: shader dispatch failed, shader expects %u descriptors but only %u resources are provided\n",
+               shader_count, provided_count);
+        return PNANOVDB_FALSE;
+    }
+
+    pnanovdb_compute_resource_t resources[provided_count] = {};
     resources[0u].buffer_transient = compute_interface->register_buffer_as_transient(compute_context, *nanovdb_buffer);
     resources[1u].buffer_transient = image_buffer;
     resources[2u].texture_transient = compute_interface->register_texture_as_transient(compute_context, background_image);

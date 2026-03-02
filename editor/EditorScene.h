@@ -243,6 +243,13 @@ public:
     const std::map<uint64_t, CameraViewContext>& get_camera_views() const;
     const std::map<uint64_t, NanoVDBContext>& get_nanovdb_views() const;
     const std::map<uint64_t, GaussianDataContext>& get_gaussian_views() const;
+    std::vector<pnanovdb_editor_token_t*> get_ordered_renderable_views(pnanovdb_editor_token_t* scene_token) const;
+    std::vector<pnanovdb_editor_token_t*> get_ordered_nanovdb_views(pnanovdb_editor_token_t* scene_token) const;
+    std::vector<pnanovdb_editor_token_t*> get_ordered_gaussian_views(pnanovdb_editor_token_t* scene_token) const;
+    bool move_renderable_order(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token, int direction);
+    bool move_renderable_before(pnanovdb_editor_token_t* scene_token,
+                                pnanovdb_editor_token_t* source_name_token,
+                                pnanovdb_editor_token_t* target_name_token);
 
     //! Add a placeholder NanoVDB entry in the scene tree (for objects whose conversion hasn't completed yet)
     void add_nanovdb_placeholder(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token);

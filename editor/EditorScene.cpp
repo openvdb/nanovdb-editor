@@ -1243,6 +1243,40 @@ const std::map<uint64_t, GaussianDataContext>& EditorScene::get_gaussian_views()
     return m_scene_view.get_gaussians();
 }
 
+std::vector<pnanovdb_editor_token_t*> EditorScene::get_ordered_renderable_views(pnanovdb_editor_token_t* scene_token) const
+{
+    pnanovdb_editor_token_t* token = scene_token ? scene_token : get_current_scene_token();
+    return m_scene_view.get_ordered_renderable_views(token);
+}
+
+std::vector<pnanovdb_editor_token_t*> EditorScene::get_ordered_nanovdb_views(pnanovdb_editor_token_t* scene_token) const
+{
+    pnanovdb_editor_token_t* token = scene_token ? scene_token : get_current_scene_token();
+    return m_scene_view.get_ordered_nanovdb_views(token);
+}
+
+std::vector<pnanovdb_editor_token_t*> EditorScene::get_ordered_gaussian_views(pnanovdb_editor_token_t* scene_token) const
+{
+    pnanovdb_editor_token_t* token = scene_token ? scene_token : get_current_scene_token();
+    return m_scene_view.get_ordered_gaussian_views(token);
+}
+
+bool EditorScene::move_renderable_order(pnanovdb_editor_token_t* scene_token,
+                                        pnanovdb_editor_token_t* name_token,
+                                        int direction)
+{
+    pnanovdb_editor_token_t* token = scene_token ? scene_token : get_current_scene_token();
+    return m_scene_view.move_renderable_order(token, name_token, direction);
+}
+
+bool EditorScene::move_renderable_before(pnanovdb_editor_token_t* scene_token,
+                                         pnanovdb_editor_token_t* source_name_token,
+                                         pnanovdb_editor_token_t* target_name_token)
+{
+    pnanovdb_editor_token_t* token = scene_token ? scene_token : get_current_scene_token();
+    return m_scene_view.move_renderable_before(token, source_name_token, target_name_token);
+}
+
 EditorScene::ViewMapVariant EditorScene::get_views(ViewType type) const
 {
     switch (type)
