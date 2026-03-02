@@ -415,6 +415,18 @@ if(SKBUILD)
                         file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
                     endforeach()
 
+                    # Install glslang runtime dependency used by libslang-glslang.
+                    # Depending on Slang's external layout this can be in one of a few locations.
+                    file(GLOB SLANG_GLSLANG_LIBS
+                        \"${Slang_SOURCE_DIR}/lib/libglslang.so*\"
+                        \"${SLANG_BUILD_DIR}/external/slang-glslang/libglslang.so*\"
+                        \"${SLANG_BUILD_DIR}/external/slang-glslang/glslang/libglslang.so*\"
+                    )
+                    foreach(lib \${SLANG_GLSLANG_LIBS})
+                        message(STATUS \"Installing glslang: \${lib}\")
+                        file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                    endforeach()
+
                     # auditwheel resolves dependencies via the DT_NEEDED name (libminiz.so.3)
                     # so ensure that filename exists in the wheel, even if CMake didn't create
                     # a symlink (file(INSTALL) may also dereference symlinks).
@@ -428,6 +440,19 @@ if(SKBUILD)
                         elseif(EXISTS \"\${_miniz_dst}/libminiz.so\")
                             message(STATUS \"Creating libminiz.so.3 from libminiz.so\")
                             file(COPY_FILE \"\${_miniz_dst}/libminiz.so\" \"\${_miniz_dst}/libminiz.so.3\")
+                        endif()
+                    endif()
+
+                    # Same safety pattern for glslang SONAME used by DT_NEEDED.
+                    if(NOT EXISTS \"\${_miniz_dst}/libglslang.so.15\")
+                        file(GLOB _glslang_v15 \"\${_miniz_dst}/libglslang.so.15.*\")
+                        if(_glslang_v15)
+                            list(GET _glslang_v15 0 _glslang_src)
+                            message(STATUS \"Creating libglslang.so.15 from \${_glslang_src}\")
+                            file(COPY_FILE \"\${_glslang_src}\" \"\${_miniz_dst}/libglslang.so.15\")
+                        elseif(EXISTS \"\${_miniz_dst}/libglslang.so\")
+                            message(STATUS \"Creating libglslang.so.15 from libglslang.so\")
+                            file(COPY_FILE \"\${_miniz_dst}/libglslang.so\" \"\${_miniz_dst}/libglslang.so.15\")
                         endif()
                     endif()
                 " COMPONENT python_libs)
