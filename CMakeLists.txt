@@ -397,7 +397,6 @@ if(SKBUILD)
                     endforeach()
 
                     # Install miniz dependency (required by Slang for ZIP/compression)
-                    # miniz is built as a separate CPM dependency
                     file(GLOB SLANG_MINIZ_LIBS \"${Slang_SOURCE_DIR}/lib/libminiz.so*\")
                     foreach(lib \${SLANG_MINIZ_LIBS})
                         message(STATUS \"Installing Slang miniz: \${lib}\")
@@ -406,7 +405,13 @@ if(SKBUILD)
 
                     file(GLOB MINIZ_LIBS \"${miniz_BINARY_DIR}/libminiz.so*\")
                     foreach(lib \${MINIZ_LIBS})
-                        message(STATUS \"Installing miniz: \${lib}\")
+                        message(STATUS \"Installing CPM miniz: \${lib}\")
+                        file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                    endforeach()
+
+                    file(GLOB SLANG_BUILD_MINIZ_LIBS \"${SLANG_BUILD_DIR}/external/miniz/libminiz.so*\")
+                    foreach(lib \${SLANG_BUILD_MINIZ_LIBS})
+                        message(STATUS \"Installing Slang build miniz: \${lib}\")
                         file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
                     endforeach()
 
