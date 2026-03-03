@@ -304,13 +304,13 @@ int main(int argc, char* argv[])
     editor.add_nanovdb_2(&editor, scene_secondary, volume_token, data_nanovdb);
     printf("Added dragon volume to main scene using add_nanovdb()\n");
 
-    pnanovdb_compute_array_t* data_nanovdb2 = compute.load_nanovdb("./data/hexagon_flow_test2.nvdb");
-    if (data_nanovdb2)
-    {
-        pnanovdb_editor_token_t* flow_token = editor.get_token("flow_volume");
-        editor.add_nanovdb_2(&editor, scene_main, flow_token, data_nanovdb2);
-        printf("Added flow volume to main using add_nanovdb()\n");
-    }
+    // pnanovdb_compute_array_t* data_nanovdb2 = compute.load_nanovdb("./data/hexagon_flow_test2.nvdb");
+    // if (data_nanovdb2)
+    // {
+    //     pnanovdb_editor_token_t* flow_token = editor.get_token("flow_volume");
+    //     editor.add_nanovdb_2(&editor, scene_main, flow_token, data_nanovdb2);
+    //     printf("Added flow volume to main using add_nanovdb()\n");
+    // }
 
 #    ifdef TEST_CAMERA
     pnanovdb_camera_config_t default_config = {};

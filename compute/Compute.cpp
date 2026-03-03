@@ -242,7 +242,15 @@ pnanovdb_bool_t dispatch_shader_on_nanovdb_array(const pnanovdb_compute_t* compu
                                                  pnanovdb_compute_buffer_t** nanovdb_buffer,
                                                  pnanovdb_compute_buffer_transient_t** readback_buffer)
 {
+    if (!compute || !device || !shader_context)
+    {
+        return PNANOVDB_FALSE;
+    }
     if (!nanovdb_array)
+    {
+        return PNANOVDB_FALSE;
+    }
+    if (image_width <= 0 || image_height <= 0 || !background_image)
     {
         return PNANOVDB_FALSE;
     }
@@ -260,6 +268,10 @@ pnanovdb_bool_t dispatch_shader_on_nanovdb_array(const pnanovdb_compute_t* compu
     pnanovdb_compute_queue_t* queue = compute->device_interface.get_device_queue(device);
     pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
     pnanovdb_compute_context_t* compute_context = compute->device_interface.get_compute_context(queue);
+    if (!queue || !compute_interface || !compute_context)
+    {
+        return PNANOVDB_FALSE;
+    }
 
     if (nanovdb_array && *nanovdb_buffer == nullptr)
     {
@@ -308,13 +320,15 @@ pnanovdb_bool_t dispatch_shader_on_nanovdb_array(const pnanovdb_compute_t* compu
     image_buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_SRC;
     image_buf_desc.structure_stride = 4u;
     auto* image_buffer = compute_interface->get_buffer_transient(compute_context, &image_buf_desc);
+    if (!image_buffer)
+    {
+        return PNANOVDB_FALSE;
+    }
 
     const pnanovdb_uint32_t provided_count = 5u;
     const pnanovdb_uint32_t shader_count = shader->shader_build->descriptor_write_count;
     if (shader_count > provided_count)
     {
-        printf("Error: shader dispatch failed, shader expects %u descriptors but only %u resources are provided\n",
-               shader_count, provided_count);
         return PNANOVDB_FALSE;
     }
 

@@ -218,6 +218,7 @@ private:
 
     // Shader state
     pnanovdb_shader_context_t* m_shader_context = nullptr;
+    std::string m_active_shader_name;
     pnanovdb_compute_buffer_t* m_nanovdb_buffer = nullptr;
     pnanovdb_compute_array_t* m_uploaded_nanovdb_array = nullptr;
     pnanovdb_compute_upload_buffer_t m_compute_upload_buffer;

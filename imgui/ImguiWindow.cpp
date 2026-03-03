@@ -493,10 +493,14 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
     pnanovdb_compute_swapchain_t* swapchain = nullptr;
     if (ptr->window_glfw)
     {
+        // Poll events before swapchain acquire so resize callbacks run first
+        windowGlfwPollEvents(ptr->window_glfw);
         swapchain = windowGlfwGetSwapchain(ptr->window_glfw);
     }
     if (swapchain)
     {
+        // Keep swapchain synchronized with current framebuffer size in the frame loop
+        ptr->device_interface.resize_swapchain(swapchain, (pnanovdb_uint32_t)ptr->width, (pnanovdb_uint32_t)ptr->height);
         swapchain_texture = ptr->device_interface.get_swapchain_front_texture(swapchain);
     }
     pnanovdb_compute_texture_t* encoder_texture = nullptr;
@@ -610,10 +614,6 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
 
-    if (ptr->window_glfw)
-    {
-        windowGlfwPollEvents(ptr->window_glfw);
-    }
     {
         if (ptr->server)
         {

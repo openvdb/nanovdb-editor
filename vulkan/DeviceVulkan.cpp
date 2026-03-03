@@ -1074,13 +1074,27 @@ void swapchain_initSwapchain(Swapchain* ptr)
     auto instanceLoader = &ptr->deviceQueue->device->deviceManager->loader;
     auto deviceLoader = &ptr->deviceQueue->device->loader;
 
+    // If we are recreating after an out-of-date event, we may still hold stale swapchain handles
+    // Clean them up here without a queue-wide wait to avoid resize-path stalls
+    if (ptr->swapchainVulkan != VK_NULL_HANDLE)
+    {
+        for (pnanovdb_uint32_t idx = 0; idx < ptr->numSwapchainImages; idx++)
+        {
+            if (ptr->textures[idx])
+            {
+                destroyTexture(cast(ptr->deviceQueue->context), ptr->textures[idx]);
+                ptr->textures[idx] = nullptr;
+            }
+            ptr->swapchainImages[idx] = VK_NULL_HANDLE;
+        }
+        ptr->numSwapchainImages = 0u;
+        deviceLoader->vkDestroySwapchainKHR(device->vulkanDevice, ptr->swapchainVulkan, nullptr);
+        ptr->swapchainVulkan = VK_NULL_HANDLE;
+    }
+
     pnanovdb_uint32_t width = 0u;
     pnanovdb_uint32_t height = 0u;
     swapchain_getWindowSize(ptr, &width, &height);
-
-    VkExtent2D imageExtent = {};
-    imageExtent.width = width;
-    imageExtent.height = height;
 
     ptr->width = width;
     ptr->height = height;
@@ -1112,6 +1126,10 @@ void swapchain_initSwapchain(Swapchain* ptr)
     {
         ptr->height = surfaceCaps.maxImageExtent.height;
     }
+
+    VkExtent2D imageExtent = {};
+    imageExtent.width = ptr->width;
+    imageExtent.height = ptr->height;
 
     VkPresentModeKHR presentModes[8u] = {};
     uint32_t numPresentModes = 0u;
@@ -1304,6 +1322,8 @@ pnanovdb_compute_texture_t* getSwapchainFrontTexture(pnanovdb_compute_swapchain_
 
     if (ptr->valid == PNANOVDB_FALSE)
     {
+        // Ensure we don't keep a stale wait semaphore when acquire path is skipped
+        ptr->deviceQueue->currentBeginFrameSemaphore = VK_NULL_HANDLE;
         return nullptr;
     }
 
@@ -1314,8 +1334,20 @@ pnanovdb_compute_texture_t* getSwapchainFrontTexture(pnanovdb_compute_swapchain_
                                                     ptr->deviceQueue->currentBeginFrameSemaphore, VK_NULL_HANDLE,
                                                     &ptr->currentSwapchainIdx);
 
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+    {
+        // Defer swapchain recreation to the next frame's resize path
+        // Do not destroy here: swapchain_destroySwapchain() waits for idle and can stall during resize churn
+        // Clear begin semaphore so subsequent submit doesn't wait on an unsignaled acquire semaphore
+        ptr->deviceQueue->currentBeginFrameSemaphore = VK_NULL_HANDLE;
+        ptr->valid = PNANOVDB_FALSE;
+        return nullptr;
+    }
+
     if (result != VK_SUCCESS)
     {
+        // Acquire failed: clear begin semaphore to avoid waiting on it in later flush/submit
+        ptr->deviceQueue->currentBeginFrameSemaphore = VK_NULL_HANDLE;
         swapchain_destroySwapchain(ptr);
         ptr->valid = PNANOVDB_FALSE;
         return nullptr;
