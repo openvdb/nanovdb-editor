@@ -416,16 +416,19 @@ if(SKBUILD)
                     endforeach()
 
                     # Install glslang runtime dependency used by libslang-glslang.
-                    # Depending on Slang's external layout this can be in one of a few locations.
-                    file(GLOB SLANG_GLSLANG_LIBS
-                        \"${Slang_SOURCE_DIR}/lib/libglslang.so*\"
-                        \"${SLANG_BUILD_DIR}/external/slang-glslang/libglslang.so*\"
-                        \"${SLANG_BUILD_DIR}/external/slang-glslang/glslang/libglslang.so*\"
+                    # Slang's external layout varies across versions/generators, so
+                    # search recursively in both install and build trees.
+                    file(GLOB_RECURSE SLANG_GLSLANG_LIBS
+                        \"${Slang_SOURCE_DIR}/libglslang.so*\"
+                        \"${SLANG_BUILD_DIR}/libglslang.so*\"
                     )
                     foreach(lib \${SLANG_GLSLANG_LIBS})
                         message(STATUS \"Installing glslang: \${lib}\")
                         file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
                     endforeach()
+                    if(NOT SLANG_GLSLANG_LIBS)
+                        message(WARNING \"No libglslang.so* found under ${Slang_SOURCE_DIR} or ${SLANG_BUILD_DIR}\")
+                    endif()
 
                     # auditwheel resolves dependencies via the DT_NEEDED name (libminiz.so.3)
                     # so ensure that filename exists in the wheel, even if CMake didn't create
