@@ -118,12 +118,34 @@ jobs:
 
         CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
           set -e
+          shopt -s globstar nullglob
           SLANG_LIB_DIR="$(ls -d /tmp/cpm-cache/slang/*/lib 2>/dev/null | head -n1 || true)"
+          SPIRV_LIB_PATH=""
+          for pattern in \
+            /tmp/cpm-cache/**/libSPIRV.so.15 \
+            /tmp/cpm-cache/**/libSPIRV.so.15.* \
+            /project/**/libSPIRV.so.15 \
+            /project/**/libSPIRV.so.15.*; do
+            candidate="$(compgen -G "${pattern}" | head -n1 || true)"
+            if [ -n "${candidate}" ]; then
+              SPIRV_LIB_PATH="${candidate}"
+              break
+            fi
+          done
+          SPIRV_LIB_DIR=""
+          if [ -n "${SPIRV_LIB_PATH}" ]; then
+            SPIRV_LIB_DIR="$(dirname "${SPIRV_LIB_PATH}")"
+          fi
           if [ -n "${SLANG_LIB_DIR}" ]; then
             export LD_LIBRARY_PATH="${SLANG_LIB_DIR}:${LD_LIBRARY_PATH:-}"
             echo "Using Slang runtime libs from ${SLANG_LIB_DIR}"
+          fi
+          if [ -n "${SPIRV_LIB_DIR}" ]; then
+            export LD_LIBRARY_PATH="${SPIRV_LIB_DIR}:${LD_LIBRARY_PATH:-}"
+            echo "Using SPIRV runtime libs from ${SPIRV_LIB_DIR}"
           else
-            echo "Warning: Slang lib dir not found in /tmp/cpm-cache/slang/*/lib"
+            echo "Error: could not locate libSPIRV.so.15 in CPM/project build paths"
+            exit 1
           fi
           if [[ "{wheel}" == *"aarch64"* ]]; then
             auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_34_aarch64
