@@ -43,7 +43,7 @@ static void renderPipelineProcessParams(EditorSceneManager* scene_manager,
     if (!desc || desc->param_field_count == 0 || !desc->param_fields)
         return;
 
-    void* params_data = nullptr;
+    std::vector<unsigned char> params_snapshot;
     size_t params_size = 0;
     scene_manager->with_object(scene_token, name_token,
                                [&](pnanovdb_editor::SceneObject* scene_obj)
@@ -57,17 +57,19 @@ static void renderPipelineProcessParams(EditorSceneManager* scene_manager,
                                        pp = {};
                                        desc->init_params(&pp);
                                    }
-                                   params_data = pp.data;
-                                   params_size = pp.size;
+                                   if (pp.data && pp.size > 0)
+                                   {
+                                       params_size = pp.size;
+                                       params_snapshot.resize(pp.size);
+                                       std::memcpy(params_snapshot.data(), pp.data, pp.size);
+                                   }
                                });
 
-    if (!params_data || params_size == 0)
+    if (params_snapshot.empty() || params_size == 0)
         return;
 
     // Snapshot current source params so "New" can keep source object unchanged.
-    std::vector<unsigned char> original_params;
-    original_params.resize(params_size);
-    std::memcpy(original_params.data(), params_data, params_size);
+    const std::vector<unsigned char> original_params = params_snapshot;
 
     constexpr pnanovdb_uint32_t MAX_FIELDS = 16;
     pnanovdb_uint32_t field_count = desc->param_field_count;
@@ -79,7 +81,7 @@ static void renderPipelineProcessParams(EditorSceneManager* scene_manager,
     {
         const auto& field = desc->param_fields[i];
         if (field.type == PNANOVDB_REFLECT_TYPE_FLOAT && field.offset + sizeof(float) <= params_size)
-            field_values[i] = *(const float*)((const char*)params_data + field.offset);
+            field_values[i] = *(const float*)(params_snapshot.data() + field.offset);
         else
             field_values[i] = field.default_value;
     }

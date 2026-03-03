@@ -1894,11 +1894,27 @@ void unmap_params(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pna
     - The object (scene, name) MUST NOT be removed while params are mapped.
     - Always call unmap_pipeline_params() after map_pipeline_params(), even when
       map returns nullptr (in worker mode the mutex is held until unmap).
+    - Caller must provide higher-level exclusion against remove/rename operations
+      for (scene, name) during the map/unmap window.
 
     In worker mode (editor.start()):
     - Holds pipeline_params_mutex for the entire map/unmap window.
     - This protects against concurrent parameter updates from the render thread.
-    - Does NOT protect against object removal - caller's responsibility!
+    - Does NOT protect against object removal - caller's responsibility.
+
+    SAFE USAGE PATTERN:
+    1) Resolve/validate scene+name tokens.
+    2) Ensure no removal path can run for those tokens (app-level guard/phase).
+    3) map_pipeline_params(...)
+    4) Read/write params->data
+    5) unmap_pipeline_params(...)
+    6) Release app-level guard/phase
+
+    UNSAFE PATTERN (DO NOT DO):
+    - map_pipeline_params(...)
+    - allow async/UI task to remove the object
+    - dereference returned params pointer
+    - unmap_pipeline_params(...)
 
     \param editor Editor instance
     \param scene  Scene token
@@ -1971,6 +1987,7 @@ pnanovdb_pipeline_params_t* map_pipeline_params(pnanovdb_editor_t* editor,
     - The pointer from map_pipeline_params() becomes invalid
     - The pipeline stage is marked dirty for re-execution
     - Mutex is released (in worker mode)
+    - Caller may allow removal/rename operations again
 
     \param editor Editor instance
     \param scene  Scene token

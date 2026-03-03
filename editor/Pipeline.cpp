@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /*!
-    \file   editor/Pipeline.h
+    \file   editor/Pipeline.cpp
 
     \author Petra Hapalova, Andrew Reidmeyer
 
@@ -46,6 +46,7 @@ static void pnanovdb_pipeline_params_set_voxels_per_unit(pnanovdb_pipeline_param
 
 static std::array<const pnanovdb_pipeline_descriptor_t*, pnanovdb_pipeline_type_count> s_pipeline_registry = {};
 static pnanovdb_uint32_t s_pipeline_count = 0;
+static std::mutex s_pipeline_registry_mutex;
 
 void pnanovdb_pipeline_register(const pnanovdb_pipeline_descriptor_t* descriptor)
 {
@@ -53,6 +54,7 @@ void pnanovdb_pipeline_register(const pnanovdb_pipeline_descriptor_t* descriptor
     {
         return;
     }
+    std::lock_guard<std::mutex> lock(s_pipeline_registry_mutex);
     s_pipeline_registry[descriptor->type] = descriptor;
     s_pipeline_count = 0;
     for (auto* d : s_pipeline_registry)
@@ -66,6 +68,7 @@ void pnanovdb_pipeline_register(const pnanovdb_pipeline_descriptor_t* descriptor
 
 pnanovdb_uint32_t pnanovdb_pipeline_get_count(void)
 {
+    std::lock_guard<std::mutex> lock(s_pipeline_registry_mutex);
     return s_pipeline_count;
 }
 
@@ -91,6 +94,7 @@ static const pnanovdb_compute_t* s_pending_compute = nullptr;
 static std::string s_pending_conversion_filepath; // source filepath for re-conversion (kept alive for worker)
 static bool s_conversion_enqueued = false; // set immediately on enqueue, cleared on completion handling
 static pnanovdb_pipeline_params_t s_pending_conversion_params = {};
+static std::mutex s_conversion_mutex;
 
 bool is_conversion_running()
 {
@@ -106,6 +110,8 @@ bool start_conversion(pnanovdb_editor::SceneObject* scene_obj,
                       pnanovdb_editor::EditorSceneManager* scene_manager,
                       const pnanovdb_pipeline_context_t* ctx)
 {
+    std::lock_guard<std::mutex> lock(s_conversion_mutex);
+
     if (!scene_obj || !scene_manager || !ctx || !ctx->raster || !ctx->compute)
     {
         pnanovdb_editor::Console::getInstance().addLog(
@@ -183,6 +189,7 @@ bool handle_conversion_completion()
         return false;
 
     bool success = s_conversion_worker.isTaskSuccessful(s_conversion_task_id);
+    const pnanovdb_compute_t* pending_compute = s_pending_compute;
 
     pnanovdb_editor_token_t* scene_token =
         pnanovdb_editor::EditorToken::getInstance().getTokenById(s_pending_scene_token_id);
@@ -209,13 +216,12 @@ bool handle_conversion_completion()
                 object_found = true;
 
                 // Store the converted NanoVDB in the scene object
-                std::shared_ptr<pnanovdb_compute_array_t> owner(
-                    s_pending_nanovdb_array,
-                    [compute = s_pending_compute](pnanovdb_compute_array_t* arr)
-                    {
-                        if (arr)
-                            compute->destroy_array(arr);
-                    });
+                std::shared_ptr<pnanovdb_compute_array_t> owner(s_pending_nanovdb_array,
+                                                                [compute = pending_compute](pnanovdb_compute_array_t* arr)
+                                                                {
+                                                                    if (arr && compute)
+                                                                        compute->destroy_array(arr);
+                                                                });
                 scene_obj->resources.nanovdb_array = s_pending_nanovdb_array;
                 scene_obj->resources.converted_nanovdb = s_pending_nanovdb_array;
                 scene_obj->resources.nanovdb_array_owner = owner;
@@ -249,9 +255,9 @@ bool handle_conversion_completion()
         else
         {
             // Object was removed during conversion - clean up the orphaned array
-            if (s_pending_compute && s_pending_nanovdb_array)
+            if (pending_compute && s_pending_nanovdb_array)
             {
-                s_pending_compute->destroy_array(s_pending_nanovdb_array);
+                pending_compute->destroy_array(s_pending_nanovdb_array);
             }
             pnanovdb_editor::Console::getInstance().addLog(
                 pnanovdb_editor::Console::LogLevel::Warning, "Conversion completed but scene object was removed");
@@ -341,6 +347,7 @@ static pnanovdb_pipeline_type_t s_pending_render_pipeline = pnanovdb_pipeline_ty
 static pnanovdb_pipeline_params_t s_pending_process_params = {};
 static pnanovdb_raster_shader_params_t s_init_raster_shader_params;
 static const pnanovdb_reflect_data_type_t* s_raster_shader_params_data_type = nullptr;
+static std::mutex s_raster_mutex;
 
 static pnanovdb_compute_array_t* s_pending_shader_params_arrays[pnanovdb_raster::shader_param_count] = {};
 
@@ -356,16 +363,19 @@ pnanovdb_raster_shader_params_t* pipeline_get_init_raster_params()
 
 bool is_rasterization_running()
 {
+    std::lock_guard<std::mutex> lock(s_raster_mutex);
     return s_raster_worker.isTaskRunning(s_raster_task_id);
 }
 
 bool is_rasterization_completed()
 {
+    std::lock_guard<std::mutex> lock(s_raster_mutex);
     return s_raster_worker.isTaskCompleted(s_raster_task_id);
 }
 
 bool get_raster_task_progress(std::string& text, float& value)
 {
+    std::lock_guard<std::mutex> lock(s_raster_mutex);
     if (s_raster_worker.isTaskRunning(s_raster_task_id))
     {
         text = s_raster_worker.getTaskProgressText(s_raster_task_id);
@@ -644,6 +654,7 @@ const pnanovdb_pipeline_descriptor_t* pnanovdb_pipeline_get_descriptor(pnanovdb_
 {
     if (type >= pnanovdb_pipeline_type_count)
         return nullptr;
+    std::lock_guard<std::mutex> lock(s_pipeline_registry_mutex);
     return s_pipeline_registry[type];
 }
 
@@ -716,6 +727,7 @@ void* pnanovdb_scene_object_map_params(pnanovdb_scene_object_t* obj, const char*
         return nullptr;
 
     // Look up pipeline by params type name and use its map_params function
+    std::lock_guard<std::mutex> lock(s_pipeline_registry_mutex);
     for (size_t i = 0; i < pnanovdb_pipeline_type_count; ++i)
     {
         const auto* desc = s_pipeline_registry[i];
@@ -1071,6 +1083,8 @@ const char* pipeline_get_shader(const SceneObject* obj)
 
 void pipeline_init_rasterizer(const PipelineContext& ctx)
 {
+    std::lock_guard<std::mutex> lock(s_raster_mutex);
+
     s_raster_compute = ctx.compute;
     s_raster_raster = ctx.raster;
     s_raster_device_queue = ctx.queue;
@@ -1099,6 +1113,8 @@ bool pipeline_start_rasterization(const char* raster_filepath,
                                   pnanovdb_editor_token_t* scene_token,
                                   const PipelineContext& ctx)
 {
+    std::lock_guard<std::mutex> lock(s_raster_mutex);
+
     if (!s_raster_raster || !raster_filepath)
     {
         return false;
@@ -1110,7 +1126,14 @@ bool pipeline_start_rasterization(const char* raster_filepath,
         return false;
     }
 
-    pipeline_set_pending_pipelines(process_pipeline, render_pipeline, voxels_per_unit);
+    // Set pending pipeline config while holding raster mutex (avoid nested locking)
+    s_pending_process_pipeline = process_pipeline;
+    s_pending_render_pipeline = render_pipeline;
+    pnanovdb_pipeline_get_default_params(process_pipeline, &s_pending_process_params);
+    if (process_pipeline == pnanovdb_pipeline_type_raster3d)
+    {
+        pnanovdb_pipeline_params_set_voxels_per_unit(&s_pending_process_params, voxels_per_unit);
+    }
 
     s_pending_raster_filepath = raster_filepath;
     s_pending_raster_scene_token = scene_token;
@@ -1158,6 +1181,8 @@ bool pipeline_start_rasterization(const char* raster_filepath,
 
 void pipeline_set_pending_pipelines(pnanovdb_pipeline_type_t process, pnanovdb_pipeline_type_t render, float voxels_per_unit)
 {
+    std::lock_guard<std::mutex> lock(s_raster_mutex);
+
     s_pending_process_pipeline = process;
     s_pending_render_pipeline = render;
 
@@ -1170,16 +1195,19 @@ void pipeline_set_pending_pipelines(pnanovdb_pipeline_type_t process, pnanovdb_p
 
 pnanovdb_pipeline_type_t pipeline_get_pending_process_pipeline()
 {
+    std::lock_guard<std::mutex> lock(s_raster_mutex);
     return s_pending_process_pipeline;
 }
 
 pnanovdb_pipeline_type_t pipeline_get_pending_render_pipeline()
 {
+    std::lock_guard<std::mutex> lock(s_raster_mutex);
     return s_pending_render_pipeline;
 }
 
 float pipeline_get_pending_process_voxels_per_unit()
 {
+    std::lock_guard<std::mutex> lock(s_raster_mutex);
     return pnanovdb_pipeline_params_get_voxels_per_unit(&s_pending_process_params);
 }
 
@@ -1196,7 +1224,9 @@ bool pipeline_get_rasterization_progress(std::string& progress_text, float& prog
 bool pipeline_handle_rasterization_completion(EditorScene* editor_scene,
                                               std::shared_ptr<pnanovdb_raster_gaussian_data_t>& old_gaussian_data_ptr)
 {
-    if (!is_rasterization_completed())
+    std::lock_guard<std::mutex> lock(s_raster_mutex);
+
+    if (!s_raster_worker.isTaskCompleted(s_raster_task_id))
     {
         return false;
     }

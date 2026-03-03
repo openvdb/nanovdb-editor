@@ -141,6 +141,14 @@ struct PipelineStage
                 params.size = other.params.size;
                 params.type = other.params.type;
             }
+            else
+            {
+                // Keep object in a fully default/safe state if deep-copy allocation fails
+                type = pnanovdb_pipeline_type_noop;
+                params = {};
+                shader_overrides.clear();
+                dirty = true;
+            }
         }
     }
 
@@ -148,18 +156,27 @@ struct PipelineStage
     {
         if (this != &other)
         {
-            free(params.data);
-            params = {};
+            void* new_data = nullptr;
+            size_t new_size = 0;
+            const pnanovdb_reflect_data_type_t* new_type = nullptr;
             if (other.params.data && other.params.size > 0)
             {
-                params.data = malloc(other.params.size);
-                if (params.data)
+                new_data = malloc(other.params.size);
+                if (!new_data)
                 {
-                    memcpy(params.data, other.params.data, other.params.size);
-                    params.size = other.params.size;
-                    params.type = other.params.type;
+                    // Allocation failed: keep current object unchanged
+                    return *this;
                 }
+                memcpy(new_data, other.params.data, other.params.size);
+                new_size = other.params.size;
+                new_type = other.params.type;
             }
+
+            free(params.data);
+            params = {};
+            params.data = new_data;
+            params.size = new_size;
+            params.type = new_type;
             type = other.type;
             shader_overrides = other.shader_overrides;
             dirty = other.dirty;
