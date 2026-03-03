@@ -499,8 +499,24 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
     }
     if (swapchain)
     {
-        // Keep swapchain synchronized with current framebuffer size in the frame loop
-        ptr->device_interface.resize_swapchain(swapchain, (pnanovdb_uint32_t)ptr->width, (pnanovdb_uint32_t)ptr->height);
+        // Keep swapchain synchronized with current framebuffer size in the frame loop,
+        // but avoid redundant resize calls when the size has not changed.
+        static pnanovdb_compute_swapchain_t* s_last_swapchain = nullptr;
+        static pnanovdb_uint32_t s_last_swapchain_width = 0;
+        static pnanovdb_uint32_t s_last_swapchain_height = 0;
+
+        const pnanovdb_uint32_t current_width = static_cast<pnanovdb_uint32_t>(ptr->width);
+        const pnanovdb_uint32_t current_height = static_cast<pnanovdb_uint32_t>(ptr->height);
+
+        if (swapchain != s_last_swapchain ||
+            current_width != s_last_swapchain_width ||
+            current_height != s_last_swapchain_height)
+        {
+            ptr->device_interface.resize_swapchain(swapchain, current_width, current_height);
+            s_last_swapchain = swapchain;
+            s_last_swapchain_width = current_width;
+            s_last_swapchain_height = current_height;
+        }
         swapchain_texture = ptr->device_interface.get_swapchain_front_texture(swapchain);
     }
     pnanovdb_compute_texture_t* encoder_texture = nullptr;
