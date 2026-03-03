@@ -122,10 +122,10 @@ jobs:
           SLANG_LIB_DIR="$(ls -d /tmp/cpm-cache/slang/*/lib 2>/dev/null | head -n1 || true)"
           SPIRV_LIB_PATH=""
           for pattern in \
-            /tmp/cpm-cache/**/libSPIRV.so.15 \
-            /tmp/cpm-cache/**/libSPIRV.so.15.* \
-            /project/**/libSPIRV.so.15 \
-            /project/**/libSPIRV.so.15.*; do
+            /project/**/slang_src_build-prefix/src/slang_src_build-build/**/libSPIRV.so* \
+            /project/**/slang-install/**/libSPIRV.so* \
+            /tmp/cpm-cache/**/libSPIRV.so* \
+            /tmp/**/slang_src_build-prefix/src/slang_src_build-build/**/libSPIRV.so*; do
             candidate="$(compgen -G "${pattern}" | head -n1 || true)"
             if [ -n "${candidate}" ]; then
               SPIRV_LIB_PATH="${candidate}"
@@ -136,6 +136,13 @@ jobs:
           if [ -n "${SPIRV_LIB_PATH}" ]; then
             SPIRV_LIB_DIR="$(dirname "${SPIRV_LIB_PATH}")"
           fi
+          SPIRV_COMPAT_DIR=""
+          if [ -n "${SPIRV_LIB_PATH}" ] && [ ! -e "${SPIRV_LIB_DIR}/libSPIRV.so.15" ]; then
+            SPIRV_COMPAT_DIR="/tmp/nanovdb-spirv-compat"
+            mkdir -p "${SPIRV_COMPAT_DIR}"
+            cp -f "${SPIRV_LIB_PATH}" "${SPIRV_COMPAT_DIR}/libSPIRV.so.15"
+            echo "Created compatibility copy: ${SPIRV_COMPAT_DIR}/libSPIRV.so.15 from ${SPIRV_LIB_PATH}"
+          fi
           if [ -n "${SLANG_LIB_DIR}" ]; then
             export LD_LIBRARY_PATH="${SLANG_LIB_DIR}:${LD_LIBRARY_PATH:-}"
             echo "Using Slang runtime libs from ${SLANG_LIB_DIR}"
@@ -143,8 +150,13 @@ jobs:
           if [ -n "${SPIRV_LIB_DIR}" ]; then
             export LD_LIBRARY_PATH="${SPIRV_LIB_DIR}:${LD_LIBRARY_PATH:-}"
             echo "Using SPIRV runtime libs from ${SPIRV_LIB_DIR}"
-          else
-            echo "Error: could not locate libSPIRV.so.15 in CPM/project build paths"
+          fi
+          if [ -n "${SPIRV_COMPAT_DIR}" ]; then
+            export LD_LIBRARY_PATH="${SPIRV_COMPAT_DIR}:${LD_LIBRARY_PATH:-}"
+            echo "Using SPIRV compatibility libs from ${SPIRV_COMPAT_DIR}"
+          fi
+          if [ -z "${SPIRV_LIB_DIR}" ] && [ -z "${SPIRV_COMPAT_DIR}" ]; then
+            echo "Error: could not locate libSPIRV.so* in Slang build/install paths"
             exit 1
           fi
           if [[ "{wheel}" == *"aarch64"* ]]; then
