@@ -23,7 +23,13 @@ echo "Running black on Python files..."
 python -m black ./pymodule ./pytests --verbose --target-version=py311 --line-length=120 --extend-exclude='_skbuild|dist|\.egg-info'
 
 echo "Formatting YAML files (removing trailing whitespace)..."
-find .github -type f -name "*.yml" -print0 | xargs -0 -I {} sed -i 's/[[:space:]]*$//' {}
+# Determine a portable in-place editing flag for sed (GNU vs BSD/macOS)
+if sed --version >/dev/null 2>&1; then
+    SED_INPLACE=(-i)
+else
+    SED_INPLACE=(-i '')
+fi
+find .github -type f -name "*.yml" -print0 | xargs -0 -I {} sed "${SED_INPLACE[@]}" 's/[[:space:]]*$//' "{}"
 
 if command -v yamllint &> /dev/null; then
     echo "Running yamllint on YAML files..."
