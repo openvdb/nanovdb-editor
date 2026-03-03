@@ -118,6 +118,13 @@ jobs:
 
         CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
           set -e
+          SLANG_LIB_DIR="$(ls -d /tmp/cpm-cache/slang/*/lib 2>/dev/null | head -n1 || true)"
+          if [ -n "${SLANG_LIB_DIR}" ]; then
+            export LD_LIBRARY_PATH="${SLANG_LIB_DIR}:${LD_LIBRARY_PATH:-}"
+            echo "Using Slang runtime libs from ${SLANG_LIB_DIR}"
+          else
+            echo "Warning: Slang lib dir not found in /tmp/cpm-cache/slang/*/lib"
+          fi
           if [[ "{wheel}" == *"aarch64"* ]]; then
             auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_34_aarch64
           else
