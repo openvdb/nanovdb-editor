@@ -325,8 +325,8 @@ pnanovdb_bool_t dispatch_shader_on_nanovdb_array(const pnanovdb_compute_t* compu
     resources[3u].buffer_transient = upload_buffer;
     resources[4u].buffer_transient = user_upload_buffer;
 
-    compute->dispatch_shader(compute_interface, compute_context, shader_context, resources.data(),
-                             (image_width + 31u) / 32u, (image_height + 3u) / 4u, 1u, "dispatch_shader_on_nanovdb_array");
+    compute->dispatch_shader(compute_interface, compute_context, shader_context, resources, (image_width + 31u) / 32u,
+                             (image_height + 3u) / 4u, 1u, "dispatch_shader_on_nanovdb_array");
 
     if (*readback_buffer)
     {
