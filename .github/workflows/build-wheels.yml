@@ -118,46 +118,39 @@ jobs:
 
         CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
           set -e
-          shopt -s globstar nullglob
           SLANG_LIB_DIR="$(ls -d /tmp/cpm-cache/slang/*/lib 2>/dev/null | head -n1 || true)"
-          SPIRV_LIB_PATH=""
-          for pattern in \
-            /project/**/slang_src_build-prefix/src/slang_src_build-build/**/libSPIRV.so* \
-            /project/**/slang-install/**/libSPIRV.so* \
-            /tmp/cpm-cache/**/libSPIRV.so* \
-            /tmp/**/slang_src_build-prefix/src/slang_src_build-build/**/libSPIRV.so*; do
-            candidate="$(compgen -G "${pattern}" | head -n1 || true)"
-            if [ -n "${candidate}" ]; then
-              SPIRV_LIB_PATH="${candidate}"
-              break
-            fi
-          done
-          SPIRV_LIB_DIR=""
-          if [ -n "${SPIRV_LIB_PATH}" ]; then
-            SPIRV_LIB_DIR="$(dirname "${SPIRV_LIB_PATH}")"
-          fi
-          SPIRV_COMPAT_DIR=""
-          if [ -n "${SPIRV_LIB_PATH}" ] && [ ! -e "${SPIRV_LIB_DIR}/libSPIRV.so.15" ]; then
-            SPIRV_COMPAT_DIR="/tmp/nanovdb-spirv-compat"
-            mkdir -p "${SPIRV_COMPAT_DIR}"
-            cp -f "${SPIRV_LIB_PATH}" "${SPIRV_COMPAT_DIR}/libSPIRV.so.15"
-            echo "Created compatibility copy: ${SPIRV_COMPAT_DIR}/libSPIRV.so.15 from ${SPIRV_LIB_PATH}"
-          fi
+          SPIRV_LIB_PATH="$(python - <<'PY'
+          import os
+          targets = ("libSPIRV.so.15", "libSPIRV.so")
+          roots = ("/project", "/tmp/cpm-cache", "/tmp")
+          for root in roots:
+              if not os.path.isdir(root):
+                  continue
+              for dirpath, _, filenames in os.walk(root):
+                  for t in targets:
+                      if t in filenames:
+                          print(os.path.join(dirpath, t))
+                          raise SystemExit(0)
+          print("")
+          PY
+          )"
           if [ -n "${SLANG_LIB_DIR}" ]; then
             export LD_LIBRARY_PATH="${SLANG_LIB_DIR}:${LD_LIBRARY_PATH:-}"
             echo "Using Slang runtime libs from ${SLANG_LIB_DIR}"
           fi
-          if [ -n "${SPIRV_LIB_DIR}" ]; then
+          if [ -n "${SPIRV_LIB_PATH}" ]; then
+            SPIRV_LIB_DIR="$(dirname "${SPIRV_LIB_PATH}")"
             export LD_LIBRARY_PATH="${SPIRV_LIB_DIR}:${LD_LIBRARY_PATH:-}"
             echo "Using SPIRV runtime libs from ${SPIRV_LIB_DIR}"
-          fi
-          if [ -n "${SPIRV_COMPAT_DIR}" ]; then
-            export LD_LIBRARY_PATH="${SPIRV_COMPAT_DIR}:${LD_LIBRARY_PATH:-}"
-            echo "Using SPIRV compatibility libs from ${SPIRV_COMPAT_DIR}"
-          fi
-          if [ -z "${SPIRV_LIB_DIR}" ] && [ -z "${SPIRV_COMPAT_DIR}" ]; then
-            echo "Error: could not locate libSPIRV.so* in Slang build/install paths"
-            exit 1
+            if [ ! -e "${SPIRV_LIB_DIR}/libSPIRV.so.15" ] && [ -e "${SPIRV_LIB_DIR}/libSPIRV.so" ]; then
+              SPIRV_COMPAT_DIR="/tmp/nanovdb-spirv-compat"
+              mkdir -p "${SPIRV_COMPAT_DIR}"
+              cp -f "${SPIRV_LIB_DIR}/libSPIRV.so" "${SPIRV_COMPAT_DIR}/libSPIRV.so.15"
+              export LD_LIBRARY_PATH="${SPIRV_COMPAT_DIR}:${LD_LIBRARY_PATH:-}"
+              echo "Created compatibility copy: ${SPIRV_COMPAT_DIR}/libSPIRV.so.15"
+            fi
+          else
+            echo "Warning: could not locate libSPIRV.so* before auditwheel; relying on wheel-installed runtime libs"
           fi
           if [[ "{wheel}" == *"aarch64"* ]]; then
             auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_34_aarch64

@@ -430,6 +430,21 @@ if(SKBUILD)
                         message(WARNING \"No libglslang.so* found under ${Slang_SOURCE_DIR} or ${SLANG_BUILD_DIR}\")
                     endif()
 
+                    # Install SPIRV-Tools runtime dependency used by glslang.
+                    # Slang's external layout varies, so search recursively in
+                    # both install and build trees.
+                    file(GLOB_RECURSE SLANG_SPIRV_LIBS
+                        \"${Slang_SOURCE_DIR}/libSPIRV.so*\"
+                        \"${SLANG_BUILD_DIR}/libSPIRV.so*\"
+                    )
+                    foreach(lib \${SLANG_SPIRV_LIBS})
+                        message(STATUS \"Installing SPIRV: \${lib}\")
+                        file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                    endforeach()
+                    if(NOT SLANG_SPIRV_LIBS)
+                        message(WARNING \"No libSPIRV.so* found under ${Slang_SOURCE_DIR} or ${SLANG_BUILD_DIR}\")
+                    endif()
+
                     # auditwheel resolves dependencies via the DT_NEEDED name (libminiz.so.3)
                     # so ensure that filename exists in the wheel, even if CMake didn't create
                     # a symlink (file(INSTALL) may also dereference symlinks).
@@ -456,6 +471,19 @@ if(SKBUILD)
                         elseif(EXISTS \"\${_miniz_dst}/libglslang.so\")
                             message(STATUS \"Creating libglslang.so.15 from libglslang.so\")
                             file(COPY_FILE \"\${_miniz_dst}/libglslang.so\" \"\${_miniz_dst}/libglslang.so.15\")
+                        endif()
+                    endif()
+
+                    # Same safety pattern for SPIRV SONAME used by DT_NEEDED.
+                    if(NOT EXISTS \"\${_miniz_dst}/libSPIRV.so.15\")
+                        file(GLOB _spirv_v15 \"\${_miniz_dst}/libSPIRV.so.15.*\")
+                        if(_spirv_v15)
+                            list(GET _spirv_v15 0 _spirv_src)
+                            message(STATUS \"Creating libSPIRV.so.15 from \${_spirv_src}\")
+                            file(COPY_FILE \"\${_spirv_src}\" \"\${_miniz_dst}/libSPIRV.so.15\")
+                        elseif(EXISTS \"\${_miniz_dst}/libSPIRV.so\")
+                            message(STATUS \"Creating libSPIRV.so.15 from libSPIRV.so\")
+                            file(COPY_FILE \"\${_miniz_dst}/libSPIRV.so\" \"\${_miniz_dst}/libSPIRV.so.15\")
                         endif()
                     endif()
                 " COMPONENT python_libs)
