@@ -360,7 +360,7 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
     if(UNIX AND NOT APPLE)
         set(SLANG_EP_BUILD_CMD
             ${CMAKE_COMMAND} -E env
-            "LD_LIBRARY_PATH=<BINARY_DIR>/external/miniz:$ENV{LD_LIBRARY_PATH}"
+            "LD_LIBRARY_PATH=<BINARY_DIR>/external/miniz:<BINARY_DIR>/external/miniz/Release:<BINARY_DIR>/Release/lib:$ENV{LD_LIBRARY_PATH}"
             ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
         )
     endif()
@@ -375,6 +375,7 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
             -DCMAKE_BUILD_TYPE=Release
             -DCMAKE_INSTALL_PREFIX=${SLANG_INSTALL_DIR}
             -DCMAKE_INSTALL_LIBDIR=lib
+            -DCMAKE_BUILD_RPATH=<BINARY_DIR>/external/miniz
             -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON
             -DCMAKE_INSTALL_RPATH=\$ORIGIN
             -DCMAKE_POSITION_INDEPENDENT_CODE=ON
