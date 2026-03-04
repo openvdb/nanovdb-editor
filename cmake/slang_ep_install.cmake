@@ -39,10 +39,19 @@ else()
     message(STATUS "slang_ep_install: No libslang-llvm found under ${_bin_dir}/slang-*/lib; proceeding")
 endif()
 
-execute_process(
-    COMMAND "${CMAKE_COMMAND}" --build "${_bin_dir}" --config Release --target install
-    RESULT_VARIABLE _install_rv
-)
+set(_install_cmd "${CMAKE_COMMAND}" --build "${_bin_dir}" --config Release --target install)
+if(UNIX AND NOT APPLE)
+    set(_miniz_dir "${_bin_dir}/external/miniz")
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}" -E env "LD_LIBRARY_PATH=${_miniz_dir}:$ENV{LD_LIBRARY_PATH}" ${_install_cmd}
+        RESULT_VARIABLE _install_rv
+    )
+else()
+    execute_process(
+        COMMAND ${_install_cmd}
+        RESULT_VARIABLE _install_rv
+    )
+endif()
 
 if(NOT _install_rv EQUAL 0)
     message(FATAL_ERROR "slang_ep_install: Slang install failed (rv=${_install_rv})")

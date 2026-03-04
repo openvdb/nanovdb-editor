@@ -397,7 +397,6 @@ if(SKBUILD)
                     endforeach()
 
                     # Install miniz dependency (required by Slang for ZIP/compression)
-                    # miniz is built as a separate CPM dependency
                     file(GLOB SLANG_MINIZ_LIBS \"${Slang_SOURCE_DIR}/lib/libminiz.so*\")
                     foreach(lib \${SLANG_MINIZ_LIBS})
                         message(STATUS \"Installing Slang miniz: \${lib}\")
@@ -406,9 +405,53 @@ if(SKBUILD)
 
                     file(GLOB MINIZ_LIBS \"${miniz_BINARY_DIR}/libminiz.so*\")
                     foreach(lib \${MINIZ_LIBS})
-                        message(STATUS \"Installing miniz: \${lib}\")
+                        message(STATUS \"Installing CPM miniz: \${lib}\")
                         file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
                     endforeach()
+
+                    file(GLOB SLANG_BUILD_MINIZ_LIBS \"${SLANG_BUILD_DIR}/external/miniz/libminiz.so*\")
+                    foreach(lib \${SLANG_BUILD_MINIZ_LIBS})
+                        message(STATUS \"Installing Slang build miniz: \${lib}\")
+                        file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                    endforeach()
+
+                    # Install glslang runtime dependency used by libslang-glslang.
+                    # Slang's external layout varies across versions/generators, so
+                    # search recursively in both install and build trees.
+                    file(GLOB_RECURSE SLANG_GLSLANG_LIBS
+                        \"${Slang_SOURCE_DIR}/*.so*\"
+                        \"${SLANG_BUILD_DIR}/*.so*\"
+                    )
+                    set(_installed_glslang FALSE)
+                    foreach(lib \${SLANG_GLSLANG_LIBS})
+                        if(lib MATCHES \"/libglslang\\\\.so(\\\\..*)?$\")
+                            message(STATUS \"Installing glslang: \${lib}\")
+                            file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                            set(_installed_glslang TRUE)
+                        endif()
+                    endforeach()
+                    if(NOT _installed_glslang)
+                        message(WARNING \"No libglslang.so* found under ${Slang_SOURCE_DIR} or ${SLANG_BUILD_DIR}\")
+                    endif()
+
+                    # Install SPIRV-Tools runtime dependency used by glslang.
+                    # Slang's external layout varies, so search recursively in
+                    # both install and build trees.
+                    file(GLOB_RECURSE SLANG_SPIRV_LIBS
+                        \"${Slang_SOURCE_DIR}/*.so*\"
+                        \"${SLANG_BUILD_DIR}/*.so*\"
+                    )
+                    set(_installed_spirv FALSE)
+                    foreach(lib \${SLANG_SPIRV_LIBS})
+                        if(lib MATCHES \"/libSPIRV\\\\.so(\\\\..*)?$\")
+                            message(STATUS \"Installing SPIRV: \${lib}\")
+                            file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                            set(_installed_spirv TRUE)
+                        endif()
+                    endforeach()
+                    if(NOT _installed_spirv)
+                        message(WARNING \"No libSPIRV.so* found under ${Slang_SOURCE_DIR} or ${SLANG_BUILD_DIR}\")
+                    endif()
 
                     # auditwheel resolves dependencies via the DT_NEEDED name (libminiz.so.3)
                     # so ensure that filename exists in the wheel, even if CMake didn't create
@@ -423,6 +466,32 @@ if(SKBUILD)
                         elseif(EXISTS \"\${_miniz_dst}/libminiz.so\")
                             message(STATUS \"Creating libminiz.so.3 from libminiz.so\")
                             file(COPY_FILE \"\${_miniz_dst}/libminiz.so\" \"\${_miniz_dst}/libminiz.so.3\")
+                        endif()
+                    endif()
+
+                    # Same safety pattern for glslang SONAME used by DT_NEEDED.
+                    if(NOT EXISTS \"\${_miniz_dst}/libglslang.so.15\")
+                        file(GLOB _glslang_v15 \"\${_miniz_dst}/libglslang.so.15.*\")
+                        if(_glslang_v15)
+                            list(GET _glslang_v15 0 _glslang_src)
+                            message(STATUS \"Creating libglslang.so.15 from \${_glslang_src}\")
+                            file(COPY_FILE \"\${_glslang_src}\" \"\${_miniz_dst}/libglslang.so.15\")
+                        elseif(EXISTS \"\${_miniz_dst}/libglslang.so\")
+                            message(STATUS \"Creating libglslang.so.15 from libglslang.so\")
+                            file(COPY_FILE \"\${_miniz_dst}/libglslang.so\" \"\${_miniz_dst}/libglslang.so.15\")
+                        endif()
+                    endif()
+
+                    # Same safety pattern for SPIRV SONAME used by DT_NEEDED.
+                    if(NOT EXISTS \"\${_miniz_dst}/libSPIRV.so.15\")
+                        file(GLOB _spirv_v15 \"\${_miniz_dst}/libSPIRV.so.15.*\")
+                        if(_spirv_v15)
+                            list(GET _spirv_v15 0 _spirv_src)
+                            message(STATUS \"Creating libSPIRV.so.15 from \${_spirv_src}\")
+                            file(COPY_FILE \"\${_spirv_src}\" \"\${_miniz_dst}/libSPIRV.so.15\")
+                        elseif(EXISTS \"\${_miniz_dst}/libSPIRV.so\")
+                            message(STATUS \"Creating libSPIRV.so.15 from libSPIRV.so\")
+                            file(COPY_FILE \"\${_miniz_dst}/libSPIRV.so\" \"\${_miniz_dst}/libSPIRV.so.15\")
                         endif()
                     endif()
                 " COMPONENT python_libs)
