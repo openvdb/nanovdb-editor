@@ -118,7 +118,7 @@ jobs:
           PY
 
           cat > slang-package/Dockerfile <<'EOF'
-          FROM scratch
+          FROM alpine:3.20
           LABEL org.opencontainers.image.title="NanoVDB Slang Runtime"
           LABEL org.opencontainers.image.description="Prebuilt Slang runtime libraries extracted from nanovdb-editor wheel artifacts"
           COPY lib/ /opt/slang/lib/

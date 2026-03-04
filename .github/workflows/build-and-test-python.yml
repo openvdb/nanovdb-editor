@@ -387,6 +387,10 @@ jobs:
     name: Slang Package Image
     needs: nanovdb-editor-build-python-linux
     if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && !cancelled() && !failure() }}
+    permissions:
+      contents: read
+      packages: write
+      actions: read
     uses: ./.github/workflows/build-slang-package-image.yml
     with:
       image_name: nanovdb-slang

@@ -60,3 +60,4 @@ jobs:
     uses: ./.github/workflows/fvdb-viz-integration.yml
     with:
       package: dev
+    secrets: inherit

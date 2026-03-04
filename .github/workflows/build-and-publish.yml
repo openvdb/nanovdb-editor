@@ -92,4 +92,5 @@ jobs:
     uses: ./.github/workflows/fvdb-viz-integration.yml
     with:
       package: release
+    secrets: inherit
 

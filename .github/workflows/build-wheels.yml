@@ -117,13 +117,29 @@ jobs:
         fi
 
         echo "Found cached Slang image: ${IMAGE_REF}"
-        docker pull "${IMAGE_REF}"
+        if ! docker pull "${IMAGE_REF}"; then
+          echo "Failed to pull cached Slang image; building as usual"
+          exit 0
+        fi
         rm -rf "${LOCAL_LIB_DIR}"
         mkdir -p "${LOCAL_LIB_DIR}"
 
-        cid="$(docker create "${IMAGE_REF}" /bin/true)"
-        docker cp "${cid}:/opt/slang/lib/." "${LOCAL_LIB_DIR}/"
-        docker rm "${cid}" >/dev/null
+        cid=""
+        cleanup() {
+          if [[ -n "${cid}" ]]; then
+            docker rm "${cid}" >/dev/null 2>&1 || true
+          fi
+        }
+        trap cleanup EXIT
+
+        if ! cid="$(docker create "${IMAGE_REF}" /bin/true)"; then
+          echo "Failed to create extraction container from cached image; building as usual"
+          exit 0
+        fi
+        if ! docker cp "${cid}:/opt/slang/lib/." "${LOCAL_LIB_DIR}/"; then
+          echo "Failed to copy Slang libs from cached image; building as usual"
+          exit 0
+        fi
 
         if ls "${LOCAL_LIB_DIR}"/libslang*.so* >/dev/null 2>&1; then
           CONTAINER_LIB_DIR="/project${LOCAL_LIB_DIR#${GITHUB_WORKSPACE}}"
