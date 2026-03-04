@@ -3,6 +3,7 @@
 
 #include <nanovdb_editor/putil/Editor.h>
 #include <nanovdb_editor/putil/FileFormat.h>
+#include <nanovdb_editor/putil/Reflect.h>
 
 #include <cstdarg>
 #include <thread>
@@ -10,9 +11,10 @@
 
 #define TEST_EDITOR
 // #define TEST_RASTER
-// #define TEST_RASTER_2D
+#define TEST_RASTER_2D
 #define TEST_CAMERA
-#define TEST_NVDB
+// #define TEST_NVDB
+#define TEST_IMAGE2D
 // #define TEST_FILE_FORMAT
 // #define FORMAT_INGP
 #define FORMAT_PLY
@@ -41,6 +43,48 @@ void pnanovdb_compute_log_print(pnanovdb_compute_log_level_t level, const char* 
     printf("\n");
 
     va_end(args);
+}
+
+void test_image_2d(pnanovdb_editor_t* editor,
+                   pnanovdb_compute_t* compute,
+                   pnanovdb_editor_token_t* scene_token,
+                   const char* image_name)
+{
+    printf("Testing image2d creation: %s\n", image_name);
+
+    pnanovdb_uint32_t width = 1440;
+    pnanovdb_uint32_t height = 720;
+    pnanovdb_compute_array_t* image_rgba = compute->create_array(4u, width * height, nullptr);
+    pnanovdb_uint32_t* mapped = (pnanovdb_uint32_t*)compute->map_array(image_rgba);
+    for (pnanovdb_uint32_t j = 0u; j < height; j++)
+    {
+        for (pnanovdb_uint32_t i = 0u; i < width; i++)
+        {
+            pnanovdb_uint32_t val = 0u;
+            val |= ((255 * i) / (width - 1));
+            val |= (((255 * j) / (height - 1)) << 8u);
+            val |= (255 << 24u);
+            mapped[j * width + i] = val;
+        }
+    }
+    compute->unmap_array(image_rgba);
+
+    pnanovdb_compute_array_t* image_nanovdb = compute->nanovdb_from_image_rgba8(image_rgba, width, height);
+    compute->destroy_array(image_rgba);
+
+    pnanovdb_editor_token_t* image_token = editor->get_token(image_name);
+    editor->add_nanovdb_2(editor, scene_token, image_token, image_nanovdb);
+    compute->destroy_array(image_nanovdb);
+
+    pnanovdb_editor_shader_name_t* mapped_shader = (pnanovdb_editor_shader_name_t*)editor->map_params(
+        editor, scene_token, image_token, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t));
+    if (mapped_shader)
+    {
+        mapped_shader->shader_name = editor->get_token("editor/image2d.slang");
+        editor->unmap_params(editor, scene_token, image_token);
+    }
+
+    printf("Image2d '%s' added to scene\n", image_name);
 }
 
 int main(int argc, char* argv[])
@@ -222,12 +266,12 @@ int main(int argc, char* argv[])
     }
 
     // Load and add flow volume to secondary scene only
-    data_nanovdb2 = compute.load_nanovdb("../../data/hexagon_flow_test2.nvdb");
-    if (data_nanovdb2)
-    {
-        pnanovdb_editor_token_t* flow_token = editor.get_token("flow_volume");
-        editor.add_nanovdb_2(&editor, scene_secondary, flow_token, data_nanovdb2);
-    }
+    // data_nanovdb2 = compute.load_nanovdb("../../data/hexagon_flow_test2.nvdb");
+    // if (data_nanovdb2)
+    // {
+    //     pnanovdb_editor_token_t* flow_token = editor.get_token("flow_volume");
+    //     editor.add_nanovdb_2(&editor, scene_secondary, flow_token, data_nanovdb2);
+    // }
 
     compute.destroy_array(data_nanovdb);
     compute.destroy_array(data_nanovdb2);
@@ -235,6 +279,10 @@ int main(int argc, char* argv[])
     printf("Scene Summary:\n");
     printf("  main_scene: dragon\n");
     printf("  secondary_scene: dragon + flow_volume\n");
+#    endif
+
+#    ifdef TEST_IMAGE2D
+    test_image_2d(&editor, &compute, scene_main, "image2d");
 #    endif
 
 #    ifdef TEST_RASTER_2D

@@ -36,7 +36,7 @@
 // #define TEST_SVRASTER
 // #define TEST_E57
 // #define TEST_CAMERA
-// #define TEST_IMAGE2D
+#define TEST_IMAGE2D
 
 struct constants_t
 {

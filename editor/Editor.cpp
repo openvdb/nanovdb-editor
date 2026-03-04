@@ -706,8 +706,10 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             std::vector<OrderedRenderable> renderables;
             std::vector<pnanovdb_editor_token_t*> ordered_views =
                 editor->impl->editor_scene->get_ordered_renderable_views(scene_token);
-            for (pnanovdb_editor_token_t* name_token : ordered_views)
+            // Compositing draws bottom first so top entries are rendered last and appear on top
+            for (auto it = ordered_views.rbegin(); it != ordered_views.rend(); ++it)
             {
+                pnanovdb_editor_token_t* name_token = *it;
                 if (!name_token)
                 {
                     continue;
