@@ -11,6 +11,13 @@ on:
       version_valid:
         description: 'Whether version validation passed'
         value: ${{ jobs.validate_version.outputs.version_valid }}
+  workflow_dispatch:
+    inputs:
+      is_dev:
+        description: 'Build as dev package (nanovdb-editor-dev)'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   validate_version:
@@ -88,6 +95,44 @@ jobs:
         sed -i 's/name = "nanovdb-editor"/name = "nanovdb-editor-dev"/' pymodule/pyproject.toml
         cat pymodule/pyproject.toml | grep "name ="
 
+    - name: Reuse cached Slang image libraries (linux x86_64)
+      if: matrix.os == 'ubuntu-latest' && matrix.arch == 'x86_64'
+      shell: bash
+      env:
+        GHCR_USER: ${{ secrets.GHCR_PUSH_USERNAME }}
+        GHCR_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN }}
+      run: |
+        set -euo pipefail
+        IMAGE_REF="ghcr.io/${{ github.repository_owner }}/nanovdb-slang:${{ github.ref_name }}"
+        LOCAL_LIB_DIR="${GITHUB_WORKSPACE}/.ci/slang-image-lib"
+        echo "NANOVDB_SLANG_IMAGE_LIB_DIR=" >> "$GITHUB_ENV"
+
+        if [[ -n "${GHCR_TOKEN:-}" && -n "${GHCR_USER:-}" ]]; then
+          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin >/dev/null 2>&1 || true
+        fi
+
+        if ! docker manifest inspect "${IMAGE_REF}" >/dev/null 2>&1; then
+          echo "No cached Slang image found for ${IMAGE_REF}; building as usual"
+          exit 0
+        fi
+
+        echo "Found cached Slang image: ${IMAGE_REF}"
+        docker pull "${IMAGE_REF}"
+        rm -rf "${LOCAL_LIB_DIR}"
+        mkdir -p "${LOCAL_LIB_DIR}"
+
+        cid="$(docker create "${IMAGE_REF}" /bin/true)"
+        docker cp "${cid}:/opt/slang/lib/." "${LOCAL_LIB_DIR}/"
+        docker rm "${cid}" >/dev/null
+
+        if ls "${LOCAL_LIB_DIR}"/libslang*.so* >/dev/null 2>&1; then
+          CONTAINER_LIB_DIR="/project${LOCAL_LIB_DIR#${GITHUB_WORKSPACE}}"
+          echo "NANOVDB_SLANG_IMAGE_LIB_DIR=${CONTAINER_LIB_DIR}" >> "$GITHUB_ENV"
+          echo "Reusing Slang libs from cached image via ${LOCAL_LIB_DIR}"
+        else
+          echo "Cached image extracted but no libslang*.so* found; falling back to build outputs"
+        fi
+
     - name: Build wheels
       uses: pypa/cibuildwheel@v2.21.3
       env:
@@ -97,15 +142,18 @@ jobs:
         CIBW_BUILD_VERBOSITY: 1
         CIBW_ARCHS: ${{ matrix.os == 'ubuntu-24.04-arm' && 'aarch64' || 'auto' }}
         CIBW_ARCHS_WINDOWS: ${{ matrix.os == 'windows-11-arm' && 'ARM64' || 'auto' }}
+        CIBW_ENVIRONMENT_PASS_LINUX: NANOVDB_SLANG_IMAGE_LIB_DIR
 
         # Linux dependencies
         CIBW_BEFORE_ALL_LINUX: |
           if command -v dnf &> /dev/null; then
             dnf install -y cmake git
             dnf install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel wayland-protocols-devel
+            dnf install -y miniz miniz-devel
           else
             yum install -y cmake git
             yum install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel
+            yum install -y miniz miniz-devel
           fi
           cmake --version
 
@@ -116,6 +164,56 @@ jobs:
 
         CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
           set -e
+          SLANG_LIB_DIR="${NANOVDB_SLANG_IMAGE_LIB_DIR:-}"
+          if [ -n "${SLANG_LIB_DIR}" ] && [ ! -d "${SLANG_LIB_DIR}" ]; then
+            SLANG_LIB_DIR=""
+          fi
+          if [ -z "${SLANG_LIB_DIR}" ]; then
+            SLANG_LIB_DIR="$(ls -d /tmp/cpm-cache/slang/*/lib 2>/dev/null | head -n1 || true)"
+          fi
+          SPIRV_LIB_PATH="$(python - <<'PY'
+          import os
+          targets = ("libSPIRV.so.15", "libSPIRV.so")
+          roots = ("/project", "/tmp/cpm-cache", "/tmp")
+          for root in roots:
+              if not os.path.isdir(root):
+                  continue
+              for dirpath, _, filenames in os.walk(root):
+                  for t in targets:
+                      if t in filenames:
+                          print(os.path.join(dirpath, t))
+                          raise SystemExit(0)
+          print("")
+          PY
+          )"
+          if [ -n "${SLANG_LIB_DIR}" ]; then
+            export LD_LIBRARY_PATH="${SLANG_LIB_DIR}:${LD_LIBRARY_PATH:-}"
+            echo "Using Slang runtime libs from ${SLANG_LIB_DIR}"
+          fi
+          if [ -n "${SPIRV_LIB_PATH}" ]; then
+            SPIRV_LIB_DIR="$(dirname "${SPIRV_LIB_PATH}")"
+            export LD_LIBRARY_PATH="${SPIRV_LIB_DIR}:${LD_LIBRARY_PATH:-}"
+            echo "Using SPIRV runtime libs from ${SPIRV_LIB_DIR}"
+            if [ ! -e "${SPIRV_LIB_DIR}/libSPIRV.so.15" ]; then
+              SPIRV_COMPAT_DIR="/tmp/nanovdb-spirv-compat"
+              mkdir -p "${SPIRV_COMPAT_DIR}"
+              SPIRV_SRC_LIB=""
+              if [ -e "${SPIRV_LIB_DIR}/libSPIRV.so" ]; then
+                SPIRV_SRC_LIB="${SPIRV_LIB_DIR}/libSPIRV.so"
+              else
+                SPIRV_SRC_LIB="$(printf '%s\n' "${SPIRV_LIB_DIR}"/libSPIRV.so.15.* 2>/dev/null | head -n1 || true)"
+              fi
+              if [ -n "${SPIRV_SRC_LIB}" ] && [ -e "${SPIRV_SRC_LIB}" ]; then
+                cp -f "${SPIRV_SRC_LIB}" "${SPIRV_COMPAT_DIR}/libSPIRV.so.15"
+                export LD_LIBRARY_PATH="${SPIRV_COMPAT_DIR}:${LD_LIBRARY_PATH:-}"
+                echo "Created compatibility copy: ${SPIRV_COMPAT_DIR}/libSPIRV.so.15 from ${SPIRV_SRC_LIB}"
+              else
+                echo "Warning: could not create SPIRV compatibility libSPIRV.so.15; source library not found in ${SPIRV_LIB_DIR}"
+              fi
+            fi
+          else
+            echo "Warning: could not locate libSPIRV.so* before auditwheel; relying on wheel-installed runtime libs"
+          fi
           if [[ "{wheel}" == *"aarch64"* ]]; then
             auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_34_aarch64
           else

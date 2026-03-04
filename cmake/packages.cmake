@@ -354,6 +354,17 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
     set(SLANG_BUILD_DIR "${CMAKE_BINARY_DIR}/slang_src_build-prefix/src/slang_src_build-build" CACHE INTERNAL "Slang build directory")
     set(SLANG_EP_INSTALL_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/slang_ep_install.cmake")
 
+    set(SLANG_EP_BUILD_CMD
+        ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
+    )
+    if(UNIX AND NOT APPLE)
+        set(SLANG_EP_BUILD_CMD
+            ${CMAKE_COMMAND} -E env
+            "LD_LIBRARY_PATH=<BINARY_DIR>/external/miniz:$ENV{LD_LIBRARY_PATH}"
+            ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
+        )
+    endif()
+
     ExternalProject_Add(slang_src_build
         GIT_REPOSITORY https://github.com/shader-slang/slang.git
         GIT_TAG v${SLANG_VERSION}
@@ -378,7 +389,7 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
             -DCMAKE_PREFIX_PATH=${LLVM_INSTALL_DIR}
         BUILD_BYPRODUCTS
             ${SLANG_INSTALLED_LIB}
-        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
+        BUILD_COMMAND ${SLANG_EP_BUILD_CMD}
         INSTALL_COMMAND ${CMAKE_COMMAND} -DSLANG_EP_BINARY_DIR=<BINARY_DIR> -P ${SLANG_EP_INSTALL_SCRIPT}
     )
 
