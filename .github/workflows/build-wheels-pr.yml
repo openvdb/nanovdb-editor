@@ -24,4 +24,5 @@ jobs:
     uses: ./.github/workflows/build-wheels.yml
     with:
       is_dev: false
+      manage_slang_image: true
     secrets: inherit

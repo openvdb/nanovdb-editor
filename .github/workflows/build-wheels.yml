@@ -7,6 +7,11 @@ on:
         description: 'Whether to build as dev package (nanovdb-editor-dev) with -dev version suffix'
         required: true
         type: boolean
+      manage_slang_image:
+        description: 'Whether to check/publish Slang GHCR image from Linux x86_64 wheels'
+        required: false
+        type: boolean
+        default: false
     outputs:
       version_valid:
         description: 'Whether version validation passed'
@@ -15,6 +20,11 @@ on:
     inputs:
       is_dev:
         description: 'Build as dev package (nanovdb-editor-dev)'
+        required: false
+        type: boolean
+        default: false
+      manage_slang_image:
+        description: 'Check/publish Slang GHCR image from Linux x86_64 wheels'
         required: false
         type: boolean
         default: false
@@ -41,13 +51,15 @@ jobs:
     name: Resolve Slang Version
     runs-on: ubuntu-latest
     outputs:
-      slang_version: ${{ steps.resolve.outputs.slang_version }}
-      image_name: ${{ steps.resolve.outputs.image_name }}
+      slang_version: ${{ steps.resolve.outputs.slang_version || steps.resolve_disabled.outputs.slang_version }}
+      image_name: ${{ steps.resolve.outputs.image_name || steps.resolve_disabled.outputs.image_name }}
     steps:
     - uses: actions/checkout@v4
+      if: inputs.manage_slang_image
 
     - name: Parse Slang version from CMake config
       id: resolve
+      if: inputs.manage_slang_image
       run: |
         set -euo pipefail
         slang_version="$(python - <<'PY'
@@ -67,19 +79,29 @@ jobs:
         echo "image_name=nanovdb-slang" >> "$GITHUB_OUTPUT"
         echo "Resolved Slang version: ${slang_version}"
 
+    - name: Skip Slang version resolution
+      id: resolve_disabled
+      if: ${{ !inputs.manage_slang_image }}
+      run: |
+        set -euo pipefail
+        echo "slang_version=" >> "$GITHUB_OUTPUT"
+        echo "image_name=nanovdb-slang" >> "$GITHUB_OUTPUT"
+        echo "Slang image management disabled for this run"
+
   lookup_slang_image:
     name: Check Slang Image Exists
     needs: resolve_slang_version
     runs-on: ubuntu-latest
     outputs:
-      exists: ${{ steps.lookup.outputs.exists }}
-      image_ref: ${{ steps.lookup.outputs.image_ref }}
+      exists: ${{ steps.lookup.outputs.exists || steps.lookup_disabled.outputs.exists }}
+      image_ref: ${{ steps.lookup.outputs.image_ref || steps.lookup_disabled.outputs.image_ref }}
     env:
       IMAGE_NAME: ${{ needs.resolve_slang_version.outputs.image_name }}
       SLANG_VERSION: ${{ needs.resolve_slang_version.outputs.slang_version }}
     steps:
     - name: Look up cached Slang image
       id: lookup
+      if: inputs.manage_slang_image
       env:
         GHCR_USER: ${{ secrets.GHCR_PUSH_USERNAME }}
         GHCR_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN }}
@@ -104,6 +126,15 @@ jobs:
           echo "exists=false" >> "$GITHUB_OUTPUT"
           echo "Slang image not found, build required: ${image_ref}"
         fi
+
+    - name: Skip Slang image lookup
+      id: lookup_disabled
+      if: ${{ !inputs.manage_slang_image }}
+      run: |
+        set -euo pipefail
+        echo "exists=false" >> "$GITHUB_OUTPUT"
+        echo "image_ref=" >> "$GITHUB_OUTPUT"
+        echo "Slang image management disabled for this run"
 
   build_wheels:
     name: Build (${{ matrix.os }}${{ matrix.arch && format(' {0}', matrix.arch) || '' }})
@@ -164,7 +195,7 @@ jobs:
         cat pymodule/pyproject.toml | grep "name ="
 
     - name: Report Slang cache resolution (linux x86_64)
-      if: matrix.os == 'ubuntu-latest' && matrix.arch == 'x86_64'
+      if: matrix.os == 'ubuntu-latest' && matrix.arch == 'x86_64' && inputs.manage_slang_image
       shell: bash
       run: |
         set -euo pipefail
@@ -173,7 +204,7 @@ jobs:
         echo "Slang image exists: ${{ needs.lookup_slang_image.outputs.exists }}"
 
     - name: Reuse cached Slang image libraries (linux x86_64)
-      if: matrix.os == 'ubuntu-latest' && matrix.arch == 'x86_64' && needs.lookup_slang_image.outputs.exists == 'true'
+      if: matrix.os == 'ubuntu-latest' && matrix.arch == 'x86_64' && inputs.manage_slang_image && needs.lookup_slang_image.outputs.exists == 'true'
       shell: bash
       run: |
         set -euo pipefail
@@ -319,7 +350,7 @@ jobs:
   publish_slang_image:
     name: Publish Slang Image (if missing)
     needs: [build_wheels, resolve_slang_version, lookup_slang_image]
-    if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.lookup_slang_image.outputs.exists != 'true' && !cancelled() && !failure() }}
+    if: ${{ inputs.manage_slang_image && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.lookup_slang_image.outputs.exists != 'true' && !cancelled() && !failure() }}
     uses: ./.github/workflows/build-slang-package-image.yml
     with:
       image_name: ${{ needs.resolve_slang_version.outputs.image_name }}
