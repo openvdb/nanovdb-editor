@@ -274,6 +274,9 @@ jobs:
 
         CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
           set -e
+          # Use a Python-installed auditwheel toolchain to avoid mismatches
+          # with the preinstalled pipx auditwheel/pyelftools environment.
+          python -m pip install --upgrade "auditwheel>=6.0.0" "pyelftools>=0.30"
           SLANG_LIB_DIR="${NANOVDB_SLANG_IMAGE_LIB_DIR:-}"
           if [ -n "${SLANG_LIB_DIR}" ] && [ ! -d "${SLANG_LIB_DIR}" ]; then
             SLANG_LIB_DIR=""
@@ -325,9 +328,9 @@ jobs:
             echo "Warning: could not locate libSPIRV.so* before auditwheel; relying on wheel-installed runtime libs"
           fi
           if [[ "{wheel}" == *"aarch64"* ]]; then
-            auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_34_aarch64
+            python -m auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_34_aarch64
           else
-            auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_34_x86_64
+            python -m auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_34_x86_64
           fi
 
         # Install test dependencies before testing
