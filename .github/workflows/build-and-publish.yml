@@ -75,6 +75,10 @@ jobs:
 
   verify_release_package:
     name: Verify fvdb viewer integration (release)
+    permissions:
+      contents: read
+      packages: read
+      actions: read
     needs:
       - upload_pypi
       - upload_test_pypi

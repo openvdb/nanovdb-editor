@@ -49,6 +49,10 @@ jobs:
 
   verify_dev_package:
     name: Verify fvdb viewer integration (dev)
+    permissions:
+      contents: read
+      packages: read
+      actions: read
     needs:
       - upload_pypi_dev
       - check_fvdb_requirement
