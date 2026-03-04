@@ -24,3 +24,4 @@ jobs:
     uses: ./.github/workflows/build-wheels.yml
     with:
       is_dev: false
+    secrets: inherit

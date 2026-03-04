@@ -37,10 +37,78 @@ jobs:
       with:
         allow-dev-suffix: ${{ inputs.is_dev }}
 
+  resolve_slang_version:
+    name: Resolve Slang Version
+    runs-on: ubuntu-latest
+    outputs:
+      slang_version: ${{ steps.resolve.outputs.slang_version }}
+      image_name: ${{ steps.resolve.outputs.image_name }}
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Parse Slang version from CMake config
+      id: resolve
+      run: |
+        set -euo pipefail
+        slang_version="$(python - <<'PY'
+        import pathlib
+        import re
+        import sys
+
+        text = pathlib.Path("cmake/packages.cmake").read_text(encoding="utf-8")
+        match = re.search(r"set\s*\(\s*SLANG_VERSION\s+([0-9A-Za-z._-]+)\s*\)", text)
+        if not match:
+            print("Could not resolve SLANG_VERSION from cmake/packages.cmake", file=sys.stderr)
+            raise SystemExit(1)
+        print(match.group(1))
+        PY
+        )"
+        echo "slang_version=${slang_version}" >> "$GITHUB_OUTPUT"
+        echo "image_name=nanovdb-slang" >> "$GITHUB_OUTPUT"
+        echo "Resolved Slang version: ${slang_version}"
+
+  lookup_slang_image:
+    name: Check Slang Image Exists
+    needs: resolve_slang_version
+    runs-on: ubuntu-latest
+    outputs:
+      exists: ${{ steps.lookup.outputs.exists }}
+      image_ref: ${{ steps.lookup.outputs.image_ref }}
+    env:
+      IMAGE_NAME: ${{ needs.resolve_slang_version.outputs.image_name }}
+      SLANG_VERSION: ${{ needs.resolve_slang_version.outputs.slang_version }}
+    steps:
+    - name: Look up cached Slang image
+      id: lookup
+      env:
+        GHCR_USER: ${{ secrets.GHCR_PUSH_USERNAME }}
+        GHCR_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN }}
+      run: |
+        set -euo pipefail
+        slang_tag="${SLANG_VERSION//[^0-9a-zA-Z._-]/-}"
+        image_ref="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${slang_tag}"
+        echo "image_ref=${image_ref}" >> "$GITHUB_OUTPUT"
+        echo "Resolved Slang version tag: ${slang_tag}"
+
+        # Login only when credentials are present (not available in fork PRs)
+        if [[ -n "${GHCR_TOKEN:-}" && -n "${GHCR_USER:-}" ]]; then
+          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin >/dev/null 2>&1
+        else
+          echo "GHCR credentials not available (e.g. fork PR); checking image without login"
+        fi
+
+        if docker manifest inspect "${image_ref}" >/dev/null 2>&1; then
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+          echo "Found cached Slang image: ${image_ref}"
+        else
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+          echo "Slang image not found, build required: ${image_ref}"
+        fi
+
   build_wheels:
     name: Build (${{ matrix.os }}${{ matrix.arch && format(' {0}', matrix.arch) || '' }})
     runs-on: ${{ matrix.os }}
-    needs: [validate_version]
+    needs: [validate_version, resolve_slang_version, lookup_slang_image]
     if: ${{ !failure() && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || needs.validate_version.outputs.version_valid == 'true') }}
     strategy:
       matrix:
@@ -95,28 +163,23 @@ jobs:
         sed -i 's/name = "nanovdb-editor"/name = "nanovdb-editor-dev"/' pymodule/pyproject.toml
         cat pymodule/pyproject.toml | grep "name ="
 
-    - name: Reuse cached Slang image libraries (linux x86_64)
+    - name: Report Slang cache resolution (linux x86_64)
       if: matrix.os == 'ubuntu-latest' && matrix.arch == 'x86_64'
       shell: bash
-      env:
-        GHCR_USER: ${{ secrets.GHCR_PUSH_USERNAME }}
-        GHCR_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN }}
       run: |
         set -euo pipefail
-        IMAGE_REF="ghcr.io/${{ github.repository_owner }}/nanovdb-slang:${{ github.ref_name }}"
+        echo "Slang version: ${{ needs.resolve_slang_version.outputs.slang_version }}"
+        echo "Slang image ref: ${{ needs.lookup_slang_image.outputs.image_ref }}"
+        echo "Slang image exists: ${{ needs.lookup_slang_image.outputs.exists }}"
+
+    - name: Reuse cached Slang image libraries (linux x86_64)
+      if: matrix.os == 'ubuntu-latest' && matrix.arch == 'x86_64' && needs.lookup_slang_image.outputs.exists == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        IMAGE_REF="${{ needs.lookup_slang_image.outputs.image_ref }}"
         LOCAL_LIB_DIR="${GITHUB_WORKSPACE}/.ci/slang-image-lib"
         echo "NANOVDB_SLANG_IMAGE_LIB_DIR=" >> "$GITHUB_ENV"
-
-        if [[ -n "${GHCR_TOKEN:-}" && -n "${GHCR_USER:-}" ]]; then
-          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin >/dev/null 2>&1 || true
-        fi
-
-        if ! docker manifest inspect "${IMAGE_REF}" >/dev/null 2>&1; then
-          echo "No cached Slang image found for ${IMAGE_REF}; building as usual"
-          exit 0
-        fi
-
-        echo "Found cached Slang image: ${IMAGE_REF}"
         if ! docker pull "${IMAGE_REF}"; then
           echo "Failed to pull cached Slang image; building as usual"
           exit 0
@@ -252,6 +315,17 @@ jobs:
       with:
         name: wheels-${{ matrix.os }}${{ matrix.arch && format('-{0}', matrix.arch) || '' }}
         path: ./wheelhouse/*.whl
+
+  publish_slang_image:
+    name: Publish Slang Image (if missing)
+    needs: [build_wheels, resolve_slang_version, lookup_slang_image]
+    if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.lookup_slang_image.outputs.exists != 'true' && !cancelled() && !failure() }}
+    uses: ./.github/workflows/build-slang-package-image.yml
+    with:
+      image_name: ${{ needs.resolve_slang_version.outputs.image_name }}
+      wheel_artifact: wheels-ubuntu-latest-x86_64
+      image_tag: ${{ needs.resolve_slang_version.outputs.slang_version }}
+    secrets: inherit
 
   build_sdist:
     name: Build source distribution

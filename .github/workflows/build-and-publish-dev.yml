@@ -26,6 +26,7 @@ jobs:
     uses: ./.github/workflows/build-wheels.yml
     with:
       is_dev: true
+    secrets: inherit
 
   # Dev package upload - publishes to production PyPI with -dev package name
   upload_pypi_dev:
