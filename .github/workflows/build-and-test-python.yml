@@ -382,3 +382,14 @@ jobs:
     with:
       wheel_artifact: nanovdb-editor-wheel
     secrets: inherit
+
+  slang-package-image:
+    name: Slang Package Image
+    needs: nanovdb-editor-build-python-linux
+    if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && !cancelled() && !failure() }}
+    uses: ./.github/workflows/build-slang-package-image.yml
+    with:
+      image_name: nanovdb-slang
+      wheel_artifact: nanovdb-editor-wheel
+      image_tag: ${{ github.event_name == 'pull_request' && format('pr-{0}-{1}', github.event.pull_request.number, github.event.pull_request.head.sha) || github.sha }}
+    secrets: inherit

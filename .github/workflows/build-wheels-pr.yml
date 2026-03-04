@@ -24,23 +24,3 @@ jobs:
     uses: ./.github/workflows/build-wheels.yml
     with:
       is_dev: false
-
-  publish_slang_package:
-    name: Publish Slang package image
-    permissions:
-      contents: read
-      packages: write
-      actions: read
-    needs: [build]
-    if: >-
-      ${{
-        !cancelled() &&
-        github.event_name == 'pull_request' &&
-        github.event.pull_request.head.repo.full_name == github.repository
-      }}
-    uses: ./.github/workflows/build-slang-package-image.yml
-    with:
-      image_name: nanovdb-slang
-      wheel_artifact: wheels-ubuntu-latest-x86_64
-      image_tag: pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
-    secrets: inherit
