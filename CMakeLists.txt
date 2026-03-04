@@ -419,14 +419,18 @@ if(SKBUILD)
                     # Slang's external layout varies across versions/generators, so
                     # search recursively in both install and build trees.
                     file(GLOB_RECURSE SLANG_GLSLANG_LIBS
-                        \"${Slang_SOURCE_DIR}/libglslang.so*\"
-                        \"${SLANG_BUILD_DIR}/libglslang.so*\"
+                        \"${Slang_SOURCE_DIR}/*.so*\"
+                        \"${SLANG_BUILD_DIR}/*.so*\"
                     )
+                    set(_installed_glslang FALSE)
                     foreach(lib \${SLANG_GLSLANG_LIBS})
-                        message(STATUS \"Installing glslang: \${lib}\")
-                        file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                        if(lib MATCHES \"/libglslang\\\\.so(\\\\..*)?$\")
+                            message(STATUS \"Installing glslang: \${lib}\")
+                            file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                            set(_installed_glslang TRUE)
+                        endif()
                     endforeach()
-                    if(NOT SLANG_GLSLANG_LIBS)
+                    if(NOT _installed_glslang)
                         message(WARNING \"No libglslang.so* found under ${Slang_SOURCE_DIR} or ${SLANG_BUILD_DIR}\")
                     endif()
 
@@ -434,14 +438,18 @@ if(SKBUILD)
                     # Slang's external layout varies, so search recursively in
                     # both install and build trees.
                     file(GLOB_RECURSE SLANG_SPIRV_LIBS
-                        \"${Slang_SOURCE_DIR}/libSPIRV.so*\"
-                        \"${SLANG_BUILD_DIR}/libSPIRV.so*\"
+                        \"${Slang_SOURCE_DIR}/*.so*\"
+                        \"${SLANG_BUILD_DIR}/*.so*\"
                     )
+                    set(_installed_spirv FALSE)
                     foreach(lib \${SLANG_SPIRV_LIBS})
-                        message(STATUS \"Installing SPIRV: \${lib}\")
-                        file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                        if(lib MATCHES \"/libSPIRV\\\\.so(\\\\..*)?$\")
+                            message(STATUS \"Installing SPIRV: \${lib}\")
+                            file(INSTALL \"\${lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                            set(_installed_spirv TRUE)
+                        endif()
                     endforeach()
-                    if(NOT SLANG_SPIRV_LIBS)
+                    if(NOT _installed_spirv)
                         message(WARNING \"No libSPIRV.so* found under ${Slang_SOURCE_DIR} or ${SLANG_BUILD_DIR}\")
                     endif()
 
