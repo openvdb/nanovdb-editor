@@ -320,19 +320,8 @@ pnanovdb_bool_t dispatch_shader_on_nanovdb_array(const pnanovdb_compute_t* compu
     image_buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_SRC;
     image_buf_desc.structure_stride = 4u;
     auto* image_buffer = compute_interface->get_buffer_transient(compute_context, &image_buf_desc);
-    if (!image_buffer)
-    {
-        return PNANOVDB_FALSE;
-    }
 
-    const pnanovdb_uint32_t provided_count = 5u;
-    const pnanovdb_uint32_t shader_count = shader->shader_build->descriptor_write_count;
-    if (shader_count > provided_count)
-    {
-        return PNANOVDB_FALSE;
-    }
-
-    pnanovdb_compute_resource_t resources[provided_count] = {};
+    pnanovdb_compute_resource_t resources[5u] = {};
     resources[0u].buffer_transient = compute_interface->register_buffer_as_transient(compute_context, *nanovdb_buffer);
     resources[1u].buffer_transient = image_buffer;
     resources[2u].texture_transient = compute_interface->register_texture_as_transient(compute_context, background_image);

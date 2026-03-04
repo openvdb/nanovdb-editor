@@ -71,12 +71,8 @@ static void renderPipelineProcessParams(EditorSceneManager* scene_manager,
     // Snapshot current source params so "New" can keep source object unchanged.
     const std::vector<unsigned char> original_params = params_snapshot;
 
-    constexpr pnanovdb_uint32_t MAX_FIELDS = 16;
     pnanovdb_uint32_t field_count = desc->param_field_count;
-    if (field_count > MAX_FIELDS)
-        field_count = MAX_FIELDS;
-
-    float field_values[MAX_FIELDS];
+    std::vector<float> field_values(field_count, 0.0f);
     for (pnanovdb_uint32_t i = 0; i < field_count; ++i)
     {
         const auto& field = desc->param_fields[i];

@@ -742,10 +742,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                         }
                     });
             }
-
-            for (auto it = renderables.rbegin(); it != renderables.rend(); ++it)
+            for (const auto& item : renderables)
             {
-                const auto& item = *it;
                 if (item.render_method == pnanovdb_pipeline_render_method_nanovdb)
                 {
                     const char* shader_name =
