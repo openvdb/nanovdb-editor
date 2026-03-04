@@ -19,6 +19,8 @@
 #include "Pipeline.h"
 
 #include <vector>
+#include <cstdio>
+#include <cstring>
 
 namespace pnanovdb_editor
 {
@@ -89,6 +91,35 @@ static void drawPlusIcon(ImDrawList* drawList, ImVec2 pos, float size, float thi
     drawList->AddLine(ImVec2(cx - r, cy), ImVec2(cx + r, cy), col, thickness);
     // Vertical line
     drawList->AddLine(ImVec2(cx, cy - r), ImVec2(cx, cy + r), col, thickness);
+}
+
+static pnanovdb_editor_token_t* createUniqueSceneToken(EditorScene* editor_scene)
+{
+    if (!editor_scene)
+    {
+        return nullptr;
+    }
+
+    auto scene_tokens = editor_scene->get_all_scene_tokens();
+    std::string scene_name;
+    int suffix = 1;
+    bool is_unique = false;
+
+    while (!is_unique)
+    {
+        scene_name = "Scene " + std::to_string(suffix++);
+        is_unique = true;
+        for (pnanovdb_editor_token_t* token : scene_tokens)
+        {
+            if (token && token->str && scene_name == token->str)
+            {
+                is_unique = false;
+                break;
+            }
+        }
+    }
+
+    return EditorToken::getInstance().getToken(scene_name.c_str());
 }
 
 // TODO: revisit
@@ -289,6 +320,50 @@ bool SceneTree::renderTreeNodeHeader(const char* label, bool* visibilityCheckbox
 
 void SceneTree::render(imgui_instance_user::Instance* ptr)
 {
+    static pnanovdb_editor_token_t* s_scene_rename_target = nullptr;
+    static char s_scene_rename_buffer[128] = "";
+    static bool s_scene_rename_focus_input = false;
+    static std::string s_scene_rename_error;
+    auto clearSceneRenameState = [&]()
+    {
+        s_scene_rename_target = nullptr;
+        s_scene_rename_error.clear();
+        s_scene_rename_focus_input = false;
+    };
+    auto tryCommitSceneRename = [&]() -> bool
+    {
+        if (!ptr || !ptr->editor_scene || !s_scene_rename_target || !s_scene_rename_buffer[0])
+        {
+            s_scene_rename_error = "Name must not be empty.";
+            return false;
+        }
+
+        pnanovdb_editor_token_t* renamed_scene = EditorToken::getInstance().getToken(s_scene_rename_buffer);
+        bool name_conflict = false;
+        for (pnanovdb_editor_token_t* token : ptr->editor_scene->get_all_scene_tokens())
+        {
+            if (token && token->id != s_scene_rename_target->id && token->id == renamed_scene->id)
+            {
+                name_conflict = true;
+                break;
+            }
+        }
+
+        if (name_conflict)
+        {
+            s_scene_rename_error = "A scene with this name already exists.";
+            return false;
+        }
+        if (!ptr->editor_scene->rename_scene(s_scene_rename_target, renamed_scene))
+        {
+            s_scene_rename_error = "Failed to rename scene.";
+            return false;
+        }
+
+        clearSceneRenameState();
+        return true;
+    };
+
     if (ImGui::Begin(SCENE, &ptr->window.show_scene))
     {
         // Scene Selector Combo Box
@@ -297,30 +372,99 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
             // Get all available scenes
             auto scene_tokens = ptr->editor_scene->get_all_scene_tokens();
             pnanovdb_editor_token_t* current_scene = ptr->editor_scene->get_current_scene_token();
+            auto createAndSelectScene = [&]()
+            {
+                pnanovdb_editor_token_t* new_scene = createUniqueSceneToken(ptr->editor_scene);
+                if (new_scene)
+                {
+                    ptr->editor_scene->set_current_scene(new_scene);
+                    ptr->editor_scene->get_or_create_scene(new_scene);
+                    current_scene = new_scene;
+                    scene_tokens = ptr->editor_scene->get_all_scene_tokens();
+                }
+            };
+
+            if (scene_tokens.empty())
+            {
+                current_scene = nullptr;
+                ImGui::TextDisabled("No scenes available.");
+                ImGui::Spacing();
+                if (ImGui::Button("Create Scene", ImVec2(-1.0f, 0.0f)))
+                {
+                    createAndSelectScene();
+                }
+                ImGui::Spacing();
+            }
+
+            if (!current_scene && !scene_tokens.empty())
+            {
+                current_scene = scene_tokens.front();
+                ptr->editor_scene->set_current_scene(current_scene);
+            }
+
+            if (!current_scene)
+            {
+                ImGui::TextDisabled("Create a scene to begin.");
+                ImGui::End();
+                return;
+            }
 
             // Get current scene name for display
             const char* current_scene_name = current_scene ? current_scene->str : "";
+            const bool is_renaming_current_scene =
+                s_scene_rename_target && current_scene && s_scene_rename_target->id == current_scene->id;
 
-            ImGui::PushItemWidth(-1.0f); // Full width
-            if (ImGui::BeginCombo("##SceneSelector", current_scene_name))
+            if (is_renaming_current_scene)
             {
-                for (auto* scene_token : scene_tokens)
+                ImGui::PushItemWidth(-1.0f);
+                if (s_scene_rename_focus_input)
                 {
-                    bool is_selected = (current_scene && current_scene->id == scene_token->id);
-                    if (ImGui::Selectable(scene_token->str, is_selected))
-                    {
-                        // Switch to selected scene
-                        ptr->editor_scene->set_current_scene(scene_token);
-                    }
-
-                    if (is_selected)
-                    {
-                        ImGui::SetItemDefaultFocus();
-                    }
+                    ImGui::SetKeyboardFocusHere();
+                    s_scene_rename_focus_input = false;
                 }
-                ImGui::EndCombo();
+                bool commitRename =
+                    ImGui::InputText("##RenameSceneInline", s_scene_rename_buffer, IM_ARRAYSIZE(s_scene_rename_buffer),
+                                     ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+                ImGui::PopItemWidth();
+                if (ImGui::IsItemActive() && ImGui::IsKeyPressed(ImGuiKey_Escape))
+                {
+                    clearSceneRenameState();
+                }
+                if (commitRename)
+                {
+                    tryCommitSceneRename();
+                }
             }
-            ImGui::PopItemWidth();
+            else
+            {
+                ImGui::PushItemWidth(-1.0f);
+                if (ImGui::BeginCombo("##SceneSelector", current_scene_name))
+                {
+                    for (auto* scene_token : scene_tokens)
+                    {
+                        bool is_selected = (current_scene && current_scene->id == scene_token->id);
+                        if (ImGui::Selectable(scene_token->str, is_selected))
+                        {
+                            // Switch to selected scene
+                            ptr->editor_scene->set_current_scene(scene_token);
+                        }
+
+                        if (is_selected)
+                        {
+                            ImGui::SetItemDefaultFocus();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+                ImGui::PopItemWidth();
+            }
+
+            if (!s_scene_rename_error.empty())
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.2f, 0.2f, 1.0f));
+                ImGui::TextUnformatted(s_scene_rename_error.c_str());
+                ImGui::PopStyleColor();
+            }
 
             ImGui::Spacing();
             ImGui::Separator();
@@ -337,7 +481,80 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
             (current_scene && current_scene->str) ? current_scene->str : pnanovdb_editor::DEFAULT_SCENE_NAME;
 
         bool isRootSelected = isSelectedInCurrentScene(scene_name, ptr, ViewType::Root);
-        if (renderTreeNodeHeader(scene_name, nullptr, isRootSelected, true))
+        bool rootNodeOpen = renderTreeNodeHeader(scene_name, nullptr, isRootSelected, true);
+
+        bool removeSceneRequested = false;
+        if (current_scene && ImGui::BeginPopupContextItem("##SceneRootContextMenu"))
+        {
+            if (ImGui::MenuItem("Rename Scene"))
+            {
+                s_scene_rename_target = current_scene;
+                std::snprintf(s_scene_rename_buffer, sizeof(s_scene_rename_buffer), "%s",
+                              current_scene->str ? current_scene->str : "");
+                s_scene_rename_error.clear();
+                s_scene_rename_focus_input = true;
+            }
+
+            size_t scene_count = ptr->editor_scene->get_all_scene_tokens().size();
+            bool canRemoveScene = scene_count > 0;
+            if (!canRemoveScene)
+            {
+                ImGui::BeginDisabled();
+            }
+            if (ImGui::MenuItem("Remove Scene"))
+            {
+                removeSceneRequested = true;
+            }
+            if (!canRemoveScene)
+            {
+                ImGui::EndDisabled();
+            }
+
+            ImGui::EndPopup();
+        }
+
+        // Right-side "+" icon on scene root row (add new scene)
+        if (ptr->editor_scene)
+        {
+            float iconSize = ImGui::GetFrameHeight();
+            float rightEdge = ImGui::GetWindowContentRegionMax().x;
+            float plusXPos = rightEdge - iconSize;
+            ImGui::SameLine(plusXPos);
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            drawPlusIcon(drawList, ImGui::GetCursorScreenPos(), iconSize, 2.0f);
+            if (ImGui::InvisibleButton("##AddSceneRoot", ImVec2(iconSize, iconSize)))
+            {
+                pnanovdb_editor_token_t* new_scene = createUniqueSceneToken(ptr->editor_scene);
+                if (new_scene)
+                {
+                    ptr->editor_scene->set_current_scene(new_scene);
+                    ptr->editor_scene->get_or_create_scene(new_scene);
+                }
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Add new scene");
+            }
+        }
+
+        if (removeSceneRequested && current_scene)
+        {
+            const uint64_t removed_scene_id = current_scene->id;
+            ptr->editor_scene->remove_scene(current_scene);
+            current_scene = ptr->editor_scene->get_current_scene_token();
+            if (s_scene_rename_target && s_scene_rename_target->id == removed_scene_id)
+            {
+                clearSceneRenameState();
+            }
+            if (!current_scene)
+            {
+                ImGui::TextDisabled("Create a scene to begin.");
+                ImGui::End();
+                return;
+            }
+        }
+
+        if (rootNodeOpen)
         {
             // Ensure scene exists
             if (ptr->editor_scene)

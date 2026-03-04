@@ -1472,6 +1472,97 @@ pnanovdb_editor_token_t* EditorScene::get_current_scene_token() const
     return m_scene_view.get_current_scene_token();
 }
 
+bool EditorScene::rename_scene(pnanovdb_editor_token_t* old_scene_token, pnanovdb_editor_token_t* new_scene_token)
+{
+    if (!old_scene_token || !new_scene_token)
+    {
+        return false;
+    }
+    if (old_scene_token->id == new_scene_token->id)
+    {
+        return true;
+    }
+
+    bool old_scene_exists = false;
+    bool new_scene_exists = false;
+    for (pnanovdb_editor_token_t* token : m_scene_view.get_all_scene_tokens())
+    {
+        if (!token)
+        {
+            continue;
+        }
+        if (token->id == old_scene_token->id)
+        {
+            old_scene_exists = true;
+        }
+        if (token->id == new_scene_token->id)
+        {
+            new_scene_exists = true;
+        }
+    }
+    if (!old_scene_exists || new_scene_exists)
+    {
+        return false;
+    }
+
+    if (!m_scene_manager.rename_scene(old_scene_token, new_scene_token))
+    {
+        return false;
+    }
+    if (!m_scene_view.rename_scene(old_scene_token, new_scene_token))
+    {
+        return false;
+    }
+
+    if (m_view_selection.scene_token && m_view_selection.scene_token->id == old_scene_token->id)
+    {
+        m_view_selection.scene_token = new_scene_token;
+    }
+    if (m_render_view_selection.scene_token && m_render_view_selection.scene_token->id == old_scene_token->id)
+    {
+        m_render_view_selection.scene_token = new_scene_token;
+    }
+    return true;
+}
+
+bool EditorScene::remove_scene(pnanovdb_editor_token_t* scene_token)
+{
+    if (!scene_token)
+    {
+        return false;
+    }
+
+    std::vector<pnanovdb_editor_token_t*> scene_object_tokens;
+    m_scene_manager.for_each_object(
+        [&](SceneObject* obj)
+        {
+            if (obj && obj->scene_token && obj->scene_token->id == scene_token->id && obj->name_token)
+            {
+                scene_object_tokens.push_back(obj->name_token);
+            }
+            return true;
+        });
+
+    for (pnanovdb_editor_token_t* name_token : scene_object_tokens)
+    {
+        m_scene_manager.remove(scene_token, name_token);
+    }
+
+    const bool removed = m_scene_view.remove_scene(scene_token);
+    if (!removed)
+    {
+        return false;
+    }
+
+    if ((m_view_selection.scene_token && m_view_selection.scene_token->id == scene_token->id) ||
+        (m_render_view_selection.scene_token && m_render_view_selection.scene_token->id == scene_token->id))
+    {
+        clear_selection();
+    }
+
+    return true;
+}
+
 std::vector<pnanovdb_editor_token_t*> EditorScene::get_all_scene_tokens() const
 {
     return m_scene_view.get_all_scene_tokens();

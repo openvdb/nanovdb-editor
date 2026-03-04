@@ -648,6 +648,53 @@ bool EditorSceneManager::remove(pnanovdb_editor_token_t* scene, pnanovdb_editor_
     return result;
 }
 
+bool EditorSceneManager::rename_scene(pnanovdb_editor_token_t* old_scene, pnanovdb_editor_token_t* new_scene)
+{
+    if (!old_scene || !new_scene)
+    {
+        return false;
+    }
+    if (old_scene->id == new_scene->id)
+    {
+        return true;
+    }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    std::vector<std::pair<uint64_t, uint64_t>> key_moves;
+    key_moves.reserve(m_objects.size());
+
+    for (const auto& [old_key, obj] : m_objects)
+    {
+        if (!obj.scene_token || obj.scene_token->id != old_scene->id)
+        {
+            continue;
+        }
+
+        uint64_t new_key = make_key(new_scene, obj.name_token);
+        auto existing = m_objects.find(new_key);
+        if (existing != m_objects.end() && existing->first != old_key)
+        {
+            // Abort to avoid clobbering an existing object in the destination scene.
+            return false;
+        }
+        key_moves.emplace_back(old_key, new_key);
+    }
+
+    for (const auto& [old_key, new_key] : key_moves)
+    {
+        auto node = m_objects.extract(old_key);
+        if (!node.empty())
+        {
+            node.key() = new_key;
+            node.mapped().scene_token = new_scene;
+            m_objects.insert(std::move(node));
+        }
+    }
+
+    return true;
+}
+
 SceneObject* EditorSceneManager::get(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
 {
     std::lock_guard<std::mutex> lock(m_mutex);

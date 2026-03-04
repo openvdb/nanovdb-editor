@@ -136,6 +136,8 @@ public:
     EditorSceneManager* get_scene_manager() const;
     void set_current_scene(pnanovdb_editor_token_t* scene_token);
     pnanovdb_editor_token_t* get_current_scene_token() const;
+    bool rename_scene(pnanovdb_editor_token_t* old_scene_token, pnanovdb_editor_token_t* new_scene_token);
+    bool remove_scene(pnanovdb_editor_token_t* scene_token);
 
     // Get the viewport camera token for the current scene
     pnanovdb_editor_token_t* get_viewport_camera_token() const

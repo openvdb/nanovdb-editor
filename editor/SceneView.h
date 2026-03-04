@@ -178,6 +178,7 @@ public:
 
     // Remove entire scene
     bool remove_scene(pnanovdb_editor_token_t* scene_token);
+    bool rename_scene(pnanovdb_editor_token_t* old_scene_token, pnanovdb_editor_token_t* new_scene_token);
 
     // Ordered renderable views (NanoVDB + Gaussian) for a scene.
     std::vector<pnanovdb_editor_token_t*> get_ordered_renderable_views(pnanovdb_editor_token_t* scene_token) const;

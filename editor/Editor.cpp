@@ -1880,6 +1880,8 @@ void unmap_params(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pna
     }
 }
 
+static thread_local int s_pipeline_params_map_lock_depth = 0;
+
 /*!
     \brief Map pipeline stage parameters for read/write access
 
@@ -1890,8 +1892,8 @@ void unmap_params(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pna
     - The returned pointer is valid ONLY between map_pipeline_params() and
       unmap_pipeline_params() calls (when non-null).
     - The object (scene, name) MUST NOT be removed while params are mapped.
-    - Always call unmap_pipeline_params() after map_pipeline_params(), even when
-      map returns nullptr (in worker mode the mutex is held until unmap).
+    - Call unmap_pipeline_params() only after a successful map (non-null return).
+      Failed maps auto-release the mutex in worker mode.
     - Caller must provide higher-level exclusion against remove/rename operations
       for (scene, name) during the map/unmap window.
 
@@ -1965,21 +1967,22 @@ pnanovdb_pipeline_params_t* map_pipeline_params(pnanovdb_editor_t* editor,
                                                  }
                                              });
 
-    // If not found, do NOT unlock here - caller must still call unmap_pipeline_params to release the lock.
-    // Otherwise a caller who does "map(); if (p) {...} unmap();" would double-unlock when map failed.
     if (!result)
     {
         Console::getInstance().addLog(Console::LogLevel::Debug, "map_pipeline_params: Object not found");
+        editor->impl->editor_worker->pipeline_params_mutex.unlock();
+        return nullptr;
     }
+
+    s_pipeline_params_map_lock_depth++;
     return result;
 }
 
 /*!
     \brief Unmap pipeline stage parameters and signal changes
 
-    MUST be called after every map_pipeline_params() call (including when map
-    returned nullptr) so the lock is released in worker mode.  When a valid
-    pointer was mapped, the pipeline stage is marked dirty so it re-executes.
+    Must be called after each successful map_pipeline_params() call (non-null
+    return).  Failed map attempts do not require unmap.
 
     After calling unmap_pipeline_params():
     - The pointer from map_pipeline_params() becomes invalid
@@ -2023,13 +2026,22 @@ void unmap_pipeline_params(pnanovdb_editor_t* editor,
                                                  });
     }
 
-    // Unlock mutex (was locked in map_pipeline_params)
+    // Unlock mutex only if this thread owns a successful map lock.
     if (editor->impl->editor_worker)
     {
-        editor->impl->editor_worker->pipeline_params_mutex.unlock();
-
-        // Signal editor thread that pipeline params were modified
-        editor->impl->editor_worker->pipeline_params_dirty.store(true);
+        if (s_pipeline_params_map_lock_depth > 0)
+        {
+            s_pipeline_params_map_lock_depth--;
+            editor->impl->editor_worker->pipeline_params_mutex.unlock();
+            // Signal editor thread that pipeline params were modified
+            editor->impl->editor_worker->pipeline_params_dirty.store(true);
+        }
+        else
+        {
+            Console::getInstance().addLog(
+                Console::LogLevel::Debug,
+                "unmap_pipeline_params: no matching successful map on this thread; unlock skipped");
+        }
     }
 }
 

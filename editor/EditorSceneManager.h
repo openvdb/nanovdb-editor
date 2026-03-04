@@ -252,7 +252,7 @@ struct SceneObject
 
     SceneObjectResources resources; ///< Binary data (files)
     SceneObjectParams params; ///< Compile-time schemas (JSON)
-    SceneObjectPipeline pipeline; ///< Dynamic overrides (JSON overs)
+    SceneObjectPipeline pipeline; ///< Dynamic overrides (JSON overrides)
 
     bool visible = true;
 
@@ -507,6 +507,21 @@ public:
         \note All associated memory is automatically freed via custom deleters
     */
     bool remove(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
+
+    /*!
+        \brief Rename a scene token across all managed objects
+
+        Re-keys all objects that belong to \p old_scene so they now belong to \p new_scene.
+        The operation is rejected if any object name in \p old_scene would collide with an
+        existing object name in \p new_scene.
+
+        \param old_scene Source scene token to rename from
+        \param new_scene Destination scene token to rename to
+        \return true on success, false on collision, invalid tokens, or no-op failure
+
+        \note Thread-safe
+    */
+    bool rename_scene(pnanovdb_editor_token_t* old_scene, pnanovdb_editor_token_t* new_scene);
 
     /*!
         \brief Get object by tokens
