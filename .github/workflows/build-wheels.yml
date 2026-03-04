@@ -142,12 +142,22 @@ jobs:
             SPIRV_LIB_DIR="$(dirname "${SPIRV_LIB_PATH}")"
             export LD_LIBRARY_PATH="${SPIRV_LIB_DIR}:${LD_LIBRARY_PATH:-}"
             echo "Using SPIRV runtime libs from ${SPIRV_LIB_DIR}"
-            if [ ! -e "${SPIRV_LIB_DIR}/libSPIRV.so.15" ] && [ -e "${SPIRV_LIB_DIR}/libSPIRV.so" ]; then
+            if [ ! -e "${SPIRV_LIB_DIR}/libSPIRV.so.15" ]; then
               SPIRV_COMPAT_DIR="/tmp/nanovdb-spirv-compat"
               mkdir -p "${SPIRV_COMPAT_DIR}"
-              cp -f "${SPIRV_LIB_DIR}/libSPIRV.so" "${SPIRV_COMPAT_DIR}/libSPIRV.so.15"
-              export LD_LIBRARY_PATH="${SPIRV_COMPAT_DIR}:${LD_LIBRARY_PATH:-}"
-              echo "Created compatibility copy: ${SPIRV_COMPAT_DIR}/libSPIRV.so.15"
+              SPIRV_SRC_LIB=""
+              if [ -e "${SPIRV_LIB_DIR}/libSPIRV.so" ]; then
+                SPIRV_SRC_LIB="${SPIRV_LIB_DIR}/libSPIRV.so"
+              else
+                SPIRV_SRC_LIB="$(printf '%s\n' "${SPIRV_LIB_DIR}"/libSPIRV.so.15.* 2>/dev/null | head -n1 || true)"
+              fi
+              if [ -n "${SPIRV_SRC_LIB}" ] && [ -e "${SPIRV_SRC_LIB}" ]; then
+                cp -f "${SPIRV_SRC_LIB}" "${SPIRV_COMPAT_DIR}/libSPIRV.so.15"
+                export LD_LIBRARY_PATH="${SPIRV_COMPAT_DIR}:${LD_LIBRARY_PATH:-}"
+                echo "Created compatibility copy: ${SPIRV_COMPAT_DIR}/libSPIRV.so.15 from ${SPIRV_SRC_LIB}"
+              else
+                echo "Warning: could not create SPIRV compatibility libSPIRV.so.15; source library not found in ${SPIRV_LIB_DIR}"
+              fi
             fi
           else
             echo "Warning: could not locate libSPIRV.so* before auditwheel; relying on wheel-installed runtime libs"
