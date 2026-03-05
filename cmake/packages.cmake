@@ -341,8 +341,11 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
             -DLLVM_ENABLE_LIBXML2=OFF
         BUILD_BYPRODUCTS
             ${LLVM_INSTALLED_CONFIG}
-        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
-        INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target install
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --verbose
+        INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target install --verbose
+        USES_TERMINAL_CONFIGURE TRUE
+        USES_TERMINAL_BUILD TRUE
+        USES_TERMINAL_INSTALL TRUE
     )
 
     # Create the config dirs up-front so SLANG's configure step can resolve LLVM_DIR/Clang_DIR.
@@ -392,6 +395,9 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
             ${SLANG_INSTALLED_LIB}
         BUILD_COMMAND ${SLANG_EP_BUILD_CMD}
         INSTALL_COMMAND ${CMAKE_COMMAND} -DSLANG_EP_BINARY_DIR=<BINARY_DIR> -P ${SLANG_EP_INSTALL_SCRIPT}
+        USES_TERMINAL_CONFIGURE TRUE
+        USES_TERMINAL_BUILD TRUE
+        USES_TERMINAL_INSTALL TRUE
     )
 
     # Match existing variable naming used throughout the project.
