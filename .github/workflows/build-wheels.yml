@@ -274,13 +274,22 @@ jobs:
 
         CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
           set -e
-          # Use a Python-installed auditwheel toolchain to avoid mismatches
-          # with the preinstalled pipx auditwheel/pyelftools environment.
-          if ! python -m pip install --disable-pip-version-check --no-cache-dir --upgrade "auditwheel>=6.0.0" "pyelftools>=0.30"; then
-            # Some images enforce externally-managed Python packages.
-            python -m pip install --break-system-packages --disable-pip-version-check --no-cache-dir --upgrade "auditwheel>=6.0.0" "pyelftools>=0.30"
+          # Prefer an isolated auditwheel toolchain to avoid mismatches with
+          # preinstalled pipx/system packages. Fall back to system python.
+          AW_PYTHON="python"
+          AW_VENV="/tmp/nanovdb-auditwheel-venv"
+          rm -rf "${AW_VENV}"
+          if python -m venv "${AW_VENV}" >/dev/null 2>&1; then
+            if "${AW_VENV}/bin/python" -m pip install --disable-pip-version-check --no-cache-dir --upgrade pip >/dev/null 2>&1 && \
+               "${AW_VENV}/bin/python" -m pip install --disable-pip-version-check --no-cache-dir "auditwheel>=6.0.0" "pyelftools>=0.30" >/dev/null 2>&1; then
+              AW_PYTHON="${AW_VENV}/bin/python"
+            else
+              echo "Warning: failed to prepare isolated auditwheel environment, falling back to system python"
+            fi
+          else
+            echo "Warning: python -m venv unavailable, falling back to system python"
           fi
-          python -m auditwheel --version
+          "${AW_PYTHON}" -m auditwheel --version
           SLANG_LIB_DIR="${NANOVDB_SLANG_IMAGE_LIB_DIR:-}"
           if [ -n "${SLANG_LIB_DIR}" ] && [ ! -d "${SLANG_LIB_DIR}" ]; then
             SLANG_LIB_DIR=""
@@ -333,10 +342,10 @@ jobs:
           fi
           case "{wheel}" in
             *aarch64*)
-              python -m auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_34_aarch64
+              "${AW_PYTHON}" -m auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_34_aarch64
               ;;
             *)
-              python -m auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_34_x86_64
+              "${AW_PYTHON}" -m auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_34_x86_64
               ;;
           esac
 
