@@ -435,71 +435,71 @@ jobs:
           -v "${GITHUB_WORKSPACE}:/project" \
           -w /project \
           quay.io/pypa/manylinux_2_34_x86_64:latest \
-          /bin/bash -lc '
-            set -euo pipefail
-            export CPM_SOURCE_CACHE=/tmp/cpm-cache
-            if command -v dnf >/dev/null 2>&1; then
-              dnf install -y cmake ninja-build git
-              dnf install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel wayland-protocols-devel
-              dnf install -y miniz miniz-devel
-            else
-              yum install -y cmake ninja-build git
-              yum install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel
-              yum install -y miniz miniz-devel
-            fi
-            cmake --version
-            cmake -S /project -B /tmp/nvdb-slang-build -GNinja \
-              -DSKBUILD=ON \
-              -DNANOVDB_EDITOR_PYPI_BUILD=ON \
-              -DNANOVDB_EDITOR_BUILD_TESTS=OFF \
-              -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=ON \
-              -DFETCHCONTENT_QUIET=OFF
-            cmake --build /tmp/nvdb-slang-build --target slang_src_build --config Release --verbose
-            /opt/python/cp311-cp311/bin/python - <<'"'"'PY'"'"'
-            import pathlib
-            import shutil
-            import sys
+          /bin/bash -s <<'BASH'
+        set -euo pipefail
+        export CPM_SOURCE_CACHE=/tmp/cpm-cache
+        if command -v dnf >/dev/null 2>&1; then
+          dnf install -y cmake ninja-build git
+          dnf install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel wayland-protocols-devel
+          dnf install -y miniz miniz-devel
+        else
+          yum install -y cmake ninja-build git
+          yum install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel
+          yum install -y miniz miniz-devel
+        fi
+        cmake --version
+        cmake -S /project -B /tmp/nvdb-slang-build -GNinja \
+          -DSKBUILD=ON \
+          -DNANOVDB_EDITOR_PYPI_BUILD=ON \
+          -DNANOVDB_EDITOR_BUILD_TESTS=OFF \
+          -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=ON \
+          -DFETCHCONTENT_QUIET=OFF
+        cmake --build /tmp/nvdb-slang-build --target slang_src_build --config Release --verbose
+        /opt/python/cp311-cp311/bin/python - <<'PY'
+        import pathlib
+        import shutil
+        import sys
 
-            roots = [
-                pathlib.Path("/tmp/nvdb-slang-build/slang-install"),
-                pathlib.Path("/tmp/nvdb-slang-build/slang_src_build-prefix/src/slang_src_build-build"),
-            ]
-            dst = pathlib.Path("/project/.ci/slang-package/lib")
-            dst.mkdir(parents=True, exist_ok=True)
+        roots = [
+            pathlib.Path("/tmp/nvdb-slang-build/slang-install"),
+            pathlib.Path("/tmp/nvdb-slang-build/slang_src_build-prefix/src/slang_src_build-build"),
+        ]
+        dst = pathlib.Path("/project/.ci/slang-package/lib")
+        dst.mkdir(parents=True, exist_ok=True)
 
-            copied = []
-            seen = set()
-            for root in roots:
-                if not root.exists():
-                    continue
-                for pattern in ("libslang*.so*", "libglslang.so*", "libSPIRV.so*"):
-                    for lib in sorted(root.rglob(pattern)):
-                        if not lib.is_file():
-                            continue
-                        target = dst / lib.name
-                        if target.name in seen:
-                            continue
-                        shutil.copy2(lib, target)
-                        seen.add(target.name)
-                        copied.append(target.name)
+        copied = []
+        seen = set()
+        for root in roots:
+            if not root.exists():
+                continue
+            for pattern in ("libslang*.so*", "libglslang.so*", "libSPIRV.so*"):
+                for lib in sorted(root.rglob(pattern)):
+                    if not lib.is_file():
+                        continue
+                    target = dst / lib.name
+                    if target.name in seen:
+                        continue
+                    shutil.copy2(lib, target)
+                    seen.add(target.name)
+                    copied.append(target.name)
 
-            if not any(name.startswith("libslang-llvm") for name in copied):
-                print("libslang-llvm was not found in built Slang libraries", file=sys.stderr)
+        if not any(name.startswith("libslang-llvm") for name in copied):
+            print("libslang-llvm was not found in built Slang libraries", file=sys.stderr)
+            raise SystemExit(1)
+        has_slang_glslang = any(name.startswith("libslang-glslang") for name in copied)
+        if has_slang_glslang:
+            if not any(name.startswith("libglslang.so") for name in copied):
+                print("libslang-glslang is present but libglslang.so* is missing", file=sys.stderr)
                 raise SystemExit(1)
-            has_slang_glslang = any(name.startswith("libslang-glslang") for name in copied)
-            if has_slang_glslang:
-                if not any(name.startswith("libglslang.so") for name in copied):
-                    print("libslang-glslang is present but libglslang.so* is missing", file=sys.stderr)
-                    raise SystemExit(1)
-                if not any(name.startswith("libSPIRV.so") for name in copied):
-                    print("libslang-glslang is present but libSPIRV.so* is missing", file=sys.stderr)
-                    raise SystemExit(1)
+            if not any(name.startswith("libSPIRV.so") for name in copied):
+                print("libslang-glslang is present but libSPIRV.so* is missing", file=sys.stderr)
+                raise SystemExit(1)
 
-            print("Built Slang libraries:")
-            for name in copied:
-                print(f" - {name}")
-            PY
-          '
+        print("Built Slang libraries:")
+        for name in copied:
+            print(f" - {name}")
+        PY
+        BASH
 
     - uses: actions/upload-artifact@v4
       with:
