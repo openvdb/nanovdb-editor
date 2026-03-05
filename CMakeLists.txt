@@ -501,6 +501,14 @@ if(SKBUILD)
                         DESTINATION nanovdb_editor/lib
                         COMPONENT python_libs
                     )
+                elseif(DEFINED NANOVDB_SLANG_IMAGE_LIB_DIR AND NOT "${NANOVDB_SLANG_IMAGE_LIB_DIR}" STREQUAL "" AND EXISTS "${NANOVDB_SLANG_IMAGE_LIB_DIR}")
+                    file(GLOB SLANG_LLVM_IMAGE_FILES "${NANOVDB_SLANG_IMAGE_LIB_DIR}/libslang-llvm*${CMAKE_SHARED_LIBRARY_SUFFIX}*")
+                    if(SLANG_LLVM_IMAGE_FILES)
+                        install(FILES ${SLANG_LLVM_IMAGE_FILES}
+                            DESTINATION nanovdb_editor/lib
+                            COMPONENT python_libs
+                        )
+                    endif()
                 endif()
             endif()
         endif()
