@@ -206,6 +206,8 @@ bool SceneTree::renderSceneItem(const char* name,
     {
         clicked = true;
     }
+    const ImVec2 itemRectMin = ImGui::GetItemRectMin();
+    const ImVec2 itemRectMax = ImGui::GetItemRectMax();
 
     // Bind drag/drop to the selectable row item itself
     if (dragPayloadId && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
@@ -217,11 +219,29 @@ bool SceneTree::renderSceneItem(const char* name,
     }
     if (droppedSourceId && ImGui::BeginDragDropTarget())
     {
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCENE_TREE_OBJECT_ID"))
+        const ImGuiDragDropFlags dropFlags =
+            ImGuiDragDropFlags_AcceptNoDrawDefaultRect | ImGuiDragDropFlags_AcceptBeforeDelivery;
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCENE_TREE_OBJECT_ID", dropFlags))
         {
             if (payload->Data && payload->DataSize == sizeof(uint64_t))
             {
-                *droppedSourceId = *(const uint64_t*)payload->Data;
+                const uint64_t sourceId = *(const uint64_t*)payload->Data;
+                const bool isSelfDrop = (dragPayloadId && sourceId == *dragPayloadId);
+
+                // Render an insertion line where the item will be dropped
+                if (payload->IsPreview() && !isSelfDrop)
+                {
+                    ImDrawList* drawList = ImGui::GetWindowDrawList();
+                    const float lineY = itemRectMin.y;
+                    const float linePadX = 2.0f;
+                    drawList->AddLine(ImVec2(itemRectMin.x + linePadX, lineY), ImVec2(itemRectMax.x - linePadX, lineY),
+                                      ImGui::GetColorU32(ImGuiCol_DragDropTarget), 2.0f);
+                }
+
+                if (payload->IsDelivery() && !isSelfDrop)
+                {
+                    *droppedSourceId = sourceId;
+                }
             }
         }
         ImGui::EndDragDropTarget();

@@ -508,8 +508,7 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         const pnanovdb_uint32_t current_width = static_cast<pnanovdb_uint32_t>(ptr->width);
         const pnanovdb_uint32_t current_height = static_cast<pnanovdb_uint32_t>(ptr->height);
 
-        if (swapchain != s_last_swapchain ||
-            current_width != s_last_swapchain_width ||
+        if (swapchain != s_last_swapchain || current_width != s_last_swapchain_width ||
             current_height != s_last_swapchain_height)
         {
             ptr->device_interface.resize_swapchain(swapchain, current_width, current_height);
