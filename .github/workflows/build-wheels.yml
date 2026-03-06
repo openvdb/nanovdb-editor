@@ -357,14 +357,23 @@ jobs:
           else
             echo "Warning: could not locate libSPIRV.so* before auditwheel; relying on wheel-installed runtime libs"
           fi
+          echo "=== auditwheel show ==="
+          run_auditwheel show {wheel} || true
           case "{wheel}" in
             *aarch64*)
-              run_auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_34_aarch64
+              AUDITWHEEL_PLAT="manylinux_2_34_aarch64"
               ;;
             *)
-              run_auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_34_x86_64
+              AUDITWHEEL_PLAT="manylinux_2_34_x86_64"
               ;;
           esac
+          if run_auditwheel repair --help 2>&1 | grep -q "${AUDITWHEEL_PLAT}"; then
+            echo "Using explicit auditwheel platform: ${AUDITWHEEL_PLAT}"
+            run_auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat "${AUDITWHEEL_PLAT}"
+          else
+            echo "auditwheel does not advertise ${AUDITWHEEL_PLAT}; letting auditwheel choose the compatible platform"
+            run_auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs
+          fi
 
         # Install test dependencies before testing
         CIBW_TEST_REQUIRES: numpy
@@ -776,7 +785,16 @@ jobs:
           else
             echo "Warning: could not locate libSPIRV.so* before auditwheel; relying on wheel-installed runtime libs"
           fi
-          run_auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat manylinux_2_34_x86_64
+          echo "=== auditwheel show ==="
+          run_auditwheel show {wheel} || true
+          AUDITWHEEL_PLAT="manylinux_2_34_x86_64"
+          if run_auditwheel repair --help 2>&1 | grep -q "${AUDITWHEEL_PLAT}"; then
+            echo "Using explicit auditwheel platform: ${AUDITWHEEL_PLAT}"
+            run_auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat "${AUDITWHEEL_PLAT}"
+          else
+            echo "auditwheel does not advertise ${AUDITWHEEL_PLAT}; letting auditwheel choose the compatible platform"
+            run_auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs
+          fi
         CIBW_TEST_REQUIRES: numpy
         CIBW_TEST_COMMAND: python -c "import nanovdb_editor; print('Import successful')"
         CIBW_ENVIRONMENT: ${{ inputs.manage_slang_image && 'CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=OFF -DNANOVDB_SLANG_IMAGE_LIB_DIR=${NANOVDB_SLANG_IMAGE_LIB_DIR} -DFETCHCONTENT_QUIET=OFF" CPM_SOURCE_CACHE=/tmp/cpm-cache' || 'CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=ON -DFETCHCONTENT_QUIET=OFF" CPM_SOURCE_CACHE=/tmp/cpm-cache' }}
