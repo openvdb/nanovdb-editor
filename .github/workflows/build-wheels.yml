@@ -431,7 +431,26 @@ jobs:
         mkdir -p slang-package/lib
         rm -f slang-package/lib/*
 
+        SLANG_VERSION="${{ needs.resolve_slang_version.outputs.slang_version }}"
+        LLVM_VERSION="$(python3 - <<'PY'
+        import pathlib
+        import re
+        import sys
+
+        text = pathlib.Path("cmake/packages.cmake").read_text()
+        match = re.search(r'set\(NANOVDB_EDITOR_LLVM_VERSION\s+"([^"]+)"', text)
+        if not match:
+            print("Could not resolve NANOVDB_EDITOR_LLVM_VERSION from cmake/packages.cmake", file=sys.stderr)
+            raise SystemExit(1)
+        print(match.group(1))
+        PY
+        )"
+        echo "Resolved Slang version: ${SLANG_VERSION}"
+        echo "Resolved LLVM version: ${LLVM_VERSION}"
+
         docker run --rm -i \
+          -e SLANG_VERSION \
+          -e LLVM_VERSION \
           -v "${GITHUB_WORKSPACE}:/project" \
           -w /project \
           quay.io/pypa/manylinux_2_34_x86_64:latest \
@@ -448,16 +467,68 @@ jobs:
           yum install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel
           yum install -y miniz miniz-devel
         fi
-        echo "=== Configuring Slang runtime build ==="
+        echo "=== Preparing standalone LLVM + Slang source build ==="
         cmake --version
-        cmake -S /project -B /tmp/nvdb-slang-build -GNinja \
-          -DSKBUILD=ON \
-          -DNANOVDB_EDITOR_PYPI_BUILD=ON \
-          -DNANOVDB_EDITOR_BUILD_TESTS=OFF \
-          -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=ON \
-          -DFETCHCONTENT_QUIET=OFF
-        echo "=== Building LLVM and Slang runtime libraries ==="
-        cmake --build /tmp/nvdb-slang-build --target slang_src_build --config Release --verbose
+        echo "Building Slang ${SLANG_VERSION} against LLVM ${LLVM_VERSION}"
+        rm -rf /tmp/llvm-project /tmp/llvm-build /tmp/llvm-install /tmp/slang-src /tmp/slang-build /tmp/slang-install
+
+        echo "=== Cloning LLVM ${LLVM_VERSION} ==="
+        git clone --depth 1 --branch "llvmorg-${LLVM_VERSION}" https://github.com/llvm/llvm-project.git /tmp/llvm-project
+
+        echo "=== Configuring LLVM ${LLVM_VERSION} ==="
+        cmake -S /tmp/llvm-project/llvm -B /tmp/llvm-build -GNinja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/tmp/llvm-install \
+          -DCMAKE_INSTALL_LIBDIR=lib \
+          -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+          -DLLVM_ENABLE_PROJECTS=clang \
+          -DLLVM_TARGETS_TO_BUILD=X86 \
+          -DLLVM_ENABLE_ASSERTIONS=OFF \
+          -DLLVM_INCLUDE_TESTS=OFF \
+          -DLLVM_BUILD_TESTS=OFF \
+          -DLLVM_INCLUDE_EXAMPLES=OFF \
+          -DLLVM_BUILD_EXAMPLES=OFF \
+          -DLLVM_INCLUDE_DOCS=OFF \
+          -DCLANG_INCLUDE_TESTS=OFF \
+          -DLLVM_BUILD_LLVM_DYLIB=OFF \
+          -DLLVM_LINK_LLVM_DYLIB=OFF \
+          -DLLVM_ENABLE_TERMINFO=OFF \
+          -DLLVM_ENABLE_ZLIB=OFF \
+          -DLLVM_ENABLE_ZSTD=OFF \
+          -DLLVM_ENABLE_LIBXML2=OFF
+
+        echo "=== Building and installing LLVM ${LLVM_VERSION} ==="
+        cmake --build /tmp/llvm-build --config Release --target install --verbose
+
+        echo "=== Cloning Slang ${SLANG_VERSION} ==="
+        git clone --depth 1 --branch "v${SLANG_VERSION}" https://github.com/shader-slang/slang.git /tmp/slang-src
+
+        echo "=== Configuring Slang ${SLANG_VERSION} ==="
+        cmake -S /tmp/slang-src -B /tmp/slang-build -GNinja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/tmp/slang-install \
+          -DCMAKE_INSTALL_LIBDIR=lib \
+          -DCMAKE_BUILD_RPATH=/tmp/slang-build/external/miniz \
+          -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+          -DCMAKE_INSTALL_RPATH=\$ORIGIN \
+          -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+          -DBUILD_SHARED_LIBS=ON \
+          -DSLANG_ENABLE_TESTS=OFF \
+          -DSLANG_ENABLE_EXAMPLES=OFF \
+          -DSLANG_ENABLE_SLANG_RHI=OFF \
+          -DSLANG_ENABLE_GFX=OFF \
+          -DSLANG_SLANG_LLVM_FLAVOR=USE_SYSTEM_LLVM \
+          -DLLVM_DIR=/tmp/llvm-install/lib/cmake/llvm \
+          -DClang_DIR=/tmp/llvm-install/lib/cmake/clang \
+          -DCMAKE_PREFIX_PATH=/tmp/llvm-install
+
+        echo "=== Building Slang ${SLANG_VERSION} runtime libraries ==="
+        env LD_LIBRARY_PATH="/tmp/slang-build/external/miniz:/tmp/slang-build/external/miniz/Release:/tmp/slang-build/Release/lib:${LD_LIBRARY_PATH:-}" \
+          cmake --build /tmp/slang-build --config Release --verbose
+
+        echo "=== Installing Slang ${SLANG_VERSION} runtime libraries ==="
+        cmake -DSLANG_EP_BINARY_DIR=/tmp/slang-build -P /project/cmake/slang_ep_install.cmake
+
         echo "=== Collecting built Slang runtime libraries ==="
         /opt/python/cp311-cp311/bin/python - <<'PY'
         import pathlib
@@ -465,8 +536,8 @@ jobs:
         import sys
 
         roots = [
-            pathlib.Path("/tmp/nvdb-slang-build/slang-install"),
-            pathlib.Path("/tmp/nvdb-slang-build/slang_src_build-prefix/src/slang_src_build-build"),
+            pathlib.Path("/tmp/slang-install"),
+            pathlib.Path("/tmp/slang-build"),
         ]
         dst = pathlib.Path("/project/slang-package/lib")
         dst.mkdir(parents=True, exist_ok=True)
