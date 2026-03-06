@@ -428,16 +428,17 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
-        mkdir -p .ci/slang-package/lib
-        rm -f .ci/slang-package/lib/*
+        mkdir -p slang-package/lib
+        rm -f slang-package/lib/*
 
-        docker run --rm \
+        docker run --rm -i \
           -v "${GITHUB_WORKSPACE}:/project" \
           -w /project \
           quay.io/pypa/manylinux_2_34_x86_64:latest \
           /bin/bash -s <<'BASH'
         set -euo pipefail
         export CPM_SOURCE_CACHE=/tmp/cpm-cache
+        echo "=== Installing manylinux build dependencies ==="
         if command -v dnf >/dev/null 2>&1; then
           dnf install -y cmake ninja-build git
           dnf install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel wayland-protocols-devel
@@ -447,6 +448,7 @@ jobs:
           yum install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel
           yum install -y miniz miniz-devel
         fi
+        echo "=== Configuring Slang runtime build ==="
         cmake --version
         cmake -S /project -B /tmp/nvdb-slang-build -GNinja \
           -DSKBUILD=ON \
@@ -454,7 +456,9 @@ jobs:
           -DNANOVDB_EDITOR_BUILD_TESTS=OFF \
           -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=ON \
           -DFETCHCONTENT_QUIET=OFF
+        echo "=== Building LLVM and Slang runtime libraries ==="
         cmake --build /tmp/nvdb-slang-build --target slang_src_build --config Release --verbose
+        echo "=== Collecting built Slang runtime libraries ==="
         /opt/python/cp311-cp311/bin/python - <<'PY'
         import pathlib
         import shutil
@@ -464,7 +468,7 @@ jobs:
             pathlib.Path("/tmp/nvdb-slang-build/slang-install"),
             pathlib.Path("/tmp/nvdb-slang-build/slang_src_build-prefix/src/slang_src_build-build"),
         ]
-        dst = pathlib.Path("/project/.ci/slang-package/lib")
+        dst = pathlib.Path("/project/slang-package/lib")
         dst.mkdir(parents=True, exist_ok=True)
 
         copied = []
@@ -504,7 +508,8 @@ jobs:
     - uses: actions/upload-artifact@v4
       with:
         name: slang-libs-ubuntu-latest-x86_64
-        path: .ci/slang-package/lib/*
+        path: slang-package/lib/*
+        if-no-files-found: error
 
   publish_slang_image:
     name: Publish Slang Runtime Image (if missing)
