@@ -241,7 +241,7 @@ jobs:
       uses: pypa/cibuildwheel@v2.21.3
       env:
         CIBW_BUILD: ${{ matrix.cibw_build }}
-        CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_34_x86_64:latest
+        CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_28_x86_64:latest
         CIBW_MANYLINUX_AARCH64_IMAGE: quay.io/pypa/manylinux_2_34_aarch64:latest
         CIBW_BUILD_VERBOSITY: 1
         CIBW_ARCHS: ${{ matrix.os == 'ubuntu-24.04-arm' && 'aarch64' || 'auto' }}
@@ -364,7 +364,7 @@ jobs:
               AUDITWHEEL_PLAT="manylinux_2_34_aarch64"
               ;;
             *)
-              AUDITWHEEL_PLAT="manylinux_2_34_x86_64"
+              AUDITWHEEL_PLAT="manylinux_2_28_x86_64"
               ;;
           esac
           if run_auditwheel repair --help 2>&1 | grep -q "${AUDITWHEEL_PLAT}"; then
@@ -682,7 +682,7 @@ jobs:
       uses: pypa/cibuildwheel@v2.21.3
       env:
         CIBW_BUILD: cp311-manylinux_x86_64
-        CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_34_x86_64:latest
+        CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_28_x86_64:latest
         CIBW_BUILD_VERBOSITY: 1
         CIBW_ENVIRONMENT_PASS_LINUX: NANOVDB_SLANG_IMAGE_LIB_DIR
         CIBW_BEFORE_ALL_LINUX: |
@@ -787,7 +787,7 @@ jobs:
           fi
           echo "=== auditwheel show ==="
           run_auditwheel show {wheel} || true
-          AUDITWHEEL_PLAT="manylinux_2_34_x86_64"
+          AUDITWHEEL_PLAT="manylinux_2_28_x86_64"
           if run_auditwheel repair --help 2>&1 | grep -q "${AUDITWHEEL_PLAT}"; then
             echo "Using explicit auditwheel platform: ${AUDITWHEEL_PLAT}"
             run_auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat "${AUDITWHEEL_PLAT}"
