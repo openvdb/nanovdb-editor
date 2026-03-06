@@ -501,7 +501,8 @@ jobs:
         cmake --build /tmp/llvm-build --config Release --target install --verbose
 
         echo "=== Cloning Slang ${SLANG_VERSION} ==="
-        git clone --depth 1 --branch "v${SLANG_VERSION}" https://github.com/shader-slang/slang.git /tmp/slang-src
+        git clone --depth 1 --branch "v${SLANG_VERSION}" --recurse-submodules https://github.com/shader-slang/slang.git /tmp/slang-src
+        git -C /tmp/slang-src submodule update --init --recursive --depth 1
 
         echo "=== Configuring Slang ${SLANG_VERSION} ==="
         cmake -S /tmp/slang-src -B /tmp/slang-build -GNinja \
