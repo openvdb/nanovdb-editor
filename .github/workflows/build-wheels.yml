@@ -52,6 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       slang_version: ${{ steps.resolve.outputs.slang_version || steps.resolve_disabled.outputs.slang_version }}
+      image_tag: ${{ steps.resolve.outputs.image_tag || steps.resolve_disabled.outputs.image_tag }}
       image_name: ${{ steps.resolve.outputs.image_name || steps.resolve_disabled.outputs.image_name }}
     steps:
     - uses: actions/checkout@v4
@@ -75,9 +76,12 @@ jobs:
         print(match.group(1))
         PY
         )"
+        image_tag="${slang_version}-ml28-v1"
         echo "slang_version=${slang_version}" >> "$GITHUB_OUTPUT"
+        echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
         echo "image_name=nanovdb-editor-slang" >> "$GITHUB_OUTPUT"
         echo "Resolved Slang version: ${slang_version}"
+        echo "Resolved Slang image tag: ${image_tag}"
 
     - name: Skip Slang version resolution
       id: resolve_disabled
@@ -85,6 +89,7 @@ jobs:
       run: |
         set -euo pipefail
         echo "slang_version=" >> "$GITHUB_OUTPUT"
+        echo "image_tag=" >> "$GITHUB_OUTPUT"
         echo "image_name=nanovdb-editor-slang" >> "$GITHUB_OUTPUT"
         echo "Slang image management disabled for this run"
 
@@ -97,7 +102,7 @@ jobs:
       image_ref: ${{ steps.lookup.outputs.image_ref || steps.lookup_disabled.outputs.image_ref }}
     env:
       IMAGE_NAME: ${{ needs.resolve_slang_version.outputs.image_name }}
-      SLANG_VERSION: ${{ needs.resolve_slang_version.outputs.slang_version }}
+      SLANG_VERSION: ${{ needs.resolve_slang_version.outputs.image_tag }}
     steps:
     - name: Look up cached Slang image
       id: lookup
@@ -602,7 +607,7 @@ jobs:
     with:
       image_name: ${{ needs.resolve_slang_version.outputs.image_name }}
       libs_artifact: slang-libs-ubuntu-latest-x86_64
-      image_tag: ${{ needs.resolve_slang_version.outputs.slang_version }}
+      image_tag: ${{ needs.resolve_slang_version.outputs.image_tag }}
     secrets: inherit
 
   build_linux_x86_wheel:
@@ -633,6 +638,7 @@ jobs:
       run: |
         set -euo pipefail
         echo "Slang version: ${{ needs.resolve_slang_version.outputs.slang_version }}"
+        echo "Slang image tag: ${{ needs.resolve_slang_version.outputs.image_tag }}"
         echo "Slang image ref: ${{ needs.lookup_slang_image.outputs.image_ref }}"
         echo "Lookup result: ${{ needs.lookup_slang_image.outputs.exists }}"
         echo "Publish result: ${{ needs.publish_slang_image.result }}"
