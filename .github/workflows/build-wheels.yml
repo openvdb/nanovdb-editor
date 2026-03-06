@@ -461,11 +461,11 @@ jobs:
         export CPM_SOURCE_CACHE=/tmp/cpm-cache
         echo "=== Installing manylinux build dependencies ==="
         if command -v dnf >/dev/null 2>&1; then
-          dnf install -y cmake ninja-build git
+          dnf install -y cmake git make
           dnf install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel wayland-protocols-devel
           dnf install -y miniz miniz-devel
         else
-          yum install -y cmake ninja-build git
+          yum install -y cmake git make
           yum install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel
           yum install -y miniz miniz-devel
         fi
@@ -478,7 +478,7 @@ jobs:
         git clone --depth 1 --branch "llvmorg-${LLVM_VERSION}" https://github.com/llvm/llvm-project.git /tmp/llvm-project
 
         echo "=== Configuring LLVM ${LLVM_VERSION} ==="
-        cmake -S /tmp/llvm-project/llvm -B /tmp/llvm-build -GNinja \
+        cmake -S /tmp/llvm-project/llvm -B /tmp/llvm-build -G "Unix Makefiles" \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=/tmp/llvm-install \
           -DCMAKE_INSTALL_LIBDIR=lib \
@@ -500,14 +500,14 @@ jobs:
           -DLLVM_ENABLE_LIBXML2=OFF
 
         echo "=== Building and installing LLVM ${LLVM_VERSION} ==="
-        cmake --build /tmp/llvm-build --config Release --target install --verbose
+        cmake --build /tmp/llvm-build --parallel "$(nproc)" --target install --verbose
 
         echo "=== Cloning Slang ${SLANG_VERSION} ==="
         git clone --depth 1 --branch "v${SLANG_VERSION}" --recurse-submodules https://github.com/shader-slang/slang.git /tmp/slang-src
         git -C /tmp/slang-src submodule update --init --recursive --depth 1
 
         echo "=== Configuring Slang ${SLANG_VERSION} ==="
-        cmake -S /tmp/slang-src -B /tmp/slang-build -GNinja \
+        cmake -S /tmp/slang-src -B /tmp/slang-build -G "Unix Makefiles" \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=/tmp/slang-install \
           -DCMAKE_INSTALL_LIBDIR=lib \
@@ -527,7 +527,7 @@ jobs:
 
         echo "=== Building Slang ${SLANG_VERSION} runtime libraries ==="
         env LD_LIBRARY_PATH="/tmp/slang-build/external/miniz:/tmp/slang-build/external/miniz/Release:/tmp/slang-build/Release/lib:${LD_LIBRARY_PATH:-}" \
-          cmake --build /tmp/slang-build --config Release --verbose
+          cmake --build /tmp/slang-build --parallel "$(nproc)" --verbose
 
         echo "=== Installing Slang ${SLANG_VERSION} runtime libraries ==="
         cmake -DSLANG_EP_BINARY_DIR=/tmp/slang-build -P /project/cmake/slang_ep_install.cmake
