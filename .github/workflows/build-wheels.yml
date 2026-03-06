@@ -449,8 +449,8 @@ jobs:
         echo "Resolved LLVM version: ${LLVM_VERSION}"
 
         docker run --rm -i \
-          -e SLANG_VERSION \
-          -e LLVM_VERSION \
+          -e "SLANG_VERSION=${SLANG_VERSION}" \
+          -e "LLVM_VERSION=${LLVM_VERSION}" \
           -v "${GITHUB_WORKSPACE}:/project" \
           -w /project \
           quay.io/pypa/manylinux_2_34_x86_64:latest \
