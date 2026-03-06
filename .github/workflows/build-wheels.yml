@@ -76,7 +76,7 @@ jobs:
         PY
         )"
         echo "slang_version=${slang_version}" >> "$GITHUB_OUTPUT"
-        echo "image_name=nanovdb-slang" >> "$GITHUB_OUTPUT"
+        echo "image_name=nanovdb-editor-slang" >> "$GITHUB_OUTPUT"
         echo "Resolved Slang version: ${slang_version}"
 
     - name: Skip Slang version resolution
@@ -85,7 +85,7 @@ jobs:
       run: |
         set -euo pipefail
         echo "slang_version=" >> "$GITHUB_OUTPUT"
-        echo "image_name=nanovdb-slang" >> "$GITHUB_OUTPUT"
+        echo "image_name=nanovdb-editor-slang" >> "$GITHUB_OUTPUT"
         echo "Slang image management disabled for this run"
 
   lookup_slang_image:
@@ -448,12 +448,14 @@ jobs:
         echo "Resolved Slang version: ${SLANG_VERSION}"
         echo "Resolved LLVM version: ${LLVM_VERSION}"
 
+        # Build the cached Slang runtime libs on an older manylinux baseline so
+        # the injected libslang-llvm remains repairable in the final wheel.
         docker run --rm -i \
           -e "SLANG_VERSION=${SLANG_VERSION}" \
           -e "LLVM_VERSION=${LLVM_VERSION}" \
           -v "${GITHUB_WORKSPACE}:/project" \
           -w /project \
-          quay.io/pypa/manylinux_2_34_x86_64:latest \
+          quay.io/pypa/manylinux_2_28_x86_64:latest \
           /bin/bash -s <<'BASH'
         set -euo pipefail
         export CPM_SOURCE_CACHE=/tmp/cpm-cache
