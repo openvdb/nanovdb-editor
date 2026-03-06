@@ -629,11 +629,20 @@ jobs:
     - name: Reuse Slang image libraries
       if: inputs.manage_slang_image
       shell: bash
+      env:
+        GHCR_USER: ${{ secrets.GHCR_PUSH_USERNAME }}
+        GHCR_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN }}
       run: |
         set -euo pipefail
         IMAGE_REF="${{ needs.lookup_slang_image.outputs.image_ref }}"
         LOCAL_LIB_DIR="${GITHUB_WORKSPACE}/.ci/slang-image-lib"
         echo "NANOVDB_SLANG_IMAGE_LIB_DIR=" >> "$GITHUB_ENV"
+        if [[ -n "${GHCR_TOKEN:-}" && -n "${GHCR_USER:-}" ]]; then
+          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin >/dev/null 2>&1
+        else
+          echo "GHCR credentials not available for image pull" >&2
+          exit 1
+        fi
         docker pull "${IMAGE_REF}"
         rm -rf "${LOCAL_LIB_DIR}"
         mkdir -p "${LOCAL_LIB_DIR}"
