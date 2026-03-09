@@ -1,4 +1,4 @@
-name: Build Slang Package Image
+name: Publish Slang Runtime Image
 
 on:
   workflow_call:
@@ -6,11 +6,10 @@ on:
       image_name:
         required: false
         type: string
-        default: nanovdb-slang
-      wheel_artifact:
-        required: false
+        default: nanovdb-editor-slang
+      libs_artifact:
+        required: true
         type: string
-        default: wheels-ubuntu-latest-x86_64
       image_tag:
         required: false
         type: string
@@ -22,7 +21,7 @@ on:
 
 jobs:
   build-and-push-image:
-    name: Build and Push Slang Package Image
+    name: Publish Slang Runtime Image
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -32,7 +31,7 @@ jobs:
       image_ref: ${{ steps.compute_ref.outputs.image_ref }}
     env:
       IMAGE_NAME: ${{ inputs.image_name }}
-      WHEEL_ARTIFACT: ${{ inputs.wheel_artifact }}
+      LIBS_ARTIFACT: ${{ inputs.libs_artifact }}
       IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
     steps:
       - name: Compute image reference
@@ -48,58 +47,27 @@ jobs:
           echo "image_ref=${image_ref}" >> "$GITHUB_OUTPUT"
           echo "Will build and push: ${image_ref}"
 
-      - name: Download wheel artifact
+      - name: Download prebuilt Slang libs artifact
         uses: actions/download-artifact@v4
         with:
-          name: ${{ env.WHEEL_ARTIFACT }}
-          path: wheelhouse/
+          name: ${{ env.LIBS_ARTIFACT }}
+          path: slang-package/lib
 
-      - name: Prepare Slang package context
+      - name: Validate provided Slang libs artifact
         run: |
           set -euo pipefail
-          mkdir -p slang-package/lib
-
-          wheel_path=$(python -c "import pathlib, sys; wheels = sorted(pathlib.Path('wheelhouse').glob('nanovdb_editor*.whl')); sys.stdout.write(str(wheels[0]) if wheels else ''); sys.exit(0 if wheels else 1)")
-          if [[ -z "${wheel_path}" ]]; then
-            echo "No nanovdb_editor*.whl found in wheelhouse/" >&2
-            exit 1
-          fi
-          echo "Using wheel: ${wheel_path}"
-
           python - <<'PY'
           import pathlib
-          import zipfile
-          import shutil
           import sys
 
-          wheel = next(iter(sorted(pathlib.Path("wheelhouse").glob("nanovdb_editor*.whl"))), None)
-          if wheel is None:
-              print("No wheel found", file=sys.stderr)
-              raise SystemExit(1)
-
-          extract_root = pathlib.Path("wheel-extract")
-          if extract_root.exists():
-              shutil.rmtree(extract_root)
-          extract_root.mkdir(parents=True, exist_ok=True)
-
-          with zipfile.ZipFile(wheel) as zf:
-              zf.extractall(extract_root)
-
-          src_lib_dir = extract_root / "nanovdb_editor" / "lib"
+          src_lib_dir = pathlib.Path("slang-package") / "lib"
           if not src_lib_dir.exists():
               print(f"Missing expected library dir: {src_lib_dir}", file=sys.stderr)
               raise SystemExit(1)
 
-          dst_lib_dir = pathlib.Path("slang-package") / "lib"
-          copied = []
-          for pattern in ("libslang*.so*", "libglslang.so*", "libSPIRV.so*"):
-              for lib in sorted(src_lib_dir.glob(pattern)):
-                  target = dst_lib_dir / lib.name
-                  shutil.copy2(lib, target)
-                  copied.append(target.name)
-
+          copied = [p.name for p in sorted(src_lib_dir.iterdir()) if p.is_file() and not p.name.endswith(".dwarf")]
           if not any(name.startswith("libslang-llvm") for name in copied):
-              print("libslang-llvm was not found in the wheel; refusing to publish image", file=sys.stderr)
+              print("libslang-llvm was not found in the provided libs artifact; refusing to publish image", file=sys.stderr)
               raise SystemExit(1)
           has_slang_glslang = any(name.startswith("libslang-glslang") for name in copied)
           if has_slang_glslang:
@@ -110,17 +78,21 @@ jobs:
                   print("libslang-glslang is present but libSPIRV.so* is missing; refusing to publish image", file=sys.stderr)
                   raise SystemExit(1)
           else:
-              print("libslang-glslang is not present in the wheel; skipping glslang/SPIRV validation")
+              print("libslang-glslang is not present in provided libs; skipping glslang/SPIRV validation")
 
-          print("Copied Slang libraries:")
+          print("Provided Slang libraries:")
           for name in copied:
               print(f" - {name}")
           PY
 
+      - name: Write Slang package Dockerfile
+        run: |
+          set -euo pipefail
+          mkdir -p slang-package/lib
           cat > slang-package/Dockerfile <<'EOF'
-          FROM scratch
+          FROM alpine:3.20
           LABEL org.opencontainers.image.title="NanoVDB Slang Runtime"
-          LABEL org.opencontainers.image.description="Prebuilt Slang runtime libraries extracted from nanovdb-editor wheel artifacts"
+          LABEL org.opencontainers.image.description="Prebuilt Slang runtime libraries extracted from nanovdb-editor build artifacts"
           COPY lib/ /opt/slang/lib/
           EOF
 

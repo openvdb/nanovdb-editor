@@ -23,6 +23,11 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+  packages: write
+  actions: read
+
 jobs:
   check_fvdb_requirement:
     uses: ./.github/workflows/fvdb-version-gate.yml
@@ -33,6 +38,8 @@ jobs:
     uses: ./.github/workflows/build-wheels.yml
     with:
       is_dev: false
+      linux_x86_build_slang_from_source: false
+    secrets: inherit
 
   # Test upload from develop branch
   upload_test_pypi:
@@ -92,14 +99,5 @@ jobs:
     uses: ./.github/workflows/fvdb-viz-integration.yml
     with:
       package: release
-
-  publish_slang_package:
-    name: Publish Slang package image
-    needs: [build]
-    if: ${{ !cancelled() && !inputs.skip_build && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))) }}
-    uses: ./.github/workflows/build-slang-package-image.yml
-    with:
-      image_name: nanovdb-slang
-      wheel_artifact: wheels-ubuntu-latest-x86_64
-      image_tag: ${{ github.ref_name }}
     secrets: inherit
+
