@@ -1,16 +1,18 @@
-name: Build Wheels (PR)
+name: Build Wheels Check
 
 on:
-  pull_request:
+  push:
     branches:
       - main
+      - develop
+      - 'release/*'
     paths-ignore:
       - 'CODEOWNERS'
       - '**.md'
       - 'dev_utils/**'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
