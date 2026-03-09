@@ -432,8 +432,28 @@ jobs:
           AUDITWHEEL_SHOW_FILE="/tmp/nanovdb-auditwheel-show.txt"
           rm -f "${AUDITWHEEL_SHOW_FILE}"
           run_auditwheel show {wheel} 2>&1 | tee "${AUDITWHEEL_SHOW_FILE}" || true
-          echo "Letting auditwheel choose the compatible platform tag"
-          run_auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs
+          case "{wheel}" in
+            *aarch64*)
+              AUDITWHEEL_DEFAULT_PLAT="manylinux_2_34_aarch64"
+              ;;
+            *)
+              AUDITWHEEL_DEFAULT_PLAT="manylinux_2_34_x86_64"
+              ;;
+          esac
+          AUDITWHEEL_PLAT="$(python - <<'PY' "${AUDITWHEEL_SHOW_FILE}" "${AUDITWHEEL_DEFAULT_PLAT}"
+          import pathlib
+          import re
+          import sys
+
+          show_path = pathlib.Path(sys.argv[1])
+          default_plat = sys.argv[2]
+          text = show_path.read_text(encoding="utf-8") if show_path.exists() else ""
+          match = re.search(r'This constrains the platform tag to "([^"]+)"', text)
+          print(match.group(1) if match else default_plat)
+          PY
+          )"
+          echo "Using auditwheel platform from show output: ${AUDITWHEEL_PLAT}"
+          run_auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat "${AUDITWHEEL_PLAT}"
 
         # Install test dependencies before testing
         CIBW_TEST_REQUIRES: numpy
@@ -919,8 +939,21 @@ jobs:
           AUDITWHEEL_SHOW_FILE="/tmp/nanovdb-auditwheel-show.txt"
           rm -f "${AUDITWHEEL_SHOW_FILE}"
           run_auditwheel show {wheel} 2>&1 | tee "${AUDITWHEEL_SHOW_FILE}" || true
-          echo "Letting auditwheel choose the compatible platform tag"
-          run_auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs
+          AUDITWHEEL_DEFAULT_PLAT="manylinux_2_34_x86_64"
+          AUDITWHEEL_PLAT="$(python - <<'PY' "${AUDITWHEEL_SHOW_FILE}" "${AUDITWHEEL_DEFAULT_PLAT}"
+          import pathlib
+          import re
+          import sys
+
+          show_path = pathlib.Path(sys.argv[1])
+          default_plat = sys.argv[2]
+          text = show_path.read_text(encoding="utf-8") if show_path.exists() else ""
+          match = re.search(r'This constrains the platform tag to "([^"]+)"', text)
+          print(match.group(1) if match else default_plat)
+          PY
+          )"
+          echo "Using auditwheel platform from show output: ${AUDITWHEEL_PLAT}"
+          run_auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat "${AUDITWHEEL_PLAT}"
         CIBW_TEST_REQUIRES: numpy
         CIBW_TEST_COMMAND: python -c "import nanovdb_editor; print('Import successful')"
         CIBW_ENVIRONMENT: ${{ inputs.manage_slang_image && 'CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=OFF -DNANOVDB_SLANG_IMAGE_LIB_DIR=${NANOVDB_SLANG_IMAGE_LIB_DIR} -DFETCHCONTENT_QUIET=OFF" CPM_SOURCE_CACHE=/tmp/cpm-cache' || 'CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=ON -DFETCHCONTENT_QUIET=OFF" CPM_SOURCE_CACHE=/tmp/cpm-cache' }}
