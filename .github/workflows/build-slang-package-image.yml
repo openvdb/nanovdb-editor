@@ -8,9 +8,8 @@ on:
         type: string
         default: nanovdb-editor-slang
       libs_artifact:
-        required: false
+        required: true
         type: string
-        default: ""
       image_tag:
         required: false
         type: string
@@ -49,7 +48,6 @@ jobs:
           echo "Will build and push: ${image_ref}"
 
       - name: Download prebuilt Slang libs artifact
-        if: ${{ env.LIBS_ARTIFACT != '' }}
         uses: actions/download-artifact@v4
         with:
           name: ${{ env.LIBS_ARTIFACT }}
