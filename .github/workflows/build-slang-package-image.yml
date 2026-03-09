@@ -11,10 +11,6 @@ on:
         required: false
         type: string
         default: ""
-      wheel_artifact:
-        required: false
-        type: string
-        default: wheels-ubuntu-latest-x86_64
       image_tag:
         required: false
         type: string
@@ -37,7 +33,6 @@ jobs:
     env:
       IMAGE_NAME: ${{ inputs.image_name }}
       LIBS_ARTIFACT: ${{ inputs.libs_artifact }}
-      WHEEL_ARTIFACT: ${{ inputs.wheel_artifact }}
       IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
     steps:
       - name: Compute image reference
@@ -60,81 +55,7 @@ jobs:
           name: ${{ env.LIBS_ARTIFACT }}
           path: slang-package/lib
 
-      - name: Download wheel artifact
-        if: ${{ env.LIBS_ARTIFACT == '' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ env.WHEEL_ARTIFACT }}
-          path: wheelhouse/
-
-      - name: Prepare Slang package context
-        if: ${{ env.LIBS_ARTIFACT == '' }}
-        run: |
-          set -euo pipefail
-          mkdir -p slang-package/lib
-
-          wheel_path=$(python -c "import pathlib, sys; wheels = sorted(pathlib.Path('wheelhouse').glob('nanovdb_editor*.whl')); sys.stdout.write(str(wheels[0]) if wheels else ''); sys.exit(0 if wheels else 1)")
-          if [[ -z "${wheel_path}" ]]; then
-            echo "No nanovdb_editor*.whl found in wheelhouse/" >&2
-            exit 1
-          fi
-          echo "Using wheel: ${wheel_path}"
-
-          python - <<'PY'
-          import pathlib
-          import zipfile
-          import shutil
-          import sys
-
-          wheel = next(iter(sorted(pathlib.Path("wheelhouse").glob("nanovdb_editor*.whl"))), None)
-          if wheel is None:
-              print("No wheel found", file=sys.stderr)
-              raise SystemExit(1)
-
-          extract_root = pathlib.Path("wheel-extract")
-          if extract_root.exists():
-              shutil.rmtree(extract_root)
-          extract_root.mkdir(parents=True, exist_ok=True)
-
-          with zipfile.ZipFile(wheel) as zf:
-              zf.extractall(extract_root)
-
-          src_lib_dir = extract_root / "nanovdb_editor" / "lib"
-          if not src_lib_dir.exists():
-              print(f"Missing expected library dir: {src_lib_dir}", file=sys.stderr)
-              raise SystemExit(1)
-
-          dst_lib_dir = pathlib.Path("slang-package") / "lib"
-          copied = []
-          for pattern in ("libslang*.so*", "libglslang.so*", "libSPIRV.so*"):
-              for lib in sorted(src_lib_dir.glob(pattern)):
-                  if lib.name.endswith(".dwarf"):
-                      continue
-                  target = dst_lib_dir / lib.name
-                  shutil.copy2(lib, target)
-                  copied.append(target.name)
-
-          if not any(name.startswith("libslang-llvm") for name in copied):
-              print("libslang-llvm was not found in the wheel; refusing to publish image", file=sys.stderr)
-              raise SystemExit(1)
-          has_slang_glslang = any(name.startswith("libslang-glslang") for name in copied)
-          if has_slang_glslang:
-              if not any(name.startswith("libglslang.so") for name in copied):
-                  print("libslang-glslang is present but libglslang.so* is missing; refusing to publish image", file=sys.stderr)
-                  raise SystemExit(1)
-              if not any(name.startswith("libSPIRV.so") for name in copied):
-                  print("libslang-glslang is present but libSPIRV.so* is missing; refusing to publish image", file=sys.stderr)
-                  raise SystemExit(1)
-          else:
-              print("libslang-glslang is not present in the wheel; skipping glslang/SPIRV validation")
-
-          print("Copied Slang libraries:")
-          for name in copied:
-              print(f" - {name}")
-          PY
-
       - name: Validate provided Slang libs artifact
-        if: ${{ env.LIBS_ARTIFACT != '' }}
         run: |
           set -euo pipefail
           python - <<'PY'
