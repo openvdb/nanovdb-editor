@@ -748,6 +748,7 @@ jobs:
         CIBW_BUILD: cp311-manylinux_x86_64
         CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_34_x86_64:latest
         CIBW_BUILD_VERBOSITY: 1
+        CIBW_TEST_SKIP: cp311-manylinux_x86_64
         CIBW_ENVIRONMENT_PASS_LINUX: NANOVDB_SLANG_IMAGE_LIB_DIR
         CIBW_BEFORE_ALL_LINUX: |
           if command -v dnf &> /dev/null; then
@@ -955,6 +956,16 @@ jobs:
         for name in llvm_hits:
             print(f" - {name}")
         PY
+
+    - name: Smoke test Linux x86_64 wheel on runner
+      shell: bash
+      run: |
+        set -euo pipefail
+        TEST_VENV="$(mktemp -d)/venv"
+        python -m venv "${TEST_VENV}"
+        "${TEST_VENV}/bin/python" -m pip install --upgrade pip
+        "${TEST_VENV}/bin/python" -m pip install numpy ./wheelhouse/nanovdb_editor*.whl
+        "${TEST_VENV}/bin/python" -c "import nanovdb_editor; print('Import successful')"
 
     - uses: actions/upload-artifact@v4
       with:
