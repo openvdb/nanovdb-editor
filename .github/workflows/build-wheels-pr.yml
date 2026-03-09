@@ -25,4 +25,5 @@ jobs:
     with:
       is_dev: false
       manage_slang_image: true
+      linux_x86_build_slang_from_source: false
     secrets: inherit
