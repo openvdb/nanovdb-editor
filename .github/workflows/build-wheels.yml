@@ -305,7 +305,36 @@ jobs:
           fi
           run_auditwheel() {
             if [ "${AW_MODE}" = "python-module" ]; then
-              "${AW_PYTHON}" -m auditwheel "$@"
+              "${AW_PYTHON}" - "$@" <<'PY'
+          import sys
+
+          from auditwheel import main as auditwheel_main
+          import auditwheel.elfutils as auditwheel_elfutils
+          import auditwheel.wheel_abi as auditwheel_wheel_abi
+
+          _orig_elf_find_versioned_symbols = auditwheel_elfutils.elf_find_versioned_symbols
+
+          def _patched_elf_find_versioned_symbols(elf):
+              section = elf.get_section_by_name(".gnu.version_r")
+              if section is not None and not hasattr(section, "iter_versions"):
+                  sh_type = None
+                  try:
+                      sh_type = section["sh_type"]
+                  except Exception:
+                      sh_type = "<unknown>"
+                  print(
+                      f"Warning: skipping unparsable .gnu.version_r section (type={sh_type})",
+                      file=sys.stderr,
+                  )
+                  return iter(())
+              return _orig_elf_find_versioned_symbols(elf)
+
+          auditwheel_elfutils.elf_find_versioned_symbols = _patched_elf_find_versioned_symbols
+          auditwheel_wheel_abi.elf_find_versioned_symbols = _patched_elf_find_versioned_symbols
+
+          sys.argv = ["auditwheel", *sys.argv[1:]]
+          raise SystemExit(auditwheel_main.main())
+          PY
             else
               auditwheel "$@"
             fi
@@ -734,7 +763,36 @@ jobs:
           fi
           run_auditwheel() {
             if [ "${AW_MODE}" = "python-module" ]; then
-              "${AW_PYTHON}" -m auditwheel "$@"
+              "${AW_PYTHON}" - "$@" <<'PY'
+          import sys
+
+          from auditwheel import main as auditwheel_main
+          import auditwheel.elfutils as auditwheel_elfutils
+          import auditwheel.wheel_abi as auditwheel_wheel_abi
+
+          _orig_elf_find_versioned_symbols = auditwheel_elfutils.elf_find_versioned_symbols
+
+          def _patched_elf_find_versioned_symbols(elf):
+              section = elf.get_section_by_name(".gnu.version_r")
+              if section is not None and not hasattr(section, "iter_versions"):
+                  sh_type = None
+                  try:
+                      sh_type = section["sh_type"]
+                  except Exception:
+                      sh_type = "<unknown>"
+                  print(
+                      f"Warning: skipping unparsable .gnu.version_r section (type={sh_type})",
+                      file=sys.stderr,
+                  )
+                  return iter(())
+              return _orig_elf_find_versioned_symbols(elf)
+
+          auditwheel_elfutils.elf_find_versioned_symbols = _patched_elf_find_versioned_symbols
+          auditwheel_wheel_abi.elf_find_versioned_symbols = _patched_elf_find_versioned_symbols
+
+          sys.argv = ["auditwheel", *sys.argv[1:]]
+          raise SystemExit(auditwheel_main.main())
+          PY
             else
               auditwheel "$@"
             fi
