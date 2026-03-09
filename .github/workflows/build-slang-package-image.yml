@@ -1,0 +1,119 @@
+name: Publish Slang Runtime Image
+
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        required: false
+        type: string
+        default: nanovdb-editor-slang
+      libs_artifact:
+        required: true
+        type: string
+      image_tag:
+        required: false
+        type: string
+        default: ""
+    outputs:
+      image_ref:
+        description: "Fully qualified image reference pushed to GHCR"
+        value: ${{ jobs.build-and-push-image.outputs.image_ref }}
+
+jobs:
+  build-and-push-image:
+    name: Publish Slang Runtime Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      actions: read
+    outputs:
+      image_ref: ${{ steps.compute_ref.outputs.image_ref }}
+    env:
+      IMAGE_NAME: ${{ inputs.image_name }}
+      LIBS_ARTIFACT: ${{ inputs.libs_artifact }}
+      IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
+    steps:
+      - name: Compute image reference
+        id: compute_ref
+        run: |
+          set -euo pipefail
+          raw_tag="${IMAGE_TAG_INPUT}"
+          if [[ -z "${raw_tag}" ]]; then
+            raw_tag="${GITHUB_SHA}"
+          fi
+          safe_tag="${raw_tag//[^0-9a-zA-Z._-]/-}"
+          image_ref="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${safe_tag}"
+          echo "image_ref=${image_ref}" >> "$GITHUB_OUTPUT"
+          echo "Will build and push: ${image_ref}"
+
+      - name: Download prebuilt Slang libs artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.LIBS_ARTIFACT }}
+          path: slang-package/lib
+
+      - name: Validate provided Slang libs artifact
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import pathlib
+          import sys
+
+          src_lib_dir = pathlib.Path("slang-package") / "lib"
+          if not src_lib_dir.exists():
+              print(f"Missing expected library dir: {src_lib_dir}", file=sys.stderr)
+              raise SystemExit(1)
+
+          copied = [p.name for p in sorted(src_lib_dir.iterdir()) if p.is_file() and not p.name.endswith(".dwarf")]
+          if not any(name.startswith("libslang-llvm") for name in copied):
+              print("libslang-llvm was not found in the provided libs artifact; refusing to publish image", file=sys.stderr)
+              raise SystemExit(1)
+          has_slang_glslang = any(name.startswith("libslang-glslang") for name in copied)
+          if has_slang_glslang:
+              if not any(name.startswith("libglslang.so") for name in copied):
+                  print("libslang-glslang is present but libglslang.so* is missing; refusing to publish image", file=sys.stderr)
+                  raise SystemExit(1)
+              if not any(name.startswith("libSPIRV.so") for name in copied):
+                  print("libslang-glslang is present but libSPIRV.so* is missing; refusing to publish image", file=sys.stderr)
+                  raise SystemExit(1)
+          else:
+              print("libslang-glslang is not present in provided libs; skipping glslang/SPIRV validation")
+
+          print("Provided Slang libraries:")
+          for name in copied:
+              print(f" - {name}")
+          PY
+
+      - name: Write Slang package Dockerfile
+        run: |
+          set -euo pipefail
+          mkdir -p slang-package/lib
+          cat > slang-package/Dockerfile <<'EOF'
+          FROM alpine:3.20
+          LABEL org.opencontainers.image.title="NanoVDB Slang Runtime"
+          LABEL org.opencontainers.image.description="Prebuilt Slang runtime libraries extracted from nanovdb-editor build artifacts"
+          COPY lib/ /opt/slang/lib/
+          EOF
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_PUSH_USERNAME }}
+          password: ${{ secrets.GHCR_PUSH_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Slang package image
+        run: |
+          set -euo pipefail
+          IMAGE_REF="${{ steps.compute_ref.outputs.image_ref }}"
+          docker buildx build \
+            --platform linux/amd64 \
+            -f slang-package/Dockerfile \
+            -t "${IMAGE_REF}" \
+            --push \
+            --progress=plain \
+            slang-package

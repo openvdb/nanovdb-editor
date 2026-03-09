@@ -160,7 +160,8 @@ jobs:
       (
         contains(github.event.comment.body, '/run-build') ||
         contains(github.event.comment.body, '/run-python') ||
-        contains(github.event.comment.body, '/run-codestyle')
+        contains(github.event.comment.body, '/run-codestyle') ||
+        contains(github.event.comment.body, '/run-wheels')
       ) &&
       (
         github.event.comment.author_association == 'OWNER' ||
@@ -204,9 +205,10 @@ jobs:
             const comment = context.payload.comment.body;
 
             const workflowMap = {
-              '/run-build': 'build-and-test.yml',
-              '/run-python': 'build-and-test-python.yml',
-              '/run-codestyle': 'codestyle.yml'
+              '/run-build': { workflow: 'build-and-test.yml' },
+              '/run-python': { workflow: 'build-and-test-python.yml' },
+              '/run-codestyle': { workflow: 'codestyle.yml' },
+              '/run-wheels': { workflow: 'build-wheels.yml', inputs: { is_dev: 'false' } }
             };
 
             // Helper to find the triggered run with retries
@@ -239,8 +241,9 @@ jobs:
               return null;
             }
 
-            for (const [command, workflow] of Object.entries(workflowMap)) {
+            for (const [command, config] of Object.entries(workflowMap)) {
               if (comment.includes(command)) {
+                const workflow = config.workflow;
                 const beforeTime = new Date();
                 try {
                   console.log(`Triggering ${workflow} on ref ${ref}`);
@@ -248,7 +251,8 @@ jobs:
                     owner: context.repo.owner,
                     repo: context.repo.repo,
                     workflow_id: workflow,
-                    ref: ref
+                    ref: ref,
+                    inputs: config.inputs || {}
                   });
 
                   const run = await findWorkflowRun(workflow, beforeTime);
