@@ -23,6 +23,11 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+  packages: write
+  actions: read
+
 jobs:
   check_fvdb_requirement:
     uses: ./.github/workflows/fvdb-version-gate.yml
