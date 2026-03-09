@@ -313,6 +313,9 @@ jobs:
           import auditwheel.wheel_abi as auditwheel_wheel_abi
 
           _orig_elf_find_versioned_symbols = auditwheel_elfutils.elf_find_versioned_symbols
+          _orig_elf_is_python_extension = auditwheel_elfutils.elf_is_python_extension
+          _orig_elf_find_ucs2_symbols = auditwheel_elfutils.elf_find_ucs2_symbols
+          _orig_elf_references_pyfpe_jbuf = auditwheel_elfutils.elf_references_pyfpe_jbuf
 
           def _patched_elf_find_versioned_symbols(elf):
               section = elf.get_section_by_name(".gnu.version_r")
@@ -329,8 +332,41 @@ jobs:
                   return iter(())
               return _orig_elf_find_versioned_symbols(elf)
 
+          def _patched_elf_is_python_extension(fn, elf):
+              section = elf.get_section_by_name(".dynsym")
+              if section is not None and not hasattr(section, "iter_symbols"):
+                  sh_type = None
+                  try:
+                      sh_type = section["sh_type"]
+                  except Exception:
+                      sh_type = "<unknown>"
+                  print(
+                      f"Warning: skipping unparsable .dynsym section in {fn} (type={sh_type})",
+                      file=sys.stderr,
+                  )
+                  return False, None
+              return _orig_elf_is_python_extension(fn, elf)
+
+          def _patched_elf_find_ucs2_symbols(elf):
+              section = elf.get_section_by_name(".dynsym")
+              if section is not None and not hasattr(section, "iter_symbols"):
+                  return iter(())
+              return _orig_elf_find_ucs2_symbols(elf)
+
+          def _patched_elf_references_pyfpe_jbuf(elf):
+              section = elf.get_section_by_name(".dynsym")
+              if section is not None and not hasattr(section, "iter_symbols"):
+                  return False
+              return _orig_elf_references_pyfpe_jbuf(elf)
+
           auditwheel_elfutils.elf_find_versioned_symbols = _patched_elf_find_versioned_symbols
+          auditwheel_elfutils.elf_is_python_extension = _patched_elf_is_python_extension
+          auditwheel_elfutils.elf_find_ucs2_symbols = _patched_elf_find_ucs2_symbols
+          auditwheel_elfutils.elf_references_pyfpe_jbuf = _patched_elf_references_pyfpe_jbuf
           auditwheel_wheel_abi.elf_find_versioned_symbols = _patched_elf_find_versioned_symbols
+          auditwheel_wheel_abi.elf_is_python_extension = _patched_elf_is_python_extension
+          auditwheel_wheel_abi.elf_find_ucs2_symbols = _patched_elf_find_ucs2_symbols
+          auditwheel_wheel_abi.elf_references_pyfpe_jbuf = _patched_elf_references_pyfpe_jbuf
 
           sys.argv = ["auditwheel", *sys.argv[1:]]
           raise SystemExit(auditwheel_main.main())
@@ -771,6 +807,9 @@ jobs:
           import auditwheel.wheel_abi as auditwheel_wheel_abi
 
           _orig_elf_find_versioned_symbols = auditwheel_elfutils.elf_find_versioned_symbols
+          _orig_elf_is_python_extension = auditwheel_elfutils.elf_is_python_extension
+          _orig_elf_find_ucs2_symbols = auditwheel_elfutils.elf_find_ucs2_symbols
+          _orig_elf_references_pyfpe_jbuf = auditwheel_elfutils.elf_references_pyfpe_jbuf
 
           def _patched_elf_find_versioned_symbols(elf):
               section = elf.get_section_by_name(".gnu.version_r")
@@ -787,8 +826,41 @@ jobs:
                   return iter(())
               return _orig_elf_find_versioned_symbols(elf)
 
+          def _patched_elf_is_python_extension(fn, elf):
+              section = elf.get_section_by_name(".dynsym")
+              if section is not None and not hasattr(section, "iter_symbols"):
+                  sh_type = None
+                  try:
+                      sh_type = section["sh_type"]
+                  except Exception:
+                      sh_type = "<unknown>"
+                  print(
+                      f"Warning: skipping unparsable .dynsym section in {fn} (type={sh_type})",
+                      file=sys.stderr,
+                  )
+                  return False, None
+              return _orig_elf_is_python_extension(fn, elf)
+
+          def _patched_elf_find_ucs2_symbols(elf):
+              section = elf.get_section_by_name(".dynsym")
+              if section is not None and not hasattr(section, "iter_symbols"):
+                  return iter(())
+              return _orig_elf_find_ucs2_symbols(elf)
+
+          def _patched_elf_references_pyfpe_jbuf(elf):
+              section = elf.get_section_by_name(".dynsym")
+              if section is not None and not hasattr(section, "iter_symbols"):
+                  return False
+              return _orig_elf_references_pyfpe_jbuf(elf)
+
           auditwheel_elfutils.elf_find_versioned_symbols = _patched_elf_find_versioned_symbols
+          auditwheel_elfutils.elf_is_python_extension = _patched_elf_is_python_extension
+          auditwheel_elfutils.elf_find_ucs2_symbols = _patched_elf_find_ucs2_symbols
+          auditwheel_elfutils.elf_references_pyfpe_jbuf = _patched_elf_references_pyfpe_jbuf
           auditwheel_wheel_abi.elf_find_versioned_symbols = _patched_elf_find_versioned_symbols
+          auditwheel_wheel_abi.elf_is_python_extension = _patched_elf_is_python_extension
+          auditwheel_wheel_abi.elf_find_ucs2_symbols = _patched_elf_find_ucs2_symbols
+          auditwheel_wheel_abi.elf_references_pyfpe_jbuf = _patched_elf_references_pyfpe_jbuf
 
           sys.argv = ["auditwheel", *sys.argv[1:]]
           raise SystemExit(auditwheel_main.main())
