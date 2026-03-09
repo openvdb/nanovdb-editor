@@ -233,6 +233,7 @@ jobs:
           echo "Failed to copy Slang libs from cached image; building as usual"
           exit 0
         fi
+        rm -f "${LOCAL_LIB_DIR}"/*.dwarf
 
         if ls "${LOCAL_LIB_DIR}"/libslang*.so* >/dev/null 2>&1; then
           CONTAINER_LIB_DIR="/project${LOCAL_LIB_DIR#${GITHUB_WORKSPACE}}"
@@ -633,6 +634,8 @@ jobs:
                 for lib in sorted(root.rglob(pattern)):
                     if not lib.is_file():
                         continue
+                    if lib.name.endswith(".dwarf"):
+                        continue
                     target = dst / lib.name
                     if target.name in seen:
                         continue
@@ -739,6 +742,7 @@ jobs:
 
         cid="$(docker create "${IMAGE_REF}" /bin/true)"
         docker cp "${cid}:/opt/slang/lib/." "${LOCAL_LIB_DIR}/"
+        rm -f "${LOCAL_LIB_DIR}"/*.dwarf
 
         if ls "${LOCAL_LIB_DIR}"/libslang*.so* >/dev/null 2>&1; then
           CONTAINER_LIB_DIR="/project${LOCAL_LIB_DIR#${GITHUB_WORKSPACE}}"

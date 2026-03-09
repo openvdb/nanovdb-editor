@@ -108,6 +108,8 @@ jobs:
           copied = []
           for pattern in ("libslang*.so*", "libglslang.so*", "libSPIRV.so*"):
               for lib in sorted(src_lib_dir.glob(pattern)):
+                  if lib.name.endswith(".dwarf"):
+                      continue
                   target = dst_lib_dir / lib.name
                   shutil.copy2(lib, target)
                   copied.append(target.name)
@@ -144,7 +146,7 @@ jobs:
               print(f"Missing expected library dir: {src_lib_dir}", file=sys.stderr)
               raise SystemExit(1)
 
-          copied = [p.name for p in sorted(src_lib_dir.iterdir()) if p.is_file()]
+          copied = [p.name for p in sorted(src_lib_dir.iterdir()) if p.is_file() and not p.name.endswith(".dwarf")]
           if not any(name.startswith("libslang-llvm") for name in copied):
               print("libslang-llvm was not found in the provided libs artifact; refusing to publish image", file=sys.stderr)
               raise SystemExit(1)
