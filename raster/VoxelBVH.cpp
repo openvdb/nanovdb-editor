@@ -42,6 +42,7 @@ enum shader
     voxelbvh_nanovdb_find_uppers_slang,
     voxelbvh_nanovdb_init_slang,
     voxelbvh_nanovdb_set_mask_ijkl_slang,
+    voxelbvh_nanovdb_set_value_ijkl_slang,
     voxelbvh_scatter_range_headers_slang,
 
     shader_count
@@ -55,7 +56,7 @@ static const char* s_shader_names[shader_count] = {
     "raster/voxelbvh_nanovdb_find_leaves.slang",    "raster/voxelbvh_nanovdb_find_lowers.slang",
     "raster/voxelbvh_nanovdb_find_root.slang",      "raster/voxelbvh_nanovdb_find_uppers.slang",
     "raster/voxelbvh_nanovdb_init.slang",           "raster/voxelbvh_nanovdb_set_mask_ijkl.slang",
-    "raster/voxelbvh_scatter_range_headers.slang",
+    "raster/voxelbvh_nanovdb_set_value_ijkl.slang", "raster/voxelbvh_scatter_range_headers.slang",
 };
 
 struct voxelbvh_context_t
@@ -503,6 +504,43 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
         }
 
         voxelbvh_nanovdb_add_nodes(compute, queue, voxelbvh_context, nanovdb_inout, nanovdb_word_count);
+    }
+
+    // set grid values to form level masks
+    {
+        pnanovdb_compute_resource_t resources[3u] = {};
+        resources[0u].buffer_transient = constant_transient;
+        resources[1u].buffer_transient = ijkl_transient;
+        resources[2u].buffer_transient = nanovdb_transient;
+
+        pnanovdb_uint32_t workgroup_count = (ijkl_count + 255u) / 256u;
+
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_set_value_ijkl_slang],
+                                 resources, workgroup_count, 1u, 1u, "voxelbvh_nanovdb_set_value_ijkl");
+    }
+
+    // flatten grid value level masks
+    {
+    }
+
+    // allocate list indices for each voxel/tile
+    {
+    }
+
+    // splat lists to grid
+    {
+    }
+
+    // flatten lists
+    {
+    }
+
+    // spread
+    {
+    }
+
+    // merge
+    {
     }
 }
 
