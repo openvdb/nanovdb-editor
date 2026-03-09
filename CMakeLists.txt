@@ -487,24 +487,68 @@ if(SKBUILD)
                     endif()
                 " COMPONENT python_libs)
             else()
-                # Note: libslang-compiler and libslang-glslang have version suffix in filename
-                install(FILES
-                    "${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
-                    "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}.0.${SLANG_VERSION}"
-                    "${Slang_SOURCE_DIR}/lib/libslang-glslang-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
-                    DESTINATION nanovdb_editor/lib
-                    COMPONENT python_libs
-                )
-                file(GLOB SLANG_LLVM_FILES "${Slang_SOURCE_DIR}/lib/libslang-llvm*${CMAKE_SHARED_LIBRARY_SUFFIX}*")
-                if(SLANG_LLVM_FILES)
-                    install(FILES ${SLANG_LLVM_FILES}
+                if(DEFINED NANOVDB_SLANG_IMAGE_LIB_DIR AND NOT "${NANOVDB_SLANG_IMAGE_LIB_DIR}" STREQUAL "" AND EXISTS "${NANOVDB_SLANG_IMAGE_LIB_DIR}")
+                    # When reusing a cached Slang image, prefer its full runtime set
+                    # so all bundled Slang libraries share the same manylinux baseline.
+                    install(CODE "
+                        set(_slang_image_dir \"${NANOVDB_SLANG_IMAGE_LIB_DIR}\")
+                        set(_runtime_dst \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                        file(MAKE_DIRECTORY \"\${_runtime_dst}\")
+
+                        set(_copied_any FALSE)
+                        foreach(pattern
+                            \"\${_slang_image_dir}/libslang*.so*\"
+                            \"\${_slang_image_dir}/libglslang.so*\"
+                            \"\${_slang_image_dir}/libSPIRV.so*\"
+                        )
+                            file(GLOB _matches \${pattern})
+                            foreach(lib \${_matches})
+                                message(STATUS \"Installing cached Slang runtime: \${lib}\")
+                                file(INSTALL \"\${lib}\" DESTINATION \"\${_runtime_dst}\")
+                                set(_copied_any TRUE)
+                            endforeach()
+                        endforeach()
+
+                        if(NOT _copied_any)
+                            message(FATAL_ERROR \"No cached Slang runtime libraries found under ${NANOVDB_SLANG_IMAGE_LIB_DIR}\")
+                        endif()
+
+                        if(NOT EXISTS \"\${_runtime_dst}/libglslang.so.15\")
+                            file(GLOB _glslang_v15 \"\${_runtime_dst}/libglslang.so.15.*\")
+                            if(_glslang_v15)
+                                list(GET _glslang_v15 0 _glslang_src)
+                                message(STATUS \"Creating libglslang.so.15 from \${_glslang_src}\")
+                                file(COPY_FILE \"\${_glslang_src}\" \"\${_runtime_dst}/libglslang.so.15\")
+                            elseif(EXISTS \"\${_runtime_dst}/libglslang.so\")
+                                message(STATUS \"Creating libglslang.so.15 from libglslang.so\")
+                                file(COPY_FILE \"\${_runtime_dst}/libglslang.so\" \"\${_runtime_dst}/libglslang.so.15\")
+                            endif()
+                        endif()
+
+                        if(NOT EXISTS \"\${_runtime_dst}/libSPIRV.so.15\")
+                            file(GLOB _spirv_v15 \"\${_runtime_dst}/libSPIRV.so.15.*\")
+                            if(_spirv_v15)
+                                list(GET _spirv_v15 0 _spirv_src)
+                                message(STATUS \"Creating libSPIRV.so.15 from \${_spirv_src}\")
+                                file(COPY_FILE \"\${_spirv_src}\" \"\${_runtime_dst}/libSPIRV.so.15\")
+                            elseif(EXISTS \"\${_runtime_dst}/libSPIRV.so\")
+                                message(STATUS \"Creating libSPIRV.so.15 from libSPIRV.so\")
+                                file(COPY_FILE \"\${_runtime_dst}/libSPIRV.so\" \"\${_runtime_dst}/libSPIRV.so.15\")
+                            endif()
+                        endif()
+                    " COMPONENT python_libs)
+                else()
+                    # Note: libslang-compiler and libslang-glslang have version suffix in filename
+                    install(FILES
+                        "${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
+                        "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}.0.${SLANG_VERSION}"
+                        "${Slang_SOURCE_DIR}/lib/libslang-glslang-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
                         DESTINATION nanovdb_editor/lib
                         COMPONENT python_libs
                     )
-                elseif(DEFINED NANOVDB_SLANG_IMAGE_LIB_DIR AND NOT "${NANOVDB_SLANG_IMAGE_LIB_DIR}" STREQUAL "" AND EXISTS "${NANOVDB_SLANG_IMAGE_LIB_DIR}")
-                    file(GLOB SLANG_LLVM_IMAGE_FILES "${NANOVDB_SLANG_IMAGE_LIB_DIR}/libslang-llvm*${CMAKE_SHARED_LIBRARY_SUFFIX}*")
-                    if(SLANG_LLVM_IMAGE_FILES)
-                        install(FILES ${SLANG_LLVM_IMAGE_FILES}
+                    file(GLOB SLANG_LLVM_FILES "${Slang_SOURCE_DIR}/lib/libslang-llvm*${CMAKE_SHARED_LIBRARY_SUFFIX}*")
+                    if(SLANG_LLVM_FILES)
+                        install(FILES ${SLANG_LLVM_FILES}
                             DESTINATION nanovdb_editor/lib
                             COMPONENT python_libs
                         )
