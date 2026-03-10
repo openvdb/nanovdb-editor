@@ -240,7 +240,7 @@ jobs:
           rm -rf "${AW_VENV}"
           if python -m venv "${AW_VENV}" >/dev/null 2>&1; then
             if "${AW_VENV}/bin/python" -m pip install --disable-pip-version-check --no-cache-dir --upgrade pip >/dev/null 2>&1 && \
-               "${AW_VENV}/bin/python" -m pip install --disable-pip-version-check --no-cache-dir "auditwheel==6.6.0" "pyelftools==0.31" >/dev/null 2>&1; then
+               "${AW_VENV}/bin/python" -m pip install --index-url https://pypi.org/simple --disable-pip-version-check --no-cache-dir "auditwheel==6.6.0" "pyelftools==0.31" >/dev/null 2>&1; then
               AW_PYTHON="${AW_VENV}/bin/python"
               AW_MODE="python-module"
             else
@@ -716,7 +716,7 @@ jobs:
           rm -rf "${AW_VENV}"
           if python -m venv "${AW_VENV}" >/dev/null 2>&1; then
             if "${AW_VENV}/bin/python" -m pip install --disable-pip-version-check --no-cache-dir --upgrade pip >/dev/null 2>&1 && \
-               "${AW_VENV}/bin/python" -m pip install --disable-pip-version-check --no-cache-dir "auditwheel==6.6.0" "pyelftools==0.31" >/dev/null 2>&1; then
+               "${AW_VENV}/bin/python" -m pip install --index-url https://pypi.org/simple --disable-pip-version-check --no-cache-dir "auditwheel==6.6.0" "pyelftools==0.31" >/dev/null 2>&1; then
               AW_PYTHON="${AW_VENV}/bin/python"
               AW_MODE="python-module"
             else
