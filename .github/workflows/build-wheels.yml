@@ -607,6 +607,10 @@ jobs:
     name: Publish Slang Runtime Image (if missing)
     needs: [build_slang_libraries, resolve_slang_version, lookup_slang_image]
     if: ${{ inputs.manage_slang_image && inputs.linux_x86_build_slang_from_source && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.lookup_slang_image.outputs.exists != 'true' && !cancelled() && !failure() }}
+    permissions:
+      contents: read
+      packages: write
+      actions: read
     uses: ./.github/workflows/build-slang-package-image.yml
     with:
       image_name: ${{ needs.resolve_slang_version.outputs.image_name }}
