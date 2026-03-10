@@ -50,7 +50,7 @@ echo $VULKAN_SDK
 ```
 
 #### Windows
-- vcpkg (optional - recommended for e57 dependency)
+- vcpkg (recommended; required for Windows H.264 support)
 
 ### Dependencies
 
@@ -85,7 +85,9 @@ brew install glfw      # TODO: will be optional for streaming
 
 ```
 #### Windows
-Optionally, the project can use `vcpkg` for dependency management. If `NANOVDB_EDITOR_USE_VCPKG` is set, `vcpkg.json` automatically installs required dependencies.
+The project can use `vcpkg` for dependency management. If `NANOVDB_EDITOR_USE_VCPKG` is set, `vcpkg.json` automatically installs required dependencies.
+
+`NANOVDB_EDITOR_USE_H264` is supported on Windows only when `NANOVDB_EDITOR_USE_VCPKG=ON`. In that configuration, CMake consumes the `openh264` package from `vcpkg` instead of the Unix-only source build path used on Linux.
 
 To set up vcpkg:
 ```bat
@@ -97,6 +99,7 @@ bootstrap-vcpkg.bat
 The following dependencies are automatically managed by `vcpkg.json`:
 - blosc
 - libe57format (and xerces-c dependency)
+- openh264
 
 ### Assets
 Put any data files into the `data` folder, which is linked to the location next to the libraries.
@@ -161,6 +164,8 @@ MSVS_VERSION="Visual Studio 17 2022"
 USE_VCPKG=ON
 VCPKG_ROOT=path/to/vcpkg
 ```
+
+When `USE_VCPKG=ON`, `NANOVDB_EDITOR_USE_H264` defaults to `ON` on Windows. Without `vcpkg`, H.264 remains disabled on Windows because the fallback OpenH264 source build depends on Unix command-line tools.
 
 To select a different profile for Slang compiler (https://github.com/shader-slang/slang/blob/master/source/slang/slang-profile-defs.h):
 ```

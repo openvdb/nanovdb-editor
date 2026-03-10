@@ -369,6 +369,13 @@ if(SKBUILD)
         COMPONENT python_libs
     )
 
+    if(WIN32 AND NANOVDB_EDITOR_USE_H264 AND NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS)
+        install(FILES ${NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS}
+            DESTINATION nanovdb_editor/lib
+            COMPONENT python_libs
+        )
+    endif()
+
     # Install Slang libraries
     if(Slang_ADDED)
         if(WIN32)
