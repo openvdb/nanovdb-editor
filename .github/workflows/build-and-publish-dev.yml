@@ -16,6 +16,11 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+  packages: write
+  actions: read
+
 jobs:
   check_fvdb_requirement:
     uses: ./.github/workflows/fvdb-version-gate.yml
@@ -26,6 +31,8 @@ jobs:
     uses: ./.github/workflows/build-wheels.yml
     with:
       is_dev: true
+      linux_x86_build_slang_from_source: false
+    secrets: inherit
 
   # Dev package upload - publishes to production PyPI with -dev package name
   upload_pypi_dev:
@@ -49,6 +56,10 @@ jobs:
 
   verify_dev_package:
     name: Verify fvdb viewer integration (dev)
+    permissions:
+      contents: read
+      packages: read
+      actions: read
     needs:
       - upload_pypi_dev
       - check_fvdb_requirement
@@ -56,3 +67,4 @@ jobs:
     uses: ./.github/workflows/fvdb-viz-integration.yml
     with:
       package: dev
+    secrets: inherit

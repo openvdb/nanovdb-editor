@@ -19,7 +19,7 @@ set(BUILD_STATIC_LIBS ON CACHE BOOL "Build static libraries" FORCE)
 CPMAddPackage(
     NAME nanovdb
     GITHUB_REPOSITORY AcademySoftwareFoundation/openvdb
-    GIT_TAG 5f0432b3387c169212a009ddaa05fdd703016549
+    GIT_TAG cfba6dff785629c9f02583fde6e38bf845b3509b
     DOWNLOAD_ONLY YES
 )
 
@@ -341,8 +341,11 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
             -DLLVM_ENABLE_LIBXML2=OFF
         BUILD_BYPRODUCTS
             ${LLVM_INSTALLED_CONFIG}
-        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
-        INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target install
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --verbose
+        INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target install --verbose
+        USES_TERMINAL_CONFIGURE TRUE
+        USES_TERMINAL_BUILD TRUE
+        USES_TERMINAL_INSTALL TRUE
     )
 
     # Create the config dirs up-front so SLANG's configure step can resolve LLVM_DIR/Clang_DIR.
@@ -360,7 +363,7 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
     if(UNIX AND NOT APPLE)
         set(SLANG_EP_BUILD_CMD
             ${CMAKE_COMMAND} -E env
-            "LD_LIBRARY_PATH=<BINARY_DIR>/external/miniz:$ENV{LD_LIBRARY_PATH}"
+            "LD_LIBRARY_PATH=<BINARY_DIR>/external/miniz:<BINARY_DIR>/external/miniz/Release:<BINARY_DIR>/Release/lib:$ENV{LD_LIBRARY_PATH}"
             ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
         )
     endif()
@@ -375,6 +378,7 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
             -DCMAKE_BUILD_TYPE=Release
             -DCMAKE_INSTALL_PREFIX=${SLANG_INSTALL_DIR}
             -DCMAKE_INSTALL_LIBDIR=lib
+            -DCMAKE_BUILD_RPATH=<BINARY_DIR>/external/miniz
             -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON
             -DCMAKE_INSTALL_RPATH=\$ORIGIN
             -DCMAKE_POSITION_INDEPENDENT_CODE=ON
@@ -391,6 +395,9 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
             ${SLANG_INSTALLED_LIB}
         BUILD_COMMAND ${SLANG_EP_BUILD_CMD}
         INSTALL_COMMAND ${CMAKE_COMMAND} -DSLANG_EP_BINARY_DIR=<BINARY_DIR> -P ${SLANG_EP_INSTALL_SCRIPT}
+        USES_TERMINAL_CONFIGURE TRUE
+        USES_TERMINAL_BUILD TRUE
+        USES_TERMINAL_INSTALL TRUE
     )
 
     # Match existing variable naming used throughout the project.
