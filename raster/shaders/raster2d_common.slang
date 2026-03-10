@@ -19,7 +19,7 @@ struct constants_t
 
     uint prim_count;
     uint n_isects;
-    uint pad1;
+    uint composite;
     uint pad2;
 
     uint image_origin_w;

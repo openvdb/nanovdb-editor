@@ -242,7 +242,15 @@ pnanovdb_bool_t dispatch_shader_on_nanovdb_array(const pnanovdb_compute_t* compu
                                                  pnanovdb_compute_buffer_t** nanovdb_buffer,
                                                  pnanovdb_compute_buffer_transient_t** readback_buffer)
 {
+    if (!compute || !device || !shader_context)
+    {
+        return PNANOVDB_FALSE;
+    }
     if (!nanovdb_array)
+    {
+        return PNANOVDB_FALSE;
+    }
+    if (image_width <= 0 || image_height <= 0 || !background_image)
     {
         return PNANOVDB_FALSE;
     }
@@ -260,6 +268,10 @@ pnanovdb_bool_t dispatch_shader_on_nanovdb_array(const pnanovdb_compute_t* compu
     pnanovdb_compute_queue_t* queue = compute->device_interface.get_device_queue(device);
     pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
     pnanovdb_compute_context_t* compute_context = compute->device_interface.get_compute_context(queue);
+    if (!queue || !compute_interface || !compute_context)
+    {
+        return PNANOVDB_FALSE;
+    }
 
     if (nanovdb_array && *nanovdb_buffer == nullptr)
     {

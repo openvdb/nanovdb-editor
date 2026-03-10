@@ -100,7 +100,8 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
                         pnanovdb_uint32_t image_height,
                         const pnanovdb_camera_mat_t* view,
                         const pnanovdb_camera_mat_t* projection,
-                        const pnanovdb_raster_shader_params_t* shader_params)
+                        const pnanovdb_raster_shader_params_t* shader_params,
+                        pnanovdb_uint32_t composite)
 {
     if (shader_params == nullptr)
     {
@@ -148,7 +149,7 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
 
         pnanovdb_uint32_t prim_count;
         pnanovdb_uint32_t n_isects;
-        pnanovdb_uint32_t pad1;
+        pnanovdb_uint32_t composite;
         pnanovdb_uint32_t pad2;
 
         pnanovdb_uint32_t image_origin_w;
@@ -208,6 +209,7 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
     constants.sh_stride = data->sh_stride;
     constants.points_grid_dim_x = points_grid_dim.x;
     constants.isects_grid_dim_x = 32768u;
+    constants.composite = composite;
 
     // printf("fx(%f) fy(%f) cx(%f) cy(%f)\n", constants.fx, constants.fy, constants.cx, constants.cy);
 

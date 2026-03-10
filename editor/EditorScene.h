@@ -13,6 +13,7 @@
 
 #include "SceneView.h"
 #include "nanovdb_editor/putil/Editor.h"
+#include "PipelineTypes.h"
 #include "imgui/ImguiWindow.h"
 
 #include <string>
@@ -121,14 +122,22 @@ public:
 
     // To refresh shader params after shader compile
     void reload_shader_params_for_current_view();
+    void reload_shader_params_for_current_view(pnanovdb_pipeline_render_method_t render_method);
 
     // Copy current editor shader params from UI
     void get_shader_params_for_current_view(void* shader_params_data);
+
+    // Copy shader params for a specific scene object
+    void get_shader_params_for_object(pnanovdb_editor_token_t* scene_token,
+                                      pnanovdb_editor_token_t* name_token,
+                                      void* shader_params_data);
 
     // Scene management
     EditorSceneManager* get_scene_manager() const;
     void set_current_scene(pnanovdb_editor_token_t* scene_token);
     pnanovdb_editor_token_t* get_current_scene_token() const;
+    bool rename_scene(pnanovdb_editor_token_t* old_scene_token, pnanovdb_editor_token_t* new_scene_token);
+    bool remove_scene(pnanovdb_editor_token_t* scene_token);
 
     // Get the viewport camera token for the current scene
     pnanovdb_editor_token_t* get_viewport_camera_token() const
@@ -205,14 +214,20 @@ public:
     int get_camera_frustum_index(pnanovdb_editor_token_t* camera_name_token) const;
     void set_camera_frustum_index(pnanovdb_editor_token_t* camera_name_token, int index);
 
-    // Handle NanoVDB load completion
-    void handle_nanovdb_data_load(pnanovdb_compute_array_t* nanovdb_array, const char* filename);
+    void update_scene_tree_after_conversion(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token);
 
-    // Handle Gaussian data load completion
-    void handle_gaussian_data_load(pnanovdb_raster_gaussian_data_t* gaussian_data,
+    void handle_nanovdb_data_load(pnanovdb_editor_token_t* scene,
+                                  pnanovdb_compute_array_t* nanovdb_array,
+                                  const char* filename);
+
+    void handle_gaussian_data_load(pnanovdb_editor_token_t* scene,
+                                   pnanovdb_raster_gaussian_data_t* gaussian_data,
                                    pnanovdb_raster_shader_params_t* raster_params,
                                    const char* filename,
-                                   std::shared_ptr<pnanovdb_raster_gaussian_data_t>& old_gaussian_data_ptr);
+                                   std::shared_ptr<pnanovdb_raster_gaussian_data_t>& old_gaussian_data_ptr,
+                                   pnanovdb_pipeline_type_t process_pipeline = pnanovdb_pipeline_type_noop,
+                                   pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_raster2d,
+                                   const pnanovdb_pipeline_params_t* process_params = nullptr);
 
     // Remove object from scene (UI, loaded data, renderer state, selection)
     bool remove_object(pnanovdb_editor_token_t* scene_token, const char* name);
@@ -230,6 +245,16 @@ public:
     const std::map<uint64_t, CameraViewContext>& get_camera_views() const;
     const std::map<uint64_t, NanoVDBContext>& get_nanovdb_views() const;
     const std::map<uint64_t, GaussianDataContext>& get_gaussian_views() const;
+    std::vector<pnanovdb_editor_token_t*> get_ordered_renderable_views(pnanovdb_editor_token_t* scene_token) const;
+    std::vector<pnanovdb_editor_token_t*> get_ordered_nanovdb_views(pnanovdb_editor_token_t* scene_token) const;
+    std::vector<pnanovdb_editor_token_t*> get_ordered_gaussian_views(pnanovdb_editor_token_t* scene_token) const;
+    bool move_renderable_order(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token, int direction);
+    bool move_renderable_before(pnanovdb_editor_token_t* scene_token,
+                                pnanovdb_editor_token_t* source_name_token,
+                                pnanovdb_editor_token_t* target_name_token);
+
+    //! Add a placeholder NanoVDB entry in the scene tree (for objects whose conversion hasn't completed yet)
+    void add_nanovdb_placeholder(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token);
 
     // Generic map access by type (returns variant of possible map types)
     using ViewMapVariant = std::variant<std::monostate,
@@ -266,8 +291,16 @@ public:
             map_variant);
     }
 
+    void select_render_view(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
+    bool load_nanovdb_file(pnanovdb_editor_token_t* scene, const char* filepath);
+    bool save_nanovdb_file(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name, const char* filepath);
+    bool load_gaussian_file(const char* filepath,
+                            pnanovdb_pipeline_type_t process_pipeline,
+                            pnanovdb_pipeline_type_t render_pipeline,
+                            float voxels_per_unit);
+
 private:
-    void copy_shader_params(SceneObjectType obj_type,
+    void copy_shader_params(pnanovdb_pipeline_render_method_t render_method,
                             void* obj_shader_params,
                             const std::string& obj_shader_name,
                             SyncDirection sync_direction,

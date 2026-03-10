@@ -15,7 +15,6 @@
 #include "nanovdb_editor/putil/Editor.h"
 #include "nanovdb_editor/putil/Raster.h"
 #include "nanovdb_editor/putil/Compute.h"
-#include "nanovdb_editor/putil/WorkerThread.hpp"
 #include "../imgui/UploadBuffer.h"
 
 #include <string>
@@ -145,7 +144,8 @@ public:
                          const pnanovdb_camera_mat_t& projection,
                          uint32_t image_width,
                          uint32_t image_height,
-                         const pnanovdb_raster_shader_params_t* raster_params);
+                         const pnanovdb_raster_shader_params_t* raster_params,
+                         uint32_t composite = 0);
 
     /*!
         \brief Check if renderer is initialized
@@ -180,6 +180,9 @@ public:
         \param imgui_instance ImGui instance for settings and state
         \param editor_scene Scene manager for shader params
         \param scene_manager Scene manager for shader refresh
+        \param composite If non-zero, shader composites over existing texture (for multi-object)
+        \param params_scene_token Optional scene token for per-object shader params (with params_name_token)
+        \param params_name_token Optional name token for per-object shader params (with params_scene_token)
         \return Result of shader dispatch operation
     */
     ShaderDispatchResult dispatch_nanovdb_shader(pnanovdb_compute_array_t* nanovdb_array,
@@ -191,51 +194,10 @@ public:
                                                  uint32_t image_height,
                                                  imgui_instance_user::Instance* imgui_instance,
                                                  EditorScene* editor_scene,
-                                                 EditorSceneManager* scene_manager);
-
-    /*!
-        \brief Start rasterization task
-
-        \param raster_filepath Path to file to rasterize
-        \param voxels_per_unit Voxels per unit for rasterization
-        \param rasterize_to_nanovdb Whether to rasterize to NanoVDB or Gaussian
-        \param editor_scene Scene manager for handling results
-        \param scene_manager Scene manager for shader params
-        \param compute_queue Compute queue for NanoVDB rasterization
-        \param device_queue Device queue for Gaussian rasterization
-        \return true if rasterization was started successfully
-    */
-    bool start_rasterization(const char* raster_filepath,
-                             float voxels_per_unit,
-                             bool rasterize_to_nanovdb,
-                             EditorScene* editor_scene,
-                             class EditorSceneManager* scene_manager);
-
-    /*!
-        \brief Check if rasterization is in progress
-
-        \return true if a rasterization task is running
-    */
-    bool is_rasterizing();
-
-    /*!
-        \brief Get rasterization progress
-
-        \param progress_text Output text describing progress
-        \param progress_value Output progress value (0.0 to 1.0)
-        \return true if rasterization is in progress
-    */
-    bool get_rasterization_progress(std::string& progress_text, float& progress_value);
-
-    /*!
-        \brief Check and handle rasterization completion
-
-        \param editor_scene Scene manager for handling results
-        \param old_gaussian_data_ptr Output parameter for old gaussian data (for deferred destruction)
-        \return true if a task completed this frame (successful or not)
-    */
-    bool handle_rasterization_completion(EditorScene* editor_scene,
-                                         std::shared_ptr<pnanovdb_raster_gaussian_data_t>& old_gaussian_data_ptr);
+                                                 EditorSceneManager* scene_manager,
+                                                 uint32_t composite = 0,
+                                                 pnanovdb_editor_token_t* params_scene_token = nullptr,
+                                                 pnanovdb_editor_token_t* params_name_token = nullptr);
 
 private:
     // Internal structure for camera/editor parameters (mirrored from shader)
@@ -247,7 +209,7 @@ private:
         pnanovdb_camera_mat_t projection;
         uint32_t width;
         uint32_t height;
-        uint32_t pad1;
+        uint32_t composite;
         uint32_t pad2;
     };
 
@@ -256,26 +218,12 @@ private:
 
     // Shader state
     pnanovdb_shader_context_t* m_shader_context = nullptr;
+    std::string m_active_shader_name;
     pnanovdb_compute_buffer_t* m_nanovdb_buffer = nullptr;
     pnanovdb_compute_array_t* m_uploaded_nanovdb_array = nullptr;
     pnanovdb_compute_upload_buffer_t m_compute_upload_buffer;
     pnanovdb_compute_upload_buffer_t m_shader_params_upload_buffer;
     bool m_dispatch_shader = true;
-
-    // Rasterization worker thread
-    pnanovdb_util::WorkerThread m_raster_worker;
-    pnanovdb_util::WorkerThread::TaskId m_raster_task_id = pnanovdb_util::WorkerThread::invalidTaskId();
-
-    // Rasterization state
-    std::string m_pending_raster_filepath;
-    float m_pending_voxel_size = 1.f / 128.f;
-    pnanovdb_raster_gaussian_data_t* m_pending_gaussian_data = nullptr;
-    pnanovdb_raster_context_t* m_pending_raster_ctx = nullptr;
-    pnanovdb_raster_shader_params_t* m_pending_raster_params = nullptr;
-    pnanovdb_compute_array_t* m_pending_nanovdb_array = nullptr;
-    pnanovdb_compute_array_t* m_pending_shader_params_arrays[pnanovdb_raster::shader_param_count];
-    pnanovdb_raster_shader_params_t m_init_raster_shader_params;
-    const pnanovdb_reflect_data_type_t* m_raster_shader_params_data_type = nullptr;
 };
 
 } // namespace pnanovdb_editor

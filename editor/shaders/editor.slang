@@ -4,32 +4,7 @@
 #define PNANOVDB_BUF_HLSL_64
 #include "PNanoVDB.h"
 #include "PNanoVDBExt.h"
-
-struct EditorParams
-{
-    float4 view_inv_x;
-    float4 view_inv_y;
-    float4 view_inv_z;
-    float4 view_inv_w;
-    float4 projection_inv_x;
-    float4 projection_inv_y;
-    float4 projection_inv_z;
-    float4 projection_inv_w;
-
-    float4 view_x;
-    float4 view_y;
-    float4 view_z;
-    float4 view_w;
-    float4 projection_x;
-    float4 projection_y;
-    float4 projection_z;
-    float4 projection_w;
-
-    uint width;
-    uint height;
-    uint pad1;
-    uint pad2;
-};
+#include "editor_params.slang"
 
 struct shader_params_t
 {
@@ -915,6 +890,10 @@ float4 mat_mul(float4 v, float4 x, float4 y, float4 z, float4 w)
 void main(uint3 dispatchThreadID : SV_DispatchThreadID)
 {
     int2 tidx = int2(dispatchThreadID.xy);
+    if (tidx.x >= int(editor_params.width) || tidx.y >= int(editor_params.height))
+    {
+        return;
+    }
 
     float2 ndc = float2(2.f * ((float(tidx.x) + 0.5f) / float(editor_params.width)) - 1.f,
                         -2.f * ((float(tidx.y) + 0.5f) / float(editor_params.height)) + 1.f);
@@ -969,5 +948,9 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
                     (uint(255.f * max(0.f, min(1.f, value.w))) << 24u);
     image_out[(editor_params.height - 1 - tidx.y) * editor_params.width + tidx.x] = rawValue;
 
-    texture_out[tidx] = value;
+    float4 background = (editor_params.composite != 0u) ? texture_out[tidx] : float4(0.f, 0.f, 0.f, 1.f);
+    float4 image_color;
+    image_color.rgb = value.rgb + value.a * background.rgb;
+    image_color.a = value.a * background.a;
+    texture_out[tidx] = image_color;
 }

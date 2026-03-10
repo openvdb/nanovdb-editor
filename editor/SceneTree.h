@@ -48,8 +48,14 @@ private:
                          bool isSelected,
                          float indentSpacing = 0.0f,
                          bool useIndent = false,
-                         pnanovdb_bool_t* visibilityCheckbox = nullptr,
-                         bool* deleteRequested = nullptr);
+                         bool* deleteRequested = nullptr,
+                         bool* moveUpRequested = nullptr,
+                         bool* moveDownRequested = nullptr,
+                         const char* leftBadge = nullptr,
+                         bool badgeVisible = true,
+                         bool* visibilityToggle = nullptr,
+                         uint64_t* dragPayloadId = nullptr,
+                         uint64_t* droppedSourceId = nullptr);
 
     bool renderTreeNodeHeader(const char* label,
                               bool* visibilityCheckbox = nullptr,

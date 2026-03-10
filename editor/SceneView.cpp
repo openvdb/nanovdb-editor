@@ -14,9 +14,35 @@
 #include "ImguiInstance.h"
 
 #include <filesystem>
+#include <algorithm>
+#include <unordered_set>
 
 namespace pnanovdb_editor
 {
+
+static void append_renderable_id(SceneViewData* scene, uint64_t token_id)
+{
+    if (!scene || token_id == 0)
+    {
+        return;
+    }
+    if (std::find(scene->renderable_order.begin(), scene->renderable_order.end(), token_id) ==
+        scene->renderable_order.end())
+    {
+        // New renderables appear at the top of the scene tree
+        scene->renderable_order.insert(scene->renderable_order.begin(), token_id);
+    }
+}
+
+static void erase_renderable_id(SceneViewData* scene, uint64_t token_id)
+{
+    if (!scene || token_id == 0)
+    {
+        return;
+    }
+    auto& order = scene->renderable_order;
+    order.erase(std::remove(order.begin(), order.end(), token_id), order.end());
+}
 
 SceneView::SceneView()
 {
@@ -354,6 +380,7 @@ void SceneView::add_gaussian(pnanovdb_editor_token_t* name_token, const Gaussian
     if (scene)
     {
         scene->gaussians[name_token->id] = ctx;
+        append_renderable_id(scene, name_token->id);
     }
 }
 
@@ -368,6 +395,7 @@ void SceneView::add_gaussian(pnanovdb_editor_token_t* scene_token,
     {
         scene->gaussians[name_token->id] = ctx;
         scene->last_added_view_token_id = name_token->id;
+        append_renderable_id(scene, name_token->id);
         set_current_scene(scene_token);
     }
 }
@@ -412,6 +440,7 @@ void SceneView::add_nanovdb(pnanovdb_editor_token_t* name_token, const NanoVDBCo
     if (scene)
     {
         scene->nanovdbs[name_token->id] = ctx;
+        append_renderable_id(scene, name_token->id);
     }
 }
 
@@ -426,6 +455,7 @@ void SceneView::add_nanovdb(pnanovdb_editor_token_t* scene_token,
     {
         scene->nanovdbs[name_token->id] = ctx;
         scene->last_added_view_token_id = name_token->id;
+        append_renderable_id(scene, name_token->id);
         set_current_scene(scene_token);
     }
 }
@@ -591,11 +621,224 @@ bool SceneView::remove_from_map(MapType SceneViewData::*map_member,
 // Remove view by name (tries all types: camera, nanovdb, gaussian)
 bool SceneView::remove(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token)
 {
+    SceneViewData* scene = scene_token ? get_or_create_scene(scene_token) : get_current_scene();
+    if (scene && name_token)
+    {
+        erase_renderable_id(scene, name_token->id);
+    }
     // Try to remove from all view types, return true if any succeeded
     bool removed = remove_from_map(&SceneViewData::cameras, scene_token, name_token);
     removed = remove_from_map(&SceneViewData::nanovdbs, scene_token, name_token) || removed;
     removed = remove_from_map(&SceneViewData::gaussians, scene_token, name_token) || removed;
     return removed;
+}
+
+std::vector<pnanovdb_editor_token_t*> SceneView::get_ordered_renderable_views(pnanovdb_editor_token_t* scene_token) const
+{
+    std::vector<pnanovdb_editor_token_t*> tokens;
+    const SceneViewData* scene = get_scene(scene_token);
+    if (!scene)
+    {
+        return tokens;
+    }
+
+    std::unordered_set<uint64_t> ordered_ids(scene->renderable_order.begin(), scene->renderable_order.end());
+
+    for (uint64_t id : scene->renderable_order)
+    {
+        const bool exists = (scene->nanovdbs.find(id) != scene->nanovdbs.end()) ||
+                            (scene->gaussians.find(id) != scene->gaussians.end());
+        if (!exists)
+        {
+            continue;
+        }
+        pnanovdb_editor_token_t* token = EditorToken::getInstance().getTokenById(id);
+        if (token)
+        {
+            tokens.push_back(token);
+        }
+    }
+    for (const auto& [id, _] : scene->nanovdbs)
+    {
+        if (ordered_ids.find(id) == ordered_ids.end())
+        {
+            pnanovdb_editor_token_t* token = EditorToken::getInstance().getTokenById(id);
+            if (token)
+            {
+                tokens.push_back(token);
+            }
+        }
+    }
+    for (const auto& [id, _] : scene->gaussians)
+    {
+        if (ordered_ids.find(id) == ordered_ids.end())
+        {
+            pnanovdb_editor_token_t* token = EditorToken::getInstance().getTokenById(id);
+            if (token)
+            {
+                tokens.push_back(token);
+            }
+        }
+    }
+    return tokens;
+}
+
+std::vector<pnanovdb_editor_token_t*> SceneView::get_ordered_nanovdb_views(pnanovdb_editor_token_t* scene_token) const
+{
+    std::vector<pnanovdb_editor_token_t*> tokens;
+    const SceneViewData* scene = get_scene(scene_token);
+    if (!scene)
+    {
+        return tokens;
+    }
+    for (uint64_t id : scene->renderable_order)
+    {
+        if (scene->nanovdbs.find(id) == scene->nanovdbs.end())
+        {
+            continue;
+        }
+        pnanovdb_editor_token_t* token = EditorToken::getInstance().getTokenById(id);
+        if (token)
+        {
+            tokens.push_back(token);
+        }
+    }
+    for (const auto& [id, _] : scene->nanovdbs)
+    {
+        if (std::find(scene->renderable_order.begin(), scene->renderable_order.end(), id) != scene->renderable_order.end())
+        {
+            continue;
+        }
+        pnanovdb_editor_token_t* token = EditorToken::getInstance().getTokenById(id);
+        if (token)
+        {
+            tokens.push_back(token);
+        }
+    }
+    return tokens;
+}
+
+std::vector<pnanovdb_editor_token_t*> SceneView::get_ordered_gaussian_views(pnanovdb_editor_token_t* scene_token) const
+{
+    std::vector<pnanovdb_editor_token_t*> tokens;
+    const SceneViewData* scene = get_scene(scene_token);
+    if (!scene)
+    {
+        return tokens;
+    }
+    for (uint64_t id : scene->renderable_order)
+    {
+        if (scene->gaussians.find(id) == scene->gaussians.end())
+        {
+            continue;
+        }
+        pnanovdb_editor_token_t* token = EditorToken::getInstance().getTokenById(id);
+        if (token)
+        {
+            tokens.push_back(token);
+        }
+    }
+    for (const auto& [id, _] : scene->gaussians)
+    {
+        if (std::find(scene->renderable_order.begin(), scene->renderable_order.end(), id) != scene->renderable_order.end())
+        {
+            continue;
+        }
+        pnanovdb_editor_token_t* token = EditorToken::getInstance().getTokenById(id);
+        if (token)
+        {
+            tokens.push_back(token);
+        }
+    }
+    return tokens;
+}
+
+bool SceneView::move_renderable_order(pnanovdb_editor_token_t* scene_token,
+                                      pnanovdb_editor_token_t* name_token,
+                                      int direction)
+{
+    if (!scene_token || !name_token || (direction != -1 && direction != 1))
+    {
+        return false;
+    }
+    SceneViewData* scene = get_scene(scene_token);
+    if (!scene)
+    {
+        return false;
+    }
+    auto& order = scene->renderable_order;
+    auto it = std::find(order.begin(), order.end(), name_token->id);
+    if (it == order.end())
+    {
+        const bool exists = (scene->nanovdbs.find(name_token->id) != scene->nanovdbs.end()) ||
+                            (scene->gaussians.find(name_token->id) != scene->gaussians.end());
+        if (!exists)
+        {
+            return false;
+        }
+        order.insert(order.begin(), name_token->id);
+        it = std::find(order.begin(), order.end(), name_token->id);
+    }
+    if (direction < 0 && it == order.begin())
+    {
+        return false;
+    }
+    if (direction > 0 && (it + 1) == order.end())
+    {
+        return false;
+    }
+    std::iter_swap(it, it + direction);
+    return true;
+}
+
+bool SceneView::move_renderable_before(pnanovdb_editor_token_t* scene_token,
+                                       pnanovdb_editor_token_t* source_name_token,
+                                       pnanovdb_editor_token_t* target_name_token)
+{
+    if (!scene_token || !source_name_token || !target_name_token || source_name_token->id == target_name_token->id)
+    {
+        return false;
+    }
+    SceneViewData* scene = get_scene(scene_token);
+    if (!scene)
+    {
+        return false;
+    }
+    auto& order = scene->renderable_order;
+    auto src_it = std::find(order.begin(), order.end(), source_name_token->id);
+    auto dst_it = std::find(order.begin(), order.end(), target_name_token->id);
+    if (src_it == order.end() || dst_it == order.end())
+    {
+        const bool src_exists = (scene->nanovdbs.find(source_name_token->id) != scene->nanovdbs.end()) ||
+                                (scene->gaussians.find(source_name_token->id) != scene->gaussians.end());
+        const bool dst_exists = (scene->nanovdbs.find(target_name_token->id) != scene->nanovdbs.end()) ||
+                                (scene->gaussians.find(target_name_token->id) != scene->gaussians.end());
+        if (!src_exists || !dst_exists)
+        {
+            return false;
+        }
+        append_renderable_id(scene, source_name_token->id);
+        append_renderable_id(scene, target_name_token->id);
+        src_it = std::find(order.begin(), order.end(), source_name_token->id);
+        dst_it = std::find(order.begin(), order.end(), target_name_token->id);
+        if (src_it == order.end() || dst_it == order.end())
+        {
+            return false;
+        }
+    }
+    const uint64_t moved = *src_it;
+    if (src_it < dst_it)
+    {
+        dst_it = order.erase(src_it);
+        order.insert(dst_it, moved);
+    }
+    else
+    {
+        order.erase(src_it);
+        dst_it = std::find(order.begin(), order.end(), target_name_token->id);
+        order.insert(dst_it, moved);
+    }
+    return true;
 }
 
 pnanovdb_editor_token_t* SceneView::find_next_available_view(pnanovdb_editor_token_t* scene_token) const
@@ -688,6 +931,43 @@ bool SceneView::remove_scene(pnanovdb_editor_token_t* scene_token)
 
     // Remove the scene from the map (this destroys the SceneViewData)
     m_scene_view_data.erase(it);
+    return true;
+}
+
+bool SceneView::rename_scene(pnanovdb_editor_token_t* old_scene_token, pnanovdb_editor_token_t* new_scene_token)
+{
+    if (!old_scene_token || !new_scene_token)
+    {
+        return false;
+    }
+    if (old_scene_token->id == new_scene_token->id)
+    {
+        return true;
+    }
+    if (m_scene_view_data.find(new_scene_token->id) != m_scene_view_data.end())
+    {
+        return false;
+    }
+
+    auto it = m_scene_view_data.find(old_scene_token->id);
+    if (it == m_scene_view_data.end())
+    {
+        return false;
+    }
+
+    auto node = m_scene_view_data.extract(it);
+    node.key() = new_scene_token->id;
+    m_scene_view_data.insert(std::move(node));
+
+    if (m_current_scene_token && m_current_scene_token->id == old_scene_token->id)
+    {
+        m_current_scene_token = new_scene_token;
+    }
+    if (m_default_scene_token && m_default_scene_token->id == old_scene_token->id)
+    {
+        m_default_scene_token = new_scene_token;
+    }
+
     return true;
 }
 

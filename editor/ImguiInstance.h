@@ -42,20 +42,20 @@
 
 namespace imgui_instance_user
 {
-static const char* s_render_settings_default = "default";
-static const char* s_viewer_profile_name = "viewer";
+inline constexpr const char* s_render_settings_default = "default";
+inline constexpr const char* s_viewer_profile_name = "viewer";
 
 // UI labels
-static const char* RENDER_SETTINGS = "Settings";
-static const char* COMPILER_SETTINGS = "Compiler";
-static const char* PROFILER = "Profiler";
-static const char* CODE_EDITOR = "Shader Editor";
-static const char* CONSOLE = "Log";
-static const char* SHADER_PARAMS = "Shader Params";
-static const char* BENCHMARK = "Benchmark";
-static const char* FILE_HEADER = "File Header";
-static const char* SCENE = "Scenes";
-static const char* PROPERTIES = "Properties";
+inline constexpr const char* RENDER_SETTINGS = "Settings";
+inline constexpr const char* COMPILER_SETTINGS = "Compiler";
+inline constexpr const char* PROFILER = "Profiler";
+inline constexpr const char* CODE_EDITOR = "Shader Editor";
+inline constexpr const char* CONSOLE = "Log";
+inline constexpr const char* SHADER_PARAMS = "Shader Params";
+inline constexpr const char* BENCHMARK = "Benchmark";
+inline constexpr const char* FILE_HEADER = "File Header";
+inline constexpr const char* SCENE = "Scenes";
+inline constexpr const char* PROPERTIES = "Properties";
 
 enum class ShaderSelectionMode : int
 {
@@ -89,7 +89,6 @@ struct PendingState
     std::string viewport_gaussian_view = "";
     std::string viewport_nanovdb_array = "";
     bool update_memory_stats = false;
-    bool update_raster = false;
     bool find_shader_directory = false;
     ShaderSelectionMode shader_selection_mode = ShaderSelectionMode::UseViewportShader;
 };
