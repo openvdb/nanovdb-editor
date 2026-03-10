@@ -203,6 +203,54 @@ jobs:
         sed -i 's/name = "nanovdb-editor"/name = "nanovdb-editor-dev"/' pymodule/pyproject.toml
         cat pymodule/pyproject.toml | grep "name ="
 
+    - name: Seed cibuildwheel virtualenv cache (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $cacheDir = if ($env:CIBW_CACHE_PATH) {
+          $env:CIBW_CACHE_PATH
+        } else {
+          Join-Path $env:LOCALAPPDATA 'pypa\cibuildwheel\Cache'
+        }
+        $target = Join-Path $cacheDir 'virtualenv-20.26.6.pyz'
+        New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
+
+        if (Test-Path $target) {
+          $size = (Get-Item $target).Length
+          if ($size -gt 1024) {
+            Write-Host "Using cached cibuildwheel virtualenv payload at $target ($size bytes)"
+            exit 0
+          }
+          Remove-Item $target -Force
+        }
+
+        $urls = @(
+          'https://raw.githubusercontent.com/pypa/get-virtualenv/20.26.6/public/virtualenv.pyz',
+          'https://github.com/pypa/get-virtualenv/raw/20.26.6/public/virtualenv.pyz',
+          'https://cdn.jsdelivr.net/gh/pypa/get-virtualenv@20.26.6/public/virtualenv.pyz'
+        )
+
+        foreach ($url in $urls) {
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+              Write-Host "Downloading cibuildwheel virtualenv payload from $url (attempt $attempt)"
+              Invoke-WebRequest -Uri $url -OutFile $target
+              $size = (Get-Item $target).Length
+              if ($size -le 1024) {
+                throw "Downloaded file is unexpectedly small ($size bytes)"
+              }
+              Write-Host "Seeded cibuildwheel virtualenv cache at $target ($size bytes)"
+              exit 0
+            } catch {
+              Write-Warning $_
+              Remove-Item $target -Force -ErrorAction SilentlyContinue
+              Start-Sleep -Seconds (5 * $attempt)
+            }
+          }
+        }
+
+        throw "Failed to seed cibuildwheel virtualenv cache for Windows"
+
     - name: Build Linux wheels
       if: runner.os == 'Linux'
       uses: pypa/cibuildwheel@v2.21.3
