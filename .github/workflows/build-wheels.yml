@@ -156,6 +156,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     needs: [validate_version]
     if: ${{ !failure() && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || needs.validate_version.outputs.version_valid == 'true') }}
+    env:
+      CIBW_BUILD: ${{ matrix.cibw_build }}
+      CIBW_BUILD_VERBOSITY: 1
+      CIBW_TEST_REQUIRES: numpy
+      CIBW_TEST_COMMAND: python -c "import nanovdb_editor; print('Import successful')"
+      CIBW_ENVIRONMENT: ${{ matrix.cibw_environment }}
     strategy:
       matrix:
         include:
@@ -255,10 +261,8 @@ jobs:
       if: runner.os == 'Linux'
       uses: pypa/cibuildwheel@v2.21.3
       env:
-        CIBW_BUILD: ${{ matrix.cibw_build }}
         CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_34_x86_64:latest
         CIBW_MANYLINUX_AARCH64_IMAGE: quay.io/pypa/manylinux_2_34_aarch64:latest
-        CIBW_BUILD_VERBOSITY: 1
         CIBW_ARCHS: ${{ matrix.os == 'ubuntu-24.04-arm' && 'aarch64' || 'auto' }}
         # Linux dependencies
         CIBW_BEFORE_ALL_LINUX: |
@@ -456,15 +460,6 @@ jobs:
           echo "Using auditwheel platform from show output: ${AUDITWHEEL_PLAT}"
           run_auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat "${AUDITWHEEL_PLAT}"
 
-        # Install test dependencies before testing
-        CIBW_TEST_REQUIRES: numpy
-
-        # Test the wheels
-        CIBW_TEST_COMMAND: python -c "import nanovdb_editor; print('Import successful')"
-
-        # Mark this as a PyPI build, disable gtests for published wheels
-        # Add retry and timeout settings for CMake downloads
-        CIBW_ENVIRONMENT: ${{ matrix.cibw_environment }}
       with:
         package-dir: pymodule
 
@@ -472,23 +467,11 @@ jobs:
       if: runner.os == 'Windows'
       uses: pypa/cibuildwheel@v2.21.3
       env:
-        CIBW_BUILD: ${{ matrix.cibw_build }}
-        CIBW_BUILD_VERBOSITY: 1
         CIBW_ARCHS_WINDOWS: ${{ matrix.os == 'windows-11-arm' && 'ARM64' || 'auto' }}
         # Windows dependencies
         CIBW_BEFORE_ALL_WINDOWS: |
           python -m pip install cmake
           cmake --version
-
-        # Install test dependencies before testing
-        CIBW_TEST_REQUIRES: numpy
-
-        # Test the wheels
-        CIBW_TEST_COMMAND: python -c "import nanovdb_editor; print('Import successful')"
-
-        # Mark this as a PyPI build, disable gtests for published wheels
-        # Add retry and timeout settings for CMake downloads
-        CIBW_ENVIRONMENT: ${{ matrix.cibw_environment }}
       with:
         package-dir: pymodule
 
