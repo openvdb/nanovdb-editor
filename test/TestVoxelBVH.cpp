@@ -99,8 +99,8 @@ void voxelbvh_test()
     uint64_t* mapped_ijkl = (uint64_t*)compute.map_array(ijkl_array);
     for (uint64_t idx = 0u; idx < ijkl_count; idx++)
     {
-        mapped_ijkl[idx] = uint64_t(rand() & 4095) | (uint64_t(rand() & 4095) << 16u) |
-                           (uint64_t(rand() & 4095) << 32u) | (uint64_t(rand() % 12) << 48u);
+        mapped_ijkl[idx] = (uint64_t(rand() & 4095) << 16u) | (uint64_t(rand() & 4095) << 32u) |
+                           (uint64_t(rand() & 4095) << 48u) | uint64_t(rand() % 12);
     }
 
     pnanovdb_compute_array_t* built_nanovdb_array =
@@ -196,12 +196,13 @@ void voxelbvh_test()
     for (uint64_t idx = 0u; idx < ijkl_count; idx++)
     {
         uint64_t ijkl_raw = mapped_ijkl[idx];
-        pnanovdb_coord_t ijk = { int(ijkl_raw >> 32u) & 0xFFFF, int(ijkl_raw >> 16u) & 0xFFFF, int(ijkl_raw) & 0xFFFF };
+        pnanovdb_coord_t ijk = { int(ijkl_raw >> 48u) & 0xFFFF, int(ijkl_raw >> 32u) & 0xFFFF,
+                                 int(ijkl_raw >> 16u) & 0xFFFF };
         pnanovdb_uint32_t level = 0u;
         pnanovdb_address_t addr = pnanovdb_readaccessor_get_value_address_and_level(
             grid_type, buf, PNANOVDB_REF(acc), PNANOVDB_REF(ijk), PNANOVDB_REF(level));
         pnanovdb_int64_t val = pnanovdb_read_int64(buf, addr);
-        if ((val & (1llu << (ijkl_raw >> 48u))) != 0u)
+        if ((val & (1llu << (ijkl_raw & 0xFFFF))) != 0u)
         {
             val_pass_count++;
         }

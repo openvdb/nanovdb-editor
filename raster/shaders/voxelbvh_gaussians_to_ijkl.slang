@@ -192,10 +192,9 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                         overlap_count++;
                         if (hit_max && write_subidx < 8u)
                         {
-                            uint64_t key = (uint64_t(level) << 48u) | (uint64_t(i) << 32u) |
-                                (uint64_t(j) << 16u) | uint64_t(k);
-                            keys_out[8u * idx + write_subidx] = (uint64_t(j) << 16u) | uint64_t(k) |
-                                (uint64_t(level) << 48u) | (uint64_t(i) << 32u);
+                            uint64_t key = (uint64_t(i) << 48u) | (uint64_t(j) << 32u) |
+                                (uint64_t(k) << 16u) | uint64_t(level);
+                            keys_out[8u * idx + write_subidx] = key;
                             bbox_ids_out[8u * idx + write_subidx] = idx;
                             write_subidx++;
                         }

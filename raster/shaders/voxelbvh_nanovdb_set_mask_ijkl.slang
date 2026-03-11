@@ -45,10 +45,10 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 
     uint2 ijkl_raw = ijkl_in[idx];
     int4 ijkl = int4(
+        int(ijkl_raw.y) >> 16,
         int(ijkl_raw.y << 16) >> 16,
         int(ijkl_raw.x) >> 16,
-        int(ijkl_raw.x << 16) >> 16,
-        int(ijkl_raw.y) >> 16
+        int(ijkl_raw.x << 16) >> 16
     );
 
     pnanovdb_grid_handle_t grid = { pnanovdb_address_null() };
