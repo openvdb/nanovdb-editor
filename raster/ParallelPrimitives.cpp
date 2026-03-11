@@ -70,18 +70,22 @@ enum shader
     radix_sort1_slang,
     radix_sort2_slang,
     radix_sort3_slang,
+    radix_sort1_uint64_slang,
+    radix_sort2_uint64_slang,
+    radix_sort3_uint64_slang,
 
     shader_count
 };
 
 static const char* s_shader_names[shader_count] = {
-    "raster/scan1_max.slang",        "raster/scan1_uint64.slang",     "raster/scan1.slang",
-    "raster/scan2_max.slang",        "raster/scan2_uint64.slang",     "raster/scan2.slang",
-    "raster/scan3_max.slang",        "raster/scan3_uint64.slang",     "raster/scan3.slang",
+    "raster/scan1_max.slang",         "raster/scan1_uint64.slang",       "raster/scan1.slang",
+    "raster/scan2_max.slang",         "raster/scan2_uint64.slang",       "raster/scan2.slang",
+    "raster/scan3_max.slang",         "raster/scan3_uint64.slang",       "raster/scan3.slang",
 
-    "raster/radix_sort_dual1.slang", "raster/radix_sort_dual2.slang", "raster/radix_sort_dual3.slang",
-    "raster/radix_sort_dual4.slang", "raster/radix_sort1.slang",      "raster/radix_sort2.slang",
-    "raster/radix_sort3.slang"
+    "raster/radix_sort_dual1.slang",  "raster/radix_sort_dual2.slang",   "raster/radix_sort_dual3.slang",
+    "raster/radix_sort_dual4.slang",  "raster/radix_sort1.slang",        "raster/radix_sort2.slang",
+    "raster/radix_sort3.slang",       "raster/radix_sort1_uint64.slang", "raster/radix_sort2_uint64.slang",
+    "raster/radix_sort3_uint64.slang"
 };
 
 struct parallel_primitives_context_t
@@ -90,6 +94,10 @@ struct parallel_primitives_context_t
 };
 
 PNANOVDB_CAST_PAIR(pnanovdb_parallel_primitives_context_t, parallel_primitives_context_t)
+
+static void test_radix_sort_key64(const pnanovdb_compute_t*,
+                                  pnanovdb_compute_queue_t*,
+                                  pnanovdb_parallel_primitives_context_t*);
 
 static pnanovdb_parallel_primitives_context_t* create_context(const pnanovdb_compute_t* compute,
                                                               pnanovdb_compute_queue_t* queue)
@@ -121,6 +129,8 @@ static pnanovdb_parallel_primitives_context_t* create_context(const pnanovdb_com
             return nullptr;
         }
     }
+
+    // test_radix_sort_key64(compute, queue, cast(ctx));
 
     return cast(ctx);
 }
@@ -673,6 +683,192 @@ static void radix_sort_dual_key(const pnanovdb_compute_t* compute,
     compute_interface->destroy_buffer(context, constant_buffer);
 }
 
+void radix_sort_key64(const pnanovdb_compute_t* compute,
+                      pnanovdb_compute_queue_t* queue,
+                      pnanovdb_parallel_primitives_context_t* context_in,
+                      pnanovdb_compute_buffer_t* key_inout,
+                      pnanovdb_compute_buffer_t* val_inout,
+                      pnanovdb_uint64_t key_count,
+                      pnanovdb_uint64_t buffer_key_count,
+                      pnanovdb_uint32_t key_bit_count)
+{
+    auto ctx = cast(context_in);
+
+    if (key_count == 0u)
+    {
+        return;
+    }
+
+    pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
+    pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
+
+    pnanovdb_compute_buffer_desc_t buf_desc = {};
+
+    grid_dim_t grid_dim = compute_dispatch_grid_dim((key_count + 1023u) / 1024u);
+
+    struct constants_t
+    {
+        pnanovdb_uint32_t workgroup_count;
+        pnanovdb_uint32_t pass_start;
+        pnanovdb_uint32_t pass_mask;
+        pnanovdb_uint32_t pass_bit_count;
+        pnanovdb_uint32_t counter_count;
+        pnanovdb_uint32_t key_bits_count;
+        pnanovdb_uint32_t key_count;
+        pnanovdb_uint32_t grid_dim_x;
+    };
+    constants_t constants = {};
+    constants.workgroup_count = (key_count + 1023u) / 1024u;
+    constants.pass_start = 0u;
+    constants.pass_mask = 0x0F;
+    constants.pass_bit_count = 4u;
+    constants.counter_count = 16u * constants.workgroup_count;
+    constants.key_bits_count = key_bit_count;
+    constants.key_count = key_count;
+    constants.grid_dim_x = grid_dim.x;
+
+    pnanovdb_uint64_t max_counter_count = 16u * ((buffer_key_count + 1023u) / 1024u);
+
+    // counter buffers
+    buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED;
+    buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+    buf_desc.structure_stride = 4u;
+    buf_desc.size_in_bytes = 65536u;
+    while (buf_desc.size_in_bytes < max_counter_count * 2u * 4u)
+    {
+        buf_desc.size_in_bytes *= 2u;
+    }
+    pnanovdb_compute_buffer_t* counters_a_buffer =
+        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+    pnanovdb_compute_buffer_t* counters_b_buffer =
+        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+
+    // tmp buffers
+    buf_desc.structure_stride = 8u;
+    buf_desc.size_in_bytes = 65536u;
+    while (buf_desc.size_in_bytes < buffer_key_count * 8u)
+    {
+        buf_desc.size_in_bytes *= 2u;
+    }
+    pnanovdb_compute_buffer_t* key_tmp_buffer =
+        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+    buf_desc.structure_stride = 4u;
+    buf_desc.size_in_bytes = 65536u;
+    while (buf_desc.size_in_bytes < buffer_key_count * 4u)
+    {
+        buf_desc.size_in_bytes *= 2u;
+    }
+    pnanovdb_compute_buffer_t* val_tmp_buffer =
+        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+
+    pnanovdb_compute_buffer_transient_t* key_transient =
+        compute_interface->register_buffer_as_transient(context, key_inout);
+    pnanovdb_compute_buffer_transient_t* val_transient =
+        compute_interface->register_buffer_as_transient(context, val_inout);
+
+    pnanovdb_compute_buffer_transient_t* counters_a_transient =
+        compute_interface->register_buffer_as_transient(context, counters_a_buffer);
+    pnanovdb_compute_buffer_transient_t* counters_b_transient =
+        compute_interface->register_buffer_as_transient(context, counters_b_buffer);
+    pnanovdb_compute_buffer_transient_t* key_tmp_transient =
+        compute_interface->register_buffer_as_transient(context, key_tmp_buffer);
+    pnanovdb_compute_buffer_transient_t* val_tmp_transient =
+        compute_interface->register_buffer_as_transient(context, val_tmp_buffer);
+
+    pnanovdb_compute_buffer_transient_t* counters4_a_transient =
+        compute_interface->alias_buffer_transient(context, counters_a_transient, PNANOVDB_COMPUTE_FORMAT_UNKNOWN, 16u);
+    pnanovdb_compute_buffer_transient_t* counters4_b_transient =
+        compute_interface->alias_buffer_transient(context, counters_b_transient, PNANOVDB_COMPUTE_FORMAT_UNKNOWN, 16u);
+
+    pnanovdb_compute_buffer_transient_t* key4_transient =
+        compute_interface->alias_buffer_transient(context, key_transient, PNANOVDB_COMPUTE_FORMAT_UNKNOWN, 32u);
+    pnanovdb_compute_buffer_transient_t* val4_transient =
+        compute_interface->alias_buffer_transient(context, val_transient, PNANOVDB_COMPUTE_FORMAT_UNKNOWN, 16u);
+    pnanovdb_compute_buffer_transient_t* key4_tmp_transient =
+        compute_interface->alias_buffer_transient(context, key_tmp_transient, PNANOVDB_COMPUTE_FORMAT_UNKNOWN, 32u);
+    pnanovdb_compute_buffer_transient_t* val4_tmp_transient =
+        compute_interface->alias_buffer_transient(context, val_tmp_transient, PNANOVDB_COMPUTE_FORMAT_UNKNOWN, 16u);
+
+    pnanovdb_uint32_t pass_count = 2u * ((constants.key_bits_count + 7u) / 8u);
+    for (pnanovdb_uint32_t pass_id = 0u; pass_id < pass_count; pass_id++)
+    {
+        constants.pass_start = 4u * pass_id;
+        constants.pass_bit_count = 0u;
+        if (4u * pass_id < constants.key_bits_count)
+        {
+            constants.pass_bit_count = constants.key_bits_count - 4u * pass_id;
+        }
+        if (constants.pass_bit_count > 4u)
+        {
+            constants.pass_bit_count = 4u;
+        }
+        constants.pass_mask = (1u << constants.pass_bit_count) - 1u;
+
+        // for shared memory reasons, must take a least one pass
+        if (constants.pass_bit_count == 0u)
+        {
+            constants.pass_bit_count = 1u;
+        }
+
+        // constants
+        buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT;
+        buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+        buf_desc.structure_stride = 0u;
+        buf_desc.size_in_bytes = sizeof(constants_t);
+        pnanovdb_compute_buffer_t* constant_buffer =
+            compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &buf_desc);
+
+        // copy constants
+        void* mapped_constants = compute_interface->map_buffer(context, constant_buffer);
+        memcpy(mapped_constants, &constants, sizeof(constants_t));
+        compute_interface->unmap_buffer(context, constant_buffer);
+
+        pnanovdb_compute_buffer_transient_t* constant_transient =
+            compute_interface->register_buffer_as_transient(context, constant_buffer);
+
+        // radix sort 1
+        {
+            pnanovdb_compute_resource_t resources[3u] = {};
+            resources[0u].buffer_transient = (pass_id & 1) == 0u ? key4_transient : key4_tmp_transient;
+            resources[1u].buffer_transient = constant_transient;
+            resources[2u].buffer_transient = counters_a_transient;
+
+            compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[radix_sort1_uint64_slang], resources,
+                                     grid_dim.x, grid_dim.y, grid_dim.z, "radix_sort1_uint64");
+        }
+        // radix sort 2
+        {
+            pnanovdb_compute_resource_t resources[3u] = {};
+            resources[0u].buffer_transient = counters4_a_transient;
+            resources[1u].buffer_transient = constant_transient;
+            resources[2u].buffer_transient = counters4_b_transient;
+
+            compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[radix_sort2_uint64_slang], resources,
+                                     2u, 1u, 1u, "radix_sort2_uint64");
+        }
+        // radix sort 3
+        {
+            pnanovdb_compute_resource_t resources[6u] = {};
+            resources[0u].buffer_transient = (pass_id & 1) == 0u ? key4_transient : key4_tmp_transient;
+            resources[1u].buffer_transient = (pass_id & 1) == 0u ? val4_transient : val4_tmp_transient;
+            resources[2u].buffer_transient = counters_b_transient;
+            resources[3u].buffer_transient = constant_transient;
+            resources[4u].buffer_transient = (pass_id & 1) == 0u ? key_tmp_transient : key_transient;
+            resources[5u].buffer_transient = (pass_id & 1) == 0u ? val_tmp_transient : val_transient;
+
+            compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[radix_sort3_uint64_slang], resources,
+                                     grid_dim.x, grid_dim.y, grid_dim.z, "radix_sort3_uint64");
+        }
+
+        compute_interface->destroy_buffer(context, constant_buffer);
+    }
+
+    compute_interface->destroy_buffer(context, counters_a_buffer);
+    compute_interface->destroy_buffer(context, counters_b_buffer);
+    compute_interface->destroy_buffer(context, key_tmp_buffer);
+    compute_interface->destroy_buffer(context, val_tmp_buffer);
+}
+
 static int radix_sort_array(const pnanovdb_compute_t* compute,
                             pnanovdb_compute_queue_t* queue,
                             pnanovdb_parallel_primitives_context_t* context_in,
@@ -692,8 +888,8 @@ static int radix_sort_array(const pnanovdb_compute_t* compute,
     gpu_array_upload(compute, queue, key_gpu_array, key_inout);
     gpu_array_upload(compute, queue, val_gpu_array, val_inout);
 
-    radix_sort(compute, queue, context_in, key_gpu_array->device_buffer, val_gpu_array->device_buffer, key_count,
-               key_count, key_bit_count);
+    radix_sort_key64(compute, queue, context_in, key_gpu_array->device_buffer, val_gpu_array->device_buffer, key_count,
+                     key_count, key_bit_count);
 
     gpu_array_readback(compute, queue, key_gpu_array, key_inout);
     gpu_array_readback(compute, queue, val_gpu_array, val_inout);
@@ -712,41 +908,49 @@ static int radix_sort_array(const pnanovdb_compute_t* compute,
     return 0;
 }
 
-static void test_radix_sort(const pnanovdb_compute_t* compute,
-                            pnanovdb_compute_queue_t* queue,
-                            pnanovdb_parallel_primitives_context_t* context_in)
+static void test_radix_sort_key64(const pnanovdb_compute_t* compute,
+                                  pnanovdb_compute_queue_t* queue,
+                                  pnanovdb_parallel_primitives_context_t* context_in)
 {
     // test radix sort
-    pnanovdb_uint32_t element_count = ((rand() & 0xFFFF) | ((rand() & 0xFFFF) << 16u)) & 0x00FFFFFF;
+    pnanovdb_uint32_t element_count = 12993895; //((rand() & 0xFFFF) | ((rand() & 0xFFFF) << 16u)) & 0x00FFFFFF;
+    pnanovdb_uint32_t array_count = 8u * ((element_count + 7u) / 8u);
 
-    pnanovdb_compute_array_t* key_arr = compute->create_array(4u, element_count, nullptr);
-    pnanovdb_compute_array_t* val_arr = compute->create_array(4u, element_count, nullptr);
+    pnanovdb_compute_array_t* key_arr = compute->create_array(8u, array_count, nullptr);
+    pnanovdb_compute_array_t* val_arr = compute->create_array(4u, array_count, nullptr);
 
     pnanovdb_uint64_t pre_checksum = 0u;
-    pnanovdb_uint32_t* key_mapped = (pnanovdb_uint32_t*)compute->map_array(key_arr);
+    pnanovdb_uint64_t* key_mapped = (pnanovdb_uint64_t*)compute->map_array(key_arr);
     pnanovdb_uint32_t* val_mapped = (pnanovdb_uint32_t*)compute->map_array(val_arr);
     for (pnanovdb_uint32_t idx = 0u; idx < element_count; idx++)
     {
-        key_mapped[idx] = ((rand() & 0xFFFF) | ((rand() & 0xFFFF) << 16u));
+        key_mapped[idx] = uint64_t(rand() & 0xFFFF) | (uint64_t(rand() & 0xFFFF) << 16u) |
+                          (uint64_t(rand() & 0xFFFF) << 32u) | (uint64_t(rand() & 0xFFFF) << 48u);
+        // key_mapped[idx] = idx;
         val_mapped[idx] = idx;
+
+        if (idx < 32u)
+        {
+            printf("[%u] key(0x%zx) val(%u)\n", idx, key_mapped[idx], val_mapped[idx]);
+        }
 
         pre_checksum += key_mapped[idx];
     }
     compute->unmap_array(key_arr);
     compute->unmap_array(val_arr);
 
-    radix_sort_array(compute, queue, context_in, key_arr, val_arr, element_count, 32u);
+    radix_sort_array(compute, queue, context_in, key_arr, val_arr, element_count, 64u);
 
     pnanovdb_uint32_t old_key = 0u;
     pnanovdb_uint32_t sort_fail_count = 0u;
     pnanovdb_uint64_t post_checksum = 0u;
-    key_mapped = (pnanovdb_uint32_t*)compute->map_array(key_arr);
+    key_mapped = (pnanovdb_uint64_t*)compute->map_array(key_arr);
     val_mapped = (pnanovdb_uint32_t*)compute->map_array(val_arr);
     for (pnanovdb_uint32_t idx = 0u; idx < element_count; idx++)
     {
         if (idx < 32u)
         {
-            printf("[%u] key(%u) val(%u)\n", idx, key_mapped[idx], val_mapped[idx]);
+            printf("[%u] key(0x%zx) val(%u)\n", idx, key_mapped[idx], val_mapped[idx]);
         }
         if (key_mapped[idx] < old_key)
         {
@@ -758,7 +962,7 @@ static void test_radix_sort(const pnanovdb_compute_t* compute,
     compute->unmap_array(key_arr);
     compute->unmap_array(val_arr);
 
-    printf("radix_sort fail_count(%u of %u) pre_checksum(0x%llx) post_checksum(0x%llx)\n", sort_fail_count,
+    printf("radix_sort_key64 fail_count(%u of %u) pre_checksum(0x%llx) post_checksum(0x%llx)\n", sort_fail_count,
            element_count, (unsigned long long int)pre_checksum, (unsigned long long int)post_checksum);
 }
 
@@ -775,6 +979,7 @@ pnanovdb_parallel_primitives_t* pnanovdb_get_parallel_primitives()
     iface.global_scan_max = global_scan_max;
     iface.radix_sort = radix_sort;
     iface.radix_sort_dual_key = radix_sort_dual_key;
+    iface.radix_sort_key64 = radix_sort_key64;
 
     return &iface;
 }
