@@ -17,8 +17,7 @@ StructuredBuffer<float> scales_in;
 
 StructuredBuffer<float> bbox_in;
 
-RWStructuredBuffer<uint> keys_low_out;
-RWStructuredBuffer<uint> keys_high_out;
+RWStructuredBuffer<uint64_t> keys_out;
 RWStructuredBuffer<uint> bbox_ids_out;
 
 bool voxel_ellipsoid_overlap(uint idx, float scale, float3 offset, int3 ijk, uint level)
@@ -195,8 +194,8 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                         {
                             uint64_t key = (uint64_t(level) << 48u) | (uint64_t(i) << 32u) |
                                 (uint64_t(j) << 16u) | uint64_t(k);
-                            keys_low_out[8u * idx + write_subidx] = (uint(j) << 16u) | uint(k);
-                            keys_high_out[8u * idx + write_subidx] = (uint(level) << 16u) | uint(i);
+                            keys_out[8u * idx + write_subidx] = (uint64_t(j) << 16u) | uint64_t(k) |
+                                (uint64_t(level) << 48u) | (uint64_t(i) << 32u);
                             bbox_ids_out[8u * idx + write_subidx] = idx;
                             write_subidx++;
                         }
@@ -224,8 +223,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     // set unused to last key and invalid id
     for (; write_subidx < 8u; write_subidx++)
     {
-        keys_low_out[8u * idx + write_subidx] = ~0u;
-        keys_high_out[8u * idx + write_subidx] = ~0u;
+        keys_out[8u * idx + write_subidx] = ~uint64_t(0u);
         bbox_ids_out[8u * idx + write_subidx] = ~0u;
     }
 }

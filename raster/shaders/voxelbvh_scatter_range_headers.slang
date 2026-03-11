@@ -10,8 +10,7 @@ struct constants_t
 
 ConstantBuffer<constants_t> constants;
 
-StructuredBuffer<uint> keys_low_in;
-StructuredBuffer<uint> keys_high_in;
+StructuredBuffer<uint64_t> keys_in;
 StructuredBuffer<uint> range_starts_in;
 StructuredBuffer<uint> range_scan_in;
 
@@ -35,15 +34,15 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         range_headers_out[2u * alloc_idx + 0u] = idx;
     }
 
-    uint2 key = uint2(keys_low_in[idx], keys_high_in[idx]);
-    uint2 key_cmp = key;
-    if (idx < constants.voxel_count)
+    uint64_t key = keys_in[idx];
+    uint64_t key_cmp = ~key;
+    if (idx + 1u < constants.voxel_count)
     {
-        key_cmp = uint2(keys_low_in[idx + 1u], keys_high_in[idx + 1u]);
+        key_cmp = keys_in[idx + 1u];
     }
 
     uint is_last = 0u;
-    if (key.x != key_cmp.x || key.y != key_cmp.y)
+    if (key != key_cmp)
     {
         is_last = 1u;
     }

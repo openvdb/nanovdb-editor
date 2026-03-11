@@ -659,11 +659,10 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
     buf_desc.size_in_bytes = 6u * 4u;
     pnanovdb_compute_buffer_t* bbox_reduce2_buffer =
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+    buf_desc.size_in_bytes = 8u * constants.voxel_count;
+    pnanovdb_compute_buffer_t* keys_buffer =
+        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
     buf_desc.size_in_bytes = 4u * constants.voxel_count;
-    pnanovdb_compute_buffer_t* keys_low_buffer =
-        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
-    pnanovdb_compute_buffer_t* keys_high_buffer =
-        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
     pnanovdb_compute_buffer_t* bbox_ids_buffer =
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
 
@@ -671,10 +670,8 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
         compute_interface->register_buffer_as_transient(context, bbox_reduce1_buffer);
     pnanovdb_compute_buffer_transient_t* bbox_reduce2_transient =
         compute_interface->register_buffer_as_transient(context, bbox_reduce2_buffer);
-    pnanovdb_compute_buffer_transient_t* keys_low_transient =
-        compute_interface->register_buffer_as_transient(context, keys_low_buffer);
-    pnanovdb_compute_buffer_transient_t* keys_high_transient =
-        compute_interface->register_buffer_as_transient(context, keys_high_buffer);
+    pnanovdb_compute_buffer_transient_t* keys_transient =
+        compute_interface->register_buffer_as_transient(context, keys_buffer);
     pnanovdb_compute_buffer_transient_t* bbox_ids_transient =
         compute_interface->register_buffer_as_transient(context, bbox_ids_buffer);
 
@@ -704,16 +701,15 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
                                  resources, 1u, 1u, 1u, "voxelbvh_gaussians_bbox_reduce2");
     }
     {
-        pnanovdb_compute_resource_t resources[9u] = {};
+        pnanovdb_compute_resource_t resources[8u] = {};
         resources[0u].buffer_transient = constant_transient;
         resources[1u].buffer_transient = means_transient;
         resources[2u].buffer_transient = opacities_transient;
         resources[3u].buffer_transient = quats_transient;
         resources[4u].buffer_transient = scales_transient;
         resources[5u].buffer_transient = bbox_reduce2_transient;
-        resources[6u].buffer_transient = keys_low_transient;
-        resources[7u].buffer_transient = keys_high_transient;
-        resources[8u].buffer_transient = bbox_ids_transient;
+        resources[6u].buffer_transient = keys_transient;
+        resources[7u].buffer_transient = bbox_ids_transient;
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_gaussians_to_ijkl_slang],
                                  resources, constants.workgroup_count, 1u, 1u, "voxelbvh_gaussians_to_ijkl");
@@ -722,9 +718,8 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
     // sort ijk-level requests to bring requests together
     // radix sort
     {
-        ctx->parallel_primitives.radix_sort_dual_key(compute, queue, ctx->parallel_primitives_ctx, keys_low_buffer,
-                                                     keys_high_buffer, bbox_ids_buffer, constants.voxel_count,
-                                                     constants.voxel_count, 32u, 32u);
+        ctx->parallel_primitives.radix_sort_key64(compute, queue, ctx->parallel_primitives_ctx, keys_buffer,
+                                                  bbox_ids_buffer, constants.voxel_count, constants.voxel_count, 64u);
     }
 
     buf_desc.size_in_bytes = 4u * constants.voxel_count;
@@ -746,12 +741,11 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
     // identify range starts
     // voxelbvh_find_range_starts.slang
     {
-        pnanovdb_compute_resource_t resources[5u] = {};
+        pnanovdb_compute_resource_t resources[4u] = {};
         resources[0u].buffer_transient = constant_transient;
-        resources[1u].buffer_transient = keys_low_transient;
-        resources[2u].buffer_transient = keys_high_transient;
-        resources[3u].buffer_transient = range_starts_transient;
-        resources[4u].buffer_transient = range_headers_transient;
+        resources[1u].buffer_transient = keys_transient;
+        resources[2u].buffer_transient = range_starts_transient;
+        resources[3u].buffer_transient = range_headers_transient;
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_find_range_starts_slang],
                                  resources, constants.voxel_workgroup_count, 1u, 1u, "voxelbvh_find_range_starts");
@@ -766,13 +760,12 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
     // scatter range headers
     // voxelbvh_scatter_range_headers.slang
     {
-        pnanovdb_compute_resource_t resources[6u] = {};
+        pnanovdb_compute_resource_t resources[5u] = {};
         resources[0u].buffer_transient = constant_transient;
-        resources[1u].buffer_transient = keys_low_transient;
-        resources[2u].buffer_transient = keys_high_transient;
-        resources[3u].buffer_transient = range_starts_transient;
-        resources[4u].buffer_transient = range_scan_transient;
-        resources[5u].buffer_transient = range_headers_transient;
+        resources[1u].buffer_transient = keys_transient;
+        resources[2u].buffer_transient = range_starts_transient;
+        resources[3u].buffer_transient = range_scan_transient;
+        resources[4u].buffer_transient = range_headers_transient;
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_scatter_range_headers_slang],
                                  resources, constants.voxel_workgroup_count, 1u, 1u, "voxelbvh_scatter_range_headers");
@@ -851,8 +844,7 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
     compute_interface->destroy_buffer(context, constant_buffer);
     compute_interface->destroy_buffer(context, bbox_reduce1_buffer);
     compute_interface->destroy_buffer(context, bbox_reduce2_buffer);
-    compute_interface->destroy_buffer(context, keys_low_buffer);
-    compute_interface->destroy_buffer(context, keys_high_buffer);
+    compute_interface->destroy_buffer(context, keys_buffer);
     compute_interface->destroy_buffer(context, bbox_ids_buffer);
 
     compute_interface->destroy_buffer(context, range_starts_buffer);
