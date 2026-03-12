@@ -216,7 +216,9 @@ set CMAKE_ARGS=%PROJECT_DIR% -B %BUILD_DIR% ^
     %SLANG_PROFILE_ARG%
 
 if defined MSVS_VERSION (
-    cmake -G "%MSVS_VERSION%" -A x64 %CMAKE_ARGS%
+    rem Remove any surrounding quotes from MSVS_VERSION before passing to CMake
+    set "MSVS_GENERATOR=%MSVS_VERSION:"=%"
+    cmake -G "%MSVS_GENERATOR%" -A x64 %CMAKE_ARGS%
 ) else (
     cmake %CMAKE_ARGS%
 )
