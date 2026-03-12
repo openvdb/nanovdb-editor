@@ -50,11 +50,7 @@ echo $VULKAN_SDK
 ```
 
 #### Windows
-- vcpkg (recommended; required for Windows H.264 support), checkout the repository with:
-```bat
-git clone https://github.com/microsoft/vcpkg.git
-```
-
+- vcpkg (recommended; required for Windows H.264 support)
 
 ### Dependencies
 

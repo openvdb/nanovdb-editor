@@ -98,6 +98,14 @@ if not defined MSVS_VERSION (
     echo MSVS_VERSION not set, using default CMake generator
 )
 
+:: vcpkg triplet and CMake -A arch: default x64; use arm64 on Windows ARM64
+set VCPKG_TRIPLET=x64-windows
+set CMAKE_ARCH=x64
+if "%PROCESSOR_ARCHITECTURE%"=="ARM64" (
+    set VCPKG_TRIPLET=arm64-windows
+    set CMAKE_ARCH=ARM64
+)
+
 if "%USE_VCPKG%"=="ON" (
     if not defined VCPKG_ROOT (
         echo VCPKG_ROOT not set, please set path to vcpkg
@@ -106,14 +114,14 @@ if "%USE_VCPKG%"=="ON" (
     )
     :: Install dependencies using vcpkg.json
     if exist %VCPKG_ROOT%\vcpkg.exe (
-        echo -- Installing dependencies with vcpkg...
-        call %VCPKG_ROOT%\vcpkg.exe install --triplet x64-windows
+        echo -- Installing dependencies with vcpkg (triplet %VCPKG_TRIPLET%)...
+        call %VCPKG_ROOT%\vcpkg.exe install --triplet %VCPKG_TRIPLET%
         if errorlevel 1 (
             echo vcpkg install failed
             set BUILD_ERROR=1
             goto Error
         )
-        set VCPKG_PREFIX_PATH=%VCPKG_ROOT%\installed\x64-windows
+        set VCPKG_PREFIX_PATH=%VCPKG_ROOT%\installed\%VCPKG_TRIPLET%
     ) else (
         echo vcpkg.exe not found in %VCPKG_ROOT%
         set BUILD_ERROR=1
@@ -218,7 +226,7 @@ set CMAKE_ARGS=%PROJECT_DIR% -B %BUILD_DIR% ^
 if defined MSVS_VERSION (
     rem Remove any surrounding quotes from MSVS_VERSION before passing to CMake
     set "MSVS_GENERATOR=%MSVS_VERSION:"=%"
-    cmake -G "%MSVS_GENERATOR%" -A x64 %CMAKE_ARGS%
+    cmake -G "%MSVS_GENERATOR%" -A %CMAKE_ARCH% %CMAKE_ARGS%
 ) else (
     cmake %CMAKE_ARGS%
 )

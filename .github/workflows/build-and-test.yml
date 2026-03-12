@@ -157,13 +157,27 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up vcpkg
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git
+          .\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+        env:
+          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+          USE_VCPKG: ON
+
       - name: Build NanoVDB Editor (GLFW disabled)
         run: |
           ./build.bat -rfv
+        env:
+          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+          USE_VCPKG: ON
 
       - name: Build NanoVDB Editor (GLFW enabled)
         run: |
           ./build.bat -rv
+        env:
+          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+          USE_VCPKG: ON
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
