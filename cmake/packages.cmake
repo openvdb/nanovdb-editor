@@ -96,12 +96,12 @@ CPMAddPackage(
         "CMAKE_POSITION_INDEPENDENT_CODE ON"
 )
 endif()
-# When using vcpkg, find_package(Blosc) may create blosc_shared. Alias blosc_static only on
-# non-Windows to avoid linking a shared Blosc without corresponding DLL install rules.
+# When using vcpkg, find_package(Blosc) may create only blosc_shared. Provide a blosc_static
+# alias so targets that link blosc_static succeed. On non-Windows we alias; on Windows
+# we also alias (common with x64-windows/arm64-windows dynamic triplets)—when this
+# resolves to a shared library, the caller is responsible for the Blosc DLL at runtime.
 if(NANOVDB_EDITOR_USE_VCPKG AND TARGET blosc_shared AND NOT TARGET blosc_static)
-    if(NOT WIN32)
-        add_library(blosc_static ALIAS blosc_shared)
-    endif()
+    add_library(blosc_static ALIAS blosc_shared)
 endif()
 
 # Graphics and UI dependencies

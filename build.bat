@@ -121,7 +121,7 @@ if "%USE_VCPKG%"=="ON" (
             set BUILD_ERROR=1
             goto Error
         )
-        set VCPKG_PREFIX_PATH=%VCPKG_ROOT%\installed\%VCPKG_TRIPLET%
+        set VCPKG_PREFIX_PATH=%PROJECT_DIR%vcpkg_installed\%VCPKG_TRIPLET%
     ) else (
         echo vcpkg.exe not found in %VCPKG_ROOT%
         set BUILD_ERROR=1
