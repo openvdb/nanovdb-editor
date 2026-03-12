@@ -370,10 +370,48 @@ if(SKBUILD)
     )
 
     if(WIN32 AND NANOVDB_EDITOR_USE_H264 AND NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS)
-        install(FILES ${NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS}
-            DESTINATION nanovdb_editor/lib
-            COMPONENT python_libs
-        )
+        # Partition OpenH264 runtime DLLs by configuration to avoid installing
+        # both Debug and Release variants with the same filename into the
+        # same destination directory.
+        set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS_GENERIC "")
+        set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS_DEBUG "")
+        set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS_RELEASE "")
+
+        foreach(_dll IN LISTS NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS)
+            if(_dll MATCHES [[[/\\]](Debug|debug)[/\\]])
+                list(APPEND NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS_DEBUG "${_dll}")
+            elseif(_dll MATCHES [[[/\\]](Release|RelWithDebInfo|MinSizeRel|release)[/\\]])
+                list(APPEND NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS_RELEASE "${_dll}")
+            else()
+                list(APPEND NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS_GENERIC "${_dll}")
+            endif()
+        endforeach()
+
+        # Install configuration-agnostic DLLs for all configurations
+        if(NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS_GENERIC)
+            install(FILES ${NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS_GENERIC}
+                DESTINATION nanovdb_editor/lib
+                COMPONENT python_libs
+            )
+        endif()
+
+        # Install Debug-specific DLLs only for Debug configuration
+        if(NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS_DEBUG)
+            install(FILES ${NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS_DEBUG}
+                CONFIGURATIONS Debug
+                DESTINATION nanovdb_editor/lib
+                COMPONENT python_libs
+            )
+        endif()
+
+        # Install Release-like DLLs only for non-Debug configurations
+        if(NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS_RELEASE)
+            install(FILES ${NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS_RELEASE}
+                CONFIGURATIONS Release RelWithDebInfo MinSizeRel
+                DESTINATION nanovdb_editor/lib
+                COMPONENT python_libs
+            )
+        endif()
     endif()
 
     # Install Slang libraries
