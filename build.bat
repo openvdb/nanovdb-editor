@@ -10,7 +10,7 @@ set BUILD_DIR=%PROJECT_DIR%build
 set CONFIG_FILE=config.ini
 set SLANG_DEBUG_OUTPUT=OFF
 set CLEAN_SHADERS=OFF
-set USE_VCPKG=OFF
+if not defined USE_VCPKG set USE_VCPKG=OFF
 set GLFW_ON=ON
 
 set clean_build=0
@@ -112,15 +112,18 @@ if "%USE_VCPKG%"=="ON" (
         set BUILD_ERROR=1
         goto Error
     )
-    :: Install dependencies using vcpkg.json
+    :: Install dependencies using vcpkg.json (run from repo root so manifest is found)
     if exist %VCPKG_ROOT%\vcpkg.exe (
         echo -- Installing dependencies with vcpkg, triplet %VCPKG_TRIPLET%
+        pushd "%PROJECT_DIR%"
         call %VCPKG_ROOT%\vcpkg.exe install --triplet %VCPKG_TRIPLET%
         if errorlevel 1 (
+            popd
             echo vcpkg install failed
             set BUILD_ERROR=1
             goto Error
         )
+        popd
         set VCPKG_PREFIX_PATH=%PROJECT_DIR%vcpkg_installed\%VCPKG_TRIPLET%
     ) else (
         echo vcpkg.exe not found in %VCPKG_ROOT%
