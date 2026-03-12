@@ -9,6 +9,10 @@
 
 cmake_minimum_required(VERSION 3.25 FATAL_ERROR)
 
+if(DEFINED ENV{VCPKG_INSTALLED_DIR})
+    set(VCPKG_INSTALLED_DIR "$ENV{VCPKG_INSTALLED_DIR}" CACHE PATH "Vcpkg installed root (manifest mode)" FORCE)
+endif()
+
 # Set CMake policies to suppress warnings
 if(POLICY CMP0175)
     cmake_policy(SET CMP0175 NEW)
