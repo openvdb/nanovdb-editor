@@ -873,10 +873,19 @@ if(WIN32 AND NANOVDB_EDITOR_USE_VCPKG AND NANOVDB_EDITOR_USE_H264)
             INTERFACE_INCLUDE_DIRECTORIES ${OPENH264_INCLUDE_DIR}
         )
 
-        list(APPEND NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS ${OPENH264_DLL_RELEASE})
-        if(NOT OPENH264_DLL_DEBUG STREQUAL OPENH264_DLL_RELEASE)
-            list(APPEND NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS ${OPENH264_DLL_DEBUG})
+        # Select the appropriate runtime DLL per configuration to avoid
+        # having both Debug and Release openh264.dll copied to the same location.
+        if(OPENH264_DLL_DEBUG AND NOT OPENH264_DLL_DEBUG STREQUAL OPENH264_DLL_RELEASE)
+            # Use Debug DLL for Debug config, Release DLL for all other configs.
+            set(_NANOVDB_EDITOR_OPENH264_RUNTIME_DLL
+                "$<$<CONFIG:Debug>:${OPENH264_DLL_DEBUG}>;$<$<NOT:$<CONFIG:Debug>>:${OPENH264_DLL_RELEASE}>"
+            )
+        else()
+            # Only one distinct DLL path is available; use it for all configs.
+            set(_NANOVDB_EDITOR_OPENH264_RUNTIME_DLL "${OPENH264_DLL_RELEASE}")
         endif()
+
+        list(APPEND NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS "${_NANOVDB_EDITOR_OPENH264_RUNTIME_DLL}")
     else()
         add_library(openh264 STATIC IMPORTED)
         set_target_properties(openh264 PROPERTIES
