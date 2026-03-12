@@ -311,12 +311,22 @@ endif()
 add_sanitizer_support(pnanovdbeditor)
 
 if(WIN32 AND TARGET glfw)
-    add_custom_command(
-        TARGET pnanovdbeditor POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_PROPERTY:glfw,IMPORTED_LOCATION>" "${CMAKE_BINARY_DIR}/$<CONFIG>/glfw3.dll"
-        COMMENT "Copying GLFW DLL"
-    )
+    get_target_property(_glfw_type glfw TYPE)
+    if(_glfw_type STREQUAL "SHARED_IMPORTED" OR _glfw_type STREQUAL "UNKNOWN_IMPORTED")
+        add_custom_command(
+            TARGET pnanovdbeditor POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<TARGET_PROPERTY:glfw,IMPORTED_LOCATION>" "${CMAKE_BINARY_DIR}/$<CONFIG>/glfw3.dll"
+            COMMENT "Copying GLFW DLL"
+        )
+    elseif(TARGET glfw AND _glfw_type STREQUAL "SHARED_LIBRARY")
+        add_custom_command(
+            TARGET pnanovdbeditor POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<TARGET_FILE:glfw>" "${CMAKE_BINARY_DIR}/$<CONFIG>/$<TARGET_FILE_NAME:glfw>"
+            COMMENT "Copying GLFW DLL"
+        )
+    endif()
 endif()
 
 if(NANOVDB_EDITOR_BUILD_TESTS)
@@ -590,12 +600,20 @@ if(SKBUILD)
         PATTERN "__pycache__" EXCLUDE
     )
 
-    # Install GLFW DLL files that were previously copied
+    # Install GLFW DLL files
     if(WIN32 AND TARGET glfw)
-        install(FILES "${CMAKE_BINARY_DIR}/$<CONFIG>/glfw3.dll"
-            DESTINATION nanovdb_editor/lib
-            COMPONENT python_libs
-        )
+        get_target_property(_glfw_install_type glfw TYPE)
+        if(_glfw_install_type STREQUAL "SHARED_LIBRARY")
+            install(FILES "$<TARGET_FILE:glfw>"
+                DESTINATION nanovdb_editor/lib
+                COMPONENT python_libs
+            )
+        else()
+            install(FILES "${CMAKE_BINARY_DIR}/$<CONFIG>/glfw3.dll"
+                DESTINATION nanovdb_editor/lib
+                COMPONENT python_libs
+            )
+        endif()
     endif()
 
     if(TARGET vulkan)
