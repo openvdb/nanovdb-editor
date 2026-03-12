@@ -89,8 +89,8 @@ if "%release%"=="0" (
 
 ::: set env vars from a config file (optional)
 if exist %PROJECT_DIR%%CONFIG_FILE% (
-    for /f "tokens=1,2 delims== eol=#" %%i in (%PROJECT_DIR%%CONFIG_FILE%) do (
-      set %%i=%%j
+    for /f "usebackq tokens=1,* delims== eol=#" %%i in ("%PROJECT_DIR%%CONFIG_FILE%") do (
+      set "%%i=%%j"
     )
 )
 
@@ -216,7 +216,7 @@ set CMAKE_ARGS=%PROJECT_DIR% -B %BUILD_DIR% ^
     %SLANG_PROFILE_ARG%
 
 if defined MSVS_VERSION (
-    cmake -G %MSVS_VERSION% %CMAKE_ARGS%
+    cmake -G "%MSVS_VERSION%" -A x64 %CMAKE_ARGS%
 ) else (
     cmake %CMAKE_ARGS%
 )
