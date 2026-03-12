@@ -67,9 +67,9 @@ In Conda environment:
 
 `- mesalib`
 
-The `NANOVDB_EDITOR_USE_GLFW` option can be disabled when using the editor in haedless and streaming mode only. In that case, `libvulkan.so.1` is built locally to ensure compatibility.
+The `NANOVDB_EDITOR_USE_GLFW` option can be disabled when using the editor in headless and streaming mode only. In that case, `libvulkan.so.1` is built locally to ensure compatibility.
 
-The `NANOVDB_EDITOR_USE_H264` is enabled by default, make sure you have:
+The `NANOVDB_EDITOR_USE_H264` option is enabled by default. Make sure you have:
 ```sh
 sudo apt-get install make
 ```
@@ -158,16 +158,16 @@ Examples:
 ```
 
 #### Windows
-Optionally, rename the config file `config` next to the build script to `config.ini` and fill in the environment variables:
+Optionally, rename the config file `config` next to the build script to `config.ini` and set the environment variables (use unquoted values; `build.bat` passes them to CMake with quotes):
 ```
-MSVS_VERSION="Visual Studio 17 2022"
+MSVS_VERSION=Visual Studio 17 2022
 USE_VCPKG=ON
 VCPKG_ROOT=path/to/vcpkg
 ```
 
 When `USE_VCPKG=ON`, `NANOVDB_EDITOR_USE_H264` defaults to `ON` on Windows. Without `vcpkg`, H.264 remains disabled on Windows because the fallback OpenH264 source build depends on Unix command-line tools.
 
-To select a different profile for Slang compiler (https://github.com/shader-slang/slang/blob/master/source/slang/slang-profile-defs.h):
+To select a different profile for the Slang compiler (https://github.com/shader-slang/slang/blob/master/source/slang/slang-profile-defs.h):
 ```
 SLANG_PROFILE="sm_5_1"
 ```
@@ -249,7 +249,7 @@ Highlights:
 
 `.github/workflows/fvdb-viz-integration.yml` runs on `workflow_dispatch` or `workflow_call` and:
 - Resolves the package stream (release/dev) plus optional wheel artifact.
-- Restores a cached Docker image package with installed latest `fvdb-core` before building and executes the same pytest selector in Docker.
+- Restores a cached Docker image with the latest `fvdb-core` installed, then builds and runs the same pytest selector in Docker.
 
 Use the workflow dispatch inputs in GitHub Actions to pick the stream or supply a wheel artifact.
 
@@ -268,7 +268,7 @@ struct shader_params_t
 };
 ```
 
-Shader parameters can have defined default values in the JSON file:
+Default values for shader parameters can be defined in the JSON file:
 ```json
 {
     "ShaderParams": {
@@ -297,7 +297,7 @@ To display a group of shader parameters from different shaders, define a JSON fi
 
 ## Video Encoding To File
 
-To convert output file to mp4:
+To convert the output to mp4:
 
 ```
 ffmpeg -i input.h264 -c:v copy -f mp4 output.mp4
