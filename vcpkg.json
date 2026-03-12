@@ -7,10 +7,6 @@
     {
       "name": "openh264",
       "platform": "windows"
-    },
-    {
-      "name": "glfw3",
-      "platform": "(windows & arm64)"
     }
   ]
 }
