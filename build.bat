@@ -125,12 +125,15 @@ if "%USE_VCPKG%"=="ON" (
         )
         popd
         set VCPKG_PREFIX_PATH=%PROJECT_DIR%vcpkg_installed\%VCPKG_TRIPLET%
+        set VCPKG_INSTALLED_DIR_ARG=-DVCPKG_INSTALLED_DIR=%PROJECT_DIR%vcpkg_installed
     ) else (
         echo vcpkg.exe not found in %VCPKG_ROOT%
         set BUILD_ERROR=1
         goto Error
     )
     set VCPKG_CMAKE=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake
+) else (
+    set VCPKG_INSTALLED_DIR_ARG=
 )
 
 goto Build
@@ -219,6 +222,7 @@ if defined SLANG_PROFILE (
 set CMAKE_ARGS=%PROJECT_DIR% -B %BUILD_DIR% ^
     -DCMAKE_TOOLCHAIN_FILE=%VCPKG_CMAKE% ^
     -DCMAKE_PREFIX_PATH=%VCPKG_PREFIX_PATH% ^
+    %VCPKG_INSTALLED_DIR_ARG% ^
     -DNANOVDB_EDITOR_USE_VCPKG=%USE_VCPKG% ^
     -DNANOVDB_EDITOR_CLEAN_SHADERS=%CLEAN_SHADERS% ^
     -DNANOVDB_EDITOR_SLANG_DEBUG_OUTPUT=%SLANG_DEBUG_OUTPUT% ^
