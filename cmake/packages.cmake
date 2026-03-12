@@ -222,11 +222,17 @@ if(VulkanHeaders_ADDED)
     )
 endif()
 
-if(NANOVDB_EDITOR_USE_GLFW)
+# On Windows ARM64 with vcpkg, use vcpkg's glfw3 (no prebuilt zip); otherwise CPM
+set(GLFW_USE_VCPKG_WINARM64 OFF)
+if(NANOVDB_EDITOR_USE_VCPKG AND WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "[Aa][Rr][Mm]64")
+    set(GLFW_USE_VCPKG_WINARM64 ON)
+endif()
+
+if(NANOVDB_EDITOR_USE_GLFW AND NOT GLFW_USE_VCPKG_WINARM64)
     set(GLFW_RELEASE 3.4)
     set(GLFW_BASE_URL "https://github.com/glfw/glfw/releases/download/${GLFW_RELEASE}")
 
-    # For Windows and Apple, download pre-built binaries
+    # For Windows and Apple, download pre-built binaries (Windows = x64 only; ARM64 uses vcpkg)
     if(WIN32)
         set(GLFW_URL ${GLFW_BASE_URL}/glfw-${GLFW_RELEASE}.bin.WIN64.zip)
         set(GLFW_PLATFORM_OPTIONS URL ${GLFW_URL})
@@ -249,7 +255,7 @@ if(NANOVDB_EDITOR_USE_GLFW)
     )
 endif()
 
-# Create glfw target immediately to prevent CPM recursion
+# Create glfw target immediately to prevent CPM recursion (or use vcpkg on Windows ARM64)
 if(glfw_ADDED)
     if(WIN32)
         add_library(glfw SHARED IMPORTED)
@@ -269,6 +275,12 @@ if(glfw_ADDED)
         add_library(glfw INTERFACE)
         target_include_directories(glfw INTERFACE ${glfw_SOURCE_DIR}/include)
     endif()
+elseif(GLFW_USE_VCPKG_WINARM64 AND NANOVDB_EDITOR_USE_GLFW)
+    find_package(glfw3 CONFIG REQUIRED)
+    add_library(glfw ALIAS glfw3::glfw3)
+    get_target_property(glfw_inc glfw3::glfw3 INTERFACE_INCLUDE_DIRECTORIES)
+    list(GET glfw_inc 0 glfw_first_inc)
+    get_filename_component(glfw_SOURCE_DIR "${glfw_first_inc}" DIRECTORY)
 endif()
 
 CPMAddPackage(
