@@ -1,5 +1,5 @@
 # Config file for building nanovdb-editor with build.bat
 
-# MSVS_VERSION="Visual Studio 17 2022" (optional; leave unset to let CMake pick an installed generator)
+# MSVS_VERSION=Visual Studio 17 2022 (optional; leave unset to let CMake pick an installed generator)
 USE_VCPKG=OFF
 VCPKG_ROOT=path/to/vcpkg
