@@ -4,6 +4,9 @@
   "dependencies": [
     "blosc",
     "libe57format",
-    "openh264"
+    {
+      "name": "openh264",
+      "platform": "windows"
+    }
   ]
 }
