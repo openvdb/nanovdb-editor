@@ -114,7 +114,7 @@ if "%USE_VCPKG%"=="ON" (
     )
     :: Install dependencies using vcpkg.json
     if exist %VCPKG_ROOT%\vcpkg.exe (
-        echo -- Installing dependencies with vcpkg (triplet %VCPKG_TRIPLET%)...
+        echo -- Installing dependencies with vcpkg, triplet %VCPKG_TRIPLET%
         call %VCPKG_ROOT%\vcpkg.exe install --triplet %VCPKG_TRIPLET%
         if errorlevel 1 (
             echo vcpkg install failed
