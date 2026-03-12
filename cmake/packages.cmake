@@ -96,9 +96,12 @@ CPMAddPackage(
         "CMAKE_POSITION_INDEPENDENT_CODE ON"
 )
 endif()
-# When using vcpkg, find_package(Blosc) already created blosc_shared; alias blosc_static for existing LIBS
+# When using vcpkg, find_package(Blosc) may create blosc_shared. Alias blosc_static only on
+# non-Windows to avoid linking a shared Blosc without corresponding DLL install rules.
 if(NANOVDB_EDITOR_USE_VCPKG AND TARGET blosc_shared AND NOT TARGET blosc_static)
-    add_library(blosc_static ALIAS blosc_shared)
+    if(NOT WIN32)
+        add_library(blosc_static ALIAS blosc_shared)
+    endif()
 endif()
 
 # Graphics and UI dependencies
@@ -837,7 +840,8 @@ if(NANOVDB_EDITOR_E57_FORMAT AND libE57Format_ADDED AND TARGET E57Format)
     set_target_properties(E57Format PROPERTIES POSITION_INDEPENDENT_CODE ON)
 endif()
 
-set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS "")
+set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_DEBUG "")
+set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_RELEASE "")
 
 if(WIN32 AND NANOVDB_EDITOR_USE_VCPKG AND NANOVDB_EDITOR_USE_H264)
     find_path(OPENH264_INCLUDE_DIR
@@ -885,19 +889,16 @@ if(WIN32 AND NANOVDB_EDITOR_USE_VCPKG AND NANOVDB_EDITOR_USE_H264)
             INTERFACE_INCLUDE_DIRECTORIES ${OPENH264_INCLUDE_DIR}
         )
 
-        # Select the appropriate runtime DLL per configuration to avoid
-        # having both Debug and Release openh264.dll copied to the same location.
+        # Store Debug and Release runtime DLL paths separately so install rules
+        # can use CONFIGURATIONS and avoid copying both DLLs to the same destination.
         if(OPENH264_DLL_DEBUG AND NOT OPENH264_DLL_DEBUG STREQUAL OPENH264_DLL_RELEASE)
-            # Use Debug DLL for Debug config, Release DLL for all other configs.
-            set(_NANOVDB_EDITOR_OPENH264_RUNTIME_DLL
-                "$<$<CONFIG:Debug>:${OPENH264_DLL_DEBUG}>;$<$<NOT:$<CONFIG:Debug>>:${OPENH264_DLL_RELEASE}>"
-            )
+            set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_DEBUG "${OPENH264_DLL_DEBUG}")
+            set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_RELEASE "${OPENH264_DLL_RELEASE}")
         else()
-            # Only one distinct DLL path is available; use it for all configs.
-            set(_NANOVDB_EDITOR_OPENH264_RUNTIME_DLL "${OPENH264_DLL_RELEASE}")
+            # Only one distinct DLL; use it for all configs.
+            set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_DEBUG "${OPENH264_DLL_RELEASE}")
+            set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_RELEASE "${OPENH264_DLL_RELEASE}")
         endif()
-
-        list(APPEND NANOVDB_EDITOR_OPENH264_RUNTIME_DLLS "${_NANOVDB_EDITOR_OPENH264_RUNTIME_DLL}")
     else()
         add_library(openh264 STATIC IMPORTED)
         set_target_properties(openh264 PROPERTIES
