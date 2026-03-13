@@ -167,46 +167,68 @@ jobs:
 
       - name: Install Mesa3D lavapipe
         run: |
-          # Download Mesa3D with lavapipe for Windows
-          Write-Host "Downloading Mesa3D lavapipe..."
-          $MesaUrl = "https://github.com/pal1000/mesa-dist-win/releases/download/24.2.7/mesa3d-24.2.7-release-msvc.7z"
-          $MesaArchive = "$env:TEMP\mesa3d.7z"
-          $MesaDir = "$env:TEMP\mesa3d"
+          # Download Mesa lavapipe for Windows x64.
+          Write-Host "Downloading Mesa lavapipe for x64..."
+          $MesaUrl = "https://github.com/mmozeiko/build-mesa/releases/download/26.0.2/mesa-lavapipe-x64-26.0.2.7z"
+          $MesaArchive = "$env:TEMP\mesa-lavapipe-x64.7z"
+          $MesaDir = "$env:TEMP\mesa-lavapipe-x64"
+
+          if (Test-Path $MesaDir) { Remove-Item -Recurse -Force $MesaDir }
+          New-Item -ItemType Directory -Path $MesaDir -Force | Out-Null
 
           Invoke-WebRequest -Uri $MesaUrl -OutFile $MesaArchive
 
-          # Extract Mesa3D
-          Write-Host "Extracting Mesa3D..."
+          # Extract the package.
+          Write-Host "Extracting Mesa..."
           7z x $MesaArchive -o"$MesaDir" -y
 
-          # Verify vulkan_lvp.dll exists
-          $VulkanLvpDll = Join-Path $MesaDir "x64\vulkan_lvp.dll"
-          if (Test-Path $VulkanLvpDll) {
-              Write-Host "Found vulkan_lvp.dll at: $VulkanLvpDll"
-          } else {
-              Write-Host "ERROR: vulkan_lvp.dll not found!"
-              Write-Host "Contents of x64 directory:"
-              Get-ChildItem (Join-Path $MesaDir "x64") | Format-Table Name
+          # Locate lavapipe DLL.
+          $VulkanLvpDll = Get-ChildItem -Path $MesaDir -Recurse -File -Filter "vulkan_lvp.dll" -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if (-not $VulkanLvpDll) {
+              Write-Host "ERROR: vulkan_lvp.dll not found in x64 lavapipe package!"
+              Get-ChildItem -Path $MesaDir -Recurse -File -Filter "vulkan*.dll" -ErrorAction SilentlyContinue |
+                Select-Object -First 50 FullName | Format-Table -AutoSize
               exit 1
           }
+          $MesaBinPath = Split-Path -Parent $VulkanLvpDll.FullName
+          Write-Host "Using lavapipe DLL: $($VulkanLvpDll.FullName)"
+          Write-Host "Using Mesa bin path: $MesaBinPath"
 
-          # Register lavapipe ICD in Windows Registry
-          $VulkanICDPath = Join-Path $MesaDir "x64\lvp_icd.x86_64.json"
-          $RegistryPath = "HKLM:\SOFTWARE\Khronos\Vulkan\Drivers"
-
-          Write-Host "Registering lavapipe ICD in registry..."
-          if (-not (Test-Path $RegistryPath)) {
-              New-Item -Path $RegistryPath -Force | Out-Null
+          # Locate ICD JSON (prefer same directory).
+          $VulkanICDJson = Get-ChildItem -Path $MesaBinPath -File -Filter "lvp_icd*.json" -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if (-not $VulkanICDJson) {
+              $VulkanICDJson = Get-ChildItem -Path $MesaDir -Recurse -File -Filter "lvp_icd*.json" -ErrorAction SilentlyContinue |
+                Select-Object -First 1
           }
-          New-ItemProperty -Path $RegistryPath -Name $VulkanICDPath -Value 0 -PropertyType DWord -Force | Out-Null
+          if (-not $VulkanICDJson) {
+              Write-Host "ERROR: lvp_icd*.json not found in x64 lavapipe package!"
+              Get-ChildItem -Path $MesaDir -Recurse -File -Filter "*.json" -ErrorAction SilentlyContinue |
+                Select-Object -First 50 FullName | Format-Table -AutoSize
+              exit 1
+          }
+          $VulkanICDPath = $VulkanICDJson.FullName
+          Write-Host "Using lavapipe ICD JSON: $VulkanICDPath"
 
-          Write-Host "Registry entry created: $VulkanICDPath"
+          # Prefer env vars so the test job does not rely only on registry state.
+          "VK_ICD_FILENAMES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VK_DRIVER_FILES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-          # Add Mesa to PATH
-          $MesaBinPath = Join-Path $MesaDir "x64"
+          # Best-effort registry registration.
+          try {
+            $RegistryPath = "HKLM:\SOFTWARE\Khronos\Vulkan\Drivers"
+            if (-not (Test-Path $RegistryPath)) { New-Item -Path $RegistryPath -Force | Out-Null }
+            New-ItemProperty -Path $RegistryPath -Name $VulkanICDPath -Value 0 -PropertyType DWord -Force | Out-Null
+            Write-Host "Registry entry created: $VulkanICDPath"
+          } catch {
+            Write-Host "WARNING: Could not write Vulkan ICD registry entry: $($_.Exception.Message)"
+          }
+
+          # Add Mesa to PATH.
           echo "$MesaBinPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-          Write-Host "Lavapipe installed successfully"
+          Write-Host "Lavapipe installed successfully for x64"
 
       - name: Run GTests
         run: |
