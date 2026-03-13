@@ -17,8 +17,9 @@ option(NANOVDB_EDITOR_FORCE_REBUILD_DEPS "Force rebuild all dependencies (clears
 option(NANOVDB_EDITOR_USE_GLFW "Use GLFW, not needed for streaming only, when OFF, Vulkan loadeer is built to ensure streaming compatibility" ON)
 option(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE "Build Slang from source instead of downloading prebuilt binaries (Linux x86 only; intended for wheel builds)" OFF)
 
-# H264 support is disabled on Windows due to openh264 requiring Unix build tools (make, tr, etc.)
-if(WIN32)
+# On Windows, H264 support relies on the vcpkg-packaged OpenH264 library instead
+# of the Unix-only source build used on other platforms.
+if(WIN32 AND NOT NANOVDB_EDITOR_USE_VCPKG)
     option(NANOVDB_EDITOR_USE_H264 "Use H264 support" OFF)
 else()
     option(NANOVDB_EDITOR_USE_H264 "Use H264 support" ON)

@@ -156,6 +156,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     needs: [validate_version]
     if: ${{ !failure() && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || needs.validate_version.outputs.version_valid == 'true') }}
+    env:
+      CIBW_BUILD: ${{ matrix.cibw_build }}
+      CIBW_BUILD_VERBOSITY: 1
+      CIBW_TEST_REQUIRES: numpy
+      CIBW_TEST_COMMAND: python -c "import nanovdb_editor; print('Import successful')"
+      CIBW_ENVIRONMENT: ${{ matrix.cibw_environment }}
     strategy:
       matrix:
         include:
@@ -169,13 +175,13 @@ jobs:
             arch: ""
             cibw_build: "cp311-win_amd64"
             cibw_environment: >
-              CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DFETCHCONTENT_QUIET=OFF"
+              CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_USE_VCPKG=ON -DNANOVDB_EDITOR_USE_H264=ON -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DFETCHCONTENT_QUIET=OFF"
               CPM_SOURCE_CACHE=/tmp/cpm-cache
           - os: windows-11-arm
             arch: ARM64
             cibw_build: "cp311-win_arm64"
             cibw_environment: >
-              CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DFETCHCONTENT_QUIET=OFF"
+              CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_USE_VCPKG=ON -DNANOVDB_EDITOR_USE_H264=ON -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DFETCHCONTENT_QUIET=OFF"
               CPM_SOURCE_CACHE=/tmp/cpm-cache
 
     steps:
@@ -203,15 +209,61 @@ jobs:
         sed -i 's/name = "nanovdb-editor"/name = "nanovdb-editor-dev"/' pymodule/pyproject.toml
         cat pymodule/pyproject.toml | grep "name ="
 
-    - name: Build wheels
+    - name: Seed cibuildwheel virtualenv cache (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $cacheDir = if ($env:CIBW_CACHE_PATH) {
+          $env:CIBW_CACHE_PATH
+        } else {
+          Join-Path $env:LOCALAPPDATA 'pypa\cibuildwheel\Cache'
+        }
+        $target = Join-Path $cacheDir 'virtualenv-20.26.6.pyz'
+        New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
+
+        if (Test-Path $target) {
+          $size = (Get-Item $target).Length
+          if ($size -gt 1024) {
+            Write-Host "Using cached cibuildwheel virtualenv payload at $target ($size bytes)"
+            exit 0
+          }
+          Remove-Item $target -Force
+        }
+
+        $urls = @(
+          'https://raw.githubusercontent.com/pypa/get-virtualenv/20.26.6/public/virtualenv.pyz',
+          'https://github.com/pypa/get-virtualenv/raw/20.26.6/public/virtualenv.pyz',
+          'https://cdn.jsdelivr.net/gh/pypa/get-virtualenv@20.26.6/public/virtualenv.pyz'
+        )
+
+        foreach ($url in $urls) {
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+              Write-Host "Downloading cibuildwheel virtualenv payload from $url (attempt $attempt)"
+              Invoke-WebRequest -Uri $url -OutFile $target
+              $size = (Get-Item $target).Length
+              if ($size -le 1024) {
+                throw "Downloaded file is unexpectedly small ($size bytes)"
+              }
+              Write-Host "Seeded cibuildwheel virtualenv cache at $target ($size bytes)"
+              exit 0
+            } catch {
+              Write-Warning $_
+              Remove-Item $target -Force -ErrorAction SilentlyContinue
+              Start-Sleep -Seconds (5 * $attempt)
+            }
+          }
+        }
+
+        throw "Failed to seed cibuildwheel virtualenv cache for Windows"
+
+    - name: Build Linux wheels
+      if: runner.os == 'Linux'
       uses: pypa/cibuildwheel@v2.21.3
       env:
-        CIBW_BUILD: ${{ matrix.cibw_build }}
         CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_34_x86_64:latest
         CIBW_MANYLINUX_AARCH64_IMAGE: quay.io/pypa/manylinux_2_34_aarch64:latest
-        CIBW_BUILD_VERBOSITY: 1
         CIBW_ARCHS: ${{ matrix.os == 'ubuntu-24.04-arm' && 'aarch64' || 'auto' }}
-        CIBW_ARCHS_WINDOWS: ${{ matrix.os == 'windows-11-arm' && 'ARM64' || 'auto' }}
         # Linux dependencies
         CIBW_BEFORE_ALL_LINUX: |
           if command -v dnf &> /dev/null; then
@@ -223,11 +275,6 @@ jobs:
             yum install -y libXrandr-devel libxcb-devel libxkbcommon-x11-devel libXinerama-devel
             yum install -y miniz miniz-devel
           fi
-          cmake --version
-
-        # Windows dependencies
-        CIBW_BEFORE_ALL_WINDOWS: |
-          python -m pip install cmake
           cmake --version
 
         CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
@@ -413,15 +460,32 @@ jobs:
           echo "Using auditwheel platform from show output: ${AUDITWHEEL_PLAT}"
           run_auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat "${AUDITWHEEL_PLAT}"
 
-        # Install test dependencies before testing
-        CIBW_TEST_REQUIRES: numpy
+      with:
+        package-dir: pymodule
 
-        # Test the wheels
-        CIBW_TEST_COMMAND: python -c "import nanovdb_editor; print('Import successful')"
+    - name: Build Windows wheels
+      if: runner.os == 'Windows'
+      uses: pypa/cibuildwheel@v2.21.3
+      env:
+        CIBW_ARCHS_WINDOWS: ${{ matrix.os == 'windows-11-arm' && 'ARM64' || 'auto' }}
+        # Windows dependencies
+        CIBW_BEFORE_ALL_WINDOWS: |
+          $ErrorActionPreference = 'Stop'
 
-        # Mark this as a PyPI build, disable gtests for published wheels
-        # Add retry and timeout settings for CMake downloads
-        CIBW_ENVIRONMENT: ${{ matrix.cibw_environment }}
+          if (!(Test-Path C:\vcpkg\.git)) {
+            git clone --depth 1 https://github.com/microsoft/vcpkg C:\vcpkg
+            if ($LASTEXITCODE -ne 0 -or !(Test-Path C:\vcpkg\bootstrap-vcpkg.bat)) {
+              throw "Failed to clone vcpkg into C:\vcpkg"
+            }
+          }
+
+          & C:\vcpkg\bootstrap-vcpkg.bat
+          if ($LASTEXITCODE -ne 0 -or !(Test-Path C:\vcpkg\vcpkg.exe)) {
+            throw "Failed to bootstrap vcpkg"
+          }
+
+          python -m pip install cmake
+          cmake --version
       with:
         package-dir: pymodule
 
@@ -607,6 +671,10 @@ jobs:
     name: Publish Slang Runtime Image (if missing)
     needs: [build_slang_libraries, resolve_slang_version, lookup_slang_image]
     if: ${{ inputs.manage_slang_image && inputs.linux_x86_build_slang_from_source && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.lookup_slang_image.outputs.exists != 'true' && !cancelled() && !failure() }}
+    permissions:
+      contents: read
+      packages: write
+      actions: read
     uses: ./.github/workflows/build-slang-package-image.yml
     with:
       image_name: ${{ needs.resolve_slang_version.outputs.image_name }}
