@@ -723,6 +723,24 @@ if(Slang_ADDED)
             else()
                 message(STATUS "slang-llvm library not found, skipping copy")
             endif()
+        elseif(APPLE)
+            add_custom_command(TARGET copy_slang_libs POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    ${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}
+                    ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}
+            )
+
+            foreach(_slang_macos_lib IN ITEMS libslang-compiler libslang-glslang libslang-llvm)
+                if(EXISTS ${Slang_SOURCE_DIR}/lib/${_slang_macos_lib}${CMAKE_SHARED_LIBRARY_SUFFIX})
+                    add_custom_command(TARGET copy_slang_libs POST_BUILD
+                        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                            ${Slang_SOURCE_DIR}/lib/${_slang_macos_lib}${CMAKE_SHARED_LIBRARY_SUFFIX}
+                            ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${_slang_macos_lib}${CMAKE_SHARED_LIBRARY_SUFFIX}
+                    )
+                else()
+                    message(STATUS "${_slang_macos_lib}${CMAKE_SHARED_LIBRARY_SUFFIX} not found, skipping copy")
+                endif()
+            endforeach()
         else()
             # Note: libslang-compiler and libslang-glslang have version suffix in filename (e.g., libslang-compiler-2025.23.1.so)
             add_custom_command(TARGET copy_slang_libs POST_BUILD
