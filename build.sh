@@ -114,8 +114,10 @@ function build_python_module() {
         exit 1
     fi
 
-    PYTHON_CMD="python"
-    if command -v python3 &> /dev/null; then
+    # Prefer the active environment's `python` (e.g. setup-python, venv, conda)
+    if command -v python &> /dev/null; then
+        PYTHON_CMD="python"
+    else
         PYTHON_CMD="python3"
     fi
 
