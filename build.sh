@@ -119,7 +119,7 @@ function build_python_module() {
             major=${ver%%.*}
             rest=${ver#*.}
             minor=${rest%%.*}
-            if [ "$major" -gt 3 ] || { [ "$major" -eq 3 ] && [ "$minor" -ge 8" ]; }; then
+            if [ "$major" -gt 3 ] || { [ "$major" -eq 3 ] && [ "$minor" -ge 8 ]; }; then
                 PYTHON_CMD="$cmd"
                 break
             fi
