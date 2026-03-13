@@ -608,7 +608,7 @@ if(SKBUILD)
                 DESTINATION nanovdb_editor/lib
                 COMPONENT python_libs
             )
-        else()
+        elseif(NOT _glfw_install_type STREQUAL "STATIC_LIBRARY")
             install(FILES "${CMAKE_BINARY_DIR}/$<CONFIG>/glfw3.dll"
                 DESTINATION nanovdb_editor/lib
                 COMPONENT python_libs
