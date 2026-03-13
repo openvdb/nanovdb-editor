@@ -387,21 +387,12 @@ if(SKBUILD)
                 )
             endif()
         elseif(APPLE)
-            install(FILES
-                "${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
-                DESTINATION nanovdb_editor/lib
-                COMPONENT python_libs
-            )
-
-            foreach(_slang_macos_lib IN ITEMS libslang-compiler libslang-glslang libslang-llvm)
-                if(EXISTS "${Slang_SOURCE_DIR}/lib/${_slang_macos_lib}${CMAKE_SHARED_LIBRARY_SUFFIX}")
-                    install(FILES
-                        "${Slang_SOURCE_DIR}/lib/${_slang_macos_lib}${CMAKE_SHARED_LIBRARY_SUFFIX}"
-                        DESTINATION nanovdb_editor/lib
-                        COMPONENT python_libs
-                    )
-                endif()
-            endforeach()
+            install(CODE "
+                set(SLANG_RUNTIME_SOURCE_DIR \"${Slang_SOURCE_DIR}/lib\")
+                set(SLANG_RUNTIME_DEST_DIR \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                set(SLANG_RUNTIME_DYLIB_SUFFIX \"${CMAKE_SHARED_LIBRARY_SUFFIX}\")
+                include(\"${CMAKE_CURRENT_SOURCE_DIR}/cmake/slang_runtime_macos.cmake\")
+            " COMPONENT python_libs)
         else()
             if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
                 # Install all slang libraries using install(CODE) to avoid configure-time path resolution

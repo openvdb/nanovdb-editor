@@ -725,28 +725,13 @@ if(Slang_ADDED)
             endif()
         elseif(APPLE)
             add_custom_command(TARGET copy_slang_libs POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    ${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}
-                    ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}
+                COMMAND ${CMAKE_COMMAND}
+                    -DSLANG_RUNTIME_SOURCE_DIR=${Slang_SOURCE_DIR}/lib
+                    -DSLANG_RUNTIME_DEST_DIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+                    -DSLANG_RUNTIME_DYLIB_SUFFIX=${CMAKE_SHARED_LIBRARY_SUFFIX}
+                    -P ${CMAKE_CURRENT_LIST_DIR}/slang_runtime_macos.cmake
+                COMMENT "Copying macOS Slang runtime libraries"
             )
-
-            foreach(_slang_macos_lib IN ITEMS libslang-compiler libslang-glslang libslang-llvm)
-                if(EXISTS ${Slang_SOURCE_DIR}/lib/${_slang_macos_lib}${CMAKE_SHARED_LIBRARY_SUFFIX})
-                    add_custom_command(TARGET copy_slang_libs POST_BUILD
-                        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                            ${Slang_SOURCE_DIR}/lib/${_slang_macos_lib}${CMAKE_SHARED_LIBRARY_SUFFIX}
-                            ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${_slang_macos_lib}${CMAKE_SHARED_LIBRARY_SUFFIX}
-                    )
-                    # Slang macOS packages ship unversioned filenames even when dependent libraries reference versioned install names
-                    add_custom_command(TARGET copy_slang_libs POST_BUILD
-                        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                            ${Slang_SOURCE_DIR}/lib/${_slang_macos_lib}${CMAKE_SHARED_LIBRARY_SUFFIX}
-                            ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${_slang_macos_lib}.0.${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}
-                    )
-                else()
-                    message(STATUS "${_slang_macos_lib}${CMAKE_SHARED_LIBRARY_SUFFIX} not found, skipping copy")
-                endif()
-            endforeach()
         else()
             # Note: libslang-compiler and libslang-glslang have version suffix in filename (e.g., libslang-compiler-2025.23.1.so)
             add_custom_command(TARGET copy_slang_libs POST_BUILD
