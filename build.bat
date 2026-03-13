@@ -113,10 +113,10 @@ if "%USE_VCPKG%"=="ON" (
         goto Error
     )
     :: Install dependencies using vcpkg.json (run from repo root so manifest is found)
-    if exist %VCPKG_ROOT%\vcpkg.exe (
+    if exist "%VCPKG_ROOT%\vcpkg.exe" (
         echo -- Installing dependencies with vcpkg, triplet %VCPKG_TRIPLET%
         pushd "%PROJECT_DIR%"
-        call %VCPKG_ROOT%\vcpkg.exe install --triplet %VCPKG_TRIPLET%
+        call "%VCPKG_ROOT%\vcpkg.exe" install --triplet %VCPKG_TRIPLET%
         if errorlevel 1 (
             popd
             echo vcpkg install failed
@@ -128,7 +128,7 @@ if "%USE_VCPKG%"=="ON" (
         set VCPKG_INSTALLED_DIR_ARG=-DVCPKG_INSTALLED_DIR=%PROJECT_DIR%vcpkg_installed
         set "VCPKG_INSTALLED_DIR=%PROJECT_DIR%vcpkg_installed"
     ) else (
-        echo vcpkg.exe not found in %VCPKG_ROOT%
+        echo vcpkg.exe not found in "%VCPKG_ROOT%"
         set BUILD_ERROR=1
         goto Error
     )
