@@ -269,6 +269,8 @@ jobs:
           echo "Found MoltenVK ICD: ${MOLTENVK_ICD}"
           echo "VK_ICD_FILENAMES=${MOLTENVK_ICD}" >> "${GITHUB_ENV}"
           echo "VK_DRIVER_FILES=${MOLTENVK_ICD}" >> "${GITHUB_ENV}"
+          echo "DYLD_LIBRARY_PATH=${BREW_PREFIX}/lib:${DYLD_LIBRARY_PATH:-}" >> "${GITHUB_ENV}"
+          echo "DYLD_FALLBACK_LIBRARY_PATH=${BREW_PREFIX}/lib:${DYLD_FALLBACK_LIBRARY_PATH:-}" >> "${GITHUB_ENV}"
 
       - name: Download package with nanovdb_editor
         uses: actions/download-artifact@v4
