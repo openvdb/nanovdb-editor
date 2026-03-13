@@ -73,6 +73,70 @@ jobs:
           export LD_LIBRARY_PATH=$PWD/build/Release/lib:$PWD/build/Release/bin:$LD_LIBRARY_PATH
           ctest --test-dir build/Release/gtests -C Release --output-on-failure --verbose
 
+  nanovdb-editor-build-and-test-macos:
+    name: Build and Test (macOS)
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Vulkan dependencies
+        run: |
+          set -euo pipefail
+          brew install molten-vk
+
+          BREW_PREFIX="$(brew --prefix)"
+          MOLTENVK_ICD="$(python3 - <<'PY' "${BREW_PREFIX}"
+          import os
+          import sys
+
+          root = sys.argv[1]
+          for dirpath, _, filenames in os.walk(root):
+              if "MoltenVK_icd.json" in filenames:
+                  print(os.path.join(dirpath, "MoltenVK_icd.json"))
+                  raise SystemExit(0)
+          print("")
+          PY
+          )"
+
+          if [ -z "${MOLTENVK_ICD}" ]; then
+            echo "ERROR: MoltenVK_icd.json not found under ${BREW_PREFIX}" >&2
+            exit 1
+          fi
+
+          echo "Found MoltenVK ICD: ${MOLTENVK_ICD}"
+          echo "VK_ICD_FILENAMES=${MOLTENVK_ICD}" >> "${GITHUB_ENV}"
+          echo "VK_DRIVER_FILES=${MOLTENVK_ICD}" >> "${GITHUB_ENV}"
+
+      - name: Build NanoVDB Editor (GLFW disabled)
+        run: |
+          set -e
+          chmod +x ./build.sh
+          ./build.sh -rfv
+
+      - name: Build NanoVDB Editor (GLFW enabled)
+        run: |
+          set -e
+          chmod +x ./build.sh
+          ./build.sh -rv
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanovdb-editor-build-macos
+          path: |
+            build/
+          retention-days: 2
+
+      - name: Run GTests
+        run: |
+          set -e
+          export DYLD_LIBRARY_PATH="$PWD/build/Release/lib:$PWD/build/Release/bin:${DYLD_LIBRARY_PATH:-}"
+          ctest --test-dir build/Release/gtests -C Release --output-on-failure --verbose
+
   nanovdb-editor-build-and-test-windows:
     name: Build and Test (Windows)
     runs-on: windows-latest
