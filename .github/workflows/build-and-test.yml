@@ -169,8 +169,8 @@ jobs:
         run: |
           # Download Mesa lavapipe for Windows x64.
           Write-Host "Downloading Mesa lavapipe for x64..."
-          $MesaUrl = "https://github.com/mmozeiko/build-mesa/releases/download/26.0.2/mesa-lavapipe-x64-26.0.2.7z"
-          $MesaArchive = "$env:TEMP\mesa-lavapipe-x64.7z"
+          $MesaUrl = "https://github.com/mmozeiko/build-mesa/releases/download/24.3.1/mesa-lavapipe-x64-24.3.1.zip"
+          $MesaArchive = "$env:TEMP\mesa-lavapipe-x64.zip"
           $MesaDir = "$env:TEMP\mesa-lavapipe-x64"
 
           if (Test-Path $MesaDir) { Remove-Item -Recurse -Force $MesaDir }
@@ -180,7 +180,7 @@ jobs:
 
           # Extract the package.
           Write-Host "Extracting Mesa..."
-          7z x $MesaArchive -o"$MesaDir" -y
+          Expand-Archive -Path $MesaArchive -DestinationPath $MesaDir -Force
 
           # Locate lavapipe DLL.
           $VulkanLvpDll = Get-ChildItem -Path $MesaDir -Recurse -File -Filter "vulkan_lvp.dll" -ErrorAction SilentlyContinue |
@@ -210,6 +210,11 @@ jobs:
           }
           $VulkanICDPath = $VulkanICDJson.FullName
           Write-Host "Using lavapipe ICD JSON: $VulkanICDPath"
+
+          # Point the manifest at the extracted driver DLL explicitly.
+          $IcdContent = Get-Content $VulkanICDPath -Raw | ConvertFrom-Json
+          $IcdContent.ICD.library_path = $VulkanLvpDll.FullName
+          $IcdContent | ConvertTo-Json -Depth 10 | Set-Content $VulkanICDPath -Encoding UTF8
 
           # Prefer env vars so the test job does not rely only on registry state.
           "VK_ICD_FILENAMES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
