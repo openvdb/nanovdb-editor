@@ -5,7 +5,6 @@ from nanovdb_editor import Compiler, Compute, CompileTarget, MemoryBuffer
 from ctypes import *
 
 import os
-import sys
 import gc
 import numpy as np
 import unittest
@@ -41,14 +40,27 @@ class TestDispatch(unittest.TestCase):
         compute.device_interface().create_device_manager()
         compute.device_interface().create_device()
 
-        compiler.compile_shader(TEST_SHADER, entry_point_name="computeMain")
+        compile_success = compiler.compile_shader(TEST_SHADER, entry_point_name="computeMain")
+        self.assertTrue(
+            compile_success,
+            msg=(
+                f"Shader compilation failed for {TEST_SHADER}\n"
+                f"Compiler diagnostics:\n{compiler.get_diagnostics() or '<none>'}"
+            ),
+        )
 
         input_array = compute.create_array(self.input_data)
         constants_array = compute.create_array(self.constants_data)
         output_array = compute.create_array(self.output_data)
 
         success = compute.dispatch_shader_on_array(TEST_SHADER, (1, 1, 1), input_array, constants_array, output_array)
-        self.assertTrue(success)
+        self.assertTrue(
+            success,
+            msg=(
+                f"Shader dispatch failed for {TEST_SHADER}\n"
+                f"Compiler diagnostics:\n{compiler.get_diagnostics() or '<none>'}"
+            ),
+        )
 
         result = compute.map_array(output_array, self.array_dtype)
         self.assertIsNotNone(result)

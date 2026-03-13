@@ -82,10 +82,17 @@ class TestMatrix(unittest.TestCase):
             input_data = np.zeros(len(constants_data), dtype=array_dtype_out)
             output_data = np.zeros(len(constants_data), dtype=array_dtype_out)
 
-            self.compiler.compile_shader(
+            compile_success = self.compiler.compile_shader(
                 test_shader,
                 entry_point_name="computeMain",
                 is_row_major=is_row_major,
+            )
+            self.assertTrue(
+                compile_success,
+                msg=(
+                    f"Shader compilation failed for {test_shader}\n"
+                    f"Compiler diagnostics:\n{self.compiler.get_diagnostics() or '<none>'}"
+                ),
             )
 
             input_array = self.compute.create_array(input_data)
@@ -100,7 +107,13 @@ class TestMatrix(unittest.TestCase):
                     constants_array,
                     output_array,
                 )
-                self.assertTrue(success)
+                self.assertTrue(
+                    success,
+                    msg=(
+                        f"Shader dispatch failed for {test_shader}\n"
+                        f"Compiler diagnostics:\n{self.compiler.get_diagnostics() or '<none>'}"
+                    ),
+                )
                 result = self.compute.map_array(output_array, array_dtype_out)
                 self.assertIsNotNone(result)
                 self._assert_matrix_result(test_shader, is_row_major, result)
@@ -114,11 +127,18 @@ class TestMatrix(unittest.TestCase):
             input_data = np.zeros(len(constants_data), dtype=array_dtype_out)
             output_data = np.zeros(len(constants_data), dtype=array_dtype_out)
 
-            self.compiler.compile_shader(
+            compile_success = self.compiler.compile_shader(
                 test_shader,
                 entry_point_name="computeMain",
                 compile_target=CompileTarget.CPU,
                 is_row_major=is_row_major,
+            )
+            self.assertTrue(
+                compile_success,
+                msg=(
+                    f"CPU shader compilation failed for {test_shader}\n"
+                    f"Compiler diagnostics:\n{self.compiler.get_diagnostics() or '<none>'}"
+                ),
             )
 
             class Constants(Structure):
