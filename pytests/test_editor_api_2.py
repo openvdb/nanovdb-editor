@@ -67,10 +67,21 @@ class TestEditorAPI2:
             self.editor.start(self.config)
             sleep(0.5)
         except Exception as exc:
+            diagnostics = self.compiler.get_diagnostics() or "<none>"
             raise AssertionError(
-                "Editor API 2 startup failed.\n"
-                f"Compiler diagnostics:\n{self.compiler.get_diagnostics() or '<none>'}"
+                "Editor API 2 startup failed (exception during start).\n"
+                f"Compiler diagnostics:\n{diagnostics}"
             ) from exc
+
+        # Post-start check: if the compiler reports diagnostics even though
+        # Editor.start() did not raise, treat this as a startup failure.
+        diagnostics = self.compiler.get_diagnostics()
+        if diagnostics:
+            raise AssertionError(
+                "Editor API 2 startup reported diagnostics without raising; "
+                "treating this as a startup failure.\n"
+                f"Compiler diagnostics:\n{diagnostics}"
+            )
 
     def test_get_token(self):
         """Test get_token API - creates and returns unique tokens for names."""
