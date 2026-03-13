@@ -312,14 +312,15 @@ add_sanitizer_support(pnanovdbeditor)
 
 if(WIN32 AND TARGET glfw)
     get_target_property(_glfw_type glfw TYPE)
-    if(_glfw_type STREQUAL "SHARED_IMPORTED" OR _glfw_type STREQUAL "UNKNOWN_IMPORTED")
+    get_target_property(_glfw_imported glfw IMPORTED)
+    if(_glfw_imported AND (_glfw_type STREQUAL "SHARED_LIBRARY" OR _glfw_type STREQUAL "UNKNOWN_LIBRARY"))
         add_custom_command(
             TARGET pnanovdbeditor POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "$<TARGET_PROPERTY:glfw,IMPORTED_LOCATION>" "${CMAKE_BINARY_DIR}/$<CONFIG>/glfw3.dll"
             COMMENT "Copying GLFW DLL"
         )
-    elseif(TARGET glfw AND _glfw_type STREQUAL "SHARED_LIBRARY")
+    elseif(_glfw_type STREQUAL "SHARED_LIBRARY")
         add_custom_command(
             TARGET pnanovdbeditor POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
