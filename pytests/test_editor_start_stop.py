@@ -32,6 +32,14 @@ def test_editor_start_stop():
         editor.start(config)
         # Give the editor a brief moment to initialize
         sleep(0.5)
+        # Explicitly assert that startup succeeded, even if Editor.start()
+        # swallowed internal exceptions.
+        diagnostics = compiler.get_diagnostics()
+        if diagnostics:
+            raise AssertionError(
+                "Editor failed to start.\n"
+                f"Compiler diagnostics:\n{diagnostics}"
+            )
     except Exception as exc:
         raise AssertionError(
             "Editor start/stop failed.\n"
