@@ -6,12 +6,14 @@ from nanovdb_editor import (
     Compute,
     CompileTarget,
     MemoryBuffer,
+    OptimizationLevel,
 )
 from ctypes import Structure, c_float, c_void_p, addressof
 
 import os
 import gc
 import numpy as np
+import platform
 import unittest
 from parameterized import parameterized
 
@@ -51,6 +53,10 @@ TEST_CASES = [
 ]
 
 
+def cpu_target_supported():
+    return platform.machine().lower() not in {"arm64", "aarch64"}
+
+
 class TestMatrix(unittest.TestCase):
     def setUp(self):
         self.compiler = Compiler()
@@ -82,10 +88,18 @@ class TestMatrix(unittest.TestCase):
             input_data = np.zeros(len(constants_data), dtype=array_dtype_out)
             output_data = np.zeros(len(constants_data), dtype=array_dtype_out)
 
-            self.compiler.compile_shader(
+            compile_success = self.compiler.compile_shader(
                 test_shader,
                 entry_point_name="computeMain",
                 is_row_major=is_row_major,
+            )
+            self.assertTrue(
+                compile_success,
+                msg=(
+                    f"Shader compilation failed for {test_shader}\n"
+                    "Compiler diagnostics:\n"
+                    f"{self.compiler.get_diagnostics() or '<none>'}"
+                ),
             )
 
             input_array = self.compute.create_array(input_data)
@@ -100,7 +114,14 @@ class TestMatrix(unittest.TestCase):
                     constants_array,
                     output_array,
                 )
-                self.assertTrue(success)
+                self.assertTrue(
+                    success,
+                    msg=(
+                        f"Shader dispatch failed for {test_shader}\n"
+                        "Compiler diagnostics:\n"
+                        f"{self.compiler.get_diagnostics() or '<none>'}"
+                    ),
+                )
                 result = self.compute.map_array(output_array, array_dtype_out)
                 self.assertIsNotNone(result)
                 self._assert_matrix_result(test_shader, is_row_major, result)
@@ -111,14 +132,30 @@ class TestMatrix(unittest.TestCase):
                 self.compute.destroy_array(output_array)
 
         elif target == CompileTarget.CPU:
+            if not cpu_target_supported():
+                self.skipTest(
+                    "CPU shader target is not bundled on ARM platforms"
+                )
+
             input_data = np.zeros(len(constants_data), dtype=array_dtype_out)
             output_data = np.zeros(len(constants_data), dtype=array_dtype_out)
 
-            self.compiler.compile_shader(
+            compile_success = self.compiler.compile_shader(
                 test_shader,
                 entry_point_name="computeMain",
                 compile_target=CompileTarget.CPU,
                 is_row_major=is_row_major,
+                # Slang's optimized CPU matrix codegen is unstable on Linux CI.
+                # This test validates layout correctness, not optimization.
+                optimization_level=OptimizationLevel.NONE,
+            )
+            self.assertTrue(
+                compile_success,
+                msg=(
+                    f"CPU shader compilation failed for {test_shader}\n"
+                    "Compiler diagnostics:\n"
+                    f"{self.compiler.get_diagnostics() or '<none>'}"
+                ),
             )
 
             class Constants(Structure):
@@ -129,7 +166,9 @@ class TestMatrix(unittest.TestCase):
                 ]
 
             constants = Constants()
-            constants.matrix = (c_float * 16)(*[float(x) for x in constants_data])
+            constants.matrix = (c_float * 16)(
+                *[float(x) for x in constants_data]
+            )
 
             class UniformState(Structure):
                 _fields_ = [

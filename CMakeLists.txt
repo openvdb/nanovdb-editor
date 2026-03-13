@@ -386,6 +386,13 @@ if(SKBUILD)
                     COMPONENT python_libs
                 )
             endif()
+        elseif(APPLE)
+            install(CODE "
+                set(SLANG_RUNTIME_SOURCE_DIR \"${Slang_SOURCE_DIR}/lib\")
+                set(SLANG_RUNTIME_DEST_DIR \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                set(SLANG_RUNTIME_DYLIB_SUFFIX \"${CMAKE_SHARED_LIBRARY_SUFFIX}\")
+                include(\"${CMAKE_CURRENT_SOURCE_DIR}/cmake/slang_runtime_macos.cmake\")
+            " COMPONENT python_libs)
         else()
             if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
                 # Install all slang libraries using install(CODE) to avoid configure-time path resolution
@@ -591,6 +598,13 @@ if(SKBUILD)
                 DESTINATION nanovdb_editor/lib
                 COMPONENT python_libs
                 RENAME libvulkan.so)
+        elseif(APPLE)
+            install(CODE "
+                set(VULKAN_LOADER_SOURCE_DIR \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                set(VULKAN_LOADER_DEST_DIR \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                set(VULKAN_LOADER_DYLIB_SUFFIX \"${CMAKE_SHARED_LIBRARY_SUFFIX}\")
+                include(\"${CMAKE_CURRENT_SOURCE_DIR}/cmake/vulkan_loader_macos.cmake\")
+            " COMPONENT python_libs)
         endif()
     endif()
 endif()

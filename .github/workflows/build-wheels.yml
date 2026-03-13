@@ -171,6 +171,12 @@ jobs:
             cibw_environment: >
               CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DFETCHCONTENT_QUIET=OFF"
               CPM_SOURCE_CACHE=/tmp/cpm-cache
+          - os: macos-latest
+            arch: ""
+            cibw_build: "cp311-macosx_*"
+            cibw_environment: >
+              CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DFETCHCONTENT_QUIET=OFF"
+              CPM_SOURCE_CACHE=/tmp/cpm-cache
           - os: windows-latest
             arch: ""
             cibw_build: "cp311-win_amd64"
@@ -460,6 +466,14 @@ jobs:
           echo "Using auditwheel platform from show output: ${AUDITWHEEL_PLAT}"
           run_auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat "${AUDITWHEEL_PLAT}"
 
+      with:
+        package-dir: pymodule
+
+    - name: Build macOS wheels
+      if: runner.os == 'macOS'
+      uses: pypa/cibuildwheel@v2.21.3
+      env:
+        CIBW_ARCHS_MACOS: auto
       with:
         package-dir: pymodule
 
