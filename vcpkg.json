@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "dependencies": [
     "blosc",
-    "libe57format"
+    "libe57format",
+    {
+      "name": "openh264",
+      "platform": "windows"
+    }
   ]
 }

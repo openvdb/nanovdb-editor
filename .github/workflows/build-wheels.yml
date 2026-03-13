@@ -175,13 +175,13 @@ jobs:
             arch: ""
             cibw_build: "cp311-win_amd64"
             cibw_environment: >
-              CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DFETCHCONTENT_QUIET=OFF"
+              CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_USE_VCPKG=ON -DNANOVDB_EDITOR_USE_H264=ON -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DFETCHCONTENT_QUIET=OFF"
               CPM_SOURCE_CACHE=/tmp/cpm-cache
           - os: windows-11-arm
             arch: ARM64
             cibw_build: "cp311-win_arm64"
             cibw_environment: >
-              CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DFETCHCONTENT_QUIET=OFF"
+              CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_USE_VCPKG=ON -DNANOVDB_EDITOR_USE_H264=ON -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DFETCHCONTENT_QUIET=OFF"
               CPM_SOURCE_CACHE=/tmp/cpm-cache
 
     steps:
@@ -470,6 +470,20 @@ jobs:
         CIBW_ARCHS_WINDOWS: ${{ matrix.os == 'windows-11-arm' && 'ARM64' || 'auto' }}
         # Windows dependencies
         CIBW_BEFORE_ALL_WINDOWS: |
+          $ErrorActionPreference = 'Stop'
+
+          if (!(Test-Path C:\vcpkg\.git)) {
+            git clone --depth 1 https://github.com/microsoft/vcpkg C:\vcpkg
+            if ($LASTEXITCODE -ne 0 -or !(Test-Path C:\vcpkg\bootstrap-vcpkg.bat)) {
+              throw "Failed to clone vcpkg into C:\vcpkg"
+            }
+          }
+
+          & C:\vcpkg\bootstrap-vcpkg.bat
+          if ($LASTEXITCODE -ne 0 -or !(Test-Path C:\vcpkg\vcpkg.exe)) {
+            throw "Failed to bootstrap vcpkg"
+          }
+
           python -m pip install cmake
           cmake --version
       with:
