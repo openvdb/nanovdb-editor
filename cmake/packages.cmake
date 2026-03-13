@@ -12,6 +12,7 @@ if(NANOVDB_EDITOR_FORCE_REBUILD_DEPS AND EXISTS "$ENV{CPM_SOURCE_CACHE}")
 endif()
 
 # Set global static build preference - all dependencies should be static
+# unless a dependency is explicitly runtime-loaded as a shared library.
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries" FORCE)
 set(BUILD_STATIC_LIBS ON CACHE BOOL "Build static libraries" FORCE)
 
@@ -237,21 +238,31 @@ if(NANOVDB_EDITOR_USE_GLFW)
                 GIT_TAG ${GLFW_RELEASE}
             )
             set(GLFW_DOWNLOAD_ONLY NO)
+            # GLFW must be built as a shared library when we compile it from source.
+            # The editor loads it dynamically via pnanovdb_load_library()/LoadLibrary,
+            # so a static glfw build would not provide the runtime DLL we depend on.
+            set(GLFW_CPM_EXTRA_ARGS
+                OPTIONS
+                "BUILD_SHARED_LIBS ON"
+            )
         else()
             set(GLFW_URL ${GLFW_BASE_URL}/glfw-${GLFW_RELEASE}.bin.WIN64.zip)
             set(GLFW_PLATFORM_OPTIONS URL ${GLFW_URL})
             set(GLFW_DOWNLOAD_ONLY YES)
+            set(GLFW_CPM_EXTRA_ARGS)
         endif()
     elseif(APPLE)
         set(GLFW_URL ${GLFW_BASE_URL}/glfw-${GLFW_RELEASE}.bin.MACOS.zip)
         set(GLFW_PLATFORM_OPTIONS URL ${GLFW_URL})
         set(GLFW_DOWNLOAD_ONLY YES)
+        set(GLFW_CPM_EXTRA_ARGS)
     else()
         set(GLFW_PLATFORM_OPTIONS
             GITHUB_REPOSITORY glfw/glfw
             GIT_TAG ${GLFW_RELEASE}
         )
         set(GLFW_DOWNLOAD_ONLY YES)
+        set(GLFW_CPM_EXTRA_ARGS)
     endif()
 
     CPMAddPackage(
@@ -259,6 +270,7 @@ if(NANOVDB_EDITOR_USE_GLFW)
         VERSION ${GLFW_RELEASE}
         DOWNLOAD_ONLY ${GLFW_DOWNLOAD_ONLY}
         ${GLFW_PLATFORM_OPTIONS}
+        ${GLFW_CPM_EXTRA_ARGS}
     )
 endif()
 
