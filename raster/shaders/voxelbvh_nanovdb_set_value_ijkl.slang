@@ -9,8 +9,8 @@ struct constants_t
 {
     uint nanovdb_word_count;
     uint ijkl_count;
-    uint pad1;
-    uint pad2;
+    uint nanovdb_chunk_count;
+    uint node_mask_uint64_count;
 };
 
 ConstantBuffer<constants_t> constants;
@@ -30,6 +30,10 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     }
 
     uint2 ijkl_raw = ijkl_in[idx];
+    if (ijkl_raw.x == ~0u && ijkl_raw.y == ~0u)
+    {
+        return;
+    }
     int4 ijkl = int4(
         int(ijkl_raw.y) >> 16,
         int(ijkl_raw.y << 16) >> 16,

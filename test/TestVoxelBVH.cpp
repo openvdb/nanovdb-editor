@@ -96,15 +96,18 @@ void voxelbvh_test()
 
     uint64_t ijkl_count = 16u * 1024u;
     pnanovdb_compute_array_t* ijkl_array = compute.create_array(8u, ijkl_count, nullptr);
+    pnanovdb_compute_array_t* range_array = compute.create_array(8u, ijkl_count, nullptr);
     uint64_t* mapped_ijkl = (uint64_t*)compute.map_array(ijkl_array);
+    uint64_t* mapped_range = (uint64_t*)compute.map_array(range_array);
     for (uint64_t idx = 0u; idx < ijkl_count; idx++)
     {
         mapped_ijkl[idx] = (uint64_t(rand() & 4095) << 16u) | (uint64_t(rand() & 4095) << 32u) |
                            (uint64_t(rand() & 4095) << 48u) | uint64_t(rand() % 12);
+        mapped_range[idx] = uint64_t(idx) | (uint64_t(idx + 1u) << 32u);
     }
 
     pnanovdb_compute_array_t* built_nanovdb_array =
-        voxel_bvh.voxelbvh_nanovdb_add_nodes_from_key_array(&compute, queue, voxelbvh_ctx, ijkl_array);
+        voxel_bvh.voxelbvh_nanovdb_add_nodes_from_key_array(&compute, queue, voxelbvh_ctx, ijkl_array, range_array);
 
     pnanovdb_buf_t buf = pnanovdb_make_buf((uint32_t*)built_nanovdb_array->data,
                                            built_nanovdb_array->element_size * built_nanovdb_array->element_count / 4u);
@@ -230,6 +233,7 @@ void voxelbvh_test()
            val_pass_count, not_leaf_count);
 
     compute.destroy_array(ijkl_array);
+    compute.destroy_array(range_array);
 
     voxel_bvh.destroy_context(&compute, queue, voxelbvh_ctx);
 

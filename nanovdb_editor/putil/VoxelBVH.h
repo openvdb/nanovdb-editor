@@ -65,12 +65,15 @@ typedef struct pnanovdb_voxelbvh_t
                                                                    pnanovdb_compute_buffer_t* nanovdb_inout,
                                                                    pnanovdb_uint64_t nanovdb_word_count,
                                                                    pnanovdb_compute_buffer_t* ijkl_in,
-                                                                   pnanovdb_uint64_t ijkl_count);
+                                                                   pnanovdb_compute_buffer_t* range_in,
+                                                                   pnanovdb_uint64_t ijkl_count,
+                                                                   pnanovdb_uint64_t range_count);
 
     pnanovdb_compute_array_t*(PNANOVDB_ABI* voxelbvh_nanovdb_add_nodes_from_key_array)(const pnanovdb_compute_t* compute,
                                                                                        pnanovdb_compute_queue_t* queue,
                                                                                        pnanovdb_voxelbvh_context_t* context,
-                                                                                       pnanovdb_compute_array_t* ijkl_in);
+                                                                                       pnanovdb_compute_array_t* ijkl_in,
+                                                                                       pnanovdb_compute_array_t* range_in);
 
     void(PNANOVDB_ABI* voxelbvh_from_gaussians)(const pnanovdb_compute_t* compute,
                                                 pnanovdb_compute_queue_t* queue,
