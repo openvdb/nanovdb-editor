@@ -136,6 +136,8 @@ if "%USE_VCPKG%"=="ON" (
 ) else (
     set VCPKG_INSTALLED_DIR_ARG=
     set "VCPKG_INSTALLED_DIR="
+    set "VCPKG_PREFIX_PATH="
+    set "VCPKG_CMAKE="
 )
 
 goto Build
