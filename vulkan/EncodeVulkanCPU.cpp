@@ -80,6 +80,7 @@ pnanovdb_compute_encoder_t* create_encoder_cpu(pnanovdb_compute_queue_t* queue,
         createInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
         createInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
         createInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        createInfo.flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
 
         loader->vkCreateImage(device->vulkanDevice, &createInfo, nullptr, &ptr->srcImage);
 
