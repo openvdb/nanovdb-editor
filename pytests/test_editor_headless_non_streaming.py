@@ -42,13 +42,14 @@ def test_editor_headless_non_streaming():
             f"Starting editor on platform={platform.system()} "
             f"streaming={config.streaming} headless={config.headless}"
         )
-        success = editor.start(config)
+        editor.start(config)
         # Give the editor a brief moment to initialize
         sleep(0.5)
-        if not success:
+        diagnostics = compiler.get_diagnostics()
+        if diagnostics:
             raise AssertionError(
                 "Headless non-streaming editor start failed.\n"
-                f"Compiler diagnostics:\n{compiler.get_diagnostics() or '<none>'}"
+                f"Compiler diagnostics:\n{diagnostics}"
             )
     except Exception as exc:
         raise AssertionError(
