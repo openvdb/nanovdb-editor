@@ -902,6 +902,12 @@ if(WIN32 AND NANOVDB_EDITOR_USE_VCPKG AND NANOVDB_EDITOR_USE_H264)
             set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_DEBUG "${OPENH264_DLL_RELEASE}")
             set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_RELEASE "${OPENH264_DLL_RELEASE}")
         endif()
+
+        # Enable vcpkg's app-local dependency copying so that the OpenH264 DLL
+        # (and other vcpkg-provided DLLs) are copied next to executables for
+        # non-SKBUILD Windows builds. This avoids requiring users to manually
+        # adjust PATH in order to load openh264.dll at runtime.
+        set(VCPKG_APPLOCAL_DEPS ON CACHE BOOL "Copy vcpkg DLL dependencies next to executables" FORCE)
     else()
         add_library(openh264 STATIC IMPORTED)
         set_target_properties(openh264 PROPERTIES
