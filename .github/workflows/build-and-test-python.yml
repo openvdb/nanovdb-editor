@@ -464,19 +464,9 @@ jobs:
           python-version: '3.11'
           architecture: 'arm64'
 
-      - name: Ensure Vulkan loader is available
+      - name: Install ARM64 Vulkan SDK loader
         run: |
-          $LoaderCandidates = @(
-            "C:\Windows\System32\vulkan-1.dll",
-            "C:\Windows\SysArm32\vulkan-1.dll"
-          ) | Where-Object { Test-Path $_ }
-
-          if ($LoaderCandidates.Count -gt 0) {
-            Write-Host "Found system Vulkan loader: $($LoaderCandidates -join ', ')"
-            exit 0
-          }
-
-          Write-Host "System Vulkan loader not found; installing ARM64 Vulkan SDK in copy-only mode..."
+          Write-Host "Installing ARM64 Vulkan SDK in copy-only mode..."
           $SdkInstaller = Join-Path $env:RUNNER_TEMP "vulkan-sdk-arm64.exe"
           $SdkRoot = Join-Path $env:RUNNER_TEMP "VulkanSDK"
 
@@ -501,6 +491,7 @@ jobs:
             throw "vulkan-1.dll not found at $VulkanLoader"
           }
 
+          Write-Host "Using ARM64 Vulkan loader: $VulkanLoader"
           "VULKAN_SDK=$($InstalledSdk.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           $VulkanBinPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
@@ -544,6 +535,16 @@ jobs:
           $VulkanICDPath = $VulkanICDJson.FullName
           Write-Host "Using lavapipe ICD JSON: $VulkanICDPath"
 
+          $IcdContent = Get-Content $VulkanICDPath -Raw | ConvertFrom-Json
+          $IcdContent.ICD.library_path = $VulkanLvpDll.FullName
+          $IcdContent | ConvertTo-Json -Depth 10 | Set-Content $VulkanICDPath -Encoding UTF8
+
+          $RegistryPath = "HKLM:\SOFTWARE\Khronos\Vulkan\Drivers"
+          if (-not (Test-Path $RegistryPath)) {
+              New-Item -Path $RegistryPath -Force | Out-Null
+          }
+          New-ItemProperty -Path $RegistryPath -Name $VulkanICDPath -Value 0 -PropertyType DWord -Force | Out-Null
+
           "VK_ICD_FILENAMES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "VK_DRIVER_FILES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           $MesaBinPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
@@ -568,7 +569,7 @@ jobs:
 
       - name: Run Python tests
         run: |
-          pytest pytests -vvv --tb=short
+          python -X faulthandler -m pytest pytests -vvv -s -ra --tb=long
 
   nanovdb-editor-build-python-linux-arm:
     # if: github.ref == 'refs/heads/main'

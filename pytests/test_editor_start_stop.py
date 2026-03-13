@@ -3,7 +3,7 @@
 
 import nanovdb_editor as nve  # type: ignore
 
-import os
+import platform
 from time import sleep
 
 
@@ -25,7 +25,10 @@ def test_editor_start_stop():
     config.streaming = 1
 
     try:
-        print(f"Starting editor on platform={os.uname().sysname} streaming={config.streaming} headless={config.headless}")
+        print(
+            f"Starting editor on platform={platform.system()} "
+            f"streaming={config.streaming} headless={config.headless}"
+        )
         editor.start(config)
         # Give the editor a brief moment to initialize
         sleep(0.5)
