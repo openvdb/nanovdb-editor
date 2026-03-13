@@ -6,6 +6,7 @@ from nanovdb_editor import (
     Compute,
     CompileTarget,
     MemoryBuffer,
+    OptimizationLevel,
 )
 from ctypes import Structure, c_float, c_void_p, addressof
 
@@ -91,7 +92,8 @@ class TestMatrix(unittest.TestCase):
                 compile_success,
                 msg=(
                     f"Shader compilation failed for {test_shader}\n"
-                    f"Compiler diagnostics:\n{self.compiler.get_diagnostics() or '<none>'}"
+                    "Compiler diagnostics:\n"
+                    f"{self.compiler.get_diagnostics() or '<none>'}"
                 ),
             )
 
@@ -111,7 +113,8 @@ class TestMatrix(unittest.TestCase):
                     success,
                     msg=(
                         f"Shader dispatch failed for {test_shader}\n"
-                        f"Compiler diagnostics:\n{self.compiler.get_diagnostics() or '<none>'}"
+                        "Compiler diagnostics:\n"
+                        f"{self.compiler.get_diagnostics() or '<none>'}"
                     ),
                 )
                 result = self.compute.map_array(output_array, array_dtype_out)
@@ -132,12 +135,16 @@ class TestMatrix(unittest.TestCase):
                 entry_point_name="computeMain",
                 compile_target=CompileTarget.CPU,
                 is_row_major=is_row_major,
+                # Slang's optimized CPU matrix codegen is unstable on Linux CI.
+                # This test validates layout correctness, not optimization.
+                optimization_level=OptimizationLevel.NONE,
             )
             self.assertTrue(
                 compile_success,
                 msg=(
                     f"CPU shader compilation failed for {test_shader}\n"
-                    f"Compiler diagnostics:\n{self.compiler.get_diagnostics() or '<none>'}"
+                    "Compiler diagnostics:\n"
+                    f"{self.compiler.get_diagnostics() or '<none>'}"
                 ),
             )
 

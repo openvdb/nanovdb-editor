@@ -480,15 +480,32 @@ jobs:
             "copy_only=1"
           ) -Wait
 
-          $InstalledSdk = Get-ChildItem -Path $SdkRoot -Directory | Sort-Object Name -Descending | Select-Object -First 1
+          $InstalledSdk = Get-ChildItem -Path $SdkRoot -Directory |
+            Where-Object { $_.Name -match '^\d+(\.\d+)+$' } |
+            Sort-Object { [version]$_.Name } -Descending |
+            Select-Object -First 1
           if (-not $InstalledSdk) {
+            Write-Host "No versioned Vulkan SDK directory found under $SdkRoot"
+            Get-ChildItem -Path $SdkRoot -Directory -ErrorAction SilentlyContinue |
+              Select-Object FullName | Format-Table -AutoSize
             throw "Installed Vulkan SDK directory not found under $SdkRoot"
           }
 
           $VulkanBinPath = Join-Path $InstalledSdk.FullName "Bin"
           $VulkanLoader = Join-Path $VulkanBinPath "vulkan-1.dll"
           if (-not (Test-Path $VulkanLoader)) {
-            throw "vulkan-1.dll not found at $VulkanLoader"
+            $VulkanLoaderFile = Get-ChildItem -Path $InstalledSdk.FullName -Recurse -File -Filter "vulkan-1.dll" -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -notmatch '\\Templates\\' } |
+              Select-Object -First 1
+            if ($VulkanLoaderFile) {
+              $VulkanLoader = $VulkanLoaderFile.FullName
+              $VulkanBinPath = Split-Path -Parent $VulkanLoader
+            } else {
+              Write-Host "Unable to find vulkan-1.dll under $($InstalledSdk.FullName)"
+              Get-ChildItem -Path $InstalledSdk.FullName -Recurse -File -Filter "*vulkan*.dll" -ErrorAction SilentlyContinue |
+                Select-Object -First 50 FullName | Format-Table -AutoSize
+              throw "vulkan-1.dll not found at $VulkanLoader"
+            }
           }
 
           Write-Host "Using ARM64 Vulkan loader: $VulkanLoader"
