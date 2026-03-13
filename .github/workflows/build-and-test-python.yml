@@ -282,9 +282,21 @@ jobs:
           pip install ./dist/nanovdb_editor*.whl
 
       - name: Run Python tests
+        id: run_python_tests_macos
         run: |
           conda activate nanovdb_editor
           pytest pytests -vvv -s -ra --tb=long
+
+      - name: Rerun key failing Python tests with diagnostics
+        if: failure() && steps.run_python_tests_macos.outcome == 'failure'
+        run: |
+          conda activate nanovdb_editor
+          echo "=== Focused rerun: test_vulkan_dispatch ==="
+          pytest pytests/test_dispatch.py::TestDispatch::test_vulkan_dispatch -vvv -s --tb=long || true
+          echo "=== Focused rerun: test_get_token ==="
+          pytest pytests/test_editor_api_2.py::TestEditorAPI2::test_get_token -vvv -s --tb=long || true
+          echo "=== Focused rerun: matrix Vulkan case ==="
+          pytest pytests/test_matrix.py::TestMatrix::test_matrix_0_out_vk_col -vvv -s --tb=long || true
 
   nanovdb-editor-build-python-windows:
     name: Build (Windows)
