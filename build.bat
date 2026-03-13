@@ -88,7 +88,7 @@ if "%release%"=="0" (
 )
 
 ::: set env vars from a config file (optional)
-if exist %PROJECT_DIR%%CONFIG_FILE% (
+if exist "%PROJECT_DIR%%CONFIG_FILE%" (
     for /f "usebackq tokens=1,* delims== eol=#" %%i in ("%PROJECT_DIR%%CONFIG_FILE%") do (
       set "%%i=%%j"
     )
