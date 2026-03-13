@@ -7,6 +7,7 @@ from ctypes import *
 import os
 import gc
 import numpy as np
+import platform
 import unittest
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -14,11 +15,18 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 TEST_SHADER = os.path.join(SCRIPT_DIR, "shaders/test.slang")
 
 
+def cpu_target_supported():
+    return platform.machine().lower() not in {"arm64", "aarch64"}
+
+
 class TestDispatch(unittest.TestCase):
     def setUp(self):
         self.element_count = 8
         self.array_dtype = np.dtype(np.int32)
-        self.input_data = np.array([i for i in range(self.element_count)], dtype=self.array_dtype)
+        self.input_data = np.array(
+            [i for i in range(self.element_count)],
+            dtype=self.array_dtype,
+        )
         self.constants_data = np.array([4], dtype=self.array_dtype)
         self.output_data = np.zeros_like(self.input_data)
 
@@ -40,12 +48,16 @@ class TestDispatch(unittest.TestCase):
         compute.device_interface().create_device_manager()
         compute.device_interface().create_device()
 
-        compile_success = compiler.compile_shader(TEST_SHADER, entry_point_name="computeMain")
+        compile_success = compiler.compile_shader(
+            TEST_SHADER,
+            entry_point_name="computeMain",
+        )
         self.assertTrue(
             compile_success,
             msg=(
                 f"Shader compilation failed for {TEST_SHADER}\n"
-                f"Compiler diagnostics:\n{compiler.get_diagnostics() or '<none>'}"
+                "Compiler diagnostics:\n"
+                f"{compiler.get_diagnostics() or '<none>'}"
             ),
         )
 
@@ -53,12 +65,19 @@ class TestDispatch(unittest.TestCase):
         constants_array = compute.create_array(self.constants_data)
         output_array = compute.create_array(self.output_data)
 
-        success = compute.dispatch_shader_on_array(TEST_SHADER, (1, 1, 1), input_array, constants_array, output_array)
+        success = compute.dispatch_shader_on_array(
+            TEST_SHADER,
+            (1, 1, 1),
+            input_array,
+            constants_array,
+            output_array,
+        )
         self.assertTrue(
             success,
             msg=(
                 f"Shader dispatch failed for {TEST_SHADER}\n"
-                f"Compiler diagnostics:\n{compiler.get_diagnostics() or '<none>'}"
+                "Compiler diagnostics:\n"
+                f"{compiler.get_diagnostics() or '<none>'}"
             ),
         )
 
@@ -78,6 +97,9 @@ class TestDispatch(unittest.TestCase):
         gc.collect()
 
     def test_cpu_dispatch(self):
+        if not cpu_target_supported():
+            self.skipTest("CPU shader target is not bundled on ARM platforms")
+
         # Create fresh compiler and compute for this test
         compiler = Compiler()
         compiler.create_instance()
@@ -85,7 +107,19 @@ class TestDispatch(unittest.TestCase):
         # CPU tests don't need device, but create compute for consistency
         compute = Compute(compiler)
 
-        compiler.compile_shader(TEST_SHADER, entry_point_name="computeMain", compile_target=CompileTarget.CPU)
+        compile_success = compiler.compile_shader(
+            TEST_SHADER,
+            entry_point_name="computeMain",
+            compile_target=CompileTarget.CPU,
+        )
+        self.assertTrue(
+            compile_success,
+            msg=(
+                f"CPU shader compilation failed for {TEST_SHADER}\n"
+                "Compiler diagnostics:\n"
+                f"{compiler.get_diagnostics() or '<none>'}"
+            ),
+        )
 
         class Constants(Structure):
             """Definition equivalent to constants_t in the shader."""
@@ -100,7 +134,10 @@ class TestDispatch(unittest.TestCase):
         class UniformState(Structure):
             _fields_ = [
                 ("data_in", MemoryBuffer),
-                ("constants", c_void_p),  # Constant buffer must be passed as a pointer
+                (
+                    "constants",
+                    c_void_p,
+                ),  # Constant buffer must be passed as a pointer
                 ("data_out", MemoryBuffer),
             ]
 
@@ -109,7 +146,12 @@ class TestDispatch(unittest.TestCase):
         uniform_state.constants = c_void_p(addressof(constants))
         uniform_state.data_out = MemoryBuffer(self.output_data)
 
-        success = compiler.execute_cpu(TEST_SHADER, (1, 1, 1), None, c_void_p(addressof(uniform_state)))
+        success = compiler.execute_cpu(
+            TEST_SHADER,
+            (1, 1, 1),
+            None,
+            c_void_p(addressof(uniform_state)),
+        )
         self.assertTrue(success)
 
         data_out = uniform_state.data_out.to_ndarray(self.array_dtype)

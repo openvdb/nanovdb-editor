@@ -13,6 +13,7 @@ from ctypes import Structure, c_float, c_void_p, addressof
 import os
 import gc
 import numpy as np
+import platform
 import unittest
 from parameterized import parameterized
 
@@ -50,6 +51,10 @@ TEST_CASES = [
     ("in_cpu_col", TEST_SHADER_IN, CompileTarget.CPU, False),
     ("in_cpu_row", TEST_SHADER_IN, CompileTarget.CPU, True),
 ]
+
+
+def cpu_target_supported():
+    return platform.machine().lower() not in {"arm64", "aarch64"}
 
 
 class TestMatrix(unittest.TestCase):
@@ -127,6 +132,11 @@ class TestMatrix(unittest.TestCase):
                 self.compute.destroy_array(output_array)
 
         elif target == CompileTarget.CPU:
+            if not cpu_target_supported():
+                self.skipTest(
+                    "CPU shader target is not bundled on ARM platforms"
+                )
+
             input_data = np.zeros(len(constants_data), dtype=array_dtype_out)
             output_data = np.zeros(len(constants_data), dtype=array_dtype_out)
 
@@ -156,7 +166,9 @@ class TestMatrix(unittest.TestCase):
                 ]
 
             constants = Constants()
-            constants.matrix = (c_float * 16)(*[float(x) for x in constants_data])
+            constants.matrix = (c_float * 16)(
+                *[float(x) for x in constants_data]
+            )
 
             class UniformState(Structure):
                 _fields_ = [
