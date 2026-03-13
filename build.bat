@@ -125,7 +125,7 @@ if "%USE_VCPKG%"=="ON" (
         )
         popd
         set VCPKG_PREFIX_PATH=%PROJECT_DIR%vcpkg_installed\%VCPKG_TRIPLET%
-        set VCPKG_INSTALLED_DIR_ARG=-DVCPKG_INSTALLED_DIR=%PROJECT_DIR%vcpkg_installed
+        set VCPKG_INSTALLED_DIR_ARG=-DVCPKG_INSTALLED_DIR="%PROJECT_DIR%vcpkg_installed"
         set "VCPKG_INSTALLED_DIR=%PROJECT_DIR%vcpkg_installed"
     ) else (
         echo vcpkg.exe not found in "%VCPKG_ROOT%"
