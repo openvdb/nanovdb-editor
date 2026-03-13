@@ -484,6 +484,9 @@ jobs:
             Where-Object { $_.Name -match '^\d+(\.\d+)+$' } |
             Sort-Object { [version]$_.Name } -Descending |
             Select-Object -First 1
+          if (-not $InstalledSdk -and (Test-Path (Join-Path $SdkRoot "Bin"))) {
+            $InstalledSdk = Get-Item $SdkRoot
+          }
           if (-not $InstalledSdk) {
             Write-Host "No versioned Vulkan SDK directory found under $SdkRoot"
             Get-ChildItem -Path $SdkRoot -Directory -ErrorAction SilentlyContinue |
@@ -655,9 +658,11 @@ jobs:
       - name: Install and test Python module
         run: |
           pip install ./dist/nanovdb_editor*.whl
-          pip install pytest numpy pytest-timeout
+          pip install pytest numpy pytest-timeout parameterized
           python3 -c 'import nanovdb_editor; print("SUCCESS: Module imported on ARM64")'
-          pytest pytests -vvv -s -ra --tb=long --timeout=300 --timeout-method=thread || echo 'Tests completed'
+          export PYTHONFAULTHANDLER=1
+          export PYTHONUNBUFFERED=1
+          python3 -X faulthandler -m pytest pytests -vvv -s -ra --tb=long --timeout=300 --timeout-method=thread
 
   fvdb-viz-integration:
     name: fVDB Integration
