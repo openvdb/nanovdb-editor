@@ -737,6 +737,12 @@ if(Slang_ADDED)
                             ${Slang_SOURCE_DIR}/lib/${_slang_macos_lib}${CMAKE_SHARED_LIBRARY_SUFFIX}
                             ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${_slang_macos_lib}${CMAKE_SHARED_LIBRARY_SUFFIX}
                     )
+                    # Slang macOS packages ship unversioned filenames even when dependent libraries reference versioned install names
+                    add_custom_command(TARGET copy_slang_libs POST_BUILD
+                        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                            ${Slang_SOURCE_DIR}/lib/${_slang_macos_lib}${CMAKE_SHARED_LIBRARY_SUFFIX}
+                            ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${_slang_macos_lib}.0.${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}
+                    )
                 else()
                     message(STATUS "${_slang_macos_lib}${CMAKE_SHARED_LIBRARY_SUFFIX} not found, skipping copy")
                 endif()
