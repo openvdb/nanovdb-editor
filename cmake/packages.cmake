@@ -836,6 +836,29 @@ if(openh264_ADDED)
 
     set(OPENH264_OUTPUT_LIB ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libopenh264${CMAKE_STATIC_LIBRARY_SUFFIX})
     set(OPENH264_BUILD_LIB ${CPM_PACKAGE_openh264_BINARY_DIR}/libopenh264${CMAKE_STATIC_LIBRARY_SUFFIX})
+    set(OPENH264_CFLAGS "-fPIC -DWELS_X86_ASM=0")
+    set(OPENH264_CXXFLAGS "-fPIC -std=c++11 -DWELS_X86_ASM=0")
+    set(OPENH264_ENV_VARS
+        CC=${CMAKE_C_COMPILER}
+        CXX=${CMAKE_CXX_COMPILER}
+    )
+
+    if(APPLE)
+        execute_process(
+            COMMAND xcrun --sdk macosx --show-sdk-path
+            OUTPUT_VARIABLE OPENH264_MACOS_SDK_PATH
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
+        )
+
+        if(OPENH264_MACOS_SDK_PATH)
+            list(APPEND OPENH264_ENV_VARS SDKROOT=${OPENH264_MACOS_SDK_PATH})
+            string(APPEND OPENH264_CFLAGS " -isysroot ${OPENH264_MACOS_SDK_PATH}")
+            string(APPEND OPENH264_CXXFLAGS " -isysroot ${OPENH264_MACOS_SDK_PATH}")
+        else()
+            message(WARNING "Could not determine the macOS SDK path for the openh264 build")
+        endif()
+    endif()
 
     add_custom_command(
         OUTPUT ${OPENH264_OUTPUT_LIB}
@@ -843,11 +866,11 @@ if(openh264_ADDED)
             ${CPM_PACKAGE_openh264_SOURCE_DIR}
             ${CPM_PACKAGE_openh264_BINARY_DIR}
         # Build encoder and common libraries from root directory
-        COMMAND ${CMAKE_COMMAND} -E env CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER}
+        COMMAND ${CMAKE_COMMAND} -E env ${OPENH264_ENV_VARS}
                 make -j${CMAKE_BUILD_PARALLEL_LEVEL}
                 USE_ASM=No BUILDTYPE=static DECODER=No
-                "CFLAGS=-fPIC -DWELS_X86_ASM=0"
-                "CXXFLAGS=-fPIC -std=c++11 -DWELS_X86_ASM=0"
+                "CFLAGS=${OPENH264_CFLAGS}"
+                "CXXFLAGS=${OPENH264_CXXFLAGS}"
                 libencoder.a libcommon.a libprocessing.a
         # Create our own static library from encoder objects
         COMMAND ${CMAKE_COMMAND} -E rm -rf temp_openh264_objects

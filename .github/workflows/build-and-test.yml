@@ -30,6 +30,28 @@ permissions:
   issues: read
 
 jobs:
+  openh264-regression:
+    name: OpenH264 Regression (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build OpenH264 regression target
+        run: |
+          set -euo pipefail
+          chmod +x ./scripts/test_openh264_build.sh
+          ./scripts/test_openh264_build.sh
+
   nanovdb-editor-build-and-test-linux:
     name: Build and Test (Linux)
     runs-on: ubuntu-latest
