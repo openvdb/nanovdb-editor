@@ -73,7 +73,6 @@ if(SKBUILD)
 endif()
 
 if(NANOVDB_EDITOR_USE_VCPKG)
-  find_package(ZLIB REQUIRED)
   find_package(Blosc REQUIRED)
 
   if(NANOVDB_EDITOR_E57_FORMAT)
