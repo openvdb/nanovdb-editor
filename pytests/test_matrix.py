@@ -54,7 +54,10 @@ TEST_CASES = [
 
 
 def cpu_target_supported():
-    return platform.machine().lower() not in {"arm64", "aarch64"}
+    machine = platform.machine().lower()
+    if machine not in {"arm64", "aarch64"}:
+        return True
+    return platform.system() == "Darwin"
 
 
 class TestMatrix(unittest.TestCase):
@@ -134,7 +137,7 @@ class TestMatrix(unittest.TestCase):
         elif target == CompileTarget.CPU:
             if not cpu_target_supported():
                 self.skipTest(
-                    "CPU shader target is not bundled on ARM platforms"
+                    "CPU shader target is only enabled on macOS arm64"
                 )
 
             input_data = np.zeros(len(constants_data), dtype=array_dtype_out)
