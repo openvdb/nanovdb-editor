@@ -73,10 +73,10 @@ if(SKBUILD)
 endif()
 
 if(NANOVDB_EDITOR_USE_VCPKG)
-  find_package(Blosc REQUIRED)
+  find_package(blosc CONFIG REQUIRED)
 
   if(NANOVDB_EDITOR_E57_FORMAT)
-    find_package(e57format REQUIRED)
+    find_package(E57Format CONFIG REQUIRED)
   endif()
 endif()
 
