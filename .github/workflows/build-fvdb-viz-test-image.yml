@@ -4,9 +4,8 @@ on:
   workflow_call:
     inputs:
       image_name:
-        required: false
+        required: true
         type: string
-        default: fvdb-test-image
       torch_version:
         required: false
         type: string
