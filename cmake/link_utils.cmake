@@ -18,8 +18,9 @@ function(create_platform_file_link TARGET_NAME SOURCE_FILE TARGET_FILE COMMENT_T
             TARGET ${TARGET_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory "${TARGET_DIR}"
             COMMAND cmd /c "if not exist \"${TARGET_FILE_NATIVE}\" mklink /H \"${TARGET_FILE_NATIVE}\" \"${SOURCE_FILE_NATIVE}\" || exit 0"
-            COMMAND if not exist "${TARGET_FILE}" ${CMAKE_COMMAND} -E copy_if_different "${SOURCE_FILE}" "${TARGET_FILE}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SOURCE_FILE}" "${TARGET_FILE}"
             COMMENT "${COMMENT_TEXT}"
+            VERBATIM
         )
     else()
         # Linux/Mac: Keep a valid symlink, but repair broken or stale ones.
@@ -29,6 +30,7 @@ function(create_platform_file_link TARGET_NAME SOURCE_FILE TARGET_FILE COMMENT_T
             COMMAND ${CMAKE_COMMAND}
                 -DLINK_PATH="${TARGET_FILE}"
                 -DSOURCE_PATH="${SOURCE_FILE}"
+                -DLINK_KIND=file
                 -P "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/repair_symlink.cmake"
             COMMAND test -e "${TARGET_FILE}" || ${CMAKE_COMMAND} -E create_symlink "${SOURCE_FILE}" "${TARGET_FILE}"
             COMMENT "${COMMENT_TEXT}"
@@ -52,6 +54,7 @@ function(create_platform_directory_link TARGET_NAME SOURCE_DIR TARGET_DIR COMMEN
             COMMAND cmd /c "if not exist \"${TARGET_DIR_NATIVE}\" mklink /J \"${TARGET_DIR_NATIVE}\" \"${SOURCE_DIR_NATIVE}\" || exit 0"
             COMMAND if not exist "${TARGET_DIR}" ${CMAKE_COMMAND} -E copy_directory "${SOURCE_DIR}" "${TARGET_DIR}"
             COMMENT "${COMMENT_TEXT}"
+            VERBATIM
         )
     else()
         # Linux/Mac: Keep a valid symlink, but repair broken or stale ones.
@@ -61,6 +64,7 @@ function(create_platform_directory_link TARGET_NAME SOURCE_DIR TARGET_DIR COMMEN
             COMMAND ${CMAKE_COMMAND}
                 -DLINK_PATH="${TARGET_DIR}"
                 -DSOURCE_PATH="${SOURCE_DIR}"
+                -DLINK_KIND=directory
                 -P "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/repair_symlink.cmake"
             COMMAND test -e "${TARGET_DIR}" || ${CMAKE_COMMAND} -E create_symlink "${SOURCE_DIR}" "${TARGET_DIR}"
             COMMENT "${COMMENT_TEXT}"
