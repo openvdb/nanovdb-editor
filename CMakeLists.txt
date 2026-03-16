@@ -9,6 +9,10 @@
 
 cmake_minimum_required(VERSION 3.25 FATAL_ERROR)
 
+if(DEFINED ENV{VCPKG_INSTALLED_DIR})
+    set(VCPKG_INSTALLED_DIR "$ENV{VCPKG_INSTALLED_DIR}" CACHE PATH "Vcpkg installed root (manifest mode)" FORCE)
+endif()
+
 # Set CMake policies to suppress warnings
 if(POLICY CMP0175)
     cmake_policy(SET CMP0175 NEW)
@@ -307,12 +311,23 @@ endif()
 add_sanitizer_support(pnanovdbeditor)
 
 if(WIN32 AND TARGET glfw)
-    add_custom_command(
-        TARGET pnanovdbeditor POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_PROPERTY:glfw,IMPORTED_LOCATION>" "${CMAKE_BINARY_DIR}/$<CONFIG>/glfw3.dll"
-        COMMENT "Copying GLFW DLL"
-    )
+    get_target_property(_glfw_type glfw TYPE)
+    get_target_property(_glfw_imported glfw IMPORTED)
+    if(_glfw_imported AND (_glfw_type STREQUAL "SHARED_LIBRARY" OR _glfw_type STREQUAL "UNKNOWN_LIBRARY"))
+        add_custom_command(
+            TARGET pnanovdbeditor POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<TARGET_PROPERTY:glfw,IMPORTED_LOCATION>" "${CMAKE_BINARY_DIR}/$<CONFIG>/glfw3.dll"
+            COMMENT "Copying GLFW DLL"
+        )
+    elseif(_glfw_type STREQUAL "SHARED_LIBRARY")
+        add_custom_command(
+            TARGET pnanovdbeditor POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<TARGET_FILE:glfw>" "${CMAKE_BINARY_DIR}/$<CONFIG>/$<TARGET_FILE_NAME:glfw>"
+            COMMENT "Copying GLFW DLL"
+        )
+    endif()
 endif()
 
 if(NANOVDB_EDITOR_BUILD_TESTS)
@@ -368,6 +383,25 @@ if(SKBUILD)
         DESTINATION nanovdb_editor/lib
         COMPONENT python_libs
     )
+
+    if(WIN32 AND NANOVDB_EDITOR_USE_H264)
+        # Install OpenH264 runtime DLL using config-specific lists from packages.cmake
+        # so Debug and Release builds each get the correct DLL (no overwriting).
+        if(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_DEBUG)
+            install(FILES ${NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_DEBUG}
+                CONFIGURATIONS Debug
+                DESTINATION nanovdb_editor/lib
+                COMPONENT python_libs
+            )
+        endif()
+        if(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_RELEASE)
+            install(FILES ${NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_RELEASE}
+                CONFIGURATIONS Release RelWithDebInfo MinSizeRel
+                DESTINATION nanovdb_editor/lib
+                COMPONENT python_libs
+            )
+        endif()
+    endif()
 
     # Install Slang libraries
     if(Slang_ADDED)
@@ -574,12 +608,20 @@ if(SKBUILD)
         PATTERN "__pycache__" EXCLUDE
     )
 
-    # Install GLFW DLL files that were previously copied
+    # Install GLFW DLL files
     if(WIN32 AND TARGET glfw)
-        install(FILES "${CMAKE_BINARY_DIR}/$<CONFIG>/glfw3.dll"
-            DESTINATION nanovdb_editor/lib
-            COMPONENT python_libs
-        )
+        get_target_property(_glfw_install_type glfw TYPE)
+        if(_glfw_install_type STREQUAL "SHARED_LIBRARY")
+            install(FILES "$<TARGET_FILE:glfw>"
+                DESTINATION nanovdb_editor/lib
+                COMPONENT python_libs
+            )
+        elseif(NOT _glfw_install_type STREQUAL "STATIC_LIBRARY")
+            install(FILES "${CMAKE_BINARY_DIR}/$<CONFIG>/glfw3.dll"
+                DESTINATION nanovdb_editor/lib
+                COMPONENT python_libs
+            )
+        endif()
     endif()
 
     if(TARGET vulkan)

@@ -1,3 +1,8 @@
-MSVS_VERSION="Visual Studio 17 2022"
-USE_VCPKG=OFF
+# Config file for building nanovdb-editor with build.bat
+
+# MSVS_VERSION=Visual Studio 17 2022 (optional; leave unset to let CMake pick an installed generator)
+
+USE_VCPKG=ON
+
+# Set VCPKG_ROOT to the directory where you cloned vcpkg
 VCPKG_ROOT=path/to/vcpkg

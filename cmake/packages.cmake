@@ -12,6 +12,7 @@ if(NANOVDB_EDITOR_FORCE_REBUILD_DEPS AND EXISTS "$ENV{CPM_SOURCE_CACHE}")
 endif()
 
 # Set global static build preference - all dependencies should be static
+# unless a dependency is explicitly runtime-loaded as a shared library.
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries" FORCE)
 set(BUILD_STATIC_LIBS ON CACHE BOOL "Build static libraries" FORCE)
 
@@ -79,7 +80,9 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
     endif()
 endif()
 
+# Blosc: use vcpkg when NANOVDB_EDITOR_USE_VCPKG, otherwise fetch via CPM
 set(BLOSC_VERSION 1.21.4)
+if(NOT NANOVDB_EDITOR_USE_VCPKG)
 CPMAddPackage(
     NAME blosc
     URL
@@ -93,6 +96,14 @@ CPMAddPackage(
         "PREFER_EXTERNAL_ZLIB ON"
         "CMAKE_POSITION_INDEPENDENT_CODE ON"
 )
+endif()
+# When using vcpkg, find_package(Blosc) may create only blosc_shared. Provide a blosc_static
+# alias so targets that link blosc_static succeed. On non-Windows we alias; on Windows
+# we also alias (common with x64-windows/arm64-windows dynamic triplets)—when this
+# resolves to a shared library, the caller is responsible for the Blosc DLL at runtime.
+if(NANOVDB_EDITOR_USE_VCPKG AND TARGET blosc_shared AND NOT TARGET blosc_static)
+    add_library(blosc_static ALIAS blosc_shared)
+endif()
 
 # Graphics and UI dependencies
 set(VULKAN_VERSION 1.3.300)
@@ -219,38 +230,64 @@ if(NANOVDB_EDITOR_USE_GLFW)
     set(GLFW_RELEASE 3.4)
     set(GLFW_BASE_URL "https://github.com/glfw/glfw/releases/download/${GLFW_RELEASE}")
 
-    # For Windows and Apple, download pre-built binaries
+    # Windows x64: prebuilt zip; Windows ARM64: build from source (no prebuilt); Apple: prebuilt; Linux: headers only
     if(WIN32)
-        set(GLFW_URL ${GLFW_BASE_URL}/glfw-${GLFW_RELEASE}.bin.WIN64.zip)
-        set(GLFW_PLATFORM_OPTIONS URL ${GLFW_URL})
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "[Aa][Rr][Mm]64")
+            set(GLFW_PLATFORM_OPTIONS
+                GITHUB_REPOSITORY glfw/glfw
+                GIT_TAG ${GLFW_RELEASE}
+            )
+            set(GLFW_DOWNLOAD_ONLY NO)
+            # GLFW must be built as a shared library when we compile it from source.
+            # The editor loads it dynamically via pnanovdb_load_library()/LoadLibrary,
+            # so a static glfw build would not provide the runtime DLL we depend on.
+            set(GLFW_CPM_EXTRA_ARGS
+                OPTIONS
+                "BUILD_SHARED_LIBS ON"
+            )
+        else()
+            set(GLFW_URL ${GLFW_BASE_URL}/glfw-${GLFW_RELEASE}.bin.WIN64.zip)
+            set(GLFW_PLATFORM_OPTIONS URL ${GLFW_URL})
+            set(GLFW_DOWNLOAD_ONLY YES)
+            set(GLFW_CPM_EXTRA_ARGS)
+        endif()
     elseif(APPLE)
         set(GLFW_URL ${GLFW_BASE_URL}/glfw-${GLFW_RELEASE}.bin.MACOS.zip)
         set(GLFW_PLATFORM_OPTIONS URL ${GLFW_URL})
+        set(GLFW_DOWNLOAD_ONLY YES)
+        set(GLFW_CPM_EXTRA_ARGS)
     else()
-        # For Linux, only download headers
         set(GLFW_PLATFORM_OPTIONS
             GITHUB_REPOSITORY glfw/glfw
             GIT_TAG ${GLFW_RELEASE}
         )
+        set(GLFW_DOWNLOAD_ONLY YES)
+        set(GLFW_CPM_EXTRA_ARGS)
     endif()
 
     CPMAddPackage(
         NAME glfw
         VERSION ${GLFW_RELEASE}
-        DOWNLOAD_ONLY YES
+        DOWNLOAD_ONLY ${GLFW_DOWNLOAD_ONLY}
         ${GLFW_PLATFORM_OPTIONS}
+        ${GLFW_CPM_EXTRA_ARGS}
     )
 endif()
 
 # Create glfw target immediately to prevent CPM recursion
 if(glfw_ADDED)
     if(WIN32)
-        add_library(glfw SHARED IMPORTED)
-        set_target_properties(glfw PROPERTIES
-            IMPORTED_LOCATION ${glfw_SOURCE_DIR}/lib-vc2022/glfw3.dll
-            IMPORTED_IMPLIB ${glfw_SOURCE_DIR}/lib-vc2022/glfw3.lib
-            INTERFACE_INCLUDE_DIRECTORIES ${glfw_SOURCE_DIR}/include
-        )
+        if(EXISTS ${glfw_SOURCE_DIR}/lib-vc2022/glfw3.dll)
+            add_library(glfw SHARED IMPORTED)
+            set_target_properties(glfw PROPERTIES
+                IMPORTED_LOCATION ${glfw_SOURCE_DIR}/lib-vc2022/glfw3.dll
+                IMPORTED_IMPLIB ${glfw_SOURCE_DIR}/lib-vc2022/glfw3.lib
+                INTERFACE_INCLUDE_DIRECTORIES ${glfw_SOURCE_DIR}/include
+            )
+        else()
+            # Windows ARM64: built from source by CPM; target glfw already exists
+            set_target_properties(glfw PROPERTIES POSITION_INDEPENDENT_CODE ON)
+        endif()
     elseif(APPLE)
         add_library(glfw SHARED IMPORTED)
         set_target_properties(glfw PROPERTIES
@@ -595,7 +632,14 @@ if(NANOVDB_EDITOR_E57_FORMAT)
     )
 endif()
 
-if(NANOVDB_EDITOR_USE_H264)
+if(WIN32 AND NANOVDB_EDITOR_USE_H264 AND NOT NANOVDB_EDITOR_USE_VCPKG)
+    message(FATAL_ERROR
+        "NANOVDB_EDITOR_USE_H264 on Windows requires NANOVDB_EDITOR_USE_VCPKG=ON "
+        "so OpenH264 can be provided by vcpkg."
+    )
+endif()
+
+if(NANOVDB_EDITOR_USE_H264 AND NOT (WIN32 AND NANOVDB_EDITOR_USE_VCPKG))
     CPMAddPackage(
         NAME openh264
         GITHUB_REPOSITORY cisco/openh264
@@ -831,7 +875,81 @@ if(NANOVDB_EDITOR_E57_FORMAT AND libE57Format_ADDED AND TARGET E57Format)
     set_target_properties(E57Format PROPERTIES POSITION_INDEPENDENT_CODE ON)
 endif()
 
-if(openh264_ADDED)
+set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_DEBUG "")
+set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_RELEASE "")
+
+if(WIN32 AND NANOVDB_EDITOR_USE_VCPKG AND NANOVDB_EDITOR_USE_H264)
+    find_path(OPENH264_INCLUDE_DIR
+        NAMES wels/codec_api.h
+        REQUIRED
+    )
+
+    find_library(OPENH264_LIBRARY_RELEASE
+        NAMES openh264
+        PATH_SUFFIXES lib
+        REQUIRED
+    )
+
+    find_library(OPENH264_LIBRARY_DEBUG
+        NAMES openh264
+        PATH_SUFFIXES debug/lib lib
+    )
+
+    find_file(OPENH264_DLL_RELEASE
+        NAMES openh264.dll
+        PATH_SUFFIXES bin
+    )
+
+    find_file(OPENH264_DLL_DEBUG
+        NAMES openh264.dll
+        PATH_SUFFIXES debug/bin bin
+    )
+
+    if(NOT OPENH264_LIBRARY_DEBUG)
+        set(OPENH264_LIBRARY_DEBUG ${OPENH264_LIBRARY_RELEASE})
+    endif()
+
+    if(OPENH264_DLL_RELEASE)
+        if(NOT OPENH264_DLL_DEBUG)
+            set(OPENH264_DLL_DEBUG ${OPENH264_DLL_RELEASE})
+        endif()
+
+        add_library(openh264 SHARED IMPORTED)
+        set_target_properties(openh264 PROPERTIES
+            IMPORTED_CONFIGURATIONS "RELEASE;DEBUG"
+            IMPORTED_IMPLIB_RELEASE ${OPENH264_LIBRARY_RELEASE}
+            IMPORTED_IMPLIB_DEBUG ${OPENH264_LIBRARY_DEBUG}
+            IMPORTED_LOCATION_RELEASE ${OPENH264_DLL_RELEASE}
+            IMPORTED_LOCATION_DEBUG ${OPENH264_DLL_DEBUG}
+            INTERFACE_INCLUDE_DIRECTORIES ${OPENH264_INCLUDE_DIR}
+        )
+
+        # Store Debug and Release runtime DLL paths separately so install rules
+        # can use CONFIGURATIONS and avoid copying both DLLs to the same destination.
+        if(OPENH264_DLL_DEBUG AND NOT OPENH264_DLL_DEBUG STREQUAL OPENH264_DLL_RELEASE)
+            set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_DEBUG "${OPENH264_DLL_DEBUG}")
+            set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_RELEASE "${OPENH264_DLL_RELEASE}")
+        else()
+            # Only one distinct DLL; use it for all configs.
+            set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_DEBUG "${OPENH264_DLL_RELEASE}")
+            set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_RELEASE "${OPENH264_DLL_RELEASE}")
+        endif()
+
+        # Enable vcpkg's app-local dependency copying so that the OpenH264 DLL
+        # (and other vcpkg-provided DLLs) are copied next to executables for
+        # non-SKBUILD Windows builds. This avoids requiring users to manually
+        # adjust PATH in order to load openh264.dll at runtime.
+        set(VCPKG_APPLOCAL_DEPS ON CACHE BOOL "Copy vcpkg DLL dependencies next to executables" FORCE)
+    else()
+        add_library(openh264 STATIC IMPORTED)
+        set_target_properties(openh264 PROPERTIES
+            IMPORTED_CONFIGURATIONS "RELEASE;DEBUG"
+            IMPORTED_LOCATION_RELEASE ${OPENH264_LIBRARY_RELEASE}
+            IMPORTED_LOCATION_DEBUG ${OPENH264_LIBRARY_DEBUG}
+            INTERFACE_INCLUDE_DIRECTORIES ${OPENH264_INCLUDE_DIR}
+        )
+    endif()
+elseif(openh264_ADDED)
     file(MAKE_DIRECTORY ${CPM_PACKAGE_openh264_BINARY_DIR})     # DOWNLOAD_ONLY does not create build dir
 
     set(OPENH264_OUTPUT_LIB ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libopenh264${CMAKE_STATIC_LIBRARY_SUFFIX})

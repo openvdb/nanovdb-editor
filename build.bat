@@ -10,7 +10,7 @@ set BUILD_DIR=%PROJECT_DIR%build
 set CONFIG_FILE=config.ini
 set SLANG_DEBUG_OUTPUT=OFF
 set CLEAN_SHADERS=OFF
-set USE_VCPKG=OFF
+if not defined USE_VCPKG set USE_VCPKG=OFF
 set GLFW_ON=ON
 
 set clean_build=0
@@ -88,14 +88,22 @@ if "%release%"=="0" (
 )
 
 ::: set env vars from a config file (optional)
-if exist %PROJECT_DIR%%CONFIG_FILE% (
-    for /f "tokens=1,2 delims== eol=#" %%i in (%PROJECT_DIR%%CONFIG_FILE%) do (
-      set %%i=%%j
+if exist "%PROJECT_DIR%%CONFIG_FILE%" (
+    for /f "usebackq tokens=1,* delims== eol=#" %%i in ("%PROJECT_DIR%%CONFIG_FILE%") do (
+      set "%%i=%%j"
     )
 )
 
 if not defined MSVS_VERSION (
     echo MSVS_VERSION not set, using default CMake generator
+)
+
+:: vcpkg triplet and CMake -A arch: default x64; use arm64 on Windows ARM64
+set VCPKG_TRIPLET=x64-windows
+set CMAKE_ARCH=x64
+if "%PROCESSOR_ARCHITECTURE%"=="ARM64" (
+    set VCPKG_TRIPLET=arm64-windows
+    set CMAKE_ARCH=ARM64
 )
 
 if "%USE_VCPKG%"=="ON" (
@@ -104,22 +112,32 @@ if "%USE_VCPKG%"=="ON" (
         set BUILD_ERROR=1
         goto Error
     )
-    :: Install dependencies using vcpkg.json
-    if exist %VCPKG_ROOT%\vcpkg.exe (
-        echo -- Installing dependencies with vcpkg...
-        call %VCPKG_ROOT%\vcpkg.exe install --triplet x64-windows
+    :: Install dependencies using vcpkg.json (run from repo root so manifest is found)
+    if exist "%VCPKG_ROOT%\vcpkg.exe" (
+        echo -- Installing dependencies with vcpkg, triplet %VCPKG_TRIPLET%
+        pushd "%PROJECT_DIR%"
+        call "%VCPKG_ROOT%\vcpkg.exe" install --triplet %VCPKG_TRIPLET%
         if errorlevel 1 (
+            popd
             echo vcpkg install failed
             set BUILD_ERROR=1
             goto Error
         )
-        set VCPKG_PREFIX_PATH=%VCPKG_ROOT%\installed\x64-windows
+        popd
+        set VCPKG_PREFIX_PATH=%PROJECT_DIR%vcpkg_installed\%VCPKG_TRIPLET%
+        set VCPKG_INSTALLED_DIR_ARG=-DVCPKG_INSTALLED_DIR="%PROJECT_DIR%vcpkg_installed"
+        set "VCPKG_INSTALLED_DIR=%PROJECT_DIR%vcpkg_installed"
     ) else (
-        echo vcpkg.exe not found in %VCPKG_ROOT%
+        echo vcpkg.exe not found in "%VCPKG_ROOT%"
         set BUILD_ERROR=1
         goto Error
     )
     set VCPKG_CMAKE=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake
+) else (
+    set VCPKG_INSTALLED_DIR_ARG=
+    set "VCPKG_INSTALLED_DIR="
+    set "VCPKG_PREFIX_PATH="
+    set "VCPKG_CMAKE="
 )
 
 goto Build
@@ -208,6 +226,7 @@ if defined SLANG_PROFILE (
 set CMAKE_ARGS=%PROJECT_DIR% -B %BUILD_DIR% ^
     -DCMAKE_TOOLCHAIN_FILE=%VCPKG_CMAKE% ^
     -DCMAKE_PREFIX_PATH=%VCPKG_PREFIX_PATH% ^
+    %VCPKG_INSTALLED_DIR_ARG% ^
     -DNANOVDB_EDITOR_USE_VCPKG=%USE_VCPKG% ^
     -DNANOVDB_EDITOR_CLEAN_SHADERS=%CLEAN_SHADERS% ^
     -DNANOVDB_EDITOR_SLANG_DEBUG_OUTPUT=%SLANG_DEBUG_OUTPUT% ^
@@ -216,7 +235,9 @@ set CMAKE_ARGS=%PROJECT_DIR% -B %BUILD_DIR% ^
     %SLANG_PROFILE_ARG%
 
 if defined MSVS_VERSION (
-    cmake -G %MSVS_VERSION% %CMAKE_ARGS%
+    rem Remove any surrounding quotes from MSVS_VERSION before passing to CMake
+    set "MSVS_GENERATOR=%MSVS_VERSION:"=%"
+    cmake -G "%MSVS_GENERATOR%" -A %CMAKE_ARCH% %CMAKE_ARGS%
 ) else (
     cmake %CMAKE_ARGS%
 )

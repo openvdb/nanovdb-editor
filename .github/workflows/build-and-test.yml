@@ -169,6 +169,20 @@ jobs:
         run: |
           ./build.bat -rv
 
+      - name: Verify GLFW runtime DLL is present
+        run: |
+          $GlfwDll = "build\Release\glfw3.dll"
+          if (-not (Test-Path $GlfwDll)) {
+            Write-Host "ERROR: Expected GLFW runtime DLL was not produced: $GlfwDll"
+            Write-Host "GLFW is loaded dynamically at runtime, so local Windows builds must provide glfw3.dll."
+            if (Test-Path "build\Release") {
+              Write-Host "Contents of build\Release:"
+              Get-ChildItem "build\Release" | Select-Object Name, Length | Format-Table -AutoSize
+            }
+            exit 1
+          }
+          Write-Host "Found GLFW runtime DLL: $GlfwDll"
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -262,13 +276,41 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up vcpkg
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git
+          .\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+        env:
+          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+          USE_VCPKG: ON
+
       - name: Build NanoVDB Editor (GLFW disabled)
         run: |
           ./build.bat -rfv
+        env:
+          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+          USE_VCPKG: ON
 
       - name: Build NanoVDB Editor (GLFW enabled)
         run: |
           ./build.bat -rv
+        env:
+          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+          USE_VCPKG: ON
+
+      - name: Verify GLFW runtime DLL is present
+        run: |
+          $GlfwDll = "build\Release\glfw3.dll"
+          if (-not (Test-Path $GlfwDll)) {
+            Write-Host "ERROR: Expected GLFW runtime DLL was not produced: $GlfwDll"
+            Write-Host "GLFW is loaded dynamically at runtime, so local Windows builds must provide glfw3.dll."
+            if (Test-Path "build\Release") {
+              Write-Host "Contents of build\Release:"
+              Get-ChildItem "build\Release" | Select-Object Name, Length | Format-Table -AutoSize
+            }
+            exit 1
+          }
+          Write-Host "Found GLFW runtime DLL: $GlfwDll"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
