@@ -26,9 +26,13 @@ function(create_platform_file_link TARGET_NAME SOURCE_FILE TARGET_FILE COMMENT_T
         add_custom_command(
             TARGET ${TARGET_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory "${TARGET_DIR}"
-            COMMAND /bin/sh -c "if [ -L \"$$1\" ]; then LINK_TARGET=$$(readlink \"$$1\"); if [ \"$$LINK_TARGET\" != \"$$2\" ] || [ ! -e \"$$1\" ]; then rm -f \"$$1\"; fi; fi" _ "${TARGET_FILE}" "${SOURCE_FILE}"
+            COMMAND ${CMAKE_COMMAND}
+                -DLINK_PATH="${TARGET_FILE}"
+                -DSOURCE_PATH="${SOURCE_FILE}"
+                -P "${CMAKE_CURRENT_LIST_DIR}/repair_symlink.cmake"
             COMMAND test -e "${TARGET_FILE}" || ${CMAKE_COMMAND} -E create_symlink "${SOURCE_FILE}" "${TARGET_FILE}"
             COMMENT "${COMMENT_TEXT}"
+            VERBATIM
         )
     endif()
 endfunction()
@@ -54,9 +58,13 @@ function(create_platform_directory_link TARGET_NAME SOURCE_DIR TARGET_DIR COMMEN
         add_custom_command(
             TARGET ${TARGET_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory "${TARGET_PARENT_DIR}"
-            COMMAND /bin/sh -c "if [ -L \"$$1\" ]; then LINK_TARGET=$$(readlink \"$$1\"); if [ \"$$LINK_TARGET\" != \"$$2\" ] || [ ! -e \"$$1\" ]; then rm -f \"$$1\"; fi; fi" _ "${TARGET_DIR}" "${SOURCE_DIR}"
+            COMMAND ${CMAKE_COMMAND}
+                -DLINK_PATH="${TARGET_DIR}"
+                -DSOURCE_PATH="${SOURCE_DIR}"
+                -P "${CMAKE_CURRENT_LIST_DIR}/repair_symlink.cmake"
             COMMAND test -e "${TARGET_DIR}" || ${CMAKE_COMMAND} -E create_symlink "${SOURCE_DIR}" "${TARGET_DIR}"
             COMMENT "${COMMENT_TEXT}"
+            VERBATIM
         )
     endif()
 endfunction()
