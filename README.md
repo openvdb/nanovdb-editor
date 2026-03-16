@@ -122,10 +122,12 @@ The Linux/macOS build script supports the following flags (combine as needed):
 - **-e**: Install the Python module in editable mode (use with `-p`)
 - **-t**: Run tests (ctest + pytest); honors `-r`/`-d` to pick configuration
 - **-f**: Disable GLFW for a headless build
+- **-c**: Force CMake reconfigure (needed when switching build options like GLFW on/off)
 
 Notes:
 - If neither `-r` nor `-d` is provided (and not using `-p` or `-t`), the script defaults to a Release build.
 - For Python builds (`-p`), `-d` selects Debug wheels; otherwise Release is used.
+- CMake configure is skipped automatically when the build directory already exists. Use `-c` to force reconfigure when changing options (e.g., switching between GLFW enabled/disabled).
 
 Examples:
 
@@ -150,6 +152,9 @@ Examples:
 
 # Generate Slang ASM during build
 ./build.sh -s -r
+
+# Rebuild after changing options
+./build.sh -r -c
 ```
 
 #### Linux

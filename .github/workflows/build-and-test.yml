@@ -57,7 +57,21 @@ jobs:
         run: |
           set -e
           chmod +x ./build.sh
-          ./build.sh -rfv
+          ./build.sh -rcv
+
+      - name: Verify incremental build is a no-op
+        run: |
+          set -e
+          echo "Running no-op incremental build to verify nothing is recompiled..."
+          # Must match the GLFW mode of the preceding build step (GLFW enabled = no -f flag).
+          # The -c flag is intentionally omitted so CMake configure is skipped.
+          OUTPUT=$(./build.sh -r 2>&1)
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -q 'Building CXX object'; then
+            echo "::error::Incremental build recompiled source files unexpectedly!"
+            exit 1
+          fi
+          echo "Incremental build test passed - no recompilation detected"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -89,7 +103,7 @@ jobs:
 
       - name: Build NanoVDB Editor (GLFW enabled)
         run: |
-          ./build.bat -rv
+          ./build.bat -rcv
 
       - name: Verify GLFW runtime DLL is present
         run: |
@@ -104,6 +118,22 @@ jobs:
             exit 1
           }
           Write-Host "Found GLFW runtime DLL: $GlfwDll"
+
+      - name: Verify incremental build is a no-op
+        run: |
+          Write-Host "Running no-op incremental build to verify nothing is recompiled..."
+          # Must match the GLFW mode of the preceding build step (GLFW enabled = no -f flag).
+          # The -c flag is intentionally omitted so CMake configure is skipped.
+          $output = cmd /c "build.bat -r 2>&1"
+          $output | ForEach-Object { Write-Host $_ }
+          $compiled = $output | Select-String -Pattern 'CL\.exe.+/c\s'
+          if ($compiled) {
+            Write-Host "::error::Incremental build recompiled source files unexpectedly!"
+            Write-Host "Recompiled lines:"
+            $compiled | ForEach-Object { Write-Host $_.Line }
+            exit 1
+          }
+          Write-Host "Incremental build test passed - no recompilation detected"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -188,7 +218,7 @@ jobs:
 
       - name: Build NanoVDB Editor (GLFW enabled)
         run: |
-          ./build.bat -rv
+          ./build.bat -rcv
         env:
           VCPKG_ROOT: ${{ github.workspace }}/vcpkg
           USE_VCPKG: ON
@@ -206,6 +236,22 @@ jobs:
             exit 1
           }
           Write-Host "Found GLFW runtime DLL: $GlfwDll"
+
+      - name: Verify incremental build is a no-op
+        run: |
+          Write-Host "Running no-op incremental build to verify nothing is recompiled..."
+          # Must match the GLFW mode of the preceding build step (GLFW enabled = no -f flag).
+          # The -c flag is intentionally omitted so CMake configure is skipped.
+          $output = cmd /c "build.bat -r 2>&1"
+          $output | ForEach-Object { Write-Host $_ }
+          $compiled = $output | Select-String -Pattern 'CL\.exe.+/c\s'
+          if ($compiled) {
+            Write-Host "::error::Incremental build recompiled source files unexpectedly!"
+            Write-Host "Recompiled lines:"
+            $compiled | ForEach-Object { Write-Host $_.Line }
+            exit 1
+          }
+          Write-Host "Incremental build test passed - no recompilation detected"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -329,7 +375,21 @@ jobs:
         run: |
           set -e
           chmod +x ./build.sh
-          ./build.sh -rfv
+          ./build.sh -rcv
+
+      - name: Verify incremental build is a no-op
+        run: |
+          set -e
+          echo "Running no-op incremental build to verify nothing is recompiled..."
+          # Must match the GLFW mode of the preceding build step (GLFW enabled = no -f flag).
+          # The -c flag is intentionally omitted so CMake configure is skipped.
+          OUTPUT=$(./build.sh -r 2>&1)
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -q 'Building CXX object'; then
+            echo "::error::Incremental build recompiled source files unexpectedly!"
+            exit 1
+          fi
+          echo "Incremental build test passed - no recompilation detected"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

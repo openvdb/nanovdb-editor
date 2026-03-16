@@ -19,6 +19,7 @@ set debug=0
 set verbose=0
 set python_only=0
 set test_only=0
+set force_configure=0
 
 :parse_args
 set args=%1
@@ -65,6 +66,10 @@ if "%arg:~0,1%"=="t" (
 )
 if "%arg:~0,1%"=="f" (
     set GLFW_ON=OFF
+    goto check_next_char
+)
+if "%arg:~0,1%"=="c" (
+    set force_configure=1
     goto check_next_char
 )
 if "%arg:~0,1%"=="h" (
@@ -152,7 +157,7 @@ echo Failure while building %PROJECT_NAME%
 exit /b %BUILD_ERROR%
 
 :Usage
-echo Usage: build [-x] [-r] [-d] [-v] [-s] [-p] [-t] [-f]
+echo Usage: build [-x] [-r] [-d] [-v] [-s] [-p] [-t] [-f] [-c]
 echo        -x  Perform a clean build
 echo        -r  Build in release (default)
 echo        -d  Build in debug
@@ -161,6 +166,7 @@ echo        -s  Compile slang into ASM
 echo        -p  Build only python module (requires Python 3.8+, auto-installs scikit-build ^& wheel)
 echo        -t  Run only tests using ctest
 echo        -f  Disable GLFW (headless build)
+echo        -c  Force CMake reconfigure
 exit /b 1
 
 :Build
@@ -218,6 +224,16 @@ if "%debug%"=="1" (
 
 echo -- Building %PROJECT_NAME%...
 
+if "%clean_build%"=="1" goto RunConfigure
+if "%force_configure%"=="1" goto RunConfigure
+if not exist "%BUILD_DIR%\CMakeCache.txt" goto RunConfigure
+
+echo -- Skipping CMake configure (already configured, use -c to force)
+goto SkipConfigure
+
+:RunConfigure
+echo -- Configuring %PROJECT_NAME%...
+
 set SLANG_PROFILE_ARG=
 if defined SLANG_PROFILE (
     set SLANG_PROFILE_ARG=-DNANOVDB_EDITOR_SLANG_PROFILE=%SLANG_PROFILE%
@@ -247,6 +263,8 @@ if "%BUILD_ERROR%" neq "0" (
     echo CMake configuration failed
     goto Error
 )
+
+:SkipConfigure
 
 if "%release%"=="1" (
     call :BuildConfig Release

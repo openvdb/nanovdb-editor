@@ -260,18 +260,13 @@ create_nanovdb_library(pnanovdbeditor
         ${EDITOR_SOURCE_FILES}
         ${SERVER_SOURCE_FILES}
         ${VULKAN_IMGUI_SOURCE_FILES}
-        ${IMGUI_SOURCE_FILES}
-        ${imgui_SOURCE_DIR}/misc/cpp/imgui_stdlib.cpp    # for std::string text input
     HEADERS ${EDITOR_HEADER_FILES}
     INCLUDES
         ./
         ./imgui
         ${nanovdb_SOURCE_DIR}/nanovdb
-        ${imgui_SOURCE_DIR}
         ${glfw_SOURCE_DIR}/include
         ${FileWatch_SOURCE_DIR}
-        ${ImGuiFileDialog_SOURCE_DIR}
-        ${ImGuiColorTextEdit_SOURCE_DIR}
         ${llhttp_SOURCE_DIR}/include
         ${asio_SOURCE_DIR}/asio/include
         ${expected_SOURCE_DIR}/include
@@ -279,6 +274,7 @@ create_nanovdb_library(pnanovdbeditor
     LIBS
         nlohmann_json::nlohmann_json
         llhttp_static
+        imgui
         ImGuiColorTextEdit
         ImGuiFileDialog
         fmt::fmt
