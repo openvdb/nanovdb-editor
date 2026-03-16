@@ -29,7 +29,7 @@ function(create_platform_file_link TARGET_NAME SOURCE_FILE TARGET_FILE COMMENT_T
             COMMAND ${CMAKE_COMMAND}
                 -DLINK_PATH="${TARGET_FILE}"
                 -DSOURCE_PATH="${SOURCE_FILE}"
-                -P "${CMAKE_CURRENT_LIST_DIR}/repair_symlink.cmake"
+                -P "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/repair_symlink.cmake"
             COMMAND test -e "${TARGET_FILE}" || ${CMAKE_COMMAND} -E create_symlink "${SOURCE_FILE}" "${TARGET_FILE}"
             COMMENT "${COMMENT_TEXT}"
             VERBATIM
@@ -61,7 +61,7 @@ function(create_platform_directory_link TARGET_NAME SOURCE_DIR TARGET_DIR COMMEN
             COMMAND ${CMAKE_COMMAND}
                 -DLINK_PATH="${TARGET_DIR}"
                 -DSOURCE_PATH="${SOURCE_DIR}"
-                -P "${CMAKE_CURRENT_LIST_DIR}/repair_symlink.cmake"
+                -P "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/repair_symlink.cmake"
             COMMAND test -e "${TARGET_DIR}" || ${CMAKE_COMMAND} -E create_symlink "${SOURCE_DIR}" "${TARGET_DIR}"
             COMMENT "${COMMENT_TEXT}"
             VERBATIM
