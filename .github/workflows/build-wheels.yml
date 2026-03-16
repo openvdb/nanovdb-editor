@@ -265,6 +265,51 @@ jobs:
 
         throw "Failed to seed cibuildwheel virtualenv cache for Windows"
 
+    - name: Seed cibuildwheel virtualenv cache (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        cache_dir="${CIBW_CACHE_PATH:-$HOME/Library/Caches/cibuildwheel}"
+        target="${cache_dir}/virtualenv-20.26.6.pyz"
+        mkdir -p "${cache_dir}"
+
+        if [ -f "${target}" ]; then
+          size="$(wc -c < "${target}")"
+          if [ "${size}" -gt 1024 ]; then
+            echo "Using cached cibuildwheel virtualenv payload at ${target} (${size} bytes)"
+            exit 0
+          fi
+          rm -f "${target}"
+        fi
+
+        urls=(
+          "https://raw.githubusercontent.com/pypa/get-virtualenv/20.26.6/public/virtualenv.pyz"
+          "https://github.com/pypa/get-virtualenv/raw/20.26.6/public/virtualenv.pyz"
+          "https://cdn.jsdelivr.net/gh/pypa/get-virtualenv@20.26.6/public/virtualenv.pyz"
+        )
+
+        for url in "${urls[@]}"; do
+          for attempt in 1 2 3; do
+            echo "Downloading cibuildwheel virtualenv payload from ${url} (attempt ${attempt})"
+            if curl --fail --location --retry 3 --retry-all-errors --output "${target}" "${url}"; then
+              size="$(wc -c < "${target}")"
+              if [ "${size}" -gt 1024 ]; then
+                echo "Seeded cibuildwheel virtualenv cache at ${target} (${size} bytes)"
+                exit 0
+              fi
+              echo "Downloaded file is unexpectedly small (${size} bytes)"
+            fi
+
+            rm -f "${target}"
+            sleep $((5 * attempt))
+          done
+        done
+
+        echo "Failed to seed cibuildwheel virtualenv cache for macOS" >&2
+        exit 1
+
     - name: Build Linux wheels
       if: runner.os == 'Linux'
       uses: pypa/cibuildwheel@v2.21.3
