@@ -40,12 +40,17 @@ def _load_fvdb_defaults() -> dict[str, str]:
     return defaults
 
 
-def _default_version(var_name: str, fallback: str) -> str:
+def _default_version(var_name: str, fallback: str | None = None) -> str:
     env_value = os.environ.get(var_name)
     if env_value:
         return env_value
     defaults = _load_fvdb_defaults()
-    return defaults.get(f"{var_name}_DEFAULT", fallback)
+    default_value = defaults.get(f"{var_name}_DEFAULT")
+    if default_value is not None:
+        return default_value
+    if fallback is not None:
+        return fallback
+    raise RuntimeError(f"Missing required default for {var_name}")
 
 
 RUNS_ON_FVDB_VIZ_ENV = os.environ.get("FVDB_VIZ_TESTS") == "1"
@@ -56,14 +61,13 @@ pytestmark = pytest.mark.skipif(
     reason=("Set FVDB_VIZ_TESTS=1 to enable fvdb.viz integration checks"),
 )
 
-TORCH_VERSION = _default_version("FVDB_VIZ_TORCH_VERSION", "2.8.0")
+TORCH_VERSION = _default_version("FVDB_VIZ_TORCH_VERSION", "2.10.0")
 TORCH_INDEX_URL = _default_version(
     "FVDB_VIZ_TORCH_INDEX_URL",
     "https://download.pytorch.org/whl/cu128",
 )
 FVDB_CORE_VERSION = _default_version(
     "FVDB_VIZ_CORE_VERSION",
-    "0.4.0+pt28.cu128",
 )
 FVDB_CORE_INDEX_URL = _default_version(
     "FVDB_VIZ_CORE_INDEX_URL",
