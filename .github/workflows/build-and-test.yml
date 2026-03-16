@@ -154,12 +154,21 @@ jobs:
   nanovdb-editor-build-and-test-windows:
     name: Build and Test (Windows)
     runs-on: windows-latest
+    env:
+      USE_VCPKG: ON
     defaults:
       run:
         shell: pwsh
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up vcpkg
+        run: |
+          $VcpkgRoot = Join-Path $env:RUNNER_TEMP "vcpkg"
+          git clone --depth 1 https://github.com/microsoft/vcpkg $VcpkgRoot
+          & "$VcpkgRoot\bootstrap-vcpkg.bat"
+          "VCPKG_ROOT=$VcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build NanoVDB Editor (GLFW disabled)
         run: |
