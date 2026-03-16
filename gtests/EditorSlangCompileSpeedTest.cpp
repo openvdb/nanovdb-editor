@@ -8,6 +8,20 @@
 #include <chrono>
 #include <cstring>
 #include <iostream>
+#include <string>
+
+namespace
+{
+std::string g_editor_compile_diagnostics;
+
+void capture_diagnostics(const char* message)
+{
+    if (message)
+    {
+        g_editor_compile_diagnostics += message;
+    }
+}
+} // namespace
 
 class EditorSlangCompileSpeedTest : public ::testing::Test
 {
@@ -21,6 +35,7 @@ protected:
         }
         compiler_inst = compiler.create_instance();
         ASSERT_NE(compiler_inst, nullptr);
+        compiler.set_diagnostic_callback(compiler_inst, capture_diagnostics);
     }
 
     void TearDown() override
@@ -54,6 +69,7 @@ TEST_F(EditorSlangCompileSpeedTest, EditorSlangCompilesToVulkan)
 
     auto start = std::chrono::high_resolution_clock::now();
 
+    g_editor_compile_diagnostics.clear();
     pnanovdb_bool_t result =
         compiler.compile_shader_from_file(compiler_inst, shader_path.c_str(), &compile_settings, nullptr);
 
@@ -62,7 +78,9 @@ TEST_F(EditorSlangCompileSpeedTest, EditorSlangCompilesToVulkan)
 
     std::cout << "[COMPILE TIME] editor.slang (Vulkan): " << duration.count() << " ms" << std::endl;
 
-    ASSERT_NE(result, PNANOVDB_FALSE) << "Compilation of editor.slang failed: " << shader_path;
+    ASSERT_NE(result, PNANOVDB_FALSE)
+        << "Compilation of editor.slang failed: " << shader_path
+        << (g_editor_compile_diagnostics.empty() ? "" : "\n" + g_editor_compile_diagnostics);
 }
 
 TEST_F(EditorSlangCompileSpeedTest, EditorSlangCompileSpeedBenchmark)
@@ -86,9 +104,11 @@ TEST_F(EditorSlangCompileSpeedTest, EditorSlangCompileSpeedBenchmark)
     {
         pnanovdb_compiler_instance_t* fresh_inst = compiler.create_instance();
         ASSERT_NE(fresh_inst, nullptr);
+        compiler.set_diagnostic_callback(fresh_inst, capture_diagnostics);
 
         auto start = std::chrono::high_resolution_clock::now();
 
+        g_editor_compile_diagnostics.clear();
         pnanovdb_bool_t result =
             compiler.compile_shader_from_file(fresh_inst, shader_path.c_str(), &compile_settings, nullptr);
 
@@ -98,7 +118,9 @@ TEST_F(EditorSlangCompileSpeedTest, EditorSlangCompileSpeedBenchmark)
 
         compiler.destroy_instance(fresh_inst);
 
-        ASSERT_NE(result, PNANOVDB_FALSE) << "Compilation failed on iteration " << i;
+        ASSERT_NE(result, PNANOVDB_FALSE)
+            << "Compilation failed on iteration " << i
+            << (g_editor_compile_diagnostics.empty() ? "" : "\n" + g_editor_compile_diagnostics);
     }
 
     long long total = 0;
@@ -139,21 +161,27 @@ TEST_F(EditorSlangCompileSpeedTest, EditorSlangFirstVsSubsequentCompilation)
 
     // First compilation (cold)
     auto start1 = std::chrono::high_resolution_clock::now();
+    g_editor_compile_diagnostics.clear();
     pnanovdb_bool_t result1 =
         compiler.compile_shader_from_file(compiler_inst, shader_path.c_str(), &compile_settings, nullptr);
     auto end1 = std::chrono::high_resolution_clock::now();
     auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1);
 
-    ASSERT_NE(result1, PNANOVDB_FALSE) << "First compilation failed";
+    ASSERT_NE(result1, PNANOVDB_FALSE)
+        << "First compilation failed"
+        << (g_editor_compile_diagnostics.empty() ? "" : "\n" + g_editor_compile_diagnostics);
 
     // Second compilation (warm/cached)
     auto start2 = std::chrono::high_resolution_clock::now();
+    g_editor_compile_diagnostics.clear();
     pnanovdb_bool_t result2 =
         compiler.compile_shader_from_file(compiler_inst, shader_path.c_str(), &compile_settings, nullptr);
     auto end2 = std::chrono::high_resolution_clock::now();
     auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(end2 - start2);
 
-    ASSERT_NE(result2, PNANOVDB_FALSE) << "Second compilation failed";
+    ASSERT_NE(result2, PNANOVDB_FALSE)
+        << "Second compilation failed"
+        << (g_editor_compile_diagnostics.empty() ? "" : "\n" + g_editor_compile_diagnostics);
 
     std::cout << "[CACHING TEST] editor.slang compilation:" << std::endl;
     std::cout << "  First compilation:  " << duration1.count() << " ms" << std::endl;

@@ -35,6 +35,7 @@ class TestEditorAPI2:
         self.compute.device_interface().create_device()
 
         self.editor = nve.Editor(self.compute, self.compiler)
+        print("Initialized Editor API 2 test fixture")
 
         self.config = nve.EditorConfig()
         self.config.ip_address = b"127.0.0.1"
@@ -58,6 +59,23 @@ class TestEditorAPI2:
             self.compiler._compiler = None
             self.compiler = None
         gc.collect()
+
+    def start_editor(self):
+        """Start editor with better diagnostics for CI failures."""
+        try:
+            print(f"Starting editor fixture streaming={self.config.streaming} headless={self.config.headless}")
+            self.compiler.clear_diagnostics()
+            self.editor.start(self.config)
+            sleep(0.5)
+        except Exception as exc:
+            diagnostics = self.compiler.get_diagnostics() or "<none>"
+            raise AssertionError(
+                "Editor API 2 startup failed (exception during start).\n"
+                f"Compiler diagnostics:\n{diagnostics}"
+            ) from exc
+        diagnostics = self.compiler.get_diagnostics()
+        if diagnostics:
+            print(f"Compiler diagnostics during editor startup:\n{diagnostics}")
 
     def test_get_token(self):
         """Test get_token API - creates and returns unique tokens for names."""
@@ -83,8 +101,7 @@ class TestEditorAPI2:
 
     def test_get_camera(self):
         """Test get_camera API - retrieves camera for a given scene."""
-        self.editor.start(self.config)
-        sleep(0.5)
+        self.start_editor()
 
         # Get a token for a scene
         scene_token = self.editor.get_token("test_scene")
@@ -102,8 +119,7 @@ class TestEditorAPI2:
 
     def test_add_nanovdb_2(self):
         """Test add_nanovdb_2 API - adds NanoVDB data to scene."""
-        self.editor.start(self.config)
-        sleep(0.5)
+        self.start_editor()
 
         # Get tokens
         scene_token = self.editor.get_token("test_scene")
@@ -129,8 +145,7 @@ class TestEditorAPI2:
 
     def test_add_gaussian_data_2(self):
         """Test add_gaussian_data_2 API - adds Gaussian splatting data to scene."""
-        self.editor.start(self.config)
-        sleep(0.5)
+        self.start_editor()
 
         # Get tokens
         scene_token = self.editor.get_token("test_scene")
@@ -175,8 +190,7 @@ class TestEditorAPI2:
 
     def test_update_camera_2(self):
         """Test update_camera_2 API - updates camera for a scene."""
-        self.editor.start(self.config)
-        sleep(0.5)
+        self.start_editor()
 
         # Get scene token
         scene_token = self.editor.get_token("test_scene")
@@ -202,8 +216,7 @@ class TestEditorAPI2:
 
     def test_add_camera_view_2(self):
         """Test add_camera_view_2 API - adds camera view to scene."""
-        self.editor.start(self.config)
-        sleep(0.5)
+        self.start_editor()
 
         # Get scene token
         scene_token = self.editor.get_token("test_scene")
@@ -248,8 +261,7 @@ class TestEditorAPI2:
 
     def test_remove(self):
         """Test remove API - removes object from scene."""
-        self.editor.start(self.config)
-        sleep(0.5)
+        self.start_editor()
 
         # Get tokens
         scene_token = self.editor.get_token("test_scene")
@@ -278,8 +290,7 @@ class TestEditorAPI2:
 
     def test_map_unmap_params(self):
         """Test map_params and unmap_params APIs - parameter access."""
-        self.editor.start(self.config)
-        sleep(0.5)
+        self.start_editor()
 
         # Get tokens
         scene_token = self.editor.get_token("test_scene")
@@ -309,8 +320,7 @@ class TestEditorAPI2:
 
     def test_multiple_scenes(self):
         """Test working with multiple scenes and objects."""
-        self.editor.start(self.config)
-        sleep(0.5)
+        self.start_editor()
 
         # Create multiple scene tokens
         scene1_token = self.editor.get_token("scene1")
@@ -346,8 +356,7 @@ class TestEditorAPI2:
 
     def test_add_image2d(self):
         """Test add_image2d API - adds 2D image data to scene."""
-        self.editor.start(self.config)
-        sleep(0.5)
+        self.start_editor()
 
         # Get tokens
         scene_token = self.editor.get_token("test_scene")

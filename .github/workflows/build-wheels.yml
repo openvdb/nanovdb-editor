@@ -171,18 +171,27 @@ jobs:
             cibw_environment: >
               CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DFETCHCONTENT_QUIET=OFF"
               CPM_SOURCE_CACHE=/tmp/cpm-cache
+          - os: macos-latest
+            arch: ""
+            cibw_build: "cp311-macosx_*"
+            cibw_environment: >
+              MACOSX_DEPLOYMENT_TARGET=15.0
+              CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 -DFETCHCONTENT_QUIET=OFF"
+              CPM_SOURCE_CACHE=/tmp/cpm-cache
           - os: windows-latest
             arch: ""
             cibw_build: "cp311-win_amd64"
             cibw_environment: >
+              VCPKG_ROOT=C:/vcpkg
               CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_USE_VCPKG=ON -DNANOVDB_EDITOR_USE_H264=ON -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DFETCHCONTENT_QUIET=OFF"
-              CPM_SOURCE_CACHE=/tmp/cpm-cache
+              CPM_SOURCE_CACHE=C:/cpm-cache
           - os: windows-11-arm
             arch: ARM64
             cibw_build: "cp311-win_arm64"
             cibw_environment: >
+              VCPKG_ROOT=C:/vcpkg
               CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_USE_VCPKG=ON -DNANOVDB_EDITOR_USE_H264=ON -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DFETCHCONTENT_QUIET=OFF"
-              CPM_SOURCE_CACHE=/tmp/cpm-cache
+              CPM_SOURCE_CACHE=C:/cpm-cache
 
     steps:
     - uses: actions/checkout@v4
@@ -256,6 +265,51 @@ jobs:
         }
 
         throw "Failed to seed cibuildwheel virtualenv cache for Windows"
+
+    - name: Seed cibuildwheel virtualenv cache (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        cache_dir="${CIBW_CACHE_PATH:-$HOME/Library/Caches/cibuildwheel}"
+        target="${cache_dir}/virtualenv-20.26.6.pyz"
+        mkdir -p "${cache_dir}"
+
+        if [ -f "${target}" ]; then
+          size="$(wc -c < "${target}")"
+          if [ "${size}" -gt 1024 ]; then
+            echo "Using cached cibuildwheel virtualenv payload at ${target} (${size} bytes)"
+            exit 0
+          fi
+          rm -f "${target}"
+        fi
+
+        urls=(
+          "https://raw.githubusercontent.com/pypa/get-virtualenv/20.26.6/public/virtualenv.pyz"
+          "https://github.com/pypa/get-virtualenv/raw/20.26.6/public/virtualenv.pyz"
+          "https://cdn.jsdelivr.net/gh/pypa/get-virtualenv@20.26.6/public/virtualenv.pyz"
+        )
+
+        for url in "${urls[@]}"; do
+          for attempt in 1 2 3; do
+            echo "Downloading cibuildwheel virtualenv payload from ${url} (attempt ${attempt})"
+            if curl --fail --location --retry 3 --retry-all-errors --output "${target}" "${url}"; then
+              size="$(wc -c < "${target}")"
+              if [ "${size}" -gt 1024 ]; then
+                echo "Seeded cibuildwheel virtualenv cache at ${target} (${size} bytes)"
+                exit 0
+              fi
+              echo "Downloaded file is unexpectedly small (${size} bytes)"
+            fi
+
+            rm -f "${target}"
+            sleep $((5 * attempt))
+          done
+        done
+
+        echo "Failed to seed cibuildwheel virtualenv cache for macOS" >&2
+        exit 1
 
     - name: Build Linux wheels
       if: runner.os == 'Linux'
@@ -463,6 +517,14 @@ jobs:
       with:
         package-dir: pymodule
 
+    - name: Build macOS wheels
+      if: runner.os == 'macOS'
+      uses: pypa/cibuildwheel@v2.21.3
+      env:
+        CIBW_ARCHS_MACOS: auto
+      with:
+        package-dir: pymodule
+
     - name: Build Windows wheels
       if: runner.os == 'Windows'
       uses: pypa/cibuildwheel@v2.21.3
@@ -470,22 +532,17 @@ jobs:
         CIBW_ARCHS_WINDOWS: ${{ matrix.os == 'windows-11-arm' && 'ARM64' || 'auto' }}
         # Windows dependencies
         CIBW_BEFORE_ALL_WINDOWS: |
-          $ErrorActionPreference = 'Stop'
-
-          if (!(Test-Path C:\vcpkg\.git)) {
+          @echo on
+          if not exist C:\vcpkg\.git (
             git clone --depth 1 https://github.com/microsoft/vcpkg C:\vcpkg
-            if ($LASTEXITCODE -ne 0 -or !(Test-Path C:\vcpkg\bootstrap-vcpkg.bat)) {
-              throw "Failed to clone vcpkg into C:\vcpkg"
-            }
-          }
-
-          & C:\vcpkg\bootstrap-vcpkg.bat
-          if ($LASTEXITCODE -ne 0 -or !(Test-Path C:\vcpkg\vcpkg.exe)) {
-            throw "Failed to bootstrap vcpkg"
-          }
-
+            if errorlevel 1 exit /b 1
+          )
+          call C:\vcpkg\bootstrap-vcpkg.bat
+          if errorlevel 1 exit /b 1
           python -m pip install cmake
+          if errorlevel 1 exit /b 1
           cmake --version
+          if errorlevel 1 exit /b 1
       with:
         package-dir: pymodule
 

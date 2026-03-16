@@ -456,8 +456,8 @@ else()
             set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-windows-x86_64.zip)
         endif()
     elseif(APPLE)
-        if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
-            set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-macos-arm64.zip)
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+            set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-macos-aarch64.zip)
         else()
             set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-macos-x86_64.zip)
         endif()
@@ -767,6 +767,15 @@ if(Slang_ADDED)
             else()
                 message(STATUS "slang-llvm library not found, skipping copy")
             endif()
+        elseif(APPLE)
+            add_custom_command(TARGET copy_slang_libs POST_BUILD
+                COMMAND ${CMAKE_COMMAND}
+                    -DSLANG_RUNTIME_SOURCE_DIR=${Slang_SOURCE_DIR}/lib
+                    -DSLANG_RUNTIME_DEST_DIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+                    -DSLANG_RUNTIME_DYLIB_SUFFIX=${CMAKE_SHARED_LIBRARY_SUFFIX}
+                    -P ${CMAKE_CURRENT_LIST_DIR}/slang_runtime_macos.cmake
+                COMMENT "Copying macOS Slang runtime libraries"
+            )
         else()
             # Note: libslang-compiler and libslang-glslang have version suffix in filename (e.g., libslang-compiler-2025.23.1.so)
             add_custom_command(TARGET copy_slang_libs POST_BUILD
@@ -822,13 +831,24 @@ if(VulkanLoader_ADDED)
     if(NOT SKBUILD)
         if(TARGET vulkan)
             # Copy the produced Vulkan loader to the main lib directory for runtime loading
-            add_custom_target(copy_vulkan_loader
-                COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    $<TARGET_FILE:vulkan>
-                    ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:vulkan>
-                COMMENT "Copying Vulkan loader to main lib directory"
-            )
+            if(APPLE)
+                add_custom_target(copy_vulkan_loader
+                    COMMAND ${CMAKE_COMMAND}
+                        -DVULKAN_LOADER_SOURCE_FILE=$<TARGET_FILE:vulkan>
+                        -DVULKAN_LOADER_DEST_DIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+                        -DVULKAN_LOADER_DYLIB_SUFFIX=${CMAKE_SHARED_LIBRARY_SUFFIX}
+                        -P ${CMAKE_CURRENT_LIST_DIR}/vulkan_loader_macos.cmake
+                    COMMENT "Copying macOS Vulkan loader to main lib directory"
+                )
+            else()
+                add_custom_target(copy_vulkan_loader
+                    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        $<TARGET_FILE:vulkan>
+                        ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:vulkan>
+                    COMMENT "Copying Vulkan loader to main lib directory"
+                )
+            endif()
         endif()
     endif()
 endif()
@@ -934,6 +954,29 @@ elseif(openh264_ADDED)
 
     set(OPENH264_OUTPUT_LIB ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libopenh264${CMAKE_STATIC_LIBRARY_SUFFIX})
     set(OPENH264_BUILD_LIB ${CPM_PACKAGE_openh264_BINARY_DIR}/libopenh264${CMAKE_STATIC_LIBRARY_SUFFIX})
+    set(OPENH264_CFLAGS "-fPIC -DWELS_X86_ASM=0")
+    set(OPENH264_CXXFLAGS "-fPIC -std=c++11 -DWELS_X86_ASM=0")
+    set(OPENH264_ENV_VARS
+        CC=${CMAKE_C_COMPILER}
+        CXX=${CMAKE_CXX_COMPILER}
+    )
+
+    if(APPLE)
+        execute_process(
+            COMMAND xcrun --sdk macosx --show-sdk-path
+            OUTPUT_VARIABLE OPENH264_MACOS_SDK_PATH
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
+        )
+
+        if(OPENH264_MACOS_SDK_PATH)
+            list(APPEND OPENH264_ENV_VARS SDKROOT=${OPENH264_MACOS_SDK_PATH})
+            string(APPEND OPENH264_CFLAGS " -isysroot ${OPENH264_MACOS_SDK_PATH}")
+            string(APPEND OPENH264_CXXFLAGS " -isysroot ${OPENH264_MACOS_SDK_PATH}")
+        else()
+            message(WARNING "Could not determine the macOS SDK path for the openh264 build")
+        endif()
+    endif()
 
     add_custom_command(
         OUTPUT ${OPENH264_OUTPUT_LIB}
@@ -941,11 +984,11 @@ elseif(openh264_ADDED)
             ${CPM_PACKAGE_openh264_SOURCE_DIR}
             ${CPM_PACKAGE_openh264_BINARY_DIR}
         # Build encoder and common libraries from root directory
-        COMMAND ${CMAKE_COMMAND} -E env CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER}
+        COMMAND ${CMAKE_COMMAND} -E env ${OPENH264_ENV_VARS}
                 make -j${CMAKE_BUILD_PARALLEL_LEVEL}
                 USE_ASM=No BUILDTYPE=static DECODER=No
-                "CFLAGS=-fPIC -DWELS_X86_ASM=0"
-                "CXXFLAGS=-fPIC -std=c++11 -DWELS_X86_ASM=0"
+                "CFLAGS=${OPENH264_CFLAGS}"
+                "CXXFLAGS=${OPENH264_CXXFLAGS}"
                 libencoder.a libcommon.a libprocessing.a
         # Create our own static library from encoder objects
         COMMAND ${CMAKE_COMMAND} -E rm -rf temp_openh264_objects

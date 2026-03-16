@@ -26,7 +26,10 @@ docker run --runtime=nvidia --net=host --gpus=all ...
 - C++ compiler
 - CMake at least 3.25
 - Python 3.x
-- Vulkan library `vulkan-1` (should be installed with graphics driver)
+- Vulkan runtime/loader:
+  - Windows: Vulkan Runtime (`vulkan-1`)
+  - Linux: system Vulkan loader/driver packages
+  - macOS: MoltenVK (or the macOS Vulkan SDK)
 
 #### Streaming
 - NVIDIA Driver Version at least 550.0 (https://developer.nvidia.com/vulkan/video/get-started)
@@ -75,15 +78,15 @@ sudo apt-get install make
 ```
 
 #### macOS
-Currently not actively used, might be stale.
 
 ```sh
-# install Vulkan SDK from https://vulkan.lunarg.com/sdk/home#mac
 # install homebrew from https://brew.sh
-# brew install cmake
-brew install glfw      # TODO: will be optional for streaming
-
+brew install cmake molten-vk
 ```
+
+Notes:
+- If the Vulkan loader does not discover MoltenVK automatically on your machine, point `VK_ICD_FILENAMES` and `VK_DRIVER_FILES` at `MoltenVK_icd.json`.
+
 #### Windows
 The project can use `vcpkg` for dependency management. If `NANOVDB_EDITOR_USE_VCPKG` is set, `vcpkg.json` automatically installs required dependencies.
 
