@@ -425,6 +425,8 @@ jobs:
   nanovdb-editor-build-python-windows-arm:
     name: Build (Windows ARM64)
     runs-on: windows-11-arm
+    env:
+      USE_VCPKG: ON
     defaults:
       run:
         shell: pwsh
@@ -437,6 +439,13 @@ jobs:
         with:
           python-version: '3.11'
           architecture: 'arm64'
+
+      - name: Set up vcpkg
+        run: |
+          $VcpkgRoot = Join-Path $env:RUNNER_TEMP "vcpkg"
+          git clone --depth 1 https://github.com/microsoft/vcpkg $VcpkgRoot
+          & "$VcpkgRoot\bootstrap-vcpkg.bat"
+          "VCPKG_ROOT=$VcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build NanoVDB Editor Python module
         run: |
@@ -454,6 +463,8 @@ jobs:
     name: Test (Windows ARM64)
     needs: nanovdb-editor-build-python-windows-arm
     runs-on: windows-11-arm
+    env:
+      NANOVDB_EDITOR_WINDOWS_H264: "1"
     defaults:
       run:
         shell: pwsh
@@ -466,6 +477,15 @@ jobs:
         with:
           python-version: '3.11'
           architecture: 'arm64'
+
+      - name: Set up vcpkg
+        run: |
+          $VcpkgRoot = Join-Path $env:RUNNER_TEMP "vcpkg"
+          git clone --depth 1 https://github.com/microsoft/vcpkg $VcpkgRoot
+          & "$VcpkgRoot\bootstrap-vcpkg.bat"
+          "VCPKG_ROOT=$VcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & "$VcpkgRoot\vcpkg.exe" install --triplet arm64-windows --x-manifest-root $PWD
+          "$PWD\vcpkg_installed\arm64-windows\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Install ARM64 Vulkan SDK loader
         run: |
