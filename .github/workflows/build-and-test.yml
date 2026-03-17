@@ -67,17 +67,7 @@ jobs:
 
       - name: Verify incremental build is a no-op
         run: |
-          set -e
-          echo "Running no-op incremental build to verify nothing is recompiled..."
-          # Must match the GLFW mode of the preceding build step (GLFW enabled = no -f flag).
-          # The -c flag is intentionally omitted so CMake configure is skipped.
-          OUTPUT=$(./build.sh -r 2>&1)
-          echo "$OUTPUT"
-          if echo "$OUTPUT" | grep -q 'Building CXX object'; then
-            echo "::error::Incremental build recompiled source files unexpectedly!"
-            exit 1
-          fi
-          echo "Incremental build test passed - no recompilation detected"
+          bash ./scripts/ci/check_incremental_build.sh "./build.sh -r"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -208,19 +198,7 @@ jobs:
 
       - name: Verify incremental build is a no-op
         run: |
-          Write-Host "Running no-op incremental build to verify nothing is recompiled..."
-          # Must match the GLFW mode of the preceding build step (GLFW enabled = no -f flag).
-          # The -c flag is intentionally omitted so CMake configure is skipped.
-          $output = cmd /c "build.bat -r 2>&1"
-          $output | ForEach-Object { Write-Host $_ }
-          $compiled = $output | Select-String -Pattern 'CL\.exe.+/c\s'
-          if ($compiled) {
-            Write-Host "::error::Incremental build recompiled source files unexpectedly!"
-            Write-Host "Recompiled lines:"
-            $compiled | ForEach-Object { Write-Host $_.Line }
-            exit 1
-          }
-          Write-Host "Incremental build test passed - no recompilation detected"
+          ./scripts/ci/check_incremental_build.ps1 -Command "build.bat -r"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -353,19 +331,7 @@ jobs:
 
       - name: Verify incremental build is a no-op
         run: |
-          Write-Host "Running no-op incremental build to verify nothing is recompiled..."
-          # Must match the GLFW mode of the preceding build step (GLFW enabled = no -f flag).
-          # The -c flag is intentionally omitted so CMake configure is skipped.
-          $output = cmd /c "build.bat -r 2>&1"
-          $output | ForEach-Object { Write-Host $_ }
-          $compiled = $output | Select-String -Pattern 'CL\.exe.+/c\s'
-          if ($compiled) {
-            Write-Host "::error::Incremental build recompiled source files unexpectedly!"
-            Write-Host "Recompiled lines:"
-            $compiled | ForEach-Object { Write-Host $_.Line }
-            exit 1
-          }
-          Write-Host "Incremental build test passed - no recompilation detected"
+          ./scripts/ci/check_incremental_build.ps1 -Command "build.bat -r"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -493,17 +459,7 @@ jobs:
 
       - name: Verify incremental build is a no-op
         run: |
-          set -e
-          echo "Running no-op incremental build to verify nothing is recompiled..."
-          # Must match the GLFW mode of the preceding build step (GLFW enabled = no -f flag).
-          # The -c flag is intentionally omitted so CMake configure is skipped.
-          OUTPUT=$(./build.sh -r 2>&1)
-          echo "$OUTPUT"
-          if echo "$OUTPUT" | grep -q 'Building CXX object'; then
-            echo "::error::Incremental build recompiled source files unexpectedly!"
-            exit 1
-          fi
-          echo "Incremental build test passed - no recompilation detected"
+          bash ./scripts/ci/check_incremental_build.sh "./build.sh -r"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

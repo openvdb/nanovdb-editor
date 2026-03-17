@@ -551,52 +551,7 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
-        python - <<'PY'
-        import os
-        import pathlib
-        import zipfile
-        import sys
-
-        wheels = sorted(pathlib.Path("wheelhouse").glob("nanovdb_editor*.whl"))
-        if not wheels:
-            print("No nanovdb_editor wheel found in wheelhouse/", file=sys.stderr)
-            raise SystemExit(1)
-
-        wheel = wheels[0]
-        print(f"Inspecting wheel: {wheel}")
-        with zipfile.ZipFile(wheel) as zf:
-            names = zf.namelist()
-
-        lower_names = {name.lower() for name in names}
-        bundled_libs = sorted(
-            name for name in names if name.startswith("nanovdb_editor/lib/")
-        )
-        def has_bundled_dll(prefix):
-            prefix = prefix.lower()
-            return any(
-                name.lower().startswith(prefix) and name.lower().endswith(".dll")
-                for name in bundled_libs
-            )
-
-        print("Bundled runtime libs:")
-        for name in bundled_libs:
-            print(f" - {name}")
-
-        missing = []
-        if "nanovdb_editor/lib/vulkan-1.dll" not in lower_names:
-            missing.append("vulkan-1.dll")
-        if os.environ.get("NANOVDB_EDITOR_WINDOWS_H264") == "1" and not has_bundled_dll(
-            "nanovdb_editor/lib/openh264"
-        ):
-            missing.append("openh264*.dll")
-        if missing:
-            print(
-                "Windows wheel is missing required runtime libraries: "
-                + ", ".join(missing),
-                file=sys.stderr,
-            )
-            raise SystemExit(1)
-        PY
+        python scripts/ci/verify_windows_runtime.py wheel --dir wheelhouse
 
     - uses: actions/upload-artifact@v4
       with:
