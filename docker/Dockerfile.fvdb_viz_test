@@ -23,20 +23,20 @@ RUN python3 -m pip install \
 
 WORKDIR /workspace
 
-ARG TORCH_VERSION=2.8.0
-ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu128
-ARG FVDB_CORE_VERSION=0.3.0
-ARG FVDB_CORE_INDEX_URL=https://d36m13axqqhiit.cloudfront.net/simple
+ARG TORCH_VERSION
+ARG TORCH_INDEX_URL
+ARG FVDB_CORE_VERSION
+ARG FVDB_CORE_INDEX_URL
 
 RUN if [ -n "$TORCH_INDEX_URL" ]; then \
-        python3 -m pip install "torch==${TORCH_VERSION}" --index-url "${TORCH_INDEX_URL}" --break-system-packages; \
+        python3 -m pip install "torch==${TORCH_VERSION:?TORCH_VERSION build arg is required}" --index-url "${TORCH_INDEX_URL}" --break-system-packages; \
     else \
-        python3 -m pip install "torch==${TORCH_VERSION}" --break-system-packages; \
+        python3 -m pip install "torch==${TORCH_VERSION:?TORCH_VERSION build arg is required}" --break-system-packages; \
     fi
 
 RUN python3 -m pip install \
-        "fvdb-core==${FVDB_CORE_VERSION}" \
-        --extra-index-url "${FVDB_CORE_INDEX_URL}" \
+        "fvdb-core==${FVDB_CORE_VERSION:?FVDB_CORE_VERSION build arg is required}" \
+        --extra-index-url "${FVDB_CORE_INDEX_URL:?FVDB_CORE_INDEX_URL build arg is required}" \
         --break-system-packages && \
     python3 -m pip install numpy pytest --break-system-packages
 

@@ -6,6 +6,20 @@
 #include <nanovdb_editor/putil/Compiler.h>
 #include <filesystem>
 #include <cstring>
+#include <string>
+
+namespace
+{
+std::string g_shader_compile_diagnostics;
+
+void capture_diagnostics(const char* message)
+{
+    if (message)
+    {
+        g_shader_compile_diagnostics += message;
+    }
+}
+} // namespace
 
 TEST(NanoVDBEditor, ShaderCompilesViaDynamicCompiler)
 {
@@ -22,17 +36,21 @@ TEST(NanoVDBEditor, ShaderCompilesViaDynamicCompiler)
 
     pnanovdb_compiler_instance_t* compiler_inst = compiler.create_instance();
     ASSERT_NE(compiler_inst, nullptr);
+    compiler.set_diagnostic_callback(compiler_inst, capture_diagnostics);
 
     pnanovdb_compiler_settings_t compile_settings = {};
     pnanovdb_compiler_settings_init(&compile_settings);
     compile_settings.compile_target = PNANOVDB_COMPILE_TARGET_VULKAN;
     std::strcpy(compile_settings.entry_point_name, "computeMain");
 
+    g_shader_compile_diagnostics.clear();
     pnanovdb_bool_t result =
         compiler.compile_shader_from_file(compiler_inst, shader_path.c_str(), &compile_settings, nullptr);
 
     compiler.destroy_instance(compiler_inst);
     pnanovdb_compiler_free(&compiler);
 
-    ASSERT_NE(result, PNANOVDB_FALSE) << "Compilation of shader failed: " << shader_path;
+    ASSERT_NE(result, PNANOVDB_FALSE)
+        << "Compilation of shader failed: " << shader_path
+        << (g_shader_compile_diagnostics.empty() ? "" : "\n" + g_shader_compile_diagnostics);
 }

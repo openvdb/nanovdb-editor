@@ -4,7 +4,7 @@
 import os
 import sys
 
-from .compiler import Compiler, CompileTarget, MemoryBuffer
+from .compiler import Compiler, CompileTarget, MemoryBuffer, OptimizationLevel
 from .compute import Compute
 from .device import DeviceInterface
 from .editor import (
@@ -59,6 +59,7 @@ __all__ = [
     "Raster",
     "CompileTarget",
     "MemoryBuffer",
+    "OptimizationLevel",
     "EditorConfig",
     "EditorToken",
     "EditorGaussianDataDesc",

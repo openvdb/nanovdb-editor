@@ -67,7 +67,11 @@ TEST(NanoVDBEditor, ShaderCompilesViaCpuCompiler)
             strncpy(pathCopy, info.dli_fname, sizeof(pathCopy));
             pathCopy[sizeof(pathCopy) - 1] = 0;
             char* dir = dirname(pathCopy);
+#if defined(__APPLE__)
+            snprintf(slangLlvmPath, sizeof(slangLlvmPath), "%s/libslang-llvm.dylib", dir);
+#else
             snprintf(slangLlvmPath, sizeof(slangLlvmPath), "%s/libslang-llvm.so", dir);
+#endif
         }
     }
 #endif

@@ -4,6 +4,8 @@
 import os
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from functools import lru_cache
 from pathlib import Path
 
@@ -12,6 +14,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 VERSIONS_FILE = REPO_ROOT / "scripts" / "fvdb_viz_versions.sh"
+UPSTREAM_TEST_RELATIVE_PATH = "tests/unit/test_viz.py"
 
 
 @lru_cache(maxsize=1)
@@ -37,12 +40,17 @@ def _load_fvdb_defaults() -> dict[str, str]:
     return defaults
 
 
-def _default_version(var_name: str, fallback: str) -> str:
+def _default_version(var_name: str, fallback: str | None = None) -> str:
     env_value = os.environ.get(var_name)
     if env_value:
         return env_value
     defaults = _load_fvdb_defaults()
-    return defaults.get(f"{var_name}_DEFAULT", fallback)
+    default_value = defaults.get(f"{var_name}_DEFAULT")
+    if default_value is not None:
+        return default_value
+    if fallback is not None:
+        return fallback
+    raise RuntimeError(f"Missing required default for {var_name}")
 
 
 RUNS_ON_FVDB_VIZ_ENV = os.environ.get("FVDB_VIZ_TESTS") == "1"
@@ -53,20 +61,60 @@ pytestmark = pytest.mark.skipif(
     reason=("Set FVDB_VIZ_TESTS=1 to enable fvdb.viz integration checks"),
 )
 
-TORCH_VERSION = _default_version("FVDB_VIZ_TORCH_VERSION", "2.8.0")
+TORCH_VERSION = _default_version("FVDB_VIZ_TORCH_VERSION", "2.10.0")
 TORCH_INDEX_URL = _default_version(
     "FVDB_VIZ_TORCH_INDEX_URL",
     "https://download.pytorch.org/whl/cu128",
 )
 FVDB_CORE_VERSION = _default_version(
     "FVDB_VIZ_CORE_VERSION",
-    "0.3.0+pt28.cu128",
 )
 FVDB_CORE_INDEX_URL = _default_version(
     "FVDB_VIZ_CORE_INDEX_URL",
     "https://d36m13axqqhiit.cloudfront.net/simple",
 )
-UPSTREAM_TEST_PATH = Path(__file__).with_name("fvdb_viz_test.py")
+
+
+def _fvdb_core_release_tag() -> str:
+    return f"v{FVDB_CORE_VERSION.split('+', 1)[0]}"
+
+
+def _upstream_test_urls() -> list[str]:
+    release_tag = _fvdb_core_release_tag()
+    return [
+        (
+            "https://raw.githubusercontent.com/openvdb/fvdb-core/"
+            f"{release_tag}/{UPSTREAM_TEST_RELATIVE_PATH}"
+        ),
+        (
+            "https://raw.githubusercontent.com/openvdb/fvdb-core/main/"
+            f"{UPSTREAM_TEST_RELATIVE_PATH}"
+        ),
+    ]
+
+
+def _resolve_upstream_test_path(work_dir: Path) -> Path:
+    target_path = work_dir / "fvdb_upstream_test_viz.py"
+    last_error = None
+
+    for url in _upstream_test_urls():
+        request = urllib.request.Request(
+            url,
+            headers={"User-Agent": "nanovdb-editor-fvdb-viz-integration"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                target_path.write_bytes(response.read())
+            return target_path
+        except (urllib.error.URLError, TimeoutError) as exc:
+            last_error = exc
+
+    if last_error is None:
+        raise RuntimeError("Could not resolve an fvdb upstream viz test URL")
+
+    raise RuntimeError(
+        "Failed to fetch upstream fvdb viz test from any known URL"
+    ) from last_error
 
 
 def _run(cmd: list[str], env: dict[str, str], **kwargs):
@@ -89,6 +137,7 @@ def _venv_bin_path(venv_path: Path, binary: str) -> Path:
 @pytest.fixture(name="fvdb_viz_env", scope="module")
 def _fvdb_viz_env(tmp_path_factory):
     skip_base_setup = os.environ.get("FVDB_VIZ_SKIP_BASE_INSTALL") == "1"
+    work_dir = tmp_path_factory.mktemp("fvdb_viz_suite")
 
     env = os.environ.copy()
     env.setdefault("PIP_DISABLE_PIP_VERSION_CHECK", "1")
@@ -137,6 +186,7 @@ def _fvdb_viz_env(tmp_path_factory):
         "env": env,
         "pip_cmd": pip_cmd,
         "python": python_exe,
+        "upstream_test_path": _resolve_upstream_test_path(work_dir),
     }
 
 
@@ -181,11 +231,12 @@ def _log_nanovdb_version(env_ctx: dict):
 def _run_upstream_viz_suite(env_ctx: dict):
     python_exe = env_ctx["python"]
     env = env_ctx["env"]
+    upstream_test_path = env_ctx["upstream_test_path"]
     cmd = [
         str(python_exe),
         "-m",
         "pytest",
-        str(UPSTREAM_TEST_PATH),
+        str(upstream_test_path),
         "-vv",
         "-s",
         "--maxfail=1",

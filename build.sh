@@ -117,14 +117,26 @@ function run_build() {
 function build_python_module() {
     echo "-- Building python module..."
 
-    if ! command -v python &> /dev/null && ! command -v python3 &> /dev/null; then
-        echo "Error: Python not found. Please install Python 3.8 or later." >&2
-        exit 1
-    fi
+    PYTHON_CMD=""
 
-    PYTHON_CMD="python"
-    if command -v python3 &> /dev/null; then
-        PYTHON_CMD="python3"
+    # Select a Python interpreter that is at least version 3.8.
+    # Prefer `python` if it meets the requirement; otherwise fall back to `python3`.
+    for cmd in python python3; do
+        if command -v "$cmd" >/dev/null 2>&1; then
+            ver="$("$cmd" -c 'import sys; print(".".join(map(str, sys.version_info[:3])))' 2>/dev/null)" || continue
+            major=${ver%%.*}
+            rest=${ver#*.}
+            minor=${rest%%.*}
+            if [ "$major" -gt 3 ] || { [ "$major" -eq 3 ] && [ "$minor" -ge 8 ]; }; then
+                PYTHON_CMD="$cmd"
+                break
+            fi
+        fi
+    done
+
+    if [ -z "$PYTHON_CMD" ]; then
+        echo "Error: Python 3.8 or later not found. Please install Python 3.8 or later." >&2
+        exit 1
     fi
 
     echo "   -- Checking Python dependencies..."

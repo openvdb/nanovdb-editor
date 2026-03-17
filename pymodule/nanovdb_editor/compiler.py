@@ -4,6 +4,7 @@
 from ctypes import *
 from enum import Enum
 import numpy as np
+import sys
 from typing import Tuple
 from .utils import load_library
 
@@ -11,6 +12,7 @@ COMPILER_LIB = "pnanovdbcompiler"
 
 # Match pnanovdb_bool_t (int32_t)
 pnanovdb_bool_t = c_int32
+DIAGNOSTIC_CALLBACK = CFUNCTYPE(None, c_char_p)
 
 
 class CompileTarget(Enum):
@@ -49,7 +51,7 @@ class pnanovdb_Compiler(Structure):
     _fields_ = [
         ("interface_pnanovdb_reflect_data_type", c_void_p),  # PNANOVDB_REFLECT_INTERFACE()
         ("create_instance", CFUNCTYPE(POINTER(pnanovdb_CompilerInstance))),
-        ("set_diagnostic_callback", CFUNCTYPE(None, POINTER(pnanovdb_CompilerInstance), CFUNCTYPE(None, c_char_p))),
+        ("set_diagnostic_callback", CFUNCTYPE(None, POINTER(pnanovdb_CompilerInstance), DIAGNOSTIC_CALLBACK)),
         (
             "compile_shader_from_file",
             CFUNCTYPE(
@@ -115,6 +117,8 @@ class Compiler:
             raise RuntimeError("Failed to get compiler interface")
 
         self._instance = None
+        self._diagnostics = []
+        self._diagnostic_callback = DIAGNOSTIC_CALLBACK(self._capture_diagnostic)
         self._compiler.contents.module = self._lib._handle
 
     def get_compiler(self) -> POINTER(pnanovdb_Compiler):
@@ -130,6 +134,23 @@ class Compiler:
         if not self._instance:
             raise RuntimeError("Failed to create compiler instance")
 
+        set_diag = self._compiler.contents.set_diagnostic_callback
+        set_diag(self._instance, self._diagnostic_callback)
+
+    def _capture_diagnostic(self, message) -> None:
+        if not message:
+            return
+        try:
+            self._diagnostics.append(message.decode("utf-8", errors="replace"))
+        except Exception:
+            self._diagnostics.append(str(message))
+
+    def clear_diagnostics(self) -> None:
+        self._diagnostics.clear()
+
+    def get_diagnostics(self) -> str:
+        return "".join(self._diagnostics).strip()
+
     def compile_shader(
         self,
         filename: str,
@@ -141,6 +162,8 @@ class Compiler:
         if not self._instance:
             raise RuntimeError("No compiler instance exists")
 
+        self.clear_diagnostics()
+
         settings = pnanovdb_CompilerSettings(
             entry_point_name=entry_point_name.encode("utf-8"),
             is_row_major=is_row_major,
@@ -151,7 +174,17 @@ class Compiler:
         )
 
         compile_func = self._compiler.contents.compile_shader_from_file
-        return compile_func(self._instance, filename.encode("utf-8"), byref(settings), None)
+        result = compile_func(self._instance, filename.encode("utf-8"), byref(settings), None)
+        if not result:
+            details = self.get_diagnostics()
+            if details:
+                print(
+                    f"[Compiler] Failed to compile '{filename}' "
+                    f"(entry_point={entry_point_name}, target={compile_target.name}, row_major={is_row_major})",
+                    file=sys.stderr,
+                )
+                print(details, file=sys.stderr)
+        return result
 
     def execute_cpu(
         self,
