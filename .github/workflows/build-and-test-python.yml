@@ -428,10 +428,89 @@ jobs:
           name: nanovdb-editor-wheel-windows
           path: ./dist
 
+      - name: Verify downloaded wheel bundles Vulkan loader
+        run: |
+          conda activate nanovdb_editor
+          python - <<'PY'
+          import pathlib
+          import sys
+          import zipfile
+
+          wheels = sorted(pathlib.Path("dist").glob("nanovdb_editor*.whl"))
+          if not wheels:
+              print("No nanovdb_editor wheel found in dist/", file=sys.stderr)
+              raise SystemExit(1)
+
+          wheel = wheels[0]
+          print(f"Inspecting downloaded wheel: {wheel}")
+          with zipfile.ZipFile(wheel) as zf:
+              names = zf.namelist()
+
+          bundled_libs = sorted(
+              name for name in names if name.startswith("nanovdb_editor/lib/")
+          )
+          print("Bundled runtime libs:")
+          for name in bundled_libs:
+              print(f" - {name}")
+
+          if "nanovdb_editor/lib/vulkan-1.dll" not in {
+              name.lower() for name in names
+          }:
+              print("vulkan-1.dll was not found in the downloaded wheel", file=sys.stderr)
+              raise SystemExit(1)
+          PY
+
       - name: Install nanovdb_editor
         run: |
           conda activate nanovdb_editor
           pip install ./dist/nanovdb_editor*.whl
+
+      - name: Verify installed runtime libs and compiler smoke test
+        run: |
+          conda activate nanovdb_editor
+          python - <<'PY'
+          import pathlib
+          import site
+          import sys
+
+          candidates = []
+          for base in list(getattr(site, "getsitepackages", lambda: [])()):
+              candidates.append(pathlib.Path(base) / "nanovdb_editor")
+          user_site = getattr(site, "getusersitepackages", lambda: None)()
+          if user_site:
+              candidates.append(pathlib.Path(user_site) / "nanovdb_editor")
+
+          pkg_dir = next((p for p in candidates if p.is_dir()), None)
+          if pkg_dir is None:
+              print("Installed nanovdb_editor package directory was not found", file=sys.stderr)
+              raise SystemExit(1)
+
+          lib_dir = pkg_dir / "lib"
+          print(f"Installed package dir: {pkg_dir}")
+          print(f"Installed lib dir: {lib_dir}")
+          if not lib_dir.is_dir():
+              print("Installed nanovdb_editor/lib directory was not found", file=sys.stderr)
+              raise SystemExit(1)
+
+          libs = sorted(p.name for p in lib_dir.iterdir())
+          print("Installed runtime libs:")
+          for name in libs:
+              print(f" - {name}")
+
+          if "vulkan-1.dll" not in {name.lower() for name in libs}:
+              print("Installed wheel is missing vulkan-1.dll", file=sys.stderr)
+              raise SystemExit(1)
+
+          import nanovdb_editor
+          from nanovdb_editor import Compiler
+
+          print(f"Imported nanovdb_editor from: {nanovdb_editor.__file__}")
+          compiler = Compiler()
+          compiler.create_instance()
+          print("Compiler smoke test passed")
+          compiler._instance = None
+          compiler._compiler = None
+          PY
 
       - name: Run Python tests
         run: |
@@ -633,6 +712,37 @@ jobs:
           name: nanovdb-editor-wheel-windows-arm64
           path: ./dist
 
+      - name: Verify downloaded wheel bundles Vulkan loader
+        run: |
+          @'
+          import pathlib
+          import sys
+          import zipfile
+
+          wheels = sorted(pathlib.Path("dist").glob("nanovdb_editor*.whl"))
+          if not wheels:
+              print("No nanovdb_editor wheel found in dist/", file=sys.stderr)
+              raise SystemExit(1)
+
+          wheel = wheels[0]
+          print(f"Inspecting downloaded wheel: {wheel}")
+          with zipfile.ZipFile(wheel) as zf:
+              names = zf.namelist()
+
+          bundled_libs = sorted(
+              name for name in names if name.startswith("nanovdb_editor/lib/")
+          )
+          print("Bundled runtime libs:")
+          for name in bundled_libs:
+              print(f" - {name}")
+
+          if "nanovdb_editor/lib/vulkan-1.dll" not in {
+              name.lower() for name in names
+          }:
+              print("vulkan-1.dll was not found in the downloaded wheel", file=sys.stderr)
+              raise SystemExit(1)
+          '@ | python -
+
       - name: Install nanovdb_editor
         run: |
           python -m pip install --upgrade pip
@@ -644,6 +754,52 @@ jobs:
           }
 
           python -m pip install $Wheel.FullName
+
+      - name: Verify installed runtime libs and compiler smoke test
+        run: |
+          @'
+          import pathlib
+          import site
+          import sys
+
+          candidates = []
+          for base in list(getattr(site, "getsitepackages", lambda: [])()):
+              candidates.append(pathlib.Path(base) / "nanovdb_editor")
+          user_site = getattr(site, "getusersitepackages", lambda: None)()
+          if user_site:
+              candidates.append(pathlib.Path(user_site) / "nanovdb_editor")
+
+          pkg_dir = next((p for p in candidates if p.is_dir()), None)
+          if pkg_dir is None:
+              print("Installed nanovdb_editor package directory was not found", file=sys.stderr)
+              raise SystemExit(1)
+
+          lib_dir = pkg_dir / "lib"
+          print(f"Installed package dir: {pkg_dir}")
+          print(f"Installed lib dir: {lib_dir}")
+          if not lib_dir.is_dir():
+              print("Installed nanovdb_editor/lib directory was not found", file=sys.stderr)
+              raise SystemExit(1)
+
+          libs = sorted(p.name for p in lib_dir.iterdir())
+          print("Installed runtime libs:")
+          for name in libs:
+              print(f" - {name}")
+
+          if "vulkan-1.dll" not in {name.lower() for name in libs}:
+              print("Installed wheel is missing vulkan-1.dll", file=sys.stderr)
+              raise SystemExit(1)
+
+          import nanovdb_editor
+          from nanovdb_editor import Compiler
+
+          print(f"Imported nanovdb_editor from: {nanovdb_editor.__file__}")
+          compiler = Compiler()
+          compiler.create_instance()
+          print("Compiler smoke test passed")
+          compiler._instance = None
+          compiler._compiler = None
+          '@ | python -
 
       - name: Run Python tests
         run: |
