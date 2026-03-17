@@ -13,17 +13,24 @@ if(NOT DEFINED LINK_KIND)
     message(FATAL_ERROR "LINK_KIND is required")
 endif()
 
-if(LINK_KIND STREQUAL "file" AND EXISTS "${TARGET_PATH}")
+# MSBuild passes -DVAR=\"...\" through the generated post-build script, so
+# strip one layer of surrounding quotes before testing paths or invoking tools.
+set(TARGET_PATH_NORMALIZED "${TARGET_PATH}")
+set(SOURCE_PATH_NORMALIZED "${SOURCE_PATH}")
+string(REGEX REPLACE "^\"(.*)\"$" "\\1" TARGET_PATH_NORMALIZED "${TARGET_PATH_NORMALIZED}")
+string(REGEX REPLACE "^\"(.*)\"$" "\\1" SOURCE_PATH_NORMALIZED "${SOURCE_PATH_NORMALIZED}")
+
+if(LINK_KIND STREQUAL "file" AND EXISTS "${TARGET_PATH_NORMALIZED}")
     execute_process(
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${SOURCE_PATH}" "${TARGET_PATH}"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${SOURCE_PATH_NORMALIZED}" "${TARGET_PATH_NORMALIZED}"
         RESULT_VARIABLE COPY_RESULT
     )
     if(NOT COPY_RESULT EQUAL 0)
-        message(FATAL_ERROR "Failed to refresh file link target: ${TARGET_PATH}")
+        message(FATAL_ERROR "Failed to refresh file link target: ${TARGET_PATH_NORMALIZED}")
     endif()
-elseif(NOT EXISTS "${TARGET_PATH}")
-    file(TO_NATIVE_PATH "${TARGET_PATH}" TARGET_PATH_NATIVE)
-    file(TO_NATIVE_PATH "${SOURCE_PATH}" SOURCE_PATH_NATIVE)
+elseif(NOT EXISTS "${TARGET_PATH_NORMALIZED}")
+    file(TO_NATIVE_PATH "${TARGET_PATH_NORMALIZED}" TARGET_PATH_NATIVE)
+    file(TO_NATIVE_PATH "${SOURCE_PATH_NORMALIZED}" SOURCE_PATH_NATIVE)
 
     # Avoid a trailing backslash before the closing quote in mklink commands.
     string(REGEX REPLACE "[/\\\\]+$" "" TARGET_PATH_NATIVE "${TARGET_PATH_NATIVE}")
@@ -35,13 +42,13 @@ elseif(NOT EXISTS "${TARGET_PATH}")
             RESULT_VARIABLE LINK_RESULT
         )
 
-        if(NOT LINK_RESULT EQUAL 0 AND NOT EXISTS "${TARGET_PATH}")
+        if(NOT LINK_RESULT EQUAL 0 AND NOT EXISTS "${TARGET_PATH_NORMALIZED}")
             execute_process(
-                COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${SOURCE_PATH}" "${TARGET_PATH}"
+                COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${SOURCE_PATH_NORMALIZED}" "${TARGET_PATH_NORMALIZED}"
                 RESULT_VARIABLE COPY_RESULT
             )
             if(NOT COPY_RESULT EQUAL 0)
-                message(FATAL_ERROR "Failed to create or copy file link target: ${TARGET_PATH}")
+                message(FATAL_ERROR "Failed to create or copy file link target: ${TARGET_PATH_NORMALIZED}")
             endif()
         endif()
     elseif(LINK_KIND STREQUAL "directory")
@@ -50,13 +57,13 @@ elseif(NOT EXISTS "${TARGET_PATH}")
             RESULT_VARIABLE LINK_RESULT
         )
 
-        if(NOT LINK_RESULT EQUAL 0 AND NOT EXISTS "${TARGET_PATH}")
+        if(NOT LINK_RESULT EQUAL 0 AND NOT EXISTS "${TARGET_PATH_NORMALIZED}")
             execute_process(
-                COMMAND "${CMAKE_COMMAND}" -E copy_directory "${SOURCE_PATH}" "${TARGET_PATH}"
+                COMMAND "${CMAKE_COMMAND}" -E copy_directory "${SOURCE_PATH_NORMALIZED}" "${TARGET_PATH_NORMALIZED}"
                 RESULT_VARIABLE COPY_RESULT
             )
             if(NOT COPY_RESULT EQUAL 0)
-                message(FATAL_ERROR "Failed to create or copy directory link target: ${TARGET_PATH}")
+                message(FATAL_ERROR "Failed to create or copy directory link target: ${TARGET_PATH_NORMALIZED}")
             endif()
         endif()
     else()
