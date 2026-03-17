@@ -546,6 +546,45 @@ jobs:
       with:
         package-dir: pymodule
 
+    - name: Verify Vulkan loader is present in Windows wheel
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        set -euo pipefail
+        python - <<'PY'
+        import pathlib
+        import zipfile
+        import sys
+
+        wheels = sorted(pathlib.Path("wheelhouse").glob("nanovdb_editor*.whl"))
+        if not wheels:
+            print("No nanovdb_editor wheel found in wheelhouse/", file=sys.stderr)
+            raise SystemExit(1)
+
+        wheel = wheels[0]
+        print(f"Inspecting wheel: {wheel}")
+        with zipfile.ZipFile(wheel) as zf:
+            names = zf.namelist()
+
+        vulkan_hits = [
+            name for name in names
+            if name.lower() == "nanovdb_editor/lib/vulkan-1.dll"
+        ]
+        if not vulkan_hits:
+            bundled_libs = [
+                name for name in names
+                if name.startswith("nanovdb_editor/lib/")
+            ]
+            print("vulkan-1.dll was not found in the Windows wheel; bundled libs were:", file=sys.stderr)
+            for name in bundled_libs:
+                print(f" - {name}", file=sys.stderr)
+            raise SystemExit(1)
+
+        print("Found bundled Vulkan loader entries:")
+        for name in vulkan_hits:
+            print(f" - {name}")
+        PY
+
     - uses: actions/upload-artifact@v4
       with:
         name: wheels-${{ matrix.os }}${{ matrix.arch && format('-{0}', matrix.arch) || '' }}

@@ -366,10 +366,17 @@ jobs:
           Invoke-WebRequest -Uri $VulkanRuntimeUrl -OutFile $VulkanInstaller
           Start-Process -FilePath $VulkanInstaller -ArgumentList "/S" -Wait
 
-          if (-not (Test-Path "C:\Windows\System32\vulkan-1.dll")) {
+          $SystemLoader = @(
+            "C:\Windows\System32\vulkan-1.dll",
+            "C:\Windows\SysWOW64\vulkan-1.dll"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if (-not $SystemLoader) {
             Write-Host "ERROR: vulkan-1.dll not found after installation"
             exit 1
           }
+
+          Write-Host "Using Vulkan loader: $SystemLoader"
         shell: pwsh
 
       - name: Install Mesa3D lavapipe
@@ -394,12 +401,21 @@ jobs:
           $IcdContent.ICD.library_path = $VulkanDllPath
           $IcdContent | ConvertTo-Json -Depth 10 | Set-Content $VulkanICDPath -Encoding UTF8
 
-          # Register ICD in Windows Registry
-          $RegistryPath = "HKLM:\SOFTWARE\Khronos\Vulkan\Drivers"
-          if (-not (Test-Path $RegistryPath)) {
-            New-Item -Path $RegistryPath -Force | Out-Null
+          # Prefer env vars so pytest does not rely only on registry state.
+          "VK_ICD_FILENAMES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VK_DRIVER_FILES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          # Best-effort registry registration.
+          try {
+            $RegistryPath = "HKLM:\SOFTWARE\Khronos\Vulkan\Drivers"
+            if (-not (Test-Path $RegistryPath)) {
+              New-Item -Path $RegistryPath -Force | Out-Null
+            }
+            New-ItemProperty -Path $RegistryPath -Name $VulkanICDPath -Value 0 -PropertyType DWord -Force | Out-Null
+            Write-Host "Registry entry created: $VulkanICDPath"
+          } catch {
+            Write-Host "WARNING: Could not write Vulkan ICD registry entry: $($_.Exception.Message)"
           }
-          New-ItemProperty -Path $RegistryPath -Name $VulkanICDPath -Value 0 -PropertyType DWord -Force | Out-Null
 
           # Add Mesa to PATH for DLL dependencies
           $MesaBinPath = Join-Path $MesaDir "x64"
@@ -487,11 +503,16 @@ jobs:
           & "$VcpkgRoot\vcpkg.exe" install --triplet arm64-windows --x-manifest-root $PWD
           "$PWD\vcpkg_installed\arm64-windows\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Install ARM64 Vulkan SDK loader
+      - name: Install ARM64 Vulkan Runtime
         run: |
-          Write-Host "Installing ARM64 Vulkan SDK in copy-only mode..."
+          Write-Host "Installing ARM64 Vulkan runtime..."
           $SdkInstaller = Join-Path $env:RUNNER_TEMP "vulkan-sdk-arm64.exe"
           $SdkRoot = Join-Path $env:RUNNER_TEMP "VulkanSDK"
+
+          if (Test-Path $SdkRoot) {
+            Remove-Item -Recurse -Force $SdkRoot
+          }
+          New-Item -ItemType Directory -Path $SdkRoot -Force | Out-Null
 
           Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/latest/warm/vulkan_sdk.exe" -OutFile $SdkInstaller
           Start-Process -FilePath $SdkInstaller -ArgumentList @(
@@ -517,27 +538,37 @@ jobs:
             throw "Installed Vulkan SDK directory not found under $SdkRoot"
           }
 
-          $VulkanBinPath = Join-Path $InstalledSdk.FullName "Bin"
-          $VulkanLoader = Join-Path $VulkanBinPath "vulkan-1.dll"
-          $HasSdkLoader = $true
-          if (-not (Test-Path $VulkanLoader)) {
+          $RuntimeInstaller = Get-ChildItem -Path $InstalledSdk.FullName -Recurse -File -Filter "VulkanRT.exe" -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if (-not $RuntimeInstaller) {
+            Write-Host "Unable to find VulkanRT.exe under $($InstalledSdk.FullName)"
+            Get-ChildItem -Path $InstalledSdk.FullName -Recurse -File -Filter "*Vulkan*.exe" -ErrorAction SilentlyContinue |
+              Select-Object -First 50 FullName | Format-Table -AutoSize
+            throw "ARM64 Vulkan runtime installer not found in SDK payload"
+          }
+          Write-Host "Running ARM64 Vulkan runtime installer: $($RuntimeInstaller.FullName)"
+          Start-Process -FilePath $RuntimeInstaller.FullName -ArgumentList "/S" -Wait
+
+          $SystemLoader = @(
+            "C:\Windows\System32\vulkan-1.dll",
+            "C:\Windows\SysWOW64\vulkan-1.dll"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if ($SystemLoader) {
+            Write-Host "Using system Vulkan loader: $SystemLoader"
+          } else {
             $VulkanLoaderFile = Get-ChildItem -Path $InstalledSdk.FullName -Recurse -File -Filter "vulkan-1.dll" -ErrorAction SilentlyContinue |
               Where-Object { $_.FullName -notmatch '\\Templates\\' } |
               Select-Object -First 1
-            if ($VulkanLoaderFile) {
-              $VulkanLoader = $VulkanLoaderFile.FullName
-              $VulkanBinPath = Split-Path -Parent $VulkanLoader
-            } else {
+            if (-not $VulkanLoaderFile) {
               Write-Host "Unable to find vulkan-1.dll under $($InstalledSdk.FullName)"
               Get-ChildItem -Path $InstalledSdk.FullName -Recurse -File -Filter "*vulkan*.dll" -ErrorAction SilentlyContinue |
                 Select-Object -First 50 FullName | Format-Table -AutoSize
-              Write-Warning "ARM64 Vulkan SDK loader not found; continuing with wheel-bundled Vulkan loader"
-              $HasSdkLoader = $false
+              throw "ARM64 Vulkan loader not found after runtime installation"
             }
-          }
 
-          if ($HasSdkLoader) {
-            Write-Host "Using ARM64 Vulkan loader: $VulkanLoader"
+            $VulkanBinPath = Split-Path -Parent $VulkanLoaderFile.FullName
+            Write-Warning "System Vulkan runtime was not found; falling back to SDK loader at $($VulkanLoaderFile.FullName)"
             "VULKAN_SDK=$($InstalledSdk.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
             $VulkanBinPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           }

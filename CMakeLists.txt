@@ -631,6 +631,10 @@ if(SKBUILD)
         endif()
     endif()
 
+    if(WIN32 AND NOT TARGET vulkan)
+        message(FATAL_ERROR "Windows Python wheel builds must bundle vulkan-1.dll, but the Vulkan loader target 'vulkan' is unavailable")
+    endif()
+
     if(TARGET vulkan)
         install(FILES
             $<TARGET_FILE:vulkan>
