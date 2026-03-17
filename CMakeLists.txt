@@ -387,37 +387,44 @@ if(SKBUILD)
         pnanovdbcompute
         pnanovdbfileformat
         pnanovdbeditor
-        RUNTIME_DEPENDENCY_SET python_runtime_deps
         DESTINATION nanovdb_editor/lib
         COMPONENT python_libs
     )
 
-    if(WIN32)
-        set(_python_runtime_dependency_dirs
-            "${CMAKE_BINARY_DIR}/$<CONFIG>"
-            "${Slang_SOURCE_DIR}/bin"
+    if(WIN32 AND VCPKG_INSTALLED_DIR AND VCPKG_TARGET_TRIPLET)
+        # Mirror the Linux wheel layout on Windows: bundle the exact runtime
+        # DLLs we intentionally depend on instead of scanning the full process
+        # dependency graph during install.
+        set(_python_runtime_vcpkg_release_patterns
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin/lz4*.dll"
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin/zlib*.dll"
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin/zstd*.dll"
         )
-        if(VCPKG_INSTALLED_DIR AND VCPKG_TARGET_TRIPLET)
-            list(APPEND _python_runtime_dependency_dirs
-                "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
-                "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/bin"
-            )
-        endif()
+        foreach(_python_runtime_pattern IN LISTS _python_runtime_vcpkg_release_patterns)
+            file(GLOB _python_runtime_matches LIST_DIRECTORIES FALSE "${_python_runtime_pattern}")
+            if(_python_runtime_matches)
+                install(FILES ${_python_runtime_matches}
+                    DESTINATION nanovdb_editor/lib
+                    COMPONENT python_libs
+                )
+            endif()
+        endforeach()
 
-        install(RUNTIME_DEPENDENCY_SET python_runtime_deps
-            DESTINATION nanovdb_editor/lib
-            COMPONENT python_libs
-            PRE_EXCLUDE_REGEXES
-                "api-ms-"
-                "ext-ms-"
-                ".*[Hh]vsiFileTrust\\.dll"
-                ".*[Ww]tdccm\\.dll"
-            POST_EXCLUDE_REGEXES
-                ".*/[Ww]indows/[Ss]ystem32/.*"
-                ".*/[Ww]indows/SysWOW64/.*"
-            DIRECTORIES
-                ${_python_runtime_dependency_dirs}
+        set(_python_runtime_vcpkg_debug_patterns
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/bin/lz4*.dll"
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/bin/zlib*.dll"
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/bin/zstd*.dll"
         )
+        foreach(_python_runtime_pattern IN LISTS _python_runtime_vcpkg_debug_patterns)
+            file(GLOB _python_runtime_matches LIST_DIRECTORIES FALSE "${_python_runtime_pattern}")
+            if(_python_runtime_matches)
+                install(FILES ${_python_runtime_matches}
+                    CONFIGURATIONS Debug
+                    DESTINATION nanovdb_editor/lib
+                    COMPONENT python_libs
+                )
+            endif()
+        endforeach()
     endif()
 
     if(WIN32 AND TARGET blosc_shared)
