@@ -333,6 +333,14 @@ for /d %%i in (*.egg-info) do if exist "%%i" rmdir /s /q "%%i" 2>nul
 for /d %%i in (__pycache__) do if exist "%%i" rmdir /s /q "%%i" 2>nul
 del /q *.whl 2>nul
 
+if "%USE_VCPKG%"=="ON" (
+    set "PY_VCPKG_CMAKE=%VCPKG_CMAKE:\=/%"
+    set "PY_VCPKG_INSTALLED_DIR=%VCPKG_INSTALLED_DIR:\=/%"
+    set "CMAKE_ARGS=-DCMAKE_TOOLCHAIN_FILE=%PY_VCPKG_CMAKE% -DVCPKG_INSTALLED_DIR=%PY_VCPKG_INSTALLED_DIR% -DVCPKG_TARGET_TRIPLET=%VCPKG_TRIPLET% -DNANOVDB_EDITOR_USE_VCPKG=ON"
+) else (
+    set "CMAKE_ARGS="
+)
+
 python -m build --wheel
 if errorlevel 1 (
     echo Error: Failed to build wheel

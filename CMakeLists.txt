@@ -73,11 +73,22 @@ if(SKBUILD)
 endif()
 
 if(NANOVDB_EDITOR_USE_VCPKG)
-  find_package(ZLIB REQUIRED)
-  find_package(Blosc REQUIRED)
+  if(NOT VCPKG_TARGET_TRIPLET AND WIN32)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64")
+      set(VCPKG_TARGET_TRIPLET "arm64-windows")
+    else()
+      set(VCPKG_TARGET_TRIPLET "x64-windows")
+    endif()
+  endif()
+
+  if(VCPKG_INSTALLED_DIR AND VCPKG_TARGET_TRIPLET)
+    list(PREPEND CMAKE_PREFIX_PATH "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}")
+  endif()
+
+  find_package(blosc CONFIG REQUIRED)
 
   if(NANOVDB_EDITOR_E57_FORMAT)
-    find_package(e57format REQUIRED)
+    find_package(E57Format CONFIG REQUIRED)
   endif()
 endif()
 
@@ -420,6 +431,13 @@ if(SKBUILD)
                     COMPONENT python_libs
                 )
             endif()
+        elseif(APPLE)
+            install(CODE "
+                set(SLANG_RUNTIME_SOURCE_DIR \"${Slang_SOURCE_DIR}/lib\")
+                set(SLANG_RUNTIME_DEST_DIR \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                set(SLANG_RUNTIME_DYLIB_SUFFIX \"${CMAKE_SHARED_LIBRARY_SUFFIX}\")
+                include(\"${CMAKE_CURRENT_SOURCE_DIR}/cmake/slang_runtime_macos.cmake\")
+            " COMPONENT python_libs)
         else()
             if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
                 # Install all slang libraries using install(CODE) to avoid configure-time path resolution
@@ -633,6 +651,13 @@ if(SKBUILD)
                 DESTINATION nanovdb_editor/lib
                 COMPONENT python_libs
                 RENAME libvulkan.so)
+        elseif(APPLE)
+            install(CODE "
+                set(VULKAN_LOADER_SOURCE_DIR \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                set(VULKAN_LOADER_DEST_DIR \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                set(VULKAN_LOADER_DYLIB_SUFFIX \"${CMAKE_SHARED_LIBRARY_SUFFIX}\")
+                include(\"${CMAKE_CURRENT_SOURCE_DIR}/cmake/vulkan_loader_macos.cmake\")
+            " COMPONENT python_libs)
         endif()
     endif()
 endif()
