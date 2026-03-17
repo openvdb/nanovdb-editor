@@ -101,7 +101,7 @@ bootstrap-vcpkg.bat
 
 The following dependencies are automatically managed by `vcpkg.json`:
 - blosc
-- libe57format (and xerces-c dependency)
+- libe57format (and xerces-c dependency) when `NANOVDB_EDITOR_E57_FORMAT=ON`
 - openh264
 
 ### Assets
@@ -170,10 +170,13 @@ Optionally, rename the config file `config` next to the build script to `config.
 ```
 MSVS_VERSION=Visual Studio 17 2022
 USE_VCPKG=ON
+NANOVDB_EDITOR_E57_FORMAT=ON
 VCPKG_ROOT=path/to/vcpkg
 ```
 
 When `USE_VCPKG=ON`, `NANOVDB_EDITOR_USE_H264` defaults to `ON` on Windows. Without `vcpkg`, H.264 remains disabled on Windows because the fallback OpenH264 source build depends on Unix command-line tools.
+
+Set `NANOVDB_EDITOR_E57_FORMAT=ON` to enable E57 support and install the optional `vcpkg` `e57` feature on Windows.
 
 To select a different profile for the Slang compiler (https://github.com/shader-slang/slang/blob/master/source/slang/slang-profile-defs.h):
 ```

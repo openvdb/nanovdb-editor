@@ -10,6 +10,7 @@ set BUILD_DIR=%PROJECT_DIR%build
 set CONFIG_FILE=config.ini
 set SLANG_DEBUG_OUTPUT=OFF
 set CLEAN_SHADERS=OFF
+if not defined NANOVDB_EDITOR_E57_FORMAT set NANOVDB_EDITOR_E57_FORMAT=OFF
 if not defined USE_VCPKG set USE_VCPKG=OFF
 set GLFW_ON=ON
 
@@ -120,8 +121,12 @@ if "%USE_VCPKG%"=="ON" (
     :: Install dependencies using vcpkg.json (run from repo root so manifest is found)
     if exist "%VCPKG_ROOT%\vcpkg.exe" (
         echo -- Installing dependencies with vcpkg, triplet %VCPKG_TRIPLET%
+        set VCPKG_FEATURE_ARGS=
+        if /I "%NANOVDB_EDITOR_E57_FORMAT%"=="ON" (
+            set VCPKG_FEATURE_ARGS=--x-feature=e57
+        )
         pushd "%PROJECT_DIR%"
-        call "%VCPKG_ROOT%\vcpkg.exe" install --triplet %VCPKG_TRIPLET%
+        call "%VCPKG_ROOT%\vcpkg.exe" install --triplet %VCPKG_TRIPLET% %VCPKG_FEATURE_ARGS%
         if errorlevel 1 (
             popd
             echo vcpkg install failed
@@ -244,6 +249,7 @@ set CMAKE_ARGS=%PROJECT_DIR% -B %BUILD_DIR% ^
     -DCMAKE_PREFIX_PATH=%VCPKG_PREFIX_PATH% ^
     %VCPKG_INSTALLED_DIR_ARG% ^
     -DNANOVDB_EDITOR_USE_VCPKG=%USE_VCPKG% ^
+    -DNANOVDB_EDITOR_E57_FORMAT=%NANOVDB_EDITOR_E57_FORMAT% ^
     -DNANOVDB_EDITOR_CLEAN_SHADERS=%CLEAN_SHADERS% ^
     -DNANOVDB_EDITOR_SLANG_DEBUG_OUTPUT=%SLANG_DEBUG_OUTPUT% ^
     -DNANOVDB_EDITOR_BUILD_TESTS=ON ^
@@ -354,7 +360,7 @@ del /q *.whl 2>nul
 if "%USE_VCPKG%"=="ON" (
     set "PY_VCPKG_CMAKE=%VCPKG_CMAKE:\=/%"
     set "PY_VCPKG_INSTALLED_DIR=%VCPKG_INSTALLED_DIR:\=/%"
-    set "CMAKE_ARGS=-DCMAKE_TOOLCHAIN_FILE=%PY_VCPKG_CMAKE% -DVCPKG_INSTALLED_DIR=%PY_VCPKG_INSTALLED_DIR% -DVCPKG_TARGET_TRIPLET=%VCPKG_TRIPLET% -DNANOVDB_EDITOR_USE_VCPKG=ON"
+    set "CMAKE_ARGS=-DCMAKE_TOOLCHAIN_FILE=%PY_VCPKG_CMAKE% -DVCPKG_INSTALLED_DIR=%PY_VCPKG_INSTALLED_DIR% -DVCPKG_TARGET_TRIPLET=%VCPKG_TRIPLET% -DNANOVDB_EDITOR_USE_VCPKG=ON -DNANOVDB_EDITOR_E57_FORMAT=%NANOVDB_EDITOR_E57_FORMAT%"
 ) else (
     set "CMAKE_ARGS="
 )

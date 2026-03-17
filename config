@@ -3,6 +3,7 @@
 # MSVS_VERSION=Visual Studio 17 2022 (optional; leave unset to let CMake pick an installed generator)
 
 USE_VCPKG=ON
+NANOVDB_EDITOR_E57_FORMAT=OFF
 
 # Set VCPKG_ROOT to the directory where you cloned vcpkg
 VCPKG_ROOT=path/to/vcpkg

@@ -27,6 +27,12 @@ endif()
 
 option(NANOVDB_EDITOR_BUILD_TESTS "Configure CMake to build gtests for NanoVDB Editor" ON)
 
+# Select optional vcpkg manifest features before project() enables the toolchain
+if(NANOVDB_EDITOR_USE_VCPKG AND NANOVDB_EDITOR_E57_FORMAT)
+    list(APPEND VCPKG_MANIFEST_FEATURES e57)
+    list(REMOVE_DUPLICATES VCPKG_MANIFEST_FEATURES)
+endif()
+
 set(NANOVDB_EDITOR_COMMIT_HASH "" CACHE STRING "NanoVDB Editor commit hash for provenance")
 set(NANOVDB_EDITOR_FVDB_COMMIT_HASH "" CACHE STRING "FVDB commit hash for provenance")
 

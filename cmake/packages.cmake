@@ -620,7 +620,7 @@ CPMAddPackage(
 )
 
 # Optional dependencies
-if(NANOVDB_EDITOR_E57_FORMAT)
+if(NANOVDB_EDITOR_E57_FORMAT AND NOT NANOVDB_EDITOR_USE_VCPKG)
     CPMAddPackage(
         NAME libE57Format
         GITHUB_REPOSITORY asmaloney/libE57Format
