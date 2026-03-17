@@ -932,6 +932,41 @@ if(WIN32 AND NANOVDB_EDITOR_USE_VCPKG AND NANOVDB_EDITOR_USE_H264)
         PATH_SUFFIXES debug/bin bin
     )
 
+    if(NOT OPENH264_DLL_RELEASE)
+        set(_OPENH264_DLL_RELEASE_GLOBS "")
+        foreach(_openh264_root IN LISTS _OPENH264_DLL_HINTS)
+            list(APPEND _OPENH264_DLL_RELEASE_GLOBS
+                "${_openh264_root}/bin/openh264*.dll"
+            )
+        endforeach()
+        if(_OPENH264_DLL_RELEASE_GLOBS)
+            file(GLOB _OPENH264_DLL_RELEASE_CANDIDATES LIST_DIRECTORIES FALSE ${_OPENH264_DLL_RELEASE_GLOBS})
+            list(SORT _OPENH264_DLL_RELEASE_CANDIDATES)
+            list(LENGTH _OPENH264_DLL_RELEASE_CANDIDATES _OPENH264_DLL_RELEASE_CANDIDATE_COUNT)
+            if(_OPENH264_DLL_RELEASE_CANDIDATE_COUNT GREATER 0)
+                list(GET _OPENH264_DLL_RELEASE_CANDIDATES 0 OPENH264_DLL_RELEASE)
+            endif()
+        endif()
+    endif()
+
+    if(NOT OPENH264_DLL_DEBUG)
+        set(_OPENH264_DLL_DEBUG_GLOBS "")
+        foreach(_openh264_root IN LISTS _OPENH264_DLL_HINTS)
+            list(APPEND _OPENH264_DLL_DEBUG_GLOBS
+                "${_openh264_root}/debug/bin/openh264*.dll"
+                "${_openh264_root}/bin/openh264*.dll"
+            )
+        endforeach()
+        if(_OPENH264_DLL_DEBUG_GLOBS)
+            file(GLOB _OPENH264_DLL_DEBUG_CANDIDATES LIST_DIRECTORIES FALSE ${_OPENH264_DLL_DEBUG_GLOBS})
+            list(SORT _OPENH264_DLL_DEBUG_CANDIDATES)
+            list(LENGTH _OPENH264_DLL_DEBUG_CANDIDATES _OPENH264_DLL_DEBUG_CANDIDATE_COUNT)
+            if(_OPENH264_DLL_DEBUG_CANDIDATE_COUNT GREATER 0)
+                list(GET _OPENH264_DLL_DEBUG_CANDIDATES 0 OPENH264_DLL_DEBUG)
+            endif()
+        endif()
+    endif()
+
     if(NOT OPENH264_LIBRARY_DEBUG)
         set(OPENH264_LIBRARY_DEBUG ${OPENH264_LIBRARY_RELEASE})
     endif()

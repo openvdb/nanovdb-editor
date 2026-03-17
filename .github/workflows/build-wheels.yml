@@ -574,15 +574,15 @@ jobs:
         for name in bundled_libs:
             print(f" - {name}")
 
-        required_exact = {
-            "nanovdb_editor/lib/vulkan-1.dll": "vulkan-1.dll",
-            "nanovdb_editor/lib/openh264.dll": "openh264.dll",
-        }
-        missing = [
-            display_name
-            for archive_name, display_name in required_exact.items()
-            if archive_name not in lower_names
-        ]
+        missing = []
+        if "nanovdb_editor/lib/vulkan-1.dll" not in lower_names:
+            missing.append("vulkan-1.dll")
+        if not any(
+            name.lower().startswith("nanovdb_editor/lib/openh264")
+            and name.lower().endswith(".dll")
+            for name in bundled_libs
+        ):
+            missing.append("openh264*.dll")
         if not any(
             name.lower().startswith("nanovdb_editor/lib/blosc")
             and name.lower().endswith(".dll")
