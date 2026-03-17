@@ -907,13 +907,28 @@ if(WIN32 AND NANOVDB_EDITOR_USE_VCPKG AND NANOVDB_EDITOR_USE_H264)
         PATH_SUFFIXES debug/lib lib
     )
 
+    set(_OPENH264_DLL_HINTS "")
+    foreach(_openh264_lib_candidate IN ITEMS "${OPENH264_LIBRARY_RELEASE}" "${OPENH264_LIBRARY_DEBUG}")
+        if(_openh264_lib_candidate)
+            get_filename_component(_openh264_lib_dir "${_openh264_lib_candidate}" DIRECTORY)
+            get_filename_component(_openh264_root "${_openh264_lib_dir}/.." ABSOLUTE)
+            list(APPEND _OPENH264_DLL_HINTS
+                "${_openh264_root}"
+                "${_openh264_root}/debug"
+            )
+        endif()
+    endforeach()
+    list(REMOVE_DUPLICATES _OPENH264_DLL_HINTS)
+
     find_file(OPENH264_DLL_RELEASE
         NAMES openh264.dll
+        HINTS ${_OPENH264_DLL_HINTS}
         PATH_SUFFIXES bin
     )
 
     find_file(OPENH264_DLL_DEBUG
         NAMES openh264.dll
+        HINTS ${_OPENH264_DLL_HINTS}
         PATH_SUFFIXES debug/bin bin
     )
 
