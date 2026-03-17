@@ -546,7 +546,7 @@ jobs:
       with:
         package-dir: pymodule
 
-    - name: Verify Vulkan loader is present in Windows wheel
+    - name: Verify Windows wheel bundles required runtime DLLs
       if: runner.os == 'Windows'
       shell: bash
       run: |
@@ -566,23 +566,37 @@ jobs:
         with zipfile.ZipFile(wheel) as zf:
             names = zf.namelist()
 
-        vulkan_hits = [
-            name for name in names
-            if name.lower() == "nanovdb_editor/lib/vulkan-1.dll"
-        ]
-        if not vulkan_hits:
-            bundled_libs = [
-                name for name in names
-                if name.startswith("nanovdb_editor/lib/")
-            ]
-            print("vulkan-1.dll was not found in the Windows wheel; bundled libs were:", file=sys.stderr)
-            for name in bundled_libs:
-                print(f" - {name}", file=sys.stderr)
-            raise SystemExit(1)
-
-        print("Found bundled Vulkan loader entries:")
-        for name in vulkan_hits:
+        lower_names = {name.lower() for name in names}
+        bundled_libs = sorted(
+            name for name in names if name.startswith("nanovdb_editor/lib/")
+        )
+        print("Bundled runtime libs:")
+        for name in bundled_libs:
             print(f" - {name}")
+
+        required_exact = {
+            "nanovdb_editor/lib/vulkan-1.dll": "vulkan-1.dll",
+            "nanovdb_editor/lib/openh264.dll": "openh264.dll",
+        }
+        missing = [
+            display_name
+            for archive_name, display_name in required_exact.items()
+            if archive_name not in lower_names
+        ]
+        if not any(
+            name.lower().startswith("nanovdb_editor/lib/blosc")
+            and name.lower().endswith(".dll")
+            for name in bundled_libs
+        ):
+            missing.append("blosc*.dll")
+
+        if missing:
+            print(
+                "Windows wheel is missing required runtime libraries: "
+                + ", ".join(missing),
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
         PY
 
     - uses: actions/upload-artifact@v4

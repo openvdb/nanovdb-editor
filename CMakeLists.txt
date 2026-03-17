@@ -391,6 +391,18 @@ if(SKBUILD)
         COMPONENT python_libs
     )
 
+    if(WIN32 AND TARGET blosc_shared)
+        get_target_property(_blosc_target_type blosc_shared TYPE)
+        get_target_property(_blosc_target_imported blosc_shared IMPORTED)
+        if(_blosc_target_type STREQUAL "SHARED_LIBRARY" OR
+           (_blosc_target_imported AND NOT _blosc_target_type STREQUAL "STATIC_LIBRARY"))
+            install(FILES $<TARGET_FILE:blosc_shared>
+                DESTINATION nanovdb_editor/lib
+                COMPONENT python_libs
+            )
+        endif()
+    endif()
+
     if(WIN32 AND NANOVDB_EDITOR_USE_H264)
         # Install OpenH264 runtime DLL using config-specific lists from packages.cmake
         # so Debug and Release builds each get the correct DLL (no overwriting).
