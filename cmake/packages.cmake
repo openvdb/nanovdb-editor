@@ -80,9 +80,9 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
     endif()
 endif()
 
-# Blosc: use vcpkg when NANOVDB_EDITOR_USE_VCPKG, otherwise fetch via CPM
+# Blosc: always use the project-built static library so the editor and Python
+# wheel do not depend on a vcpkg-provided Blosc runtime package/DLL.
 set(BLOSC_VERSION 1.21.4)
-if(NOT NANOVDB_EDITOR_USE_VCPKG)
 CPMAddPackage(
     NAME blosc
     URL
@@ -96,14 +96,6 @@ CPMAddPackage(
         "PREFER_EXTERNAL_ZLIB ON"
         "CMAKE_POSITION_INDEPENDENT_CODE ON"
 )
-endif()
-# When using vcpkg, find_package(Blosc) may create only blosc_shared. Provide a blosc_static
-# alias so targets that link blosc_static succeed. On non-Windows we alias; on Windows
-# we also alias (common with x64-windows/arm64-windows dynamic triplets)—when this
-# resolves to a shared library, the caller is responsible for the Blosc DLL at runtime.
-if(NANOVDB_EDITOR_USE_VCPKG AND TARGET blosc_shared AND NOT TARGET blosc_static)
-    add_library(blosc_static ALIAS blosc_shared)
-endif()
 
 # Graphics and UI dependencies
 set(VULKAN_VERSION 1.3.300)
@@ -620,7 +612,7 @@ CPMAddPackage(
 )
 
 # Optional dependencies
-if(NANOVDB_EDITOR_E57_FORMAT)
+if(NANOVDB_EDITOR_E57_FORMAT AND NOT NANOVDB_EDITOR_USE_VCPKG)
     CPMAddPackage(
         NAME libE57Format
         GITHUB_REPOSITORY asmaloney/libE57Format
@@ -673,29 +665,41 @@ if(zlib_ADDED)
 endif()
 
 if(imgui_ADDED)
-    add_library(imgui INTERFACE)
-    target_include_directories(imgui INTERFACE ${imgui_SOURCE_DIR})
     file(GLOB IMGUI_SOURCE_FILES "${imgui_SOURCE_DIR}/imgui*.cpp")
-    target_sources(imgui INTERFACE ${IMGUI_SOURCE_FILES})
-    target_compile_features(imgui INTERFACE cxx_std_17)
+    add_library(imgui STATIC
+        ${IMGUI_SOURCE_FILES}
+        ${imgui_SOURCE_DIR}/misc/cpp/imgui_stdlib.cpp
+    )
+    target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR})
+    target_compile_features(imgui PUBLIC cxx_std_17)
+    set_target_properties(imgui PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    if(MSVC)
+        target_compile_options(imgui PRIVATE /bigobj /utf-8)
+    endif()
 endif()
 
 if(ImGuiFileDialog_ADDED)
-    add_library(ImGuiFileDialog INTERFACE)
-    target_include_directories(ImGuiFileDialog INTERFACE ${ImGuiFileDialog_SOURCE_DIR})
     file(GLOB IMGUIFILEDIALOG_SOURCE_FILES "${ImGuiFileDialog_SOURCE_DIR}/*.cpp")
-    target_sources(ImGuiFileDialog INTERFACE ${IMGUIFILEDIALOG_SOURCE_FILES})
-    target_compile_features(ImGuiFileDialog INTERFACE cxx_std_17)
-    target_link_libraries(ImGuiFileDialog INTERFACE imgui)
+    add_library(ImGuiFileDialog STATIC ${IMGUIFILEDIALOG_SOURCE_FILES})
+    target_include_directories(ImGuiFileDialog PUBLIC ${ImGuiFileDialog_SOURCE_DIR})
+    target_compile_features(ImGuiFileDialog PUBLIC cxx_std_17)
+    target_link_libraries(ImGuiFileDialog PUBLIC imgui)
+    set_target_properties(ImGuiFileDialog PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    if(MSVC)
+        target_compile_options(ImGuiFileDialog PRIVATE /bigobj /utf-8)
+    endif()
 endif()
 
 if(ImGuiColorTextEdit_ADDED)
-    add_library(ImGuiColorTextEdit INTERFACE)
-    target_include_directories(ImGuiColorTextEdit INTERFACE ${ImGuiColorTextEdit_SOURCE_DIR})
     file(GLOB IMGUICOLORTEXTEDIT_SOURCE_FILES "${ImGuiColorTextEdit_SOURCE_DIR}/*.cpp")
-    target_sources(ImGuiColorTextEdit INTERFACE ${IMGUICOLORTEXTEDIT_SOURCE_FILES})
-    target_compile_features(ImGuiColorTextEdit INTERFACE cxx_std_17)
-    target_link_libraries(ImGuiColorTextEdit INTERFACE imgui)
+    add_library(ImGuiColorTextEdit STATIC ${IMGUICOLORTEXTEDIT_SOURCE_FILES})
+    target_include_directories(ImGuiColorTextEdit PUBLIC ${ImGuiColorTextEdit_SOURCE_DIR})
+    target_compile_features(ImGuiColorTextEdit PUBLIC cxx_std_17)
+    target_link_libraries(ImGuiColorTextEdit PUBLIC imgui)
+    set_target_properties(ImGuiColorTextEdit PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    if(MSVC)
+        target_compile_options(ImGuiColorTextEdit PRIVATE /bigobj /utf-8)
+    endif()
 endif()
 
 if(asio_ADDED)
@@ -895,15 +899,65 @@ if(WIN32 AND NANOVDB_EDITOR_USE_VCPKG AND NANOVDB_EDITOR_USE_H264)
         PATH_SUFFIXES debug/lib lib
     )
 
+    set(_OPENH264_DLL_HINTS "")
+    foreach(_openh264_lib_candidate IN ITEMS "${OPENH264_LIBRARY_RELEASE}" "${OPENH264_LIBRARY_DEBUG}")
+        if(_openh264_lib_candidate)
+            get_filename_component(_openh264_lib_dir "${_openh264_lib_candidate}" DIRECTORY)
+            get_filename_component(_openh264_root "${_openh264_lib_dir}/.." ABSOLUTE)
+            list(APPEND _OPENH264_DLL_HINTS
+                "${_openh264_root}"
+                "${_openh264_root}/debug"
+            )
+        endif()
+    endforeach()
+    list(REMOVE_DUPLICATES _OPENH264_DLL_HINTS)
+
     find_file(OPENH264_DLL_RELEASE
         NAMES openh264.dll
+        HINTS ${_OPENH264_DLL_HINTS}
         PATH_SUFFIXES bin
     )
 
     find_file(OPENH264_DLL_DEBUG
         NAMES openh264.dll
+        HINTS ${_OPENH264_DLL_HINTS}
         PATH_SUFFIXES debug/bin bin
     )
+
+    if(NOT OPENH264_DLL_RELEASE)
+        set(_OPENH264_DLL_RELEASE_GLOBS "")
+        foreach(_openh264_root IN LISTS _OPENH264_DLL_HINTS)
+            list(APPEND _OPENH264_DLL_RELEASE_GLOBS
+                "${_openh264_root}/bin/openh264*.dll"
+            )
+        endforeach()
+        if(_OPENH264_DLL_RELEASE_GLOBS)
+            file(GLOB _OPENH264_DLL_RELEASE_CANDIDATES LIST_DIRECTORIES FALSE ${_OPENH264_DLL_RELEASE_GLOBS})
+            list(SORT _OPENH264_DLL_RELEASE_CANDIDATES)
+            list(LENGTH _OPENH264_DLL_RELEASE_CANDIDATES _OPENH264_DLL_RELEASE_CANDIDATE_COUNT)
+            if(_OPENH264_DLL_RELEASE_CANDIDATE_COUNT GREATER 0)
+                list(GET _OPENH264_DLL_RELEASE_CANDIDATES 0 OPENH264_DLL_RELEASE)
+            endif()
+        endif()
+    endif()
+
+    if(NOT OPENH264_DLL_DEBUG)
+        set(_OPENH264_DLL_DEBUG_GLOBS "")
+        foreach(_openh264_root IN LISTS _OPENH264_DLL_HINTS)
+            list(APPEND _OPENH264_DLL_DEBUG_GLOBS
+                "${_openh264_root}/debug/bin/openh264*.dll"
+                "${_openh264_root}/bin/openh264*.dll"
+            )
+        endforeach()
+        if(_OPENH264_DLL_DEBUG_GLOBS)
+            file(GLOB _OPENH264_DLL_DEBUG_CANDIDATES LIST_DIRECTORIES FALSE ${_OPENH264_DLL_DEBUG_GLOBS})
+            list(SORT _OPENH264_DLL_DEBUG_CANDIDATES)
+            list(LENGTH _OPENH264_DLL_DEBUG_CANDIDATES _OPENH264_DLL_DEBUG_CANDIDATE_COUNT)
+            if(_OPENH264_DLL_DEBUG_CANDIDATE_COUNT GREATER 0)
+                list(GET _OPENH264_DLL_DEBUG_CANDIDATES 0 OPENH264_DLL_DEBUG)
+            endif()
+        endif()
+    endif()
 
     if(NOT OPENH264_LIBRARY_DEBUG)
         set(OPENH264_LIBRARY_DEBUG ${OPENH264_LIBRARY_RELEASE})

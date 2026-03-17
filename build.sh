@@ -20,9 +20,10 @@ verbose=false
 python_only=false
 editable_mode=false
 test_only=false
+force_configure=false
 
 usage() {
-    echo "Usage: $0 [-x] [-r] [-d] [-v] [-s] [-a] [-p] [-e] [-t] [-f]"
+    echo "Usage: $0 [-x] [-r] [-d] [-v] [-s] [-a] [-p] [-e] [-t] [-f] [-c]"
     echo "  -x    Perform a clean build"
     echo "  -r    Build in release"
     echo "  -d    Build in debug"
@@ -33,9 +34,10 @@ usage() {
     echo "  -e    Build and install python module in editable mode"
     echo "  -t    Run tests using ctest and pytest"
     echo "  -f    Disable GLFW (headless build)"
+    echo "  -c    Force CMake reconfigure"
 }
 
-while getopts ":xrdvsapetfh" opt; do
+while getopts ":xrdvsapetfch" opt; do
     case ${opt} in
         x) clean_build=true ;;
         r) release=true ;;
@@ -47,6 +49,7 @@ while getopts ":xrdvsapetfh" opt; do
         e) editable_mode=true ;;
         t) test_only=true ;;
         f) GLFW_OFF=ON ;;
+        c) force_configure=true ;;
         h) usage; exit 1 ;;
         \?) echo "Invalid option: $OPTARG" 1>&2; usage; exit 1 ;;
     esac
@@ -84,15 +87,20 @@ function run_build() {
         mkdir -p $BUILD_DIR_CONFIG
     fi
 
-    # Configure
-    cmake -G "Unix Makefiles" -S $PROJECT_DIR -B $BUILD_DIR_CONFIG \
-    -DCMAKE_BUILD_TYPE=$CONFIG \
-    -DNANOVDB_EDITOR_CLEAN_SHADERS=$CLEAN_SHADERS \
-    -DNANOVDB_EDITOR_SLANG_DEBUG_OUTPUT=$SLANG_DEBUG_OUTPUT \
-    -DNANOVDB_EDITOR_ENABLE_SANITIZERS=$ENABLE_SANITIZERS \
-    -DNANOVDB_EDITOR_BUILD_TESTS=ON \
-    -DNANOVDB_EDITOR_USE_H264=$([ "$H264_OFF" = "ON" ] && echo OFF || echo ON) \
-    -DNANOVDB_EDITOR_USE_GLFW=$([ "$GLFW_OFF" = "ON" ] && echo OFF || echo ON)
+    # Only run CMake configure if needed (first build, clean build, or forced)
+    if [ ! -f "$BUILD_DIR_CONFIG/CMakeCache.txt" ] || $force_configure; then
+        echo "-- Configuring $CONFIG..."
+        cmake -G "Unix Makefiles" -S $PROJECT_DIR -B $BUILD_DIR_CONFIG \
+        -DCMAKE_BUILD_TYPE=$CONFIG \
+        -DNANOVDB_EDITOR_CLEAN_SHADERS=$CLEAN_SHADERS \
+        -DNANOVDB_EDITOR_SLANG_DEBUG_OUTPUT=$SLANG_DEBUG_OUTPUT \
+        -DNANOVDB_EDITOR_ENABLE_SANITIZERS=$ENABLE_SANITIZERS \
+        -DNANOVDB_EDITOR_BUILD_TESTS=ON \
+        -DNANOVDB_EDITOR_USE_H264=$([ "$H264_OFF" = "ON" ] && echo OFF || echo ON) \
+        -DNANOVDB_EDITOR_USE_GLFW=$([ "$GLFW_OFF" = "ON" ] && echo OFF || echo ON)
+    else
+        echo "-- Skipping CMake configure (already configured, use -c to force)"
+    fi
 
     # Build
     cmake --build $BUILD_DIR_CONFIG --config $CONFIG $CMAKE_VERBOSE

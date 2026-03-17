@@ -100,8 +100,7 @@ bootstrap-vcpkg.bat
 ```
 
 The following dependencies are automatically managed by `vcpkg.json`:
-- blosc
-- libe57format (and xerces-c dependency)
+- libe57format (and xerces-c dependency) when `NANOVDB_EDITOR_E57_FORMAT=ON`
 - openh264
 
 ### Assets
@@ -125,10 +124,12 @@ The Linux/macOS build script supports the following flags (combine as needed):
 - **-e**: Install the Python module in editable mode (use with `-p`)
 - **-t**: Run tests (ctest + pytest); honors `-r`/`-d` to pick configuration
 - **-f**: Disable GLFW for a headless build
+- **-c**: Force CMake reconfigure (needed when switching build options like GLFW on/off)
 
 Notes:
 - If neither `-r` nor `-d` is provided (and not using `-p` or `-t`), the script defaults to a Release build.
 - For Python builds (`-p`), `-d` selects Debug wheels; otherwise Release is used.
+- CMake configure is skipped automatically when the build directory already exists. Use `-c` to force reconfigure when changing options (e.g., switching between GLFW enabled/disabled).
 
 Examples:
 
@@ -153,6 +154,9 @@ Examples:
 
 # Generate Slang ASM during build
 ./build.sh -s -r
+
+# Rebuild after changing options
+./build.sh -r -c
 ```
 
 #### Linux
@@ -165,10 +169,13 @@ Optionally, rename the config file `config` next to the build script to `config.
 ```
 MSVS_VERSION=Visual Studio 17 2022
 USE_VCPKG=ON
+NANOVDB_EDITOR_E57_FORMAT=ON
 VCPKG_ROOT=path/to/vcpkg
 ```
 
 When `USE_VCPKG=ON`, `NANOVDB_EDITOR_USE_H264` defaults to `ON` on Windows. Without `vcpkg`, H.264 remains disabled on Windows because the fallback OpenH264 source build depends on Unix command-line tools.
+
+Set `NANOVDB_EDITOR_E57_FORMAT=ON` to enable E57 support and install the optional `vcpkg` `e57` feature on Windows.
 
 To select a different profile for the Slang compiler (https://github.com/shader-slang/slang/blob/master/source/slang/slang-profile-defs.h):
 ```

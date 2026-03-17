@@ -546,6 +546,13 @@ jobs:
       with:
         package-dir: pymodule
 
+    - name: Verify Windows wheel bundles required runtime DLLs
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        set -euo pipefail
+        python scripts/ci/verify_windows_runtime.py wheel --dir wheelhouse
+
     - uses: actions/upload-artifact@v4
       with:
         name: wheels-${{ matrix.os }}${{ matrix.arch && format('-{0}', matrix.arch) || '' }}
