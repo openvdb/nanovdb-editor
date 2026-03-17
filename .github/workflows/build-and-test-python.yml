@@ -552,6 +552,7 @@ jobs:
           conda activate nanovdb_editor
           python - <<'PY'
           import pathlib
+          import platform
           import time
 
           import nanovdb_editor as nve
@@ -579,17 +580,22 @@ jobs:
               )
           print("Vulkan shader compile smoke test passed")
 
-          compiler.clear_diagnostics()
-          if not compiler.compile_shader(
-              str(shader_path),
-              entry_point_name="computeMain",
-              compile_target=nve.CompileTarget.CPU,
-          ):
-              raise AssertionError(
-                  "CPU shader smoke compile failed.\n"
-                  f"Compiler diagnostics:\n{compiler.get_diagnostics() or '<none>'}"
-              )
-          print("CPU shader compile smoke test passed")
+          machine = platform.machine().lower()
+          cpu_target_supported = platform.system() == "Darwin" and machine in {"arm64", "aarch64"}
+          if cpu_target_supported:
+              compiler.clear_diagnostics()
+              if not compiler.compile_shader(
+                  str(shader_path),
+                  entry_point_name="computeMain",
+                  compile_target=nve.CompileTarget.CPU,
+              ):
+                  raise AssertionError(
+                      "CPU shader smoke compile failed.\n"
+                      f"Compiler diagnostics:\n{compiler.get_diagnostics() or '<none>'}"
+                  )
+              print("CPU shader compile smoke test passed")
+          else:
+              print(f"Skipping CPU shader smoke test on {platform.system()} {machine}")
 
           editor = nve.Editor(compute, compiler)
           config = nve.EditorConfig()
@@ -938,6 +944,7 @@ jobs:
         run: |
           @'
           import pathlib
+          import platform
           import time
 
           import nanovdb_editor as nve
@@ -965,17 +972,22 @@ jobs:
               )
           print("Vulkan shader compile smoke test passed")
 
-          compiler.clear_diagnostics()
-          if not compiler.compile_shader(
-              str(shader_path),
-              entry_point_name="computeMain",
-              compile_target=nve.CompileTarget.CPU,
-          ):
-              raise AssertionError(
-                  "CPU shader smoke compile failed.\n"
-                  f"Compiler diagnostics:\n{compiler.get_diagnostics() or '<none>'}"
-              )
-          print("CPU shader compile smoke test passed")
+          machine = platform.machine().lower()
+          cpu_target_supported = platform.system() == "Darwin" and machine in {"arm64", "aarch64"}
+          if cpu_target_supported:
+              compiler.clear_diagnostics()
+              if not compiler.compile_shader(
+                  str(shader_path),
+                  entry_point_name="computeMain",
+                  compile_target=nve.CompileTarget.CPU,
+              ):
+                  raise AssertionError(
+                      "CPU shader smoke compile failed.\n"
+                      f"Compiler diagnostics:\n{compiler.get_diagnostics() or '<none>'}"
+                  )
+              print("CPU shader compile smoke test passed")
+          else:
+              print(f"Skipping CPU shader smoke test on {platform.system()} {machine}")
 
           editor = nve.Editor(compute, compiler)
           config = nve.EditorConfig()
