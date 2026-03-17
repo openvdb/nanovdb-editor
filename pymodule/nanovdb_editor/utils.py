@@ -61,7 +61,9 @@ def _find_installed_lib_dir(pkg_dir: str) -> str:
         if os.path.isdir(d):
             return d
 
-    raise OSError("nanovdb_editor lib directory not found in package or site-packages")
+    raise OSError(
+        "nanovdb_editor lib directory not found in package or site-packages"
+    )
 
 
 def load_library(lib_name) -> ctypes.CDLL:
@@ -71,6 +73,7 @@ def load_library(lib_name) -> ctypes.CDLL:
     lib_dir = _find_installed_lib_dir(package_dir)
 
     if system == "Windows":
+        add_dll_search_directory(lib_dir)
         path = os.path.join(lib_dir, f"{lib_name}.dll")
     elif system == "Linux":
         path = os.path.join(lib_dir, f"lib{lib_name}.so")

@@ -387,9 +387,36 @@ if(SKBUILD)
         pnanovdbcompute
         pnanovdbfileformat
         pnanovdbeditor
+        RUNTIME_DEPENDENCY_SET python_runtime_deps
         DESTINATION nanovdb_editor/lib
         COMPONENT python_libs
     )
+
+    if(WIN32)
+        set(_python_runtime_dependency_dirs
+            "${CMAKE_BINARY_DIR}/$<CONFIG>"
+            "${Slang_SOURCE_DIR}/bin"
+        )
+        if(VCPKG_INSTALLED_DIR AND VCPKG_TARGET_TRIPLET)
+            list(APPEND _python_runtime_dependency_dirs
+                "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+                "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/bin"
+            )
+        endif()
+
+        install(RUNTIME_DEPENDENCY_SET python_runtime_deps
+            DESTINATION nanovdb_editor/lib
+            COMPONENT python_libs
+            PRE_EXCLUDE_REGEXES
+                "api-ms-"
+                "ext-ms-"
+            POST_EXCLUDE_REGEXES
+                ".*/[Ww]indows/[Ss]ystem32/.*"
+                ".*/[Ww]indows/SysWOW64/.*"
+            DIRECTORIES
+                ${_python_runtime_dependency_dirs}
+        )
+    endif()
 
     if(WIN32 AND TARGET blosc_shared)
         get_target_property(_blosc_target_type blosc_shared TYPE)
