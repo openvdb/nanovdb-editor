@@ -410,6 +410,8 @@ if(SKBUILD)
             PRE_EXCLUDE_REGEXES
                 "api-ms-"
                 "ext-ms-"
+                "[Hh]vsiFileTrust\\.dll"
+                "[Ww]tdccm\\.dll"
             POST_EXCLUDE_REGEXES
                 ".*/[Ww]indows/[Ss]ystem32/.*"
                 ".*/[Ww]indows/SysWOW64/.*"
