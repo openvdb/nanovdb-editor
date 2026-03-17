@@ -552,6 +552,7 @@ jobs:
       run: |
         set -euo pipefail
         python - <<'PY'
+        import os
         import pathlib
         import zipfile
         import sys
@@ -570,6 +571,13 @@ jobs:
         bundled_libs = sorted(
             name for name in names if name.startswith("nanovdb_editor/lib/")
         )
+        def has_bundled_dll(prefix):
+            prefix = prefix.lower()
+            return any(
+                name.lower().startswith(prefix) and name.lower().endswith(".dll")
+                for name in bundled_libs
+            )
+
         print("Bundled runtime libs:")
         for name in bundled_libs:
             print(f" - {name}")
@@ -577,19 +585,10 @@ jobs:
         missing = []
         if "nanovdb_editor/lib/vulkan-1.dll" not in lower_names:
             missing.append("vulkan-1.dll")
-        if not any(
-            name.lower().startswith("nanovdb_editor/lib/openh264")
-            and name.lower().endswith(".dll")
-            for name in bundled_libs
+        if os.environ.get("NANOVDB_EDITOR_WINDOWS_H264") == "1" and not has_bundled_dll(
+            "nanovdb_editor/lib/openh264"
         ):
             missing.append("openh264*.dll")
-        if not any(
-            name.lower().startswith("nanovdb_editor/lib/blosc")
-            and name.lower().endswith(".dll")
-            for name in bundled_libs
-        ):
-            missing.append("blosc*.dll")
-
         if missing:
             print(
                 "Windows wheel is missing required runtime libraries: "

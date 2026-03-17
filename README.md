@@ -100,7 +100,6 @@ bootstrap-vcpkg.bat
 ```
 
 The following dependencies are automatically managed by `vcpkg.json`:
-- blosc
 - libe57format (and xerces-c dependency) when `NANOVDB_EDITOR_E57_FORMAT=ON`
 - openh264
 

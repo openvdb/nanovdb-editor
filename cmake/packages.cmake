@@ -80,9 +80,9 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
     endif()
 endif()
 
-# Blosc: use vcpkg when NANOVDB_EDITOR_USE_VCPKG, otherwise fetch via CPM
+# Blosc: always use the project-built static library so the editor and Python
+# wheel do not depend on a vcpkg-provided Blosc runtime package/DLL.
 set(BLOSC_VERSION 1.21.4)
-if(NOT NANOVDB_EDITOR_USE_VCPKG)
 CPMAddPackage(
     NAME blosc
     URL
@@ -96,14 +96,6 @@ CPMAddPackage(
         "PREFER_EXTERNAL_ZLIB ON"
         "CMAKE_POSITION_INDEPENDENT_CODE ON"
 )
-endif()
-# When using vcpkg, find_package(Blosc) may create only blosc_shared. Provide a blosc_static
-# alias so targets that link blosc_static succeed. On non-Windows we alias; on Windows
-# we also alias (common with x64-windows/arm64-windows dynamic triplets)—when this
-# resolves to a shared library, the caller is responsible for the Blosc DLL at runtime.
-if(NANOVDB_EDITOR_USE_VCPKG AND TARGET blosc_shared AND NOT TARGET blosc_static)
-    add_library(blosc_static ALIAS blosc_shared)
-endif()
 
 # Graphics and UI dependencies
 set(VULKAN_VERSION 1.3.300)
