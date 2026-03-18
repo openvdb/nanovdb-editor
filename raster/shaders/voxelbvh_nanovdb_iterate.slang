@@ -37,19 +37,19 @@ pnanovdb_coord_t key_to_coord(pnanovdb_uint64_t key)
 }
 
 // Forward declare callback
-void iterate_main(pnanovdb_address_t node_addr, pnanovdb_address_t val_addr, uint level, uint n, pnanovdb_coord_t ijk);
+void iterate_main(pnanovdb_address_t node_addr, pnanovdb_address_t val_addr, uint level, uint n,
+                  pnanovdb_coord_t ijk,  inout user_state_t user_state);
 
 groupshared uint s_types[256u];
 
-[shader("compute")][numthreads(256, 1, 1)]
-void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
+void do_iteration(uint group_idx, uint thread_idx, inout user_state_t user_state)
 {
     uint pass_count = (constants.nanovdb_chunk_count + 65535u) / 65536u;
     for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
     {
         // fetch chunks for this worker, strided 256u
         // 4-bits per 64-bits
-        uint chunk_idx = pass_idx * 65536u + group_idx.x + 256u * thread_idx.x;
+        uint chunk_idx = pass_idx * 65536u + group_idx + 256u * thread_idx;
         uint word_idx = chunk_idx >> 4u;
         uint shift = uint(chunk_idx & 15) << 2;
         uint64_t node_mask = 0llu;
@@ -59,7 +59,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         }
         uint type = uint(node_mask >> shift) & 15;
 
-        s_types[thread_idx.x] = type;
+        s_types[thread_idx] = type;
 
         GroupMemoryBarrierWithGroupSync();
 
@@ -68,7 +68,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
             type = s_types[s_idx];
             if (type >= 1u && type <= 4u)
             {
-                chunk_idx = pass_idx * 65536u + group_idx.x + 256u * s_idx;
+                chunk_idx = pass_idx * 65536u + group_idx + 256u * s_idx;
 
                 // Should this be avoided?
                 pnanovdb_grid_handle_t grid = { pnanovdb_address_null() };
@@ -83,11 +83,11 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                         pnanovdb_address_t val_addr = pnanovdb_root_get_background_address(grid_type, buf, root);
 
                         pnanovdb_coord_t ijk = {0, 0, 0};
-                        iterate_main(root.address, val_addr, 4u, thread_idx.x, ijk);
+                        iterate_main(root.address, val_addr, 4u, thread_idx, ijk, user_state);
                     }
                     pnanovdb_uint32_t root_tile_count = pnanovdb_root_get_tile_count(buf, root);
                     pnanovdb_uint32_t count = pnanovdb_root_get_tile_count(buf, root);
-                    for (uint n = thread_idx.x; n < count; n += 256u)
+                    for (uint n = thread_idx; n < count; n += 256u)
                     {
                         pnanovdb_root_tile_handle_t tile = pnanovdb_root_get_tile(grid_type, root, n);
 
@@ -100,13 +100,13 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                             val_addr = pnanovdb_address_null();
                         }
 
-                        iterate_main(root.address, val_addr, 3u, n, ijk);
+                        iterate_main(root.address, val_addr, 3u, n, ijk, user_state);
                     }
                 }
                 else if (type == 2u)
                 {
                     pnanovdb_upper_handle_t upper = {uint64_t(chunk_idx) << 5u};
-                    for (uint n = thread_idx.x; n < PNANOVDB_UPPER_TABLE_COUNT; n+= 256u)
+                    for (uint n = thread_idx; n < PNANOVDB_UPPER_TABLE_COUNT; n+= 256u)
                     {
                         pnanovdb_coord_t ijk = pnanovdb_upper_get_bbox_min(buf, upper);
                         ijk.x += int(((n >> 10u) & 31) << 7u);
@@ -119,13 +119,13 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                             val_addr = pnanovdb_address_null();
                         }
 
-                        iterate_main(upper.address, val_addr, 2u, n, ijk);
+                        iterate_main(upper.address, val_addr, 2u, n, ijk, user_state);
                     }
                 }
                 else if (type == 3u)
                 {
                     pnanovdb_lower_handle_t lower = {uint64_t(chunk_idx) << 5u};
-                    for (uint n = thread_idx.x; n < PNANOVDB_LOWER_TABLE_COUNT; n+= 256u)
+                    for (uint n = thread_idx; n < PNANOVDB_LOWER_TABLE_COUNT; n+= 256u)
                     {
                         pnanovdb_coord_t ijk = pnanovdb_lower_get_bbox_min(buf, lower);
                         ijk.x += int(((n >> 8u) & 15) << 3u);
@@ -138,13 +138,13 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                             val_addr = pnanovdb_address_null();
                         }
 
-                        iterate_main(lower.address, val_addr, 1u, n, ijk);
+                        iterate_main(lower.address, val_addr, 1u, n, ijk, user_state);
                     }
                 }
                 else if (type == 4u)
                 {
                     pnanovdb_leaf_handle_t leaf = {uint64_t(chunk_idx) << 5u};
-                    for (uint n = thread_idx.x; n < PNANOVDB_LEAF_TABLE_COUNT; n+= 256u)
+                    for (uint n = thread_idx; n < PNANOVDB_LEAF_TABLE_COUNT; n+= 256u)
                     {
                         pnanovdb_coord_t ijk = pnanovdb_leaf_get_bbox_min(buf, leaf);
                         ijk.x += int((n >> 6u) & 7);
@@ -153,7 +153,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 
                         pnanovdb_address_t val_addr = pnanovdb_leaf_get_table_address(grid_type, buf, leaf, n);
 
-                        iterate_main(leaf.address, val_addr, 0u, n, ijk);
+                        iterate_main(leaf.address, val_addr, 0u, n, ijk, user_state);
                     }
                 }
             }

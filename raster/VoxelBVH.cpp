@@ -42,7 +42,9 @@ enum shader
     voxelbvh_nanovdb_find_uppers_slang,
     voxelbvh_nanovdb_init_slang,
     voxelbvh_nanovdb_iterate_copy_scratch_slang,
-    voxelbvh_nanovdb_level_list_alloc_slang,
+    voxelbvh_nanovdb_level_list_alloc1_slang,
+    voxelbvh_nanovdb_level_list_alloc2_slang,
+    voxelbvh_nanovdb_level_list_alloc3_slang,
     voxelbvh_nanovdb_level_list_flatten_slang,
     voxelbvh_nanovdb_level_list_splat_slang,
     voxelbvh_nanovdb_level_list_spread_slang,
@@ -71,7 +73,9 @@ static const char* s_shader_names[shader_count] = {
     "raster/voxelbvh_nanovdb_init.slang",
 
     "raster/voxelbvh_nanovdb_iterate_copy_scratch.slang",
-    "raster/voxelbvh_nanovdb_level_list_alloc.slang",
+    "raster/voxelbvh_nanovdb_level_list_alloc1.slang",
+    "raster/voxelbvh_nanovdb_level_list_alloc2.slang",
+    "raster/voxelbvh_nanovdb_level_list_alloc3.slang",
     "raster/voxelbvh_nanovdb_level_list_flatten.slang",
     "raster/voxelbvh_nanovdb_level_list_splat.slang",
     "raster/voxelbvh_nanovdb_level_list_spread.slang",
@@ -491,6 +495,10 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
     pnanovdb_compute_buffer_t* scratch_buffer =
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
 
+    buf_desc.size_in_bytes = 8u * 256u * 2u;
+    pnanovdb_compute_buffer_t* workgroup_counter_buffer =
+        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+
     struct constants_t
     {
         pnanovdb_uint32_t nanovdb_word_count;
@@ -525,6 +533,8 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
         compute_interface->register_buffer_as_transient(context, ijkl_in);
     pnanovdb_compute_buffer_transient_t* scratch_transient =
         compute_interface->register_buffer_as_transient(context, scratch_buffer);
+    pnanovdb_compute_buffer_transient_t* workgroup_counter_transient =
+        compute_interface->register_buffer_as_transient(context, workgroup_counter_buffer);
 
     for (pnanovdb_uint32_t pass_id = 0u; pass_id < 4u; pass_id++)
     {
@@ -594,6 +604,19 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
 
     // allocate list indices for each voxel/tile
     {
+        pnanovdb_compute_resource_t resources[5u] = {};
+        resources[0u].buffer_transient = constant_transient;
+        resources[1u].buffer_transient = nanovdb_transient;
+        resources[2u].buffer_transient = node_mask_transient;
+        resources[3u].buffer_transient = scratch_transient;
+        resources[4u].buffer_transient = workgroup_counter_transient;
+
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_level_list_alloc1_slang],
+                                 resources, 256u, 1u, 1u, "voxelbvh_nanovdb_level_list_alloc1");
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_level_list_alloc2_slang],
+                                 resources, 256u, 1u, 1u, "voxelbvh_nanovdb_level_list_alloc2");
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_level_list_alloc3_slang],
+                                 resources, 256u, 1u, 1u, "voxelbvh_nanovdb_level_list_alloc3");
     }
 
     // splat lists to grid
@@ -615,6 +638,7 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
     compute_interface->destroy_buffer(context, constant_buffer);
     compute_interface->destroy_buffer(context, node_mask_buffer);
     compute_interface->destroy_buffer(context, scratch_buffer);
+    compute_interface->destroy_buffer(context, workgroup_counter_buffer);
 }
 
 pnanovdb_compute_array_t* voxelbvh_nanovdb_add_nodes_from_key_array(const pnanovdb_compute_t* compute,
