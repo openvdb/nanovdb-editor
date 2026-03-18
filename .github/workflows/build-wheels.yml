@@ -215,8 +215,9 @@ jobs:
       if: inputs.is_dev
       shell: bash
       run: |
-        sed -i 's/name = "nanovdb-editor"/name = "nanovdb-editor-dev"/' pymodule/pyproject.toml
-        cat pymodule/pyproject.toml | grep "name ="
+        sed -i.bak 's/name = "nanovdb-editor"/name = "nanovdb-editor-dev"/' pymodule/pyproject.toml
+        rm -f pymodule/pyproject.toml.bak
+        grep "name =" pymodule/pyproject.toml
 
     - name: Seed cibuildwheel virtualenv cache (Windows)
       if: runner.os == 'Windows'
@@ -765,8 +766,9 @@ jobs:
       if: inputs.is_dev
       shell: bash
       run: |
-        sed -i 's/name = "nanovdb-editor"/name = "nanovdb-editor-dev"/' pymodule/pyproject.toml
-        cat pymodule/pyproject.toml | grep "name ="
+        sed -i.bak 's/name = "nanovdb-editor"/name = "nanovdb-editor-dev"/' pymodule/pyproject.toml
+        rm -f pymodule/pyproject.toml.bak
+        grep "name =" pymodule/pyproject.toml
 
     - name: Report Slang image resolution
       if: ${{ inputs.manage_slang_image && inputs.linux_x86_build_slang_from_source }}
@@ -1083,8 +1085,9 @@ jobs:
     - name: Rename package for dev release
       if: inputs.is_dev
       run: |
-        sed -i 's/name = "nanovdb-editor"/name = "nanovdb-editor-dev"/' pymodule/pyproject.toml
-        cat pymodule/pyproject.toml | grep "name ="
+        sed -i.bak 's/name = "nanovdb-editor"/name = "nanovdb-editor-dev"/' pymodule/pyproject.toml
+        rm -f pymodule/pyproject.toml.bak
+        grep "name =" pymodule/pyproject.toml
 
     - name: Build sdist
       run: pipx run build --sdist
