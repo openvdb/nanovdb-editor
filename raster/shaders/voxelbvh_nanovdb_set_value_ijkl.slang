@@ -40,6 +40,9 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         int(ijkl_raw.x) >> 16,
         int(ijkl_raw.x << 16) >> 16
     );
+    // squash lsbs to zero for higher levels
+    uint lmask = ~((1u << ijkl.w) - 1u);
+    ijkl.xyz = ijkl.xyz & lmask;
 
     pnanovdb_grid_handle_t grid = { pnanovdb_address_null() };
     pnanovdb_tree_handle_t tree = pnanovdb_grid_get_tree(buf, grid);
