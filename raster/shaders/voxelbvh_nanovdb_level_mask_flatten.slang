@@ -22,7 +22,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     pnanovdb_root_handle_t root = pnanovdb_tree_get_root(buf, tree);
 
     uint val_accum = 0u;
-    for (uint l = 0u; l < 12; l++)
+    for (uint l = 0u; l <= 12; l++)
     {
         uint lmask = ~((1u << l) - 1u);
         pnanovdb_coord_t ijkmask = ijk & lmask;

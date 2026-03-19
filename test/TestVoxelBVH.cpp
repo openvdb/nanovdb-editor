@@ -106,11 +106,14 @@ void voxelbvh_test()
         mapped_range[idx] = uint64_t(idx) | (uint64_t(idx + 1u) << 32u);
     }
 
-    pnanovdb_compute_array_t* built_nanovdb_array =
-        voxel_bvh.voxelbvh_nanovdb_add_nodes_from_key_array(&compute, queue, voxelbvh_ctx, ijkl_array, range_array);
+    pnanovdb_compute_array_t* built_nanovdb_array = nullptr;
+    pnanovdb_compute_array_t* built_flat_range_array = nullptr;
+    voxel_bvh.voxelbvh_nanovdb_add_nodes_from_key_array(
+        &compute, queue, voxelbvh_ctx, &built_nanovdb_array, &built_flat_range_array, ijkl_array, range_array);
 
     pnanovdb_buf_t buf = pnanovdb_make_buf((uint32_t*)built_nanovdb_array->data,
                                            built_nanovdb_array->element_size * built_nanovdb_array->element_count / 4u);
+    pnanovdb_uint64_t* range_flat_ptr = (pnanovdb_uint64_t*)built_flat_range_array->data;
 
     pnanovdb_grid_handle_t grid = {};
     pnanovdb_tree_handle_t tree = pnanovdb_grid_get_tree(buf, grid);
@@ -218,8 +221,8 @@ void voxelbvh_test()
             if (idx < 64u)
             {
                 pnanovdb_coord_t leaf_ijk = pnanovdb_leaf_get_bbox_min(buf, acc.leaf);
-                printf("leaf ijk(%d,%d,%d) vs point ijk(%d,%d,%d) val(0x%zx)\n", leaf_ijk.x, leaf_ijk.y, leaf_ijk.z,
-                       ijk.x, ijk.y, ijk.z, val);
+                printf("leaf ijk(%d,%d,%d) vs point ijk(%d,%d,%d) val(%d, 0x%x)\n", leaf_ijk.x, leaf_ijk.y, leaf_ijk.z,
+                       ijk.x, ijk.y, ijk.z, uint32_t(val >> 32u), uint32_t(val));
             }
         }
         else
@@ -232,8 +235,20 @@ void voxelbvh_test()
     printf("grid_size(%zu) unique_count(%zu) val_pass_count(%zu) not_leaf_count(%zu)\n", grid_size, unique_count,
            val_pass_count, not_leaf_count);
 
+    // print out some range_flat values
+    for (uint64_t idx = 0u; idx < 64u; idx++)
+    {
+        uint64_t range_val = range_flat_ptr[idx];
+        uint32_t range_begin = uint32_t(range_val);
+        uint32_t range_end = uint32_t(range_val >> 32u);
+        printf("range_flat[%zu] (%d, %d)\n", idx, range_begin, range_end);
+    }
+
     compute.destroy_array(ijkl_array);
     compute.destroy_array(range_array);
+
+    compute.destroy_array(built_nanovdb_array);
+    compute.destroy_array(built_flat_range_array);
 
     voxel_bvh.destroy_context(&compute, queue, voxelbvh_ctx);
 
