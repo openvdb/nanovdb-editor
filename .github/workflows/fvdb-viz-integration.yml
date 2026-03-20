@@ -38,6 +38,7 @@ jobs:
       torch_index_url: ${{ steps.fvdb.outputs.torch_index_url }}
       core_version: ${{ steps.fvdb.outputs.core_version }}
       core_index_url: ${{ steps.fvdb.outputs.core_index_url }}
+      test_image_revision: ${{ steps.fvdb.outputs.test_image_revision }}
       script_timeout: ${{ steps.fvdb.outputs.script_timeout }}
       test_image: ${{ steps.fvdb.outputs.test_image }}
     steps:
@@ -55,6 +56,7 @@ jobs:
             echo "torch_index_url=${FVDB_VIZ_TORCH_INDEX_URL_DEFAULT}"
             echo "core_version=${FVDB_VIZ_CORE_VERSION_DEFAULT}"
             echo "core_index_url=${FVDB_VIZ_CORE_INDEX_URL_DEFAULT}"
+            echo "test_image_revision=${FVDB_VIZ_TEST_IMAGE_REVISION_DEFAULT}"
             echo "script_timeout=${FVDB_VIZ_SCRIPT_TIMEOUT_DEFAULT}"
             echo "test_image=${FVDB_VIZ_TEST_IMAGE_BASE_DEFAULT}"
           } >> "$GITHUB_OUTPUT"
@@ -69,6 +71,7 @@ jobs:
     env:
       IMAGE_NAME: ${{ needs.resolve-fvdb-versions.outputs.test_image }}
       CORE_VERSION: ${{ needs.resolve-fvdb-versions.outputs.core_version }}
+      IMAGE_REVISION: ${{ needs.resolve-fvdb-versions.outputs.test_image_revision }}
     steps:
       - name: Look up cached image
         id: lookup
@@ -78,7 +81,7 @@ jobs:
         run: |
           set -euo pipefail
           core_tag="${CORE_VERSION//[^0-9a-zA-Z.-]/-}"
-          image_ref="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${core_tag}"
+          image_ref="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${core_tag}-r${IMAGE_REVISION}"
           echo "image_ref=${image_ref}" >> "$GITHUB_OUTPUT"
 
           # Login only when credentials are present (not available in fork PRs)
@@ -104,6 +107,7 @@ jobs:
     uses: ./.github/workflows/build-fvdb-viz-test-image.yml
     with:
       image_name: ${{ needs.resolve-fvdb-versions.outputs.test_image }}
+      image_revision: ${{ needs.resolve-fvdb-versions.outputs.test_image_revision }}
       torch_version: ${{ needs.resolve-fvdb-versions.outputs.torch_version }}
       torch_index_url: ${{ needs.resolve-fvdb-versions.outputs.torch_index_url }}
       fvdb_core_version: ${{ needs.resolve-fvdb-versions.outputs.core_version }}

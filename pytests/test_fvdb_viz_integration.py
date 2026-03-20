@@ -228,10 +228,47 @@ def _log_nanovdb_version(env_ctx: dict):
     )
 
 
+def _assert_viz_server_initializes(env_ctx: dict):
+    python_exe = env_ctx["python"]
+    env = env_ctx["env"]
+    try:
+        subprocess.run(
+            [
+                str(python_exe),
+                "-c",
+                (
+                    "import os; "
+                    "import fvdb; "
+                    "print("
+                    "'VK_ICD_FILENAMES:', "
+                    "os.environ.get('VK_ICD_FILENAMES', '<unset>')"
+                    "); "
+                    "print("
+                    "'VK_DRIVER_FILES:', "
+                    "os.environ.get('VK_DRIVER_FILES', '<unset>')"
+                    "); "
+                    "fvdb.viz.init("
+                    "ip_address='127.0.0.1', port=8080, verbose=False"
+                    "); "
+                    "print('fvdb.viz init preflight: ok')"
+                ),
+            ],
+            env=env,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise AssertionError(
+            "fvdb.viz viewer initialization failed during preflight. "
+            "Treating this as a hard failure instead of allowing the upstream "
+            "suite to skip."
+        ) from exc
+
+
 def _run_upstream_viz_suite(env_ctx: dict):
     python_exe = env_ctx["python"]
     env = env_ctx["env"]
     upstream_test_path = env_ctx["upstream_test_path"]
+    _assert_viz_server_initializes(env_ctx)
     cmd = [
         str(python_exe),
         "-m",
@@ -269,7 +306,9 @@ def test_fvdb_viz_with_dev_package(fvdb_viz_env):
 @pytest.mark.slow
 @pytest.mark.skipif(
     not LOCAL_DIST_SPEC,
-    reason=("Set FVDB_VIZ_LOCAL_DIST to the local wheel or source path to test it."),
+    reason=(
+        "Set FVDB_VIZ_LOCAL_DIST to the local wheel or source path to test it."
+    ),
 )
 def test_fvdb_viz_with_local_package(fvdb_viz_env):
     """
@@ -282,7 +321,9 @@ def test_fvdb_viz_with_local_package(fvdb_viz_env):
     if not local_spec.is_absolute():
         local_spec = (Path.cwd() / local_spec).resolve()
     if not local_spec.exists():
-        raise AssertionError(f"FVDB_VIZ_LOCAL_DIST target does not exist: {local_spec}")
+        raise AssertionError(
+            f"FVDB_VIZ_LOCAL_DIST target does not exist: {local_spec}"
+        )
 
     _install_nanovdb_distribution(fvdb_viz_env, str(local_spec))
     _run_upstream_viz_suite(fvdb_viz_env)

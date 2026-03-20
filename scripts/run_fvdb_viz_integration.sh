@@ -127,6 +127,7 @@ fi
 : "${FVDB_VIZ_CORE_VERSION:=${FVDB_VIZ_CORE_VERSION_DEFAULT}}"
 : "${FVDB_VIZ_CORE_INDEX_URL:=${FVDB_VIZ_CORE_INDEX_URL_DEFAULT}}"
 : "${FVDB_VIZ_TEST_IMAGE_BASE:=${FVDB_VIZ_TEST_IMAGE_BASE_DEFAULT}}"
+: "${FVDB_VIZ_TEST_IMAGE_REVISION:=${FVDB_VIZ_TEST_IMAGE_REVISION_DEFAULT}}"
 : "${FVDB_VIZ_SCRIPT_TIMEOUT:=${FVDB_VIZ_SCRIPT_TIMEOUT_DEFAULT}}"
 : "${FVDB_VIZ_SKIP_BASE_INSTALL:=1}"
 
@@ -136,7 +137,7 @@ if [[ -z "${CORE_VERSION_TAG}" ]]; then
 fi
 
 if [[ -z "${FVDB_VIZ_TEST_IMAGE:-}" ]]; then
-  FVDB_VIZ_TEST_IMAGE="${FVDB_VIZ_TEST_IMAGE_BASE}-${CORE_VERSION_TAG}"
+  FVDB_VIZ_TEST_IMAGE="${FVDB_VIZ_TEST_IMAGE_BASE}-${CORE_VERSION_TAG}-r${FVDB_VIZ_TEST_IMAGE_REVISION}"
 fi
 
 if [[ -n "$IMAGE_NAME" ]]; then
@@ -189,17 +190,33 @@ DOCKER_RUN_COMMON=(
   -e "FVDB_VIZ_CORE_INDEX_URL=${FVDB_VIZ_CORE_INDEX_URL}"
   -e "FVDB_VIZ_SCRIPT_TIMEOUT=${FVDB_VIZ_SCRIPT_TIMEOUT}"
   -e "FVDB_VIZ_SKIP_BASE_INSTALL=${FVDB_VIZ_SKIP_BASE_INSTALL}"
-  -e "VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json"
-  -e "VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json"
-  -e "LP_NUM_THREADS=1"
-  -e "LIBGL_ALWAYS_SOFTWARE=1"
-  -e "GALLIUM_DRIVER=llvmpipe"
   -e "PYTHONUNBUFFERED=1"
   -v "${REPO_ROOT}:/workspace"
   -w /workspace
 )
 
-PYTEST_CMD=$'python3 -m pip install --break-system-packages pytest >/tmp/pip.log 2>&1; '\
+PYTEST_CMD=$'LVP_ICD=""; '\
+$'for candidate in /usr/share/vulkan/icd.d/lvp_icd*.json; do '\
+$'  if [ -f "$candidate" ]; then LVP_ICD="$candidate"; break; fi; '\
+$'done; '\
+$'if [ -z "$LVP_ICD" ]; then '\
+$'  echo "ERROR: No lavapipe ICD found under /usr/share/vulkan/icd.d" >&2; '\
+$'  ls -la /usr/share/vulkan/icd.d || true; '\
+$'  exit 1; '\
+$'fi; '\
+$'export VK_ICD_FILENAMES="$LVP_ICD"; '\
+$'export VK_DRIVER_FILES="$LVP_ICD"; '\
+$'export LP_NUM_THREADS=1; '\
+$'export LIBGL_ALWAYS_SOFTWARE=1; '\
+$'export GALLIUM_DRIVER=llvmpipe; '\
+$'echo "Using lavapipe ICD: $LVP_ICD"; '\
+$'ls -la /usr/share/vulkan/icd.d; '\
+$'if command -v vulkaninfo >/dev/null 2>&1; then '\
+$'  vulkaninfo --summary || true; '\
+$'else '\
+$'  echo "WARNING: vulkaninfo is not installed in the fvdb test image"; '\
+$'fi; '\
+$'python3 -m pip install --break-system-packages pytest >/tmp/pip.log 2>&1; '\
 $'python3 -c "import importlib; mod = importlib.import_module(\'nanovdb_editor\'); '\
 $'version = getattr(mod, \'__version__\', \'unknown\'); '\
 $'print(f\'nanovdb_editor version: {version}\')"; '\

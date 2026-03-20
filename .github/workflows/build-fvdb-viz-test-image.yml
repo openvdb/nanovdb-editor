@@ -6,6 +6,10 @@ on:
       image_name:
         required: true
         type: string
+      image_revision:
+        required: false
+        type: string
+        default: "0"
       torch_version:
         required: false
         type: string
@@ -34,6 +38,7 @@ jobs:
       image_ref: ${{ steps.compute_ref.outputs.image_ref }}
     env:
       IMAGE_NAME: ${{ inputs.image_name }}
+      IMAGE_REVISION: ${{ inputs.image_revision }}
       TORCH_VERSION: ${{ inputs.torch_version }}
       TORCH_INDEX_URL: ${{ inputs.torch_index_url }}
       FVDB_CORE_VERSION: ${{ inputs.fvdb_core_version }}
@@ -44,7 +49,7 @@ jobs:
         run: |
           set -euo pipefail
           core_tag="${FVDB_CORE_VERSION//[^0-9a-zA-Z.-]/-}"
-          image_ref="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${core_tag}"
+          image_ref="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${core_tag}-r${IMAGE_REVISION}"
           echo "image_ref=${image_ref}" >> "$GITHUB_OUTPUT"
           echo "Will build and push: ${image_ref}"
 
