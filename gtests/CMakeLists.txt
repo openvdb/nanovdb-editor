@@ -49,6 +49,7 @@ endfunction()
 
 ConfigureTest(ShaderCompileTest ShaderCompileTest.cpp)
 ConfigureTest(ComputeDispatchTest ComputeDispatchTest.cpp)
+# ConfigureTest(ComputeDispatchCpuInterfaceTest ComputeDispatchCpuInterfaceTest.cpp)
 ConfigureTest(ShaderCompileCpuTest ShaderCompileCpuTest.cpp)
 ConfigureTest(FileFormatTest FileFormatTest.cpp)
 ConfigureTest(EditorStartStopTest EditorStartStopTest.cpp)
