@@ -269,10 +269,27 @@ def _run_upstream_viz_suite(env_ctx: dict):
     env = env_ctx["env"]
     upstream_test_path = env_ctx["upstream_test_path"]
     _assert_viz_server_initializes(env_ctx)
+    runner = """
+import os
+import sys
+import traceback
+
+import pytest
+
+exit_code = 1
+try:
+    exit_code = int(pytest.main(sys.argv[1:]))
+except BaseException:
+    traceback.print_exc()
+finally:
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(exit_code)
+"""
     cmd = [
         str(python_exe),
-        "-m",
-        "pytest",
+        "-c",
+        runner,
         str(upstream_test_path),
         "-vv",
         "-s",
