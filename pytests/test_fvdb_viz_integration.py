@@ -55,23 +55,6 @@ def _default_version(var_name: str, fallback: str | None = None) -> str:
 
 RUNS_ON_FVDB_VIZ_ENV = os.environ.get("FVDB_VIZ_TESTS") == "1"
 LOCAL_DIST_SPEC = os.environ.get("FVDB_VIZ_LOCAL_DIST")
-UPSTREAM_PYTEST_RUNNER = """
-import os
-import sys
-import traceback
-
-import pytest
-
-exit_code = 1
-try:
-    exit_code = int(pytest.main(sys.argv[1:]))
-except BaseException:
-    traceback.print_exc()
-finally:
-    sys.stdout.flush()
-    sys.stderr.flush()
-    os._exit(exit_code)
-"""
 
 pytestmark = pytest.mark.skipif(
     not RUNS_ON_FVDB_VIZ_ENV,
@@ -281,76 +264,40 @@ def _assert_viz_server_initializes(env_ctx: dict):
         ) from exc
 
 
-def _collect_upstream_node_ids(
-    python_exe: Path, env: dict[str, str], upstream_test_path: Path
-) -> list[str]:
-    result = subprocess.run(
-        [
-            str(python_exe),
-            "-m",
-            "pytest",
-            "--collect-only",
-            "-q",
-            str(upstream_test_path),
-        ],
-        env=env,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    node_ids = []
-    for line in result.stdout.splitlines():
-        node_id = line.strip()
-        if "::" not in node_id:
-            continue
-        if node_id.startswith(f"{upstream_test_path.name}::"):
-            _, suffix = node_id.split("::", 1)
-            node_id = f"{upstream_test_path}::{suffix}"
-        node_ids.append(node_id)
-    if not node_ids:
-        raise RuntimeError(
-            f"No upstream fvdb.viz tests were collected from {upstream_test_path}"
-        )
-    return node_ids
-
-
-def _format_return_code(return_code: int) -> str:
-    if return_code < 0:
-        return f"signal {-return_code}"
-    return f"exit code {return_code}"
-
-
 def _run_upstream_viz_suite(env_ctx: dict):
     python_exe = env_ctx["python"]
     env = env_ctx["env"]
     upstream_test_path = env_ctx["upstream_test_path"]
     _assert_viz_server_initializes(env_ctx)
-    node_ids = _collect_upstream_node_ids(python_exe, env, upstream_test_path)
-    failures: list[tuple[str, int]] = []
+    runner = """
+import os
+import sys
+import traceback
 
-    for node_id in node_ids:
-        print(f"Running upstream fvdb.viz test in isolated process: {node_id}")
-        cmd = [
-            str(python_exe),
-            "-c",
-            UPSTREAM_PYTEST_RUNNER,
-            node_id,
-            "-vv",
-            "-s",
-            "--maxfail=1",
-            "--full-trace",
-            "-rA",
-        ]
-        result = subprocess.run(cmd, env=env, check=False)
-        if result.returncode != 0:
-            failures.append((node_id, result.returncode))
+import pytest
 
-    if failures:
-        details = ", ".join(
-            f"{node_id} ({_format_return_code(return_code)})"
-            for node_id, return_code in failures
-        )
-        raise AssertionError(f"Upstream fvdb.viz test failures: {details}")
+exit_code = 1
+try:
+    exit_code = int(pytest.main(sys.argv[1:]))
+except BaseException:
+    traceback.print_exc()
+finally:
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(exit_code)
+"""
+    cmd = [
+        str(python_exe),
+        "-c",
+        runner,
+        str(upstream_test_path),
+        "-vv",
+        "-s",
+        "--maxfail=1",
+        "--full-trace",
+        "-rA",
+    ]
+    subprocess.run(cmd, env=env, check=True)
 
 
 @pytest.mark.slow
