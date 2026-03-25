@@ -602,7 +602,7 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
         resources[3u].buffer_transient = scratch_transient;
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_level_mask_flatten_slang],
-                                 resources, 256u, 1u, 1u, "voxelbvh_level_mask_flatten");
+                                 resources, 256u, 1u, 1u, "voxelbvh_nanovdb_level_mask_flatten");
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_iterate_copy_scratch_slang],
                                  resources, 256u, 1u, 1u, "voxelbvh_nanovdb_iterate_copy_scratch");
@@ -640,7 +640,7 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
         pnanovdb_uint32_t workgroup_count = (ijkl_count + 255u) / 256u;
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_level_list_splat_slang],
-                                 resources, workgroup_count, 1u, 1u, "voxelbvh_level_list_splat");
+                                 resources, workgroup_count, 1u, 1u, "voxelbvh_nanovdb_level_list_splat");
     }
 
     // flatten lists
@@ -653,7 +653,7 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
         resources[4u].buffer_transient = range_flat_transient;
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_level_list_flatten_slang],
-                                 resources, 256u, 1u, 1u, "voxelbvh_level_list_flatten");
+                                 resources, 256u, 1u, 1u, "voxelbvh_nanovdb_level_list_flatten");
     }
 
     // spread
@@ -665,14 +665,50 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
         resources[3u].buffer_transient = scratch_transient;
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_level_list_spread_slang],
-                                 resources, 256u, 1u, 1u, "voxelbvh_level_list_spread");
+                                 resources, 256u, 1u, 1u, "voxelbvh_nanovdb_level_list_spread");
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_iterate_copy_scratch_slang],
                                  resources, 256u, 1u, 1u, "voxelbvh_nanovdb_iterate_copy_scratch");
     }
 
     // merge
+    for (uint l = 1u; l <= 12; l++)
     {
+        struct merge_arg_t
+        {
+            pnanovdb_uint32_t level;
+        };
+        merge_arg_t merge_arg = {};
+        merge_arg.level = l;
+
+        buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT;
+        buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+        buf_desc.structure_stride = 0u;
+        buf_desc.size_in_bytes = sizeof(merge_arg_t);
+        pnanovdb_compute_buffer_t* merge_arg_buffer =
+            compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &buf_desc);
+
+        void* mapped_merge_arg = compute_interface->map_buffer(context, merge_arg_buffer);
+        memcpy(mapped_merge_arg, &merge_arg, sizeof(merge_arg_t));
+        compute_interface->unmap_buffer(context, merge_arg_buffer);
+
+        pnanovdb_compute_buffer_transient_t* merge_arg_transient =
+            compute_interface->register_buffer_as_transient(context, merge_arg_buffer);
+
+        pnanovdb_compute_resource_t resources[5u] = {};
+        resources[0u].buffer_transient = constant_transient;
+        resources[1u].buffer_transient = nanovdb_transient;
+        resources[2u].buffer_transient = node_mask_transient;
+        resources[3u].buffer_transient = scratch_transient;
+        resources[4u].buffer_transient = merge_arg_transient;
+
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_merge_voxels_slang],
+                                 resources, 256u, 1u, 1u, "voxelbvh_nanovdb_merge_voxels");
+
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_iterate_copy_scratch_slang],
+                                 resources, 256u, 1u, 1u, "voxelbvh_nanovdb_iterate_copy_scratch");
+
+        compute_interface->destroy_buffer(context, merge_arg_buffer);
     }
 
     compute_interface->destroy_buffer(context, constant_buffer);

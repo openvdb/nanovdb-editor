@@ -1,127 +1,74 @@
 // voxelbvh_nanovdb_merge_voxels.slang
-#define PNANOVDB_HLSL
-#define PNANOVDB_ADDRESS_64
-#define PNANOVDB_BUF_HLSL_64
-#define PNANOVDB_BUF_HLSL_RW
-#include "PNanoVDB.h"
 
-struct constants_t
+struct user_state_t
 {
-    uint nanovdb_word_count;
-    uint pad0;
-    uint nanovdb_chunk_count;
-    uint node_mask_uint64_count;
+    int unused;
+}
+
+#include "voxelbvh_nanovdb_iterate.slang"
+
+struct merge_arg_t
+{
+    uint level;
 };
+ConstantBuffer<merge_arg_t> merge_arg_in;
 
-ConstantBuffer<constants_t> constants;
-RWStructuredBuffer<uint2> buf;
-StructuredBuffer<uint2> node_mask_in;
-
-uint64_t uint2_to_uint64_t(uint2 v)
+void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint level, uint n,
+                  pnanovdb_coord_t ijk, inout user_state_t user_state)
 {
-    return (uint64_t(v.y) << 32u) | uint64_t(v.x);
-}
+    if (pnanovdb_address_is_null(val_addr))
+    {
+        return;
+    }
 
-uint2 uint64_t_to_uint2(uint64_t v)
-{
-    return uint2(uint(v), uint(v >> 32u));
-}
+    // Note: single grid assumption
+    pnanovdb_grid_handle_t grid = { pnanovdb_address_null() };
+    pnanovdb_uint32_t grid_type = pnanovdb_grid_get_grid_type(buf, grid);
+    pnanovdb_tree_handle_t tree = pnanovdb_grid_get_tree(buf, grid);
+    pnanovdb_root_handle_t root = pnanovdb_tree_get_root(buf, tree);
 
-groupshared uint s_types[256u];
+    pnanovdb_uint64_t val = pnanovdb_read_uint64(buf, val_addr);
+
+    uint l = merge_arg_in.level;
+    int flip_mask = 1 << (l - 1u);
+
+    if ((uint(val >> 16u) & 0xFFFF) == (l - 1))
+    {
+        bool all_match = true;
+        for (uint i = 1u; i < 8; i++)
+        {
+            pnanovdb_coord_t ijkmask = ijk;
+            if ((i & 1) != 0u)
+            {
+                ijk.z = ijk.z ^ flip_mask;
+            }
+            if ((i & 2) != 0u)
+            {
+                ijk.y = ijk.y ^ flip_mask;
+            }
+            if ((i & 4) != 0u)
+            {
+                ijk.x = ijk.x ^ flip_mask;
+            }
+            pnanovdb_address_t read_val_addr = pnanovdb_root_get_value_address(grid_type, buf, root, ijkmask);
+            pnanovdb_uint64_t read_val = pnanovdb_read_uint64(buf, read_val_addr);
+            if (read_val != val)
+            {
+                all_match = false;
+            }
+        }
+        if (all_match)
+        {
+            val = (val & ~uint64_t(0xFFFF0000)) | uint64_t((l & 0xFFFF) << 16u);
+        }
+    }
+
+    pnanovdb_write_uint64(buf_scratch, val_addr, val);
+}
 
 [shader("compute")][numthreads(256, 1, 1)]
 void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
-    uint pass_count = (constants.nanovdb_chunk_count + 65535u) / 65536u;
-    for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
-    {
-        // fetch chunks for this worker, strided 256u
-        // 4-bits per 64-bits
-        uint chunk_idx = pass_idx * 65536u + group_idx.x + 256u * thread_idx.x;
-        uint word_idx = chunk_idx >> 4u;
-        uint shift = uint(chunk_idx & 15) << 2;
-        uint64_t node_mask = 0llu;
-        if (word_idx < constants.node_mask_uint64_count)
-        {
-            node_mask = uint2_to_uint64_t(node_mask_in[word_idx]);
-        }
-        uint type = uint(node_mask >> shift) & 15;
-
-        s_types[thread_idx.x] = type;
-
-        GroupMemoryBarrierWithGroupSync();
-
-        for (uint s_idx = 0u; s_idx < 256u; s_idx++)
-        {
-            type = s_types[s_idx];
-            if (type >= 1u && type <= 4u)
-            {
-                chunk_idx = pass_idx * 65536u + group_idx.x + 256u * s_idx;
-
-                // Should this be avoided?
-                pnanovdb_grid_handle_t grid = { pnanovdb_address_null() };
-                pnanovdb_uint32_t grid_type = pnanovdb_grid_get_grid_type(buf, grid);
-
-                if (type == 1u)
-                {
-                    pnanovdb_root_handle_t root = {uint64_t(chunk_idx) << 5u};
-
-                    // flattening root tiles isn't needed yet
-                    //pnanovdb_uint32_t root_tile_count = pnanovdb_root_get_tile_count(buf, root);
-                    //pnanovdb_uint32_t count = pnanovdb_root_get_tile_count(buf, root);
-                    //for (uint tile_idx = thread_idx.x; tile_idx < count; tile_idx += 256u)
-                    //{
-                    //    pnanovdb_root_tile_handle_t tile = pnanovdb_root_get_tile(grid_type, root, tile_idx);
-                    //}
-                }
-                else if (type == 2u)
-                {
-                    pnanovdb_upper_handle_t upper = {uint64_t(chunk_idx) << 5u};
-                    for (uint n = thread_idx.x; n < PNANOVDB_UPPER_TABLE_COUNT; n+= 256u)
-                    {
-                        if (!pnanovdb_upper_get_child_mask(buf, upper, n))
-                        {
-                            pnanovdb_coord_t ijk = pnanovdb_upper_get_bbox_min(buf, upper);
-                            ijk.x += int(((n >> 10u) & 31) << 7u);
-                            ijk.y += int(((n >> 5u) & 31) << 7u);
-                            ijk.z += int((n & 31) << 7u);
-
-                        }
-                    }
-                }
-                else if (type == 3u)
-                {
-                    pnanovdb_lower_handle_t lower = {uint64_t(chunk_idx) << 5u};
-                    for (uint n = thread_idx.x; n < PNANOVDB_LOWER_TABLE_COUNT; n+= 256u)
-                    {
-                        if (!pnanovdb_lower_get_child_mask(buf, lower, n))
-                        {
-                            pnanovdb_coord_t ijk = pnanovdb_lower_get_bbox_min(buf, lower);
-                            ijk.x += int(((n >> 8u) & 15) << 3u);
-                            ijk.y += int(((n >> 4u) & 15) << 3u);
-                            ijk.z += int((n & 15) << 3u);
-
-                        }
-                    }
-                }
-                else if (type == 4u)
-                {
-                    pnanovdb_leaf_handle_t leaf = {uint64_t(chunk_idx) << 5u};
-                    for (uint n = thread_idx.x; n < PNANOVDB_LEAF_TABLE_COUNT; n+= 256u)
-                    {
-                        if (pnanovdb_leaf_get_value_mask(buf, leaf, n))
-                        {
-                            pnanovdb_coord_t ijk = pnanovdb_leaf_get_bbox_min(buf, leaf);
-                            ijk.x += int((n >> 6u) & 7);
-                            ijk.y += int((n >> 3u) & 7);
-                            ijk.z += int(n & 7);
-
-                        }
-                    }
-                }
-            }
-        }
-
-        GroupMemoryBarrierWithGroupSync();
-    }
+    user_state_t user_state = {};
+    do_iteration(group_idx.x, thread_idx.x, user_state);
 }
