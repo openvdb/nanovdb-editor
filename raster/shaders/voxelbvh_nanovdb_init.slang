@@ -1,4 +1,4 @@
-// grid_nanovdb_init.slang
+// voxelbvh_nanovdb_init.slang
 
 StructuredBuffer<uint2> upload;
 

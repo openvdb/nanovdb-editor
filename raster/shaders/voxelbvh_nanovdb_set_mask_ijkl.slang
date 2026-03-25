@@ -1,4 +1,4 @@
-// voxelbvh_nanovdb_find_leafs.slang
+// voxelbvh_nanovdb_set_mask_ijkl.slang
 #define PNANOVDB_HLSL
 #define PNANOVDB_ADDRESS_64
 #define PNANOVDB_BUF_HLSL_64

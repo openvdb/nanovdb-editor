@@ -1,4 +1,4 @@
-// voxelbvh_nanovdb_find_root.slang
+// voxelbvh_nanovdb_find_clear.slang
 #define PNANOVDB_HLSL
 #define PNANOVDB_ADDRESS_64
 #define PNANOVDB_BUF_HLSL_64

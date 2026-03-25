@@ -35,6 +35,7 @@ enum shader
     voxelbvh_nanovdb_add_count_slang,
     voxelbvh_nanovdb_add_link_slang,
     voxelbvh_nanovdb_add_scan_slang,
+    voxelbvh_nanovdb_clear_slang,
     voxelbvh_nanovdb_find_clear_slang,
     voxelbvh_nanovdb_find_leaves_slang,
     voxelbvh_nanovdb_find_lowers_slang,
@@ -65,6 +66,7 @@ static const char* s_shader_names[shader_count] = {
     "raster/voxelbvh_nanovdb_add_count.slang",
     "raster/voxelbvh_nanovdb_add_link.slang",
     "raster/voxelbvh_nanovdb_add_scan.slang",
+    "raster/voxelbvh_nanovdb_clear.slang",
     "raster/voxelbvh_nanovdb_find_clear.slang",
     "raster/voxelbvh_nanovdb_find_leaves.slang",
     "raster/voxelbvh_nanovdb_find_lowers.slang",
@@ -259,6 +261,55 @@ pnanovdb_compute_array_t* voxelbvh_generate_node_mask_array(const pnanovdb_compu
     return node_mask_array;
 }
 
+void voxelbvh_nanovdb_clear(const pnanovdb_compute_t* compute,
+                            pnanovdb_compute_queue_t* queue,
+                            pnanovdb_voxelbvh_context_t* voxelbvh_context,
+                            pnanovdb_compute_buffer_t* nanovdb_inout,
+                            pnanovdb_uint64_t nanovdb_word_count)
+{
+    auto ctx = cast(voxelbvh_context);
+
+    pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
+    pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
+
+    struct constants_t
+    {
+        pnanovdb_uint32_t nanovdb_word_count;
+    };
+    constants_t constants = {};
+    constants.nanovdb_word_count = nanovdb_word_count;
+
+    // constants
+    pnanovdb_compute_buffer_desc_t buf_desc = {};
+    buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT;
+    buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+    buf_desc.structure_stride = 0u;
+    buf_desc.size_in_bytes = sizeof(constants_t);
+    pnanovdb_compute_buffer_t* constant_buffer =
+        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &buf_desc);
+
+    // copy constants
+    void* mapped_constants = compute_interface->map_buffer(context, constant_buffer);
+    memcpy(mapped_constants, &constants, sizeof(constants_t));
+    compute_interface->unmap_buffer(context, constant_buffer);
+
+    pnanovdb_compute_buffer_transient_t* constant_transient =
+        compute_interface->register_buffer_as_transient(context, constant_buffer);
+    pnanovdb_compute_buffer_transient_t* nanovdb_transient =
+        compute_interface->register_buffer_as_transient(context, nanovdb_inout);
+
+    {
+        pnanovdb_compute_resource_t resources[2u] = {};
+        resources[0u].buffer_transient = constant_transient;
+        resources[1u].buffer_transient = nanovdb_transient;
+
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_clear_slang], resources,
+                                 256u, 1u, 1u, "voxelbvh_nanovdb_clear");
+    }
+
+    compute_interface->destroy_buffer(context, constant_buffer);
+}
+
 void voxelbvh_nanovdb_init(const pnanovdb_compute_t* compute,
                            pnanovdb_compute_queue_t* queue,
                            pnanovdb_voxelbvh_context_t* voxelbvh_context,
@@ -346,6 +397,9 @@ void voxelbvh_nanovdb_init(const pnanovdb_compute_t* compute,
         compute_interface->register_buffer_as_transient(context, upload_buffer);
     pnanovdb_compute_buffer_transient_t* nanovdb_transient =
         compute_interface->register_buffer_as_transient(context, nanovdb_inout);
+
+    // clear buffer before initialization, to ensure everything starts 0
+    voxelbvh_nanovdb_clear(compute, queue, voxelbvh_context, nanovdb_inout, nanovdb_word_count);
 
     // voxelbvh_nanovdb_init.slang
     {
@@ -496,6 +550,9 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
     buf_desc.size_in_bytes = buf_size;
     pnanovdb_compute_buffer_t* scratch_buffer =
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+
+    // clear scratch buffer for now
+    voxelbvh_nanovdb_clear(compute, queue, voxelbvh_context, scratch_buffer, nanovdb_word_count);
 
     buf_desc.size_in_bytes = 8u * 256u * 2u;
     pnanovdb_compute_buffer_t* workgroup_counter_buffer =
