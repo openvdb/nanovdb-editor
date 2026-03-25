@@ -9,7 +9,7 @@ on:
       image_revision:
         required: false
         type: string
-        default: "0"
+        default: "1"
       torch_version:
         required: false
         type: string

@@ -220,7 +220,7 @@ $'python3 -m pip install --break-system-packages pytest >/tmp/pip.log 2>&1; '\
 $'python3 -c "import importlib; mod = importlib.import_module(\'nanovdb_editor\'); '\
 $'version = getattr(mod, \'__version__\', \'unknown\'); '\
 $'print(f\'nanovdb_editor version: {version}\')"; '\
-$'pytest --noconftest pytests/test_fvdb_viz_integration.py -k "'"${PYTEST_EXPR}"'" -vv -s --maxfail=1 --full-trace -rA; '\
+$'pytest pytests/test_fvdb_viz_integration.py -k "'"${PYTEST_EXPR}"'" -vv -s --maxfail=1 --full-trace -rA; '\
 $'PYTEST_EXIT=$?; echo "Pytest exit code: $PYTEST_EXIT"; exit $PYTEST_EXIT'
 
 echo "Running pytest selector: ${PYTEST_EXPR}"
