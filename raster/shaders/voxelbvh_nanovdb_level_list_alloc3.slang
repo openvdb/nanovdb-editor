@@ -7,26 +7,27 @@ struct user_state_t
 
 #include "voxelbvh_nanovdb_iterate.slang"
 
-RWStructuredBuffer<uint2> workgroup_counters_inout;
+StructuredBuffer<uint2> workgroup_counters_inout;
 
 #include <workgroup_scan_uint64.slang>
 
 void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint level, uint n,
                   pnanovdb_coord_t ijk, inout user_state_t user_state)
 {
-    if (pnanovdb_address_is_null(val_addr))
-    {
-        return;
-    }
     uint thread_idx = n & 255;
 
-    pnanovdb_uint32_t val = pnanovdb_read_uint32(buf, val_addr);
-    uint level_mask = val & 0xFFFF;
-    uint alloc_count = countbits(level_mask);
-    // only allocate background once
-    if (level == 4u && n != 0u)
+    uint alloc_count = 0u;
+    pnanovdb_uint64_t val = uint64_t(0u);
+    if (!pnanovdb_address_is_null(val_addr))
     {
-        alloc_count = 0u;
+        val = pnanovdb_read_uint64(buf, val_addr);
+        uint level_mask = uint(val) & 0xFFFF;
+        alloc_count = countbits(level_mask);
+        // only allocate background once
+        if (level == 4u && n != 0u)
+        {
+            alloc_count = 0u;
+        }
     }
 
     uint64_t4 alloc_count4 = uint64_t4(alloc_count, 0llu, 0llu, 0llu);
@@ -34,10 +35,14 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     uint64_t workgroup_alloc_count = 0llu;
     workgroup_scan_uint64(thread_idx, alloc_count4, scan_alloc_count4, workgroup_alloc_count);
 
-    uint64_t val_alloc_idx = user_state.workgroup_alloc_idx + scan_alloc_count4.x - alloc_count4.x;
-    // voxel value is only 32-bit for now
-    uint val_alloc_idx32 = uint(val_alloc_idx);
-    pnanovdb_write_uint32(buf, pnanovdb_address_offset(val_addr, 4u), val_alloc_idx32);
+    if (!pnanovdb_address_is_null(val_addr))
+    {
+        uint64_t val_alloc_idx = user_state.workgroup_alloc_idx + scan_alloc_count4.x - alloc_count4.x;
+        // voxel value is only 32-bit for now
+        uint val_alloc_idx32 = uint(val_alloc_idx);
+        val = val | (uint64_t(val_alloc_idx32) << 32u);
+        pnanovdb_write_uint64(buf_scratch, val_addr, val);
+    }
 
     // update state for next iterate_main call on this worker
     user_state.workgroup_alloc_idx = user_state.workgroup_alloc_idx + workgroup_alloc_count;

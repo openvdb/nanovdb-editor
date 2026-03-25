@@ -14,20 +14,18 @@ RWStructuredBuffer<uint2> workgroup_counters_inout;
 void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint level, uint n,
                   pnanovdb_coord_t ijk, inout user_state_t user_state)
 {
-    if (pnanovdb_address_is_null(val_addr))
+    uint alloc_count = 0u;
+    if (!pnanovdb_address_is_null(val_addr))
     {
-        return;
+        pnanovdb_uint32_t val = pnanovdb_read_uint32(buf, val_addr);
+        uint level_mask = val & 0xFFFF;
+        alloc_count = countbits(level_mask);
+        // only allocate background once
+        if (level == 4u && n != 0u)
+        {
+            alloc_count = 0u;
+        }
     }
-
-    pnanovdb_uint32_t val = pnanovdb_read_uint32(buf, val_addr);
-    uint level_mask = val & 0xFFFF;
-    uint alloc_count = countbits(level_mask);
-    // only allocate background once
-    if (level == 4u && n != 0u)
-    {
-        alloc_count = 0u;
-    }
-
     user_state.element_count = user_state.element_count + alloc_count;
 }
 

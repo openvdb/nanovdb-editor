@@ -623,6 +623,9 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
                                  resources, 256u, 1u, 1u, "voxelbvh_nanovdb_level_list_alloc2");
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_level_list_alloc3_slang],
                                  resources, 256u, 1u, 1u, "voxelbvh_nanovdb_level_list_alloc3");
+
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_iterate_copy_scratch_slang],
+                                 resources, 256u, 1u, 1u, "voxelbvh_nanovdb_iterate_copy_scratch");
     }
 
     // splat lists to grid
@@ -655,6 +658,17 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
 
     // spread
     {
+        pnanovdb_compute_resource_t resources[4u] = {};
+        resources[0u].buffer_transient = constant_transient;
+        resources[1u].buffer_transient = nanovdb_transient;
+        resources[2u].buffer_transient = node_mask_transient;
+        resources[3u].buffer_transient = scratch_transient;
+
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_level_list_spread_slang],
+                                 resources, 256u, 1u, 1u, "voxelbvh_level_list_spread");
+
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_iterate_copy_scratch_slang],
+                                 resources, 256u, 1u, 1u, "voxelbvh_nanovdb_iterate_copy_scratch");
     }
 
     // merge
