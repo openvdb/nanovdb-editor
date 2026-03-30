@@ -41,7 +41,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
         // voxel value is only 32-bit for now
         uint val_alloc_idx32 = uint(val_alloc_idx);
         val = val | (uint64_t(val_alloc_idx32) << 32u);
-        pnanovdb_write_uint64(buf_scratch, val_addr, val);
+        pnanovdb_write_uint64(buf, val_addr, val);
     }
 
     // update state for next iterate_main call on this worker

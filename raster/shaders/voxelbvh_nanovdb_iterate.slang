@@ -80,24 +80,36 @@ void do_iteration(uint group_idx, uint thread_idx, inout user_state_t user_state
 
                     // background, workgroup wide callback, but only one is expected to write
                     {
-                        pnanovdb_address_t val_addr = pnanovdb_root_get_background_address(grid_type, buf, root);
+                        pnanovdb_address_t val_addr = pnanovdb_address_null();
+                        if (thread_idx == 0u)
+                        {
+                            val_addr = pnanovdb_root_get_background_address(grid_type, buf, root);
+                        }
 
                         pnanovdb_coord_t ijk = {0, 0, 0};
                         iterate_main(root.address, val_addr, 4u, thread_idx, ijk, user_state);
                     }
                     pnanovdb_uint32_t root_tile_count = pnanovdb_root_get_tile_count(buf, root);
                     pnanovdb_uint32_t count = pnanovdb_root_get_tile_count(buf, root);
-                    for (uint n = thread_idx; n < count; n += 256u)
+                    pnanovdb_uint32_t pass_count = (count + 255u) / 256u;
+                    for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
                     {
-                        pnanovdb_root_tile_handle_t tile = pnanovdb_root_get_tile(grid_type, root, n);
+                        uint n = thread_idx + 256u * pass_idx;
 
-                        pnanovdb_uint64_t key = pnanovdb_root_tile_get_key(buf, tile);
-                        pnanovdb_coord_t ijk = key_to_coord(key);
-
-                        pnanovdb_address_t val_addr = pnanovdb_root_tile_get_value_address(grid_type, buf, tile);
-                        if (pnanovdb_root_tile_get_child_mask(buf, tile))
+                        pnanovdb_coord_t ijk = {0, 0, 0};
+                        pnanovdb_address_t val_addr = pnanovdb_address_null();
+                        if (n < count)
                         {
-                            val_addr = pnanovdb_address_null();
+                            pnanovdb_root_tile_handle_t tile = pnanovdb_root_get_tile(grid_type, root, n);
+
+                            pnanovdb_uint64_t key = pnanovdb_root_tile_get_key(buf, tile);
+                            ijk = key_to_coord(key);
+
+                            val_addr = pnanovdb_root_tile_get_value_address(grid_type, buf, tile);
+                            if (pnanovdb_root_tile_get_child_mask(buf, tile))
+                            {
+                                val_addr = pnanovdb_address_null();
+                            }
                         }
 
                         iterate_main(root.address, val_addr, 3u, n, ijk, user_state);

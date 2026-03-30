@@ -680,9 +680,6 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
                                  resources, 256u, 1u, 1u, "voxelbvh_nanovdb_level_list_alloc2");
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_level_list_alloc3_slang],
                                  resources, 256u, 1u, 1u, "voxelbvh_nanovdb_level_list_alloc3");
-
-        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_iterate_copy_scratch_slang],
-                                 resources, 256u, 1u, 1u, "voxelbvh_nanovdb_iterate_copy_scratch");
     }
 
     // splat lists to grid
