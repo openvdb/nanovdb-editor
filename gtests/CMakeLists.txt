@@ -53,4 +53,8 @@ ConfigureTest(ShaderCompileCpuTest ShaderCompileCpuTest.cpp)
 ConfigureTest(FileFormatTest FileFormatTest.cpp)
 ConfigureTest(EditorStartStopTest EditorStartStopTest.cpp)
 ConfigureTest(EditorHeadlessNonStreamingTest EditorHeadlessNonStreamingTest.cpp)
+ConfigureTest(EditorViewportCameraSyncTest
+  EditorViewportCameraSyncTest.cpp
+  ../editor/SceneView.cpp
+)
 ConfigureTest(EditorSlangCompileSpeedTest EditorSlangCompileSpeedTest.cpp)

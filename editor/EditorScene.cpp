@@ -634,17 +634,7 @@ void EditorScene::sync_views_from_scene_manager()
             {
                 if (obj->resources.camera_view && obj->resources.camera_view_owner)
                 {
-                    // If this camera already exists in SceneView with the same camera_view
-                    // object (shared via register_camera), skip it. Replacing would destroy
-                    // the CameraViewContext's camera_config/camera_state shared_ptrs while
-                    // the camera_view still holds raw pointers (configs/states) to them.
-                    pnanovdb_camera_view_t* existing =
-                        m_scene_view.get_camera(obj->scene_token, obj->name_token);
-                    if (existing != obj->resources.camera_view_owner.get())
-                    {
-                        CameraViewContext ctx{ obj->resources.camera_view_owner };
-                        m_scene_view.add_camera(obj->scene_token, obj->name_token, ctx);
-                    }
+                    m_scene_view.sync_camera_owner(obj->scene_token, obj->name_token, obj->resources.camera_view_owner);
                 }
             }
             else

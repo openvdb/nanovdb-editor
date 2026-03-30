@@ -169,6 +169,28 @@ void SceneView::add_camera(pnanovdb_editor_token_t* scene_token,
     }
 }
 
+void SceneView::sync_camera_owner(pnanovdb_editor_token_t* scene_token,
+                                  pnanovdb_editor_token_t* name_token,
+                                  const std::shared_ptr<pnanovdb_camera_view_t>& camera_view_owner)
+{
+    if (!scene_token || !name_token || !camera_view_owner)
+    {
+        return;
+    }
+
+    // SceneView-created viewport cameras keep config/state ownership outside camera_view.
+    // Re-adding the same camera_view with a partial CameraViewContext would drop those
+    // owners, so skip replacement when the owner already matches.
+    pnanovdb_camera_view_t* existing = get_camera(scene_token, name_token);
+    if (existing == camera_view_owner.get())
+    {
+        return;
+    }
+
+    CameraViewContext ctx{ camera_view_owner };
+    add_camera(scene_token, name_token, ctx);
+}
+
 pnanovdb_camera_view_t* SceneView::get_camera(pnanovdb_editor_token_t* name_token) const
 {
     if (!name_token)
