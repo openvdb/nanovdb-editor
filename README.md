@@ -59,7 +59,7 @@ echo $VULKAN_SDK
 
 #### Python
 ```
-pip install scikit-build wheel build numpy
+pip install scikit-build wheel build numpy slangpy
 ```
 #### Linux
 By default, editor is built with enabled `NANOVDB_EDITOR_USE_GLFW` which requires:
@@ -197,6 +197,10 @@ After building, run the editor app:
 The libraries can be bundled into a Python package with a wrapper for the C-type functions. The following script will automatically install scikit-build, wheel, and build dependencies:
 
 Build with `-p` to build and install the `nanovdb_editor` package.
+
+Published wheels depend on the official `slangpy` package for the Slang compiler runtime. Local source builds still use the CPM-managed Slang package during the build, and non-PyPI local installs keep bundling that runtime as before.
+
+CPU shader compilation additionally needs `slang-llvm`. That runtime is optional for the pip package; if you need CPU compilation from an installed wheel, point `NANOVDB_EDITOR_SLANG_LLVM_PATH` (or `SLANG_LLVM_PATH`) at your own `slang-llvm` shared library or at a directory containing it.
 
 #### Python Test Apps
 

@@ -725,19 +725,94 @@ if(restinio_ADDED)
     endif()
 endif()
 
+function(_nanovdb_editor_set_first_existing out_var)
+    set(_fallback "")
+    foreach(_candidate IN LISTS ARGN)
+        if(_fallback STREQUAL "")
+            set(_fallback "${_candidate}")
+        endif()
+        if(EXISTS "${_candidate}")
+            set(${out_var} "${_candidate}" PARENT_SCOPE)
+            return()
+        endif()
+    endforeach()
+    set(${out_var} "${_fallback}" PARENT_SCOPE)
+endfunction()
+
+function(_nanovdb_editor_collect_existing out_var)
+    set(_matches "")
+    foreach(_candidate IN LISTS ARGN)
+        if(EXISTS "${_candidate}")
+            list(APPEND _matches "${_candidate}")
+        endif()
+    endforeach()
+    set(${out_var} "${_matches}" PARENT_SCOPE)
+endfunction()
+
 if(Slang_ADDED)
     add_library(slang SHARED IMPORTED)
 
-    # Set library location using platform-specific naming
     if(WIN32)
+        _nanovdb_editor_set_first_existing(_nanovdb_editor_slang_import_location
+            "${Slang_SOURCE_DIR}/bin/slang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/bin/slang${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        )
+        _nanovdb_editor_set_first_existing(_nanovdb_editor_slang_import_library
+            "${Slang_SOURCE_DIR}/lib/slang-compiler${CMAKE_STATIC_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/lib/slang${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        )
+        _nanovdb_editor_collect_existing(NANOVDB_EDITOR_SLANG_RUNTIME_FILES
+            "${Slang_SOURCE_DIR}/bin/slang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/bin/slang-glsl-module${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/bin/slang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/bin/slang${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        )
+        _nanovdb_editor_collect_existing(NANOVDB_EDITOR_SLANG_LLVM_RUNTIME_FILES
+            "${Slang_SOURCE_DIR}/bin/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        )
         set_target_properties(slang PROPERTIES
-            IMPORTED_LOCATION ${Slang_SOURCE_DIR}/bin/slang${CMAKE_SHARED_LIBRARY_SUFFIX}
-            IMPORTED_IMPLIB ${Slang_SOURCE_DIR}/lib/slang${CMAKE_STATIC_LIBRARY_SUFFIX}
+            IMPORTED_LOCATION ${_nanovdb_editor_slang_import_location}
+            IMPORTED_IMPLIB ${_nanovdb_editor_slang_import_library}
+            INTERFACE_INCLUDE_DIRECTORIES ${Slang_SOURCE_DIR}/include
+        )
+    elseif(APPLE)
+        _nanovdb_editor_set_first_existing(_nanovdb_editor_slang_import_location
+            "${Slang_SOURCE_DIR}/lib/libslang-compiler.0.${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        )
+        _nanovdb_editor_collect_existing(NANOVDB_EDITOR_SLANG_RUNTIME_FILES
+            "${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/lib/libslang-compiler.0.${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/lib/libslang-glsl-module-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/lib/libslang-glslang-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        )
+        _nanovdb_editor_collect_existing(NANOVDB_EDITOR_SLANG_LLVM_RUNTIME_FILES
+            "${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/lib/libslang-llvm.0.${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        )
+        set_target_properties(slang PROPERTIES
+            IMPORTED_LOCATION ${_nanovdb_editor_slang_import_location}
             INTERFACE_INCLUDE_DIRECTORIES ${Slang_SOURCE_DIR}/include
         )
     else()
+        _nanovdb_editor_set_first_existing(_nanovdb_editor_slang_import_location
+            "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}.0.${SLANG_VERSION}"
+            "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        )
+        _nanovdb_editor_collect_existing(NANOVDB_EDITOR_SLANG_RUNTIME_FILES
+            "${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}.0.${SLANG_VERSION}"
+            "${Slang_SOURCE_DIR}/lib/libslang-glsl-module-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/lib/libslang-glslang-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        )
+        _nanovdb_editor_collect_existing(NANOVDB_EDITOR_SLANG_LLVM_RUNTIME_FILES
+            "${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}.0.${SLANG_VERSION}"
+        )
         set_target_properties(slang PROPERTIES
-            IMPORTED_LOCATION ${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}
+            IMPORTED_LOCATION ${_nanovdb_editor_slang_import_location}
             INTERFACE_INCLUDE_DIRECTORIES ${Slang_SOURCE_DIR}/include
         )
     endif()
@@ -752,25 +827,10 @@ if(Slang_ADDED)
         if(WIN32)
             add_custom_command(TARGET copy_slang_libs POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    ${Slang_SOURCE_DIR}/bin/slang${CMAKE_SHARED_LIBRARY_SUFFIX}
-                    ${CMAKE_BINARY_DIR}/$<CONFIG>/slang${CMAKE_SHARED_LIBRARY_SUFFIX}
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    ${Slang_SOURCE_DIR}/bin/slang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}
-                    ${CMAKE_BINARY_DIR}/$<CONFIG>/slang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    ${Slang_SOURCE_DIR}/bin/slang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}
-                    ${CMAKE_BINARY_DIR}/$<CONFIG>/slang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}
+                    ${NANOVDB_EDITOR_SLANG_RUNTIME_FILES}
+                    ${NANOVDB_EDITOR_SLANG_LLVM_RUNTIME_FILES}
+                    ${CMAKE_BINARY_DIR}/$<CONFIG>
             )
-            # Copy slang-llvm only if it exists
-            if(EXISTS ${Slang_SOURCE_DIR}/bin/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX})
-                add_custom_command(TARGET copy_slang_libs POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                        ${Slang_SOURCE_DIR}/bin/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}
-                        ${CMAKE_BINARY_DIR}/$<CONFIG>/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}
-                )
-            else()
-                message(STATUS "slang-llvm library not found, skipping copy")
-            endif()
         elseif(APPLE)
             add_custom_command(TARGET copy_slang_libs POST_BUILD
                 COMMAND ${CMAKE_COMMAND}
@@ -781,28 +841,12 @@ if(Slang_ADDED)
                 COMMENT "Copying macOS Slang runtime libraries"
             )
         else()
-            # Note: libslang-compiler and libslang-glslang have version suffix in filename (e.g., libslang-compiler-2025.23.1.so)
             add_custom_command(TARGET copy_slang_libs POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    ${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}
-                    ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    ${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}.0.${SLANG_VERSION}
-                    ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}.0.${SLANG_VERSION}
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    ${Slang_SOURCE_DIR}/lib/libslang-glslang-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}
-                    ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang-glslang-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}
+                    ${NANOVDB_EDITOR_SLANG_RUNTIME_FILES}
+                    ${NANOVDB_EDITOR_SLANG_LLVM_RUNTIME_FILES}
+                    ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
             )
-            # Copy slang-llvm only if it exists
-            if(EXISTS ${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX})
-                add_custom_command(TARGET copy_slang_libs POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                        ${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}
-                        ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}
-                )
-            else()
-                message(STATUS "libslang-llvm library not found, skipping copy")
-            endif()
         endif()
     endif()
 endif()

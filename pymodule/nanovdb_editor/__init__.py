@@ -11,6 +11,7 @@ if sys.platform == "win32":
 
         add_dll_search_directory(lib_dir)
 
+from .utils import has_slang_llvm_runtime
 from .compiler import Compiler, CompileTarget, MemoryBuffer, OptimizationLevel
 from .compute import Compute
 from .device import DeviceInterface
@@ -59,6 +60,7 @@ __all__ = [
     "CompileTarget",
     "MemoryBuffer",
     "OptimizationLevel",
+    "has_slang_llvm_runtime",
     "EditorConfig",
     "EditorToken",
     "EditorGaussianDataDesc",

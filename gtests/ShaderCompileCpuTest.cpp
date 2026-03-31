@@ -45,7 +45,11 @@ TEST(NanoVDBEditor, ShaderCompilesViaCpuCompiler)
 
     char slangLlvmPath[1024] = { 0 };
 #ifdef _WIN32
-    HMODULE slangModule = GetModuleHandleA("slang.dll");
+    HMODULE slangModule = GetModuleHandleA("slang-compiler.dll");
+    if (!slangModule)
+    {
+        slangModule = GetModuleHandleA("slang.dll");
+    }
     if (slangModule)
     {
         GetModuleFileNameA(slangModule, slangLlvmPath, sizeof(slangLlvmPath));

@@ -16,6 +16,10 @@ license = {text = "Apache-2.0"}
 readme = "README.md"
 requires-python = ">=3.8"
 keywords = ["nanovdb", "volume", "rendering", "gaussian", "splatting", "3d"]
+dependencies = [
+    "numpy>=1.19.0",
+    "slangpy; python_version >= '3.9'",
+]
 
 [project.urls]
 Homepage = "https://github.com/openvdb/nanovdb-editor"

@@ -39,13 +39,9 @@ function(create_distribution_package TARGET_NAME)
 
             # Copy Slang libraries (needed by pnanovdbcompiler)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${CMAKE_BINARY_DIR}/$<CONFIG>/slang${CMAKE_SHARED_LIBRARY_SUFFIX}" "${DIST_LIB_DIR}/"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${CMAKE_BINARY_DIR}/$<CONFIG>/slang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}" "${DIST_LIB_DIR}/"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${CMAKE_BINARY_DIR}/$<CONFIG>/slang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}" "${DIST_LIB_DIR}/"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${CMAKE_BINARY_DIR}/$<CONFIG>/slang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}" "${DIST_LIB_DIR}/"
+                ${NANOVDB_EDITOR_SLANG_RUNTIME_FILES}
+                ${NANOVDB_EDITOR_SLANG_LLVM_RUNTIME_FILES}
+                "${DIST_LIB_DIR}/"
 
             # Copy GLFW library (needed on Windows)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -83,13 +79,9 @@ function(create_distribution_package TARGET_NAME)
 
             # Copy Slang libraries (needed by pnanovdbcompiler)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}" "${DIST_LIB_DIR}/"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}" "${DIST_LIB_DIR}/"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}" "${DIST_LIB_DIR}/"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}" "${DIST_LIB_DIR}/"
+                ${NANOVDB_EDITOR_SLANG_RUNTIME_FILES}
+                ${NANOVDB_EDITOR_SLANG_LLVM_RUNTIME_FILES}
+                "${DIST_LIB_DIR}/"
 
             # Copy shaders directory
             COMMAND ${CMAKE_COMMAND} -E copy_directory

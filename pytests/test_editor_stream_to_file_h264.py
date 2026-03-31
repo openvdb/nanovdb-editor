@@ -30,12 +30,8 @@ def test_editor_stream_to_file_produces_h264_output(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     if "VK_ICD_FILENAMES" in os.environ or "VK_DRIVER_FILES" in os.environ:
-        print(
-            f"Using Vulkan ICD: {os.environ.get('VK_ICD_FILENAMES', 'N/A')}"
-        )
-        print(
-            f"Using Vulkan driver: {os.environ.get('VK_DRIVER_FILES', 'N/A')}"
-        )
+        print(f"Using Vulkan ICD: {os.environ.get('VK_ICD_FILENAMES', 'N/A')}")
+        print(f"Using Vulkan driver: {os.environ.get('VK_DRIVER_FILES', 'N/A')}")
 
     compiler = nve.Compiler()
     compiler.create_instance()
@@ -77,8 +73,7 @@ def test_editor_stream_to_file_produces_h264_output(tmp_path, monkeypatch):
             print(f"Compiler diagnostics during startup:\n{diagnostics}")
     except Exception as exc:
         raise AssertionError(
-            "Editor CPU streaming to file failed.\n"
-            f"Compiler diagnostics:\n{compiler.get_diagnostics() or '<none>'}"
+            "Editor CPU streaming to file failed.\n" f"Compiler diagnostics:\n{compiler.get_diagnostics() or '<none>'}"
         ) from exc
     finally:
         editor.stop()
@@ -89,16 +84,9 @@ def test_editor_stream_to_file_produces_h264_output(tmp_path, monkeypatch):
         compiler = None
         gc.collect()
 
-    assert output_path.exists(), (
-        f"Expected H264 output file to exist: {output_path}"
-    )
+    assert output_path.exists(), f"Expected H264 output file to exist: {output_path}"
 
     payload = output_path.read_bytes()
     assert payload, "Expected non-empty H264 output file"
-    assert len(payload) > 128, (
-        "Expected H264 output larger than a trivial header, "
-        f"got {len(payload)} bytes"
-    )
-    assert _contains_h264_start_code(payload), (
-        "Expected H264 Annex B start codes in encoded output"
-    )
+    assert len(payload) > 128, "Expected H264 output larger than a trivial header, " f"got {len(payload)} bytes"
+    assert _contains_h264_start_code(payload), "Expected H264 Annex B start codes in encoded output"

@@ -1,13 +1,18 @@
 # Copyright Contributors to the OpenVDB Project
 # SPDX-License-Identifier: Apache-2.0
 #
-from nanovdb_editor import Compiler, Compute, CompileTarget, MemoryBuffer
+from nanovdb_editor import (
+    Compiler,
+    Compute,
+    CompileTarget,
+    MemoryBuffer,
+    has_slang_llvm_runtime,
+)
 from ctypes import *
 
 import os
 import gc
 import numpy as np
-import platform
 import unittest
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -16,10 +21,7 @@ TEST_SHADER = os.path.join(SCRIPT_DIR, "shaders/test.slang")
 
 
 def cpu_target_supported():
-    machine = platform.machine().lower()
-    if machine not in {"arm64", "aarch64"}:
-        return True
-    return platform.system() == "Darwin"
+    return has_slang_llvm_runtime()
 
 
 class TestDispatch(unittest.TestCase):
@@ -101,7 +103,7 @@ class TestDispatch(unittest.TestCase):
 
     def test_cpu_dispatch(self):
         if not cpu_target_supported():
-            self.skipTest("CPU shader target is only enabled on macOS arm64")
+            self.skipTest("CPU shader target requires an available slang-llvm runtime")
 
         # Create fresh compiler and compute for this test
         compiler = Compiler()

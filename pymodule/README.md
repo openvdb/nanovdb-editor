@@ -2,6 +2,11 @@
 
 Prerequisities:
 - `numpy`
+- `slangpy` for the pip-installed Slang compiler runtime
+
+The published `nanovdb_editor` wheels depend on the official `slangpy` package for the Slang compiler runtime. Local source builds can still use the CPM-managed Slang dependency bundled next to the module.
+
+CPU shader compilation additionally needs `slang-llvm`. That runtime is optional for the pip package; if you need CPU compilation from an installed wheel, point `NANOVDB_EDITOR_SLANG_LLVM_PATH` (or `SLANG_LLVM_PATH`) at your own `slang-llvm` shared library or at a directory containing it.
 
 ### Running in Docker
 To run the editor in the docker container, the Dockerfile needs to contain:
