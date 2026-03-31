@@ -82,14 +82,8 @@ def _fvdb_core_release_tag() -> str:
 def _upstream_test_urls() -> list[str]:
     release_tag = _fvdb_core_release_tag()
     return [
-        (
-            "https://raw.githubusercontent.com/openvdb/fvdb-core/"
-            f"{release_tag}/{UPSTREAM_TEST_RELATIVE_PATH}"
-        ),
-        (
-            "https://raw.githubusercontent.com/openvdb/fvdb-core/main/"
-            f"{UPSTREAM_TEST_RELATIVE_PATH}"
-        ),
+        ("https://raw.githubusercontent.com/openvdb/fvdb-core/" f"{release_tag}/{UPSTREAM_TEST_RELATIVE_PATH}"),
+        ("https://raw.githubusercontent.com/openvdb/fvdb-core/main/" f"{UPSTREAM_TEST_RELATIVE_PATH}"),
     ]
 
 
@@ -112,9 +106,7 @@ def _resolve_upstream_test_path(work_dir: Path) -> Path:
     if last_error is None:
         raise RuntimeError("Could not resolve an fvdb upstream viz test URL")
 
-    raise RuntimeError(
-        "Failed to fetch upstream fvdb viz test from any known URL"
-    ) from last_error
+    raise RuntimeError("Failed to fetch upstream fvdb viz test from any known URL") from last_error
 
 
 def _run(cmd: list[str], env: dict[str, str], **kwargs):
@@ -323,9 +315,7 @@ def test_fvdb_viz_with_dev_package(fvdb_viz_env):
 @pytest.mark.slow
 @pytest.mark.skipif(
     not LOCAL_DIST_SPEC,
-    reason=(
-        "Set FVDB_VIZ_LOCAL_DIST to the local wheel or source path to test it."
-    ),
+    reason=("Set FVDB_VIZ_LOCAL_DIST to the local wheel or source path to test it."),
 )
 def test_fvdb_viz_with_local_package(fvdb_viz_env):
     """
@@ -338,9 +328,7 @@ def test_fvdb_viz_with_local_package(fvdb_viz_env):
     if not local_spec.is_absolute():
         local_spec = (Path.cwd() / local_spec).resolve()
     if not local_spec.exists():
-        raise AssertionError(
-            f"FVDB_VIZ_LOCAL_DIST target does not exist: {local_spec}"
-        )
+        raise AssertionError(f"FVDB_VIZ_LOCAL_DIST target does not exist: {local_spec}")
 
     _install_nanovdb_distribution(fvdb_viz_env, str(local_spec))
     _run_upstream_viz_suite(fvdb_viz_env)

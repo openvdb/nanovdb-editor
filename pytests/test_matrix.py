@@ -136,9 +136,7 @@ class TestMatrix(unittest.TestCase):
 
         elif target == CompileTarget.CPU:
             if not cpu_target_supported():
-                self.skipTest(
-                    "CPU shader target is only enabled on macOS arm64"
-                )
+                self.skipTest("CPU shader target is only enabled on macOS arm64")
 
             input_data = np.zeros(len(constants_data), dtype=array_dtype_out)
             output_data = np.zeros(len(constants_data), dtype=array_dtype_out)
@@ -169,9 +167,7 @@ class TestMatrix(unittest.TestCase):
                 ]
 
             constants = Constants()
-            constants.matrix = (c_float * 16)(
-                *[float(x) for x in constants_data]
-            )
+            constants.matrix = (c_float * 16)(*[float(x) for x in constants_data])
 
             class UniformState(Structure):
                 _fields_ = [
