@@ -21,6 +21,10 @@ echo "Using cibuildwheel $(python -c 'import cibuildwheel; print(cibuildwheel.__
 
 LOCAL_BUILD_SLANG_FROM_SOURCE="${LOCAL_BUILD_SLANG_FROM_SOURCE:-ON}"
 echo "LOCAL_BUILD_SLANG_FROM_SOURCE=${LOCAL_BUILD_SLANG_FROM_SOURCE}"
+LOCAL_MANYLINUX_X86_64_TAG="${LOCAL_MANYLINUX_X86_64_TAG:-manylinux_2_28_x86_64}"
+LOCAL_MANYLINUX_X86_64_IMAGE="${LOCAL_MANYLINUX_X86_64_IMAGE:-quay.io/pypa/${LOCAL_MANYLINUX_X86_64_TAG}:latest}"
+echo "LOCAL_MANYLINUX_X86_64_TAG=${LOCAL_MANYLINUX_X86_64_TAG}"
+echo "LOCAL_MANYLINUX_X86_64_IMAGE=${LOCAL_MANYLINUX_X86_64_IMAGE}"
 
 if [ -d "${REPO_ROOT}/pymodule/build" ]; then
   echo "Removing stale pymodule/build/ to avoid container path mismatch..."
@@ -187,7 +191,7 @@ echo "=== auditwheel show ==="
 AUDITWHEEL_SHOW_FILE="/tmp/nanovdb-auditwheel-show.txt"
 rm -f "${AUDITWHEEL_SHOW_FILE}"
 run_auditwheel show {wheel} 2>&1 | tee "${AUDITWHEEL_SHOW_FILE}" || true
-AUDITWHEEL_DEFAULT_PLAT="manylinux_2_34_x86_64"
+AUDITWHEEL_DEFAULT_PLAT="${LOCAL_MANYLINUX_X86_64_TAG}"
 AUDITWHEEL_PLAT="$(python - <<'"'"'PY'"'"' "${AUDITWHEEL_SHOW_FILE}" "${AUDITWHEEL_DEFAULT_PLAT}"
 import pathlib
 import re
@@ -204,10 +208,10 @@ echo "Using auditwheel platform from show output: ${AUDITWHEEL_PLAT}"
 run_auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat "${AUDITWHEEL_PLAT}"
 '
 
-echo "Building Linux x86_64 wheel via Docker ..."
+echo "Building Linux x86_64 wheel via Docker (${LOCAL_MANYLINUX_X86_64_TAG}) ..."
 
 CIBW_BUILD="cp311-manylinux_x86_64" \
-CIBW_MANYLINUX_X86_64_IMAGE="quay.io/pypa/manylinux_2_34_x86_64:latest" \
+CIBW_MANYLINUX_X86_64_IMAGE="${LOCAL_MANYLINUX_X86_64_IMAGE}" \
 CIBW_BUILD_VERBOSITY=1 \
 CIBW_TEST_SKIP="cp311-manylinux_x86_64" \
 CIBW_BEFORE_ALL_LINUX='
