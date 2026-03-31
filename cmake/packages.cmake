@@ -749,6 +749,37 @@ function(_nanovdb_editor_collect_existing out_var)
     set(${out_var} "${_matches}" PARENT_SCOPE)
 endfunction()
 
+function(_nanovdb_editor_set_first_glob out_var)
+    set(_matches "")
+    foreach(_pattern IN LISTS ARGN)
+        file(GLOB _pattern_matches ${_pattern})
+        if(_pattern_matches)
+            list(APPEND _matches ${_pattern_matches})
+        endif()
+    endforeach()
+    list(REMOVE_DUPLICATES _matches)
+    if(_matches)
+        list(SORT _matches)
+        list(GET _matches 0 _first_match)
+        set(${out_var} "${_first_match}" PARENT_SCOPE)
+    else()
+        set(${out_var} "" PARENT_SCOPE)
+    endif()
+endfunction()
+
+function(_nanovdb_editor_collect_glob out_var)
+    set(_matches "")
+    foreach(_pattern IN LISTS ARGN)
+        file(GLOB _pattern_matches ${_pattern})
+        if(_pattern_matches)
+            list(APPEND _matches ${_pattern_matches})
+        endif()
+    endforeach()
+    list(REMOVE_DUPLICATES _matches)
+    list(FILTER _matches EXCLUDE REGEX "\\.dwarf$")
+    set(${out_var} "${_matches}" PARENT_SCOPE)
+endfunction()
+
 if(Slang_ADDED)
     add_library(slang SHARED IMPORTED)
 
@@ -776,40 +807,42 @@ if(Slang_ADDED)
             INTERFACE_INCLUDE_DIRECTORIES ${Slang_SOURCE_DIR}/include
         )
     elseif(APPLE)
-        _nanovdb_editor_set_first_existing(_nanovdb_editor_slang_import_location
-            "${Slang_SOURCE_DIR}/lib/libslang-compiler.0.${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        _nanovdb_editor_set_first_glob(_nanovdb_editor_slang_import_location
             "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/lib/libslang-compiler*${CMAKE_SHARED_LIBRARY_SUFFIX}"
         )
-        _nanovdb_editor_collect_existing(NANOVDB_EDITOR_SLANG_RUNTIME_FILES
+        _nanovdb_editor_collect_glob(NANOVDB_EDITOR_SLANG_RUNTIME_FILES
             "${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
-            "${Slang_SOURCE_DIR}/lib/libslang-compiler.0.${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}.*"
             "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}"
-            "${Slang_SOURCE_DIR}/lib/libslang-glsl-module-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
-            "${Slang_SOURCE_DIR}/lib/libslang-glslang-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/lib/libslang-compiler*${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/lib/libslang-glsl-module*${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/lib/libslang-glslang*${CMAKE_SHARED_LIBRARY_SUFFIX}"
         )
-        _nanovdb_editor_collect_existing(NANOVDB_EDITOR_SLANG_LLVM_RUNTIME_FILES
+        _nanovdb_editor_collect_glob(NANOVDB_EDITOR_SLANG_LLVM_RUNTIME_FILES
             "${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}"
-            "${Slang_SOURCE_DIR}/lib/libslang-llvm.0.${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/lib/libslang-llvm*${CMAKE_SHARED_LIBRARY_SUFFIX}"
         )
         set_target_properties(slang PROPERTIES
             IMPORTED_LOCATION ${_nanovdb_editor_slang_import_location}
             INTERFACE_INCLUDE_DIRECTORIES ${Slang_SOURCE_DIR}/include
         )
     else()
-        _nanovdb_editor_set_first_existing(_nanovdb_editor_slang_import_location
-            "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}.0.${SLANG_VERSION}"
+        _nanovdb_editor_set_first_glob(_nanovdb_editor_slang_import_location
             "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}*"
         )
-        _nanovdb_editor_collect_existing(NANOVDB_EDITOR_SLANG_RUNTIME_FILES
+        _nanovdb_editor_collect_glob(NANOVDB_EDITOR_SLANG_RUNTIME_FILES
             "${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}*"
             "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}"
-            "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}.0.${SLANG_VERSION}"
-            "${Slang_SOURCE_DIR}/lib/libslang-glsl-module-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
-            "${Slang_SOURCE_DIR}/lib/libslang-glslang-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}*"
+            "${Slang_SOURCE_DIR}/lib/libslang-glsl-module*${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${Slang_SOURCE_DIR}/lib/libslang-glslang*${CMAKE_SHARED_LIBRARY_SUFFIX}"
         )
-        _nanovdb_editor_collect_existing(NANOVDB_EDITOR_SLANG_LLVM_RUNTIME_FILES
+        _nanovdb_editor_collect_glob(NANOVDB_EDITOR_SLANG_LLVM_RUNTIME_FILES
             "${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}"
-            "${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}.0.${SLANG_VERSION}"
+            "${Slang_SOURCE_DIR}/lib/libslang-llvm${CMAKE_SHARED_LIBRARY_SUFFIX}*"
         )
         set_target_properties(slang PROPERTIES
             IMPORTED_LOCATION ${_nanovdb_editor_slang_import_location}
