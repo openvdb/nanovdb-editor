@@ -230,7 +230,7 @@ echo
 echo "Wheel built successfully. Output in ./wheelhouse/"
 echo
 
-echo "Verifying libslang-llvm is present in wheel ..."
+echo "Verifying libslang-llvm is not bundled in wheel ..."
 python - <<'PY'
 import pathlib
 import sys
@@ -247,16 +247,13 @@ with zipfile.ZipFile(wheel) as zf:
     names = zf.namelist()
 
 llvm_hits = [n for n in names if n.startswith("nanovdb_editor/lib/") and "libslang-llvm" in n]
-if not llvm_hits:
-    slang_libs = [n for n in names if n.startswith("nanovdb_editor/lib/") and "libslang" in n]
-    print("libslang-llvm was not found in wheel; available Slang libs:", file=sys.stderr)
-    for name in slang_libs:
+if llvm_hits:
+    print("libslang-llvm should not be bundled in wheel:", file=sys.stderr)
+    for name in llvm_hits:
         print(f" - {name}", file=sys.stderr)
     raise SystemExit(1)
 
-print("Found libslang-llvm entries:")
-for name in llvm_hits:
-    print(f" - {name}")
+print("No bundled libslang-llvm entries found")
 PY
 
 echo
@@ -264,7 +261,7 @@ echo "Smoke testing repaired wheel in a fresh host venv ..."
 TEST_VENV="$(mktemp -d)/venv"
 python -m venv "${TEST_VENV}"
 "${TEST_VENV}/bin/python" -m pip install --upgrade pip
-"${TEST_VENV}/bin/python" -m pip install numpy ./wheelhouse/nanovdb_editor*.whl
+"${TEST_VENV}/bin/python" -m pip install numpy slangpy ./wheelhouse/nanovdb_editor*.whl
 "${TEST_VENV}/bin/python" -c "import nanovdb_editor; print('Import successful')"
 
 echo

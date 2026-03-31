@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import pathlib
-import platform
 import time
 
 import nanovdb_editor as nve
@@ -26,19 +25,16 @@ def main() -> None:
     print("Compute device created")
 
     compiler.clear_diagnostics()
-    if not compiler.compile_shader(str(shader_path), entry_point_name="computeMain"):
+    if not compiler.compile_shader(
+        str(shader_path), entry_point_name="computeMain"
+    ):
         raise AssertionError(
             "Vulkan shader smoke compile failed.\n"
             f"Compiler diagnostics:\n{compiler.get_diagnostics() or '<none>'}"
         )
     print("Vulkan shader compile smoke test passed")
 
-    machine = platform.machine().lower()
-    cpu_target_supported = platform.system() == "Darwin" and machine in {
-        "arm64",
-        "aarch64",
-    }
-    if cpu_target_supported:
+    if nve.has_slang_llvm_runtime():
         compiler.clear_diagnostics()
         if not compiler.compile_shader(
             str(shader_path),
@@ -47,11 +43,14 @@ def main() -> None:
         ):
             raise AssertionError(
                 "CPU shader smoke compile failed.\n"
-                f"Compiler diagnostics:\n{compiler.get_diagnostics() or '<none>'}"
+                "Compiler diagnostics:\n"
+                f"{compiler.get_diagnostics() or '<none>'}"
             )
         print("CPU shader compile smoke test passed")
     else:
-        print(f"Skipping CPU shader smoke test on {platform.system()} {machine}")
+        print(
+            "Skipping CPU shader smoke test because slang-llvm is unavailable"
+        )
 
     editor = nve.Editor(compute, compiler)
     config = nve.EditorConfig()

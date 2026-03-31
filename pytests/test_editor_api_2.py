@@ -70,8 +70,7 @@ class TestEditorAPI2:
         except Exception as exc:
             diagnostics = self.compiler.get_diagnostics() or "<none>"
             raise AssertionError(
-                "Editor API 2 startup failed (exception during start).\n"
-                f"Compiler diagnostics:\n{diagnostics}"
+                "Editor API 2 startup failed (exception during start).\n" f"Compiler diagnostics:\n{diagnostics}"
             ) from exc
         diagnostics = self.compiler.get_diagnostics()
         if diagnostics:

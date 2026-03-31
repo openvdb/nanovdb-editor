@@ -159,7 +159,7 @@ jobs:
     env:
       CIBW_BUILD: ${{ matrix.cibw_build }}
       CIBW_BUILD_VERBOSITY: 1
-      CIBW_TEST_REQUIRES: numpy
+      CIBW_TEST_REQUIRES: numpy slangpy
       CIBW_TEST_COMMAND: python -c "import nanovdb_editor; print('Import successful')"
       CIBW_ENVIRONMENT: ${{ matrix.cibw_environment }}
     strategy:
@@ -1015,13 +1015,13 @@ jobs:
           )"
           echo "Using auditwheel platform from show output: ${AUDITWHEEL_PLAT}"
           run_auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat "${AUDITWHEEL_PLAT}"
-        CIBW_TEST_REQUIRES: numpy
+        CIBW_TEST_REQUIRES: numpy slangpy
         CIBW_TEST_COMMAND: python -c "import nanovdb_editor; print('Import successful')"
         CIBW_ENVIRONMENT: ${{ inputs.linux_x86_build_slang_from_source && inputs.manage_slang_image && 'CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=ON -DNANOVDB_SLANG_IMAGE_LIB_DIR=${NANOVDB_SLANG_IMAGE_LIB_DIR} -DFETCHCONTENT_QUIET=OFF" CPM_SOURCE_CACHE=/tmp/cpm-cache' || inputs.linux_x86_build_slang_from_source && 'CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=ON -DFETCHCONTENT_QUIET=OFF" CPM_SOURCE_CACHE=/tmp/cpm-cache' || 'CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=OFF -DFETCHCONTENT_QUIET=OFF" CPM_SOURCE_CACHE=/tmp/cpm-cache' }}
       with:
         package-dir: pymodule
 
-    - name: Verify libslang-llvm is present in Linux x86_64 wheel
+    - name: Verify Linux x86_64 wheel omits libslang-llvm
       shell: bash
       run: |
         set -euo pipefail
@@ -1040,15 +1040,12 @@ jobs:
         with zipfile.ZipFile(wheel) as zf:
             names = zf.namelist()
         llvm_hits = [n for n in names if n.startswith("nanovdb_editor/lib/") and "libslang-llvm" in n]
-        if not llvm_hits:
-            slang_libs = [n for n in names if n.startswith("nanovdb_editor/lib/") and "libslang" in n]
-            print("libslang-llvm was not found in wheel; available Slang libs:", file=sys.stderr)
-            for name in slang_libs:
+        if llvm_hits:
+            print("libslang-llvm should not be bundled in the wheel:", file=sys.stderr)
+            for name in llvm_hits:
                 print(f" - {name}", file=sys.stderr)
             raise SystemExit(1)
-        print("Found libslang-llvm entries:")
-        for name in llvm_hits:
-            print(f" - {name}")
+        print("No bundled libslang-llvm entries found")
         PY
 
     - name: Smoke test Linux x86_64 wheel on runner
@@ -1058,7 +1055,7 @@ jobs:
         TEST_VENV="$(mktemp -d)/venv"
         python -m venv "${TEST_VENV}"
         "${TEST_VENV}/bin/python" -m pip install --upgrade pip
-        "${TEST_VENV}/bin/python" -m pip install numpy ./wheelhouse/nanovdb_editor*.whl
+        "${TEST_VENV}/bin/python" -m pip install numpy slangpy ./wheelhouse/nanovdb_editor*.whl
         "${TEST_VENV}/bin/python" -c "import nanovdb_editor; print('Import successful')"
 
     - uses: actions/upload-artifact@v4

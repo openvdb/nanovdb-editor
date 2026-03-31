@@ -15,6 +15,7 @@
 #include <fstream>
 #include <iomanip>
 #include <cstring>
+#include <cstdlib>
 #include <filesystem>
 #include <string.h>
 #include <cstdio>
@@ -42,6 +43,43 @@
 
 namespace pnanovdb_compiler
 {
+namespace
+{
+bool resolveSlangLlvmPathFromEnv(char* outPath, size_t outPathSize)
+{
+    const char* envPath = std::getenv("NANOVDB_EDITOR_SLANG_LLVM_PATH");
+    if (!envPath || !envPath[0])
+    {
+        envPath = std::getenv("SLANG_LLVM_PATH");
+    }
+    if (!envPath || !envPath[0])
+    {
+        return false;
+    }
+
+    std::filesystem::path resolvedPath = envPath;
+    if (std::filesystem::is_directory(resolvedPath))
+    {
+#ifdef _WIN32
+        resolvedPath /= "slang-llvm.dll";
+#elif defined(__APPLE__)
+        resolvedPath /= "libslang-llvm.dylib";
+#else
+        resolvedPath /= "libslang-llvm.so";
+#endif
+    }
+
+    if (!std::filesystem::exists(resolvedPath))
+    {
+        return false;
+    }
+
+    const std::string resolved = resolvedPath.string();
+    std::snprintf(outPath, outPathSize, "%s", resolved.c_str());
+    return true;
+}
+} // namespace
+
 static const char* scalarTypeNames[] = {
     "", // SLANG_SCALAR_TYPE_NONE
     "void", // SLANG_SCALAR_TYPE_VOID
@@ -115,30 +153,38 @@ SlangCompiler::SlangCompiler()
     slang::createGlobalSession(&globalSession_);
 
     char slangLlvmPath[1024] = { 0 };
+    if (!resolveSlangLlvmPathFromEnv(slangLlvmPath, sizeof(slangLlvmPath)))
+    {
 #ifdef _WIN32
-    // look for slang-llvm in the same directory as slang
-    HMODULE slangModule = GetModuleHandleA("slang.dll");
-    if (slangModule)
-    {
-        GetModuleFileNameA(slangModule, slangLlvmPath, sizeof(slangLlvmPath));
-        char* lastSlash = strrchr(slangLlvmPath, '\\');
-        if (lastSlash)
+        // Prefer the slang-compiler runtime used by slangpy, but also accept the
+        // legacy slang runtime from the CPM/local-build path.
+        HMODULE slangModule = GetModuleHandleA("slang-compiler.dll");
+        if (!slangModule)
         {
-            *(lastSlash + 1) = '\0';
-            strcat(slangLlvmPath, "slang-llvm");
+            slangModule = GetModuleHandleA("slang.dll");
         }
-    }
+        if (slangModule)
+        {
+            GetModuleFileNameA(slangModule, slangLlvmPath, sizeof(slangLlvmPath));
+            char* lastSlash = strrchr(slangLlvmPath, '\\');
+            if (lastSlash)
+            {
+                *(lastSlash + 1) = '\0';
+                strcat(slangLlvmPath, "slang-llvm");
+            }
+        }
 #else
-    Dl_info info;
-    if (dladdr((void*)&compileShader, &info) && info.dli_fname)
-    {
-        char pathCopy[1024];
-        strncpy(pathCopy, info.dli_fname, sizeof(pathCopy));
-        pathCopy[sizeof(pathCopy) - 1] = 0;
-        char* dir = dirname(pathCopy);
-        snprintf(slangLlvmPath, sizeof(slangLlvmPath), "%s/slang-llvm", dir);
-    }
+        Dl_info info;
+        if (dladdr((void*)&compileShader, &info) && info.dli_fname)
+        {
+            char pathCopy[1024];
+            strncpy(pathCopy, info.dli_fname, sizeof(pathCopy));
+            pathCopy[sizeof(pathCopy) - 1] = 0;
+            char* dir = dirname(pathCopy);
+            snprintf(slangLlvmPath, sizeof(slangLlvmPath), "%s/slang-llvm", dir);
+        }
 #endif
+    }
     globalSession_->setDownstreamCompilerPath(SLANG_PASS_THROUGH_LLVM, slangLlvmPath);
     // printf("Slang LLVM path: %s\n", slangLlvmPath);
 

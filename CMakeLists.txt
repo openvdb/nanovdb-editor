@@ -446,17 +446,17 @@ if(SKBUILD)
 
     # Install Slang libraries
     if(Slang_ADDED)
-        if(WIN32)
-            install(FILES
-                "${Slang_SOURCE_DIR}/bin/slang${CMAKE_SHARED_LIBRARY_SUFFIX}"
-                "${Slang_SOURCE_DIR}/bin/slang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}"
-                "${Slang_SOURCE_DIR}/bin/slang-glslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
-                DESTINATION nanovdb_editor/lib
-                COMPONENT python_libs
-            )
-            file(GLOB SLANG_LLVM_FILES "${Slang_SOURCE_DIR}/bin/slang-llvm*${CMAKE_SHARED_LIBRARY_SUFFIX}*")
-            if(SLANG_LLVM_FILES)
-                install(FILES ${SLANG_LLVM_FILES}
+        if(NANOVDB_EDITOR_PYPI_BUILD)
+            message(STATUS "PyPI build: relying on the slangpy runtime instead of bundling Slang libraries")
+        elseif(WIN32)
+            if(NANOVDB_EDITOR_SLANG_RUNTIME_FILES)
+                install(FILES ${NANOVDB_EDITOR_SLANG_RUNTIME_FILES}
+                    DESTINATION nanovdb_editor/lib
+                    COMPONENT python_libs
+                )
+            endif()
+            if(NANOVDB_EDITOR_SLANG_LLVM_RUNTIME_FILES)
+                install(FILES ${NANOVDB_EDITOR_SLANG_LLVM_RUNTIME_FILES}
                     DESTINATION nanovdb_editor/lib
                     COMPONENT python_libs
                 )
@@ -468,6 +468,12 @@ if(SKBUILD)
                 set(SLANG_RUNTIME_DYLIB_SUFFIX \"${CMAKE_SHARED_LIBRARY_SUFFIX}\")
                 include(\"${CMAKE_CURRENT_SOURCE_DIR}/cmake/slang_runtime_macos.cmake\")
             " COMPONENT python_libs)
+            if(NANOVDB_EDITOR_SLANG_LLVM_RUNTIME_FILES)
+                install(FILES ${NANOVDB_EDITOR_SLANG_LLVM_RUNTIME_FILES}
+                    DESTINATION nanovdb_editor/lib
+                    COMPONENT python_libs
+                )
+            endif()
         else()
             if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
                 # Install all slang libraries using install(CODE) to avoid configure-time path resolution
@@ -581,18 +587,14 @@ if(SKBUILD)
                     endif()
                 " COMPONENT python_libs)
             else()
-                # Note: libslang-compiler and libslang-glslang have version suffix in filename
-                install(FILES
-                    "${Slang_SOURCE_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}"
-                    "${Slang_SOURCE_DIR}/lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}.0.${SLANG_VERSION}"
-                    "${Slang_SOURCE_DIR}/lib/libslang-glslang-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
-                    DESTINATION nanovdb_editor/lib
-                    COMPONENT python_libs
-                )
-                file(GLOB SLANG_LLVM_FILES "${Slang_SOURCE_DIR}/lib/libslang-llvm*${CMAKE_SHARED_LIBRARY_SUFFIX}*")
-                list(FILTER SLANG_LLVM_FILES EXCLUDE REGEX "\\.dwarf$")
-                if(SLANG_LLVM_FILES)
-                    install(FILES ${SLANG_LLVM_FILES}
+                if(NANOVDB_EDITOR_SLANG_RUNTIME_FILES)
+                    install(FILES ${NANOVDB_EDITOR_SLANG_RUNTIME_FILES}
+                        DESTINATION nanovdb_editor/lib
+                        COMPONENT python_libs
+                    )
+                endif()
+                if(NANOVDB_EDITOR_SLANG_LLVM_RUNTIME_FILES)
+                    install(FILES ${NANOVDB_EDITOR_SLANG_LLVM_RUNTIME_FILES}
                         DESTINATION nanovdb_editor/lib
                         COMPONENT python_libs
                     )

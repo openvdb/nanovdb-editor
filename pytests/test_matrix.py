@@ -7,13 +7,13 @@ from nanovdb_editor import (
     CompileTarget,
     MemoryBuffer,
     OptimizationLevel,
+    has_slang_llvm_runtime,
 )
 from ctypes import Structure, c_float, c_void_p, addressof
 
 import os
 import gc
 import numpy as np
-import platform
 import unittest
 from parameterized import parameterized
 
@@ -54,10 +54,7 @@ TEST_CASES = [
 
 
 def cpu_target_supported():
-    machine = platform.machine().lower()
-    if machine not in {"arm64", "aarch64"}:
-        return True
-    return platform.system() == "Darwin"
+    return has_slang_llvm_runtime()
 
 
 class TestMatrix(unittest.TestCase):
@@ -136,9 +133,7 @@ class TestMatrix(unittest.TestCase):
 
         elif target == CompileTarget.CPU:
             if not cpu_target_supported():
-                self.skipTest(
-                    "CPU shader target is only enabled on macOS arm64"
-                )
+                self.skipTest("CPU shader target requires an available slang-llvm runtime")
 
             input_data = np.zeros(len(constants_data), dtype=array_dtype_out)
             output_data = np.zeros(len(constants_data), dtype=array_dtype_out)
@@ -169,9 +164,7 @@ class TestMatrix(unittest.TestCase):
                 ]
 
             constants = Constants()
-            constants.matrix = (c_float * 16)(
-                *[float(x) for x in constants_data]
-            )
+            constants.matrix = (c_float * 16)(*[float(x) for x in constants_data])
 
             class UniformState(Structure):
                 _fields_ = [
