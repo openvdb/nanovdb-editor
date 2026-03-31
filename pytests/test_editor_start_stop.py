@@ -38,8 +38,7 @@ def test_editor_start_stop():
             print(f"Compiler diagnostics during startup:\n{diagnostics}")
     except Exception as exc:
         raise AssertionError(
-            "Editor start/stop failed.\n"
-            f"Compiler diagnostics:\n{compiler.get_diagnostics() or '<none>'}"
+            "Editor start/stop failed.\n" f"Compiler diagnostics:\n{compiler.get_diagnostics() or '<none>'}"
         ) from exc
     finally:
         editor.stop()
