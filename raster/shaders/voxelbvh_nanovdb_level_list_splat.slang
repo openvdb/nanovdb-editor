@@ -11,6 +11,7 @@ struct constants_t
     uint ijkl_count;
     uint nanovdb_chunk_count;
     uint node_mask_uint64_count;
+    uint range_count;
 };
 
 ConstantBuffer<constants_t> constants;
@@ -26,12 +27,16 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
     uint idx = group_idx.x * 256u + thread_idx.x;
 
-    if (idx >= constants.ijkl_count)
+    if (idx >= constants.range_count)
     {
         return;
     }
-
-    uint2 ijkl_raw = ijkl_in[idx];
+    uint2 range = range_in[idx];
+    if (range.x >= range.y || range.x >= constants.ijkl_count)
+    {
+        return;
+    }
+    uint2 ijkl_raw = ijkl_in[range.x];
     if (ijkl_raw.x == ~0u && ijkl_raw.y == ~0u)
     {
         return;
@@ -64,5 +69,5 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     uint list_begin_idx = uint(val >> 32u);
     uint list_idx = list_begin_idx + countbits(level_mask & ~lmask);
 
-    range_flat_out[list_idx] = range_in[idx];
+    range_flat_out[list_idx] = range;
 }

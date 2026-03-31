@@ -564,12 +564,14 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
         pnanovdb_uint32_t ijkl_count;
         pnanovdb_uint32_t nanovdb_chunk_count;
         pnanovdb_uint32_t node_mask_uint64_count;
+        pnanovdb_uint32_t range_count;
     };
     constants_t constants = {};
     constants.nanovdb_word_count = nanovdb_word_count;
     constants.ijkl_count = ijkl_count;
     constants.nanovdb_chunk_count = nanovdb_word_count >> 3u;
     constants.node_mask_uint64_count = node_mask_uint64_count;
+    constants.range_count = range_count;
 
     // constants
     buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT;
@@ -602,12 +604,13 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
     for (pnanovdb_uint32_t pass_id = 0u; pass_id < 4u; pass_id++)
     {
         {
-            pnanovdb_compute_resource_t resources[3u] = {};
+            pnanovdb_compute_resource_t resources[4u] = {};
             resources[0u].buffer_transient = constant_transient;
             resources[1u].buffer_transient = ijkl_transient;
-            resources[2u].buffer_transient = nanovdb_transient;
+            resources[2u].buffer_transient = range_transient;
+            resources[3u].buffer_transient = nanovdb_transient;
 
-            pnanovdb_uint32_t workgroup_count = (ijkl_count + 255u) / 256u;
+            pnanovdb_uint32_t workgroup_count = (range_count + 255u) / 256u;
 
             compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_set_mask_ijkl_slang],
                                      resources, workgroup_count, 1u, 1u, "voxelbvh_nanovdb_set_mask_ijkl");
@@ -623,12 +626,13 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
 
     // set grid values to form level masks
     {
-        pnanovdb_compute_resource_t resources[3u] = {};
+        pnanovdb_compute_resource_t resources[4u] = {};
         resources[0u].buffer_transient = constant_transient;
         resources[1u].buffer_transient = ijkl_transient;
-        resources[2u].buffer_transient = nanovdb_transient;
+        resources[2u].buffer_transient = range_transient;
+        resources[3u].buffer_transient = nanovdb_transient;
 
-        pnanovdb_uint32_t workgroup_count = (ijkl_count + 255u) / 256u;
+        pnanovdb_uint32_t workgroup_count = (range_count + 255u) / 256u;
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_set_value_ijkl_slang],
                                  resources, workgroup_count, 1u, 1u, "voxelbvh_nanovdb_set_value_ijkl");
@@ -691,7 +695,7 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
         resources[3u].buffer_transient = nanovdb_transient;
         resources[4u].buffer_transient = range_flat_transient;
 
-        pnanovdb_uint32_t workgroup_count = (ijkl_count + 255u) / 256u;
+        pnanovdb_uint32_t workgroup_count = (range_count + 255u) / 256u;
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_level_list_splat_slang],
                                  resources, workgroup_count, 1u, 1u, "voxelbvh_nanovdb_level_list_splat");
@@ -842,7 +846,9 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
                              pnanovdb_uint32_t gaussian_array_count,
                              pnanovdb_uint64_t gaussian_count,
                              pnanovdb_compute_buffer_t* nanovdb_out,
-                             pnanovdb_uint64_t nanovdb_word_count)
+                             pnanovdb_uint64_t nanovdb_word_count,
+                             pnanovdb_compute_buffer_t* range_flat_out,
+                             pnanovdb_uint64_t range_flat_count)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -1014,76 +1020,16 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
                                  resources, constants.voxel_workgroup_count, 1u, 1u, "voxelbvh_scatter_range_headers");
     }
 
-    pnanovdb_compute_array_t* debug_array = compute->create_array(4u, 2u * constants.voxel_count, nullptr);
-    pnanovdb_compute_array_t* debug_array2 = compute->create_array(4u, 6u, nullptr);
-    compute_gpu_array_t* debug_gpu_array = gpu_array_create();
-    compute_gpu_array_t* debug_gpu_array2 = gpu_array_create();
-    gpu_array_alloc_device(compute, queue, debug_gpu_array, debug_array);
-    gpu_array_alloc_device(compute, queue, debug_gpu_array2, debug_array2);
+#if 0
+    pnanovdb_coord_t root_coords[1u] = {};
+    voxelbvh_nanovdb_init(
+        compute, queue, voxelbvh_context, nanovdb_out, nanovdb_word_count, root_coords, 1u);
 
-    gpu_array_copy(compute, queue, debug_gpu_array, range_headers_buffer, 0llu, 4u * 2u * constants.voxel_count);
-    gpu_array_copy(compute, queue, debug_gpu_array2, bbox_reduce2_buffer, 0llu, 4u * 6u);
-
-    gpu_array_readback(compute, queue, debug_gpu_array, debug_array);
-    gpu_array_readback(compute, queue, debug_gpu_array2, debug_array2);
-
-    pnanovdb_uint64_t flushed_frame = 0llu;
-    compute->device_interface.flush(queue, &flushed_frame, nullptr, nullptr);
-
-    compute->device_interface.wait_idle(queue);
-
-    gpu_array_map(compute, queue, debug_gpu_array, debug_array);
-    gpu_array_map(compute, queue, debug_gpu_array2, debug_array2);
-
-    pnanovdb_uint64_t valid_count = 0u;
-    pnanovdb_uint64_t invalid_count = 0u;
-    pnanovdb_uint32_t* mapped_debug = (pnanovdb_uint32_t*)debug_array->data;
-    for (uint64_t idx = 0llu; idx < constants.voxel_count; idx++)
-    {
-        if (mapped_debug[2u * idx + 0u] < mapped_debug[2u * idx + 1u])
-        {
-            valid_count++;
-        }
-        else
-        {
-            invalid_count++;
-        }
-    }
-
-    float* mapped_debug2 = (float*)debug_array2->data;
-    printf("bbox{(%f,%f,%f), (%f,%f,%f)}\n", mapped_debug2[0], mapped_debug2[1], mapped_debug2[2], mapped_debug2[3],
-           mapped_debug2[4], mapped_debug2[5]);
-
-    printf("valid_count(%zu) invalid_count(%zu) voxel_count(%u)\n", valid_count, invalid_count, constants.voxel_count);
-
-    gpu_array_destroy(compute, queue, debug_gpu_array);
-    gpu_array_destroy(compute, queue, debug_gpu_array2);
-
-    // form grid header, tree, root, upper from template
-    // voxelbvh_init_grid.slang
-
-    // set child masks on upper
-    // voxelbvh_set_upper_masks.slang
-    // count new lowers and scan new lowers to allocate
-    // voxelbvh_allocate_lowers.slang
-
-    // set child masks on lower
-    // voxelbvh_set_lower_masks.slang
-    // count new leaves
-    // voxelbvh_count_lower_masks.slang
-    // scan new leaves
-    // voxelbvh_allocate_leaves.slang
-
-    // set level masks on voxels
-    // voxelbvh_set_voxel_masks.slang
-    // count per voxel range header counts
-    // voxelbvh_count_voxel_masks.slang
-    // scan per voxel range header counts
-    // allocate per voxel range headers
-    // voxelbvh_allocate_range_headers.slang
-    // scatter per voxel range headers
-    // voxelbvh_scatter_range_headers.slang
-
+    voxelbvh_nanovdb_add_nodes_from_key_buffer(compute, queue, voxelbvh_context, nanovdb_out,
+                                               nanovdb_word_count, range_flat_out,
+                                               range_flat_count, keys_buffer,
+                                               range_headers_buffer, constants.voxel_count, constants.voxel_count);
+#endif
     compute_interface->destroy_buffer(context, constant_buffer);
     compute_interface->destroy_buffer(context, bbox_reduce1_buffer);
     compute_interface->destroy_buffer(context, bbox_reduce2_buffer);
@@ -1103,6 +1049,19 @@ void voxelbvh_from_gaussians_file(const pnanovdb_compute_t* compute,
 
     pnanovdb_fileformat_t fileformat = {};
     pnanovdb_fileformat_load(&fileformat, compute);
+
+    // default to 1GB return for now
+    uint64_t buf_size = 1024llu * 1024llu * 1024llu;
+    uint64_t nanovdb_uint64_count = (buf_size + 7u) / 8u;
+
+    pnanovdb_compute_array_t* nanovdb_array = compute->create_array(8u, nanovdb_uint64_count, nullptr);
+    pnanovdb_compute_array_t* flat_range_array = compute->create_array(8u, nanovdb_uint64_count, nullptr);
+
+    compute_gpu_array_t* nanovdb_gpu_array = gpu_array_create();
+    compute_gpu_array_t* flat_range_gpu_array = gpu_array_create();
+
+    gpu_array_alloc_device(compute, queue, nanovdb_gpu_array, nanovdb_array);
+    gpu_array_alloc_device(compute, queue, flat_range_gpu_array, flat_range_array);
 
     const char* array_names_gaussian[] = { "means", "opacities", "quaternions", "scales", "sh_0", "sh_n" };
     pnanovdb_compute_array_t* arrays_gaussian[6] = {};
@@ -1167,7 +1126,11 @@ void voxelbvh_from_gaussians_file(const pnanovdb_compute_t* compute,
             scales_gpu_array->device_buffer, sh_0_gpu_array->device_buffer,      sh_n_gpu_array->device_buffer
         };
 
-        voxelbvh_from_gaussians(compute, queue, voxelbvh_context, gpu_buffers, 6u, gaussian_count, nullptr, 0llu);
+        voxelbvh_from_gaussians(compute, queue, voxelbvh_context, gpu_buffers, 6u, gaussian_count,
+            nanovdb_gpu_array->device_buffer,
+            nanovdb_uint64_count * 2u,
+            flat_range_gpu_array->device_buffer,
+            nanovdb_uint64_count);
 
         gpu_array_destroy(compute, queue, means_gpu_array);
         gpu_array_destroy(compute, queue, opacities_gpu_array);
@@ -1176,6 +1139,22 @@ void voxelbvh_from_gaussians_file(const pnanovdb_compute_t* compute,
         gpu_array_destroy(compute, queue, sh_0_gpu_array);
         gpu_array_destroy(compute, queue, sh_n_gpu_array);
     }
+
+    gpu_array_readback(compute, queue, nanovdb_gpu_array, nanovdb_array);
+    gpu_array_readback(compute, queue, flat_range_gpu_array, flat_range_array);
+
+    pnanovdb_uint64_t flushed_frame = 0llu;
+    compute->device_interface.flush(queue, &flushed_frame, nullptr, nullptr);
+
+    compute->device_interface.wait_idle(queue);
+
+    gpu_array_map(compute, queue, nanovdb_gpu_array, nanovdb_array);
+    gpu_array_map(compute, queue, flat_range_gpu_array, flat_range_array);
+
+
+
+    gpu_array_destroy(compute, queue, nanovdb_gpu_array);
+    gpu_array_destroy(compute, queue, flat_range_gpu_array);
 
     for (pnanovdb_uint32_t idx = 0u; idx < 6u; idx++)
     {

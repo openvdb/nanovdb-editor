@@ -8,9 +8,10 @@
 struct constants_t
 {
     uint nanovdb_word_count;
-    uint pad0;
+    uint ijkl_count;
     uint nanovdb_chunk_count;
     uint node_mask_uint64_count;
+    uint range_count;
 };
 
 ConstantBuffer<constants_t> constants;

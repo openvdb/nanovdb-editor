@@ -88,7 +88,9 @@ typedef struct pnanovdb_voxelbvh_t
                                                 pnanovdb_uint32_t gaussian_array_count,
                                                 pnanovdb_uint64_t gaussian_count,
                                                 pnanovdb_compute_buffer_t* nanovdb_out,
-                                                pnanovdb_uint64_t nanovdb_word_count);
+                                                pnanovdb_uint64_t nanovdb_word_count,
+                                                pnanovdb_compute_buffer_t* range_flat_out,
+                                                pnanovdb_uint64_t range_flat_count);
 
     void(PNANOVDB_ABI* voxelbvh_from_gaussians_file)(const pnanovdb_compute_t* compute,
                                                      pnanovdb_compute_queue_t* queue,
