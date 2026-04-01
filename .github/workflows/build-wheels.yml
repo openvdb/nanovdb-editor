@@ -61,16 +61,14 @@ jobs:
     name: Resolve Slang Version
     runs-on: ubuntu-latest
     outputs:
-      slang_version: ${{ steps.resolve.outputs.slang_version || steps.resolve_disabled.outputs.slang_version }}
-      image_tag: ${{ steps.resolve.outputs.image_tag || steps.resolve_disabled.outputs.image_tag }}
-      image_name: ${{ steps.resolve.outputs.image_name || steps.resolve_disabled.outputs.image_name }}
+      slang_version: ${{ steps.resolve.outputs.slang_version }}
+      image_tag: ${{ steps.resolve.outputs.image_tag }}
+      image_name: ${{ steps.resolve.outputs.image_name }}
     steps:
     - uses: actions/checkout@v4
-      if: ${{ inputs.manage_slang_image && inputs.linux_x86_build_slang_from_source }}
 
     - name: Parse Slang version from CMake config
       id: resolve
-      if: ${{ inputs.manage_slang_image && inputs.linux_x86_build_slang_from_source }}
       run: |
         set -euo pipefail
         slang_version="$(python - <<'PY'
@@ -93,30 +91,19 @@ jobs:
         echo "Resolved Slang version: ${slang_version}"
         echo "Resolved Slang image tag: ${image_tag}"
 
-    - name: Skip Slang version resolution
-      id: resolve_disabled
-      if: ${{ !(inputs.manage_slang_image && inputs.linux_x86_build_slang_from_source) }}
-      run: |
-        set -euo pipefail
-        echo "slang_version=" >> "$GITHUB_OUTPUT"
-        echo "image_tag=" >> "$GITHUB_OUTPUT"
-        echo "image_name=nanovdb-editor-slang" >> "$GITHUB_OUTPUT"
-        echo "Slang image management disabled for this run"
-
   lookup_slang_image:
     name: Check Slang Image Exists
     needs: resolve_slang_version
     runs-on: ubuntu-latest
     outputs:
-      exists: ${{ steps.lookup.outputs.exists || steps.lookup_disabled.outputs.exists }}
-      image_ref: ${{ steps.lookup.outputs.image_ref || steps.lookup_disabled.outputs.image_ref }}
+      exists: ${{ steps.lookup.outputs.exists }}
+      image_ref: ${{ steps.lookup.outputs.image_ref }}
     env:
       IMAGE_NAME: ${{ needs.resolve_slang_version.outputs.image_name }}
       SLANG_VERSION: ${{ needs.resolve_slang_version.outputs.image_tag }}
     steps:
     - name: Look up cached Slang image
       id: lookup
-      if: ${{ inputs.manage_slang_image && inputs.linux_x86_build_slang_from_source }}
       env:
         GHCR_USER: ${{ secrets.GHCR_PUSH_USERNAME }}
         GHCR_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN }}
@@ -141,15 +128,6 @@ jobs:
           echo "exists=false" >> "$GITHUB_OUTPUT"
           echo "Slang image not found, build required: ${image_ref}"
         fi
-
-    - name: Skip Slang image lookup
-      id: lookup_disabled
-      if: ${{ !(inputs.manage_slang_image && inputs.linux_x86_build_slang_from_source) }}
-      run: |
-        set -euo pipefail
-        echo "exists=false" >> "$GITHUB_OUTPUT"
-        echo "image_ref=" >> "$GITHUB_OUTPUT"
-        echo "Slang image management disabled for this run"
 
   build_wheels:
     name: Build (${{ matrix.os }}${{ matrix.arch && format(' {0}', matrix.arch) || '' }})
@@ -563,7 +541,9 @@ jobs:
     name: Build Slang Runtime Libs
     runs-on: ubuntu-latest
     needs: [validate_version, resolve_slang_version, lookup_slang_image]
-    if: ${{ inputs.manage_slang_image && inputs.linux_x86_build_slang_from_source && !cancelled() && !failure() && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || needs.validate_version.outputs.version_valid == 'true') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.lookup_slang_image.outputs.exists != 'true' }}
+    # Always prepare the reusable manylinux_2_28 Slang runtime image because the
+    # x86_64 manylinux_2_28 wheel row depends on these older-baseline libs.
+    if: ${{ !cancelled() && !failure() && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || needs.validate_version.outputs.version_valid == 'true') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.lookup_slang_image.outputs.exists != 'true' }}
     steps:
     - uses: actions/checkout@v4
       with:
@@ -735,7 +715,7 @@ jobs:
   publish_slang_image:
     name: Publish Slang Runtime Image (if missing)
     needs: [build_slang_libraries, resolve_slang_version, lookup_slang_image]
-    if: ${{ inputs.manage_slang_image && inputs.linux_x86_build_slang_from_source && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.lookup_slang_image.outputs.exists != 'true' && !cancelled() && !failure() }}
+    if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.lookup_slang_image.outputs.exists != 'true' && !cancelled() && !failure() }}
     permissions:
       contents: read
       packages: write
@@ -751,15 +731,19 @@ jobs:
     name: Build (ubuntu-latest x86_64 ${{ matrix.manylinux_tag }})
     runs-on: ubuntu-latest
     needs: [validate_version, resolve_slang_version, lookup_slang_image, publish_slang_image]
-    if: ${{ !failure() && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || needs.validate_version.outputs.version_valid == 'true') && (!inputs.manage_slang_image || !inputs.linux_x86_build_slang_from_source || needs.lookup_slang_image.outputs.exists == 'true' || needs.publish_slang_image.result == 'success') }}
+    if: ${{ !failure() && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || needs.validate_version.outputs.version_valid == 'true') }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - manylinux_tag: manylinux_2_28_x86_64
             manylinux_image: quay.io/pypa/manylinux_2_28_x86_64:latest
+            slang_build_from_source: true
+            slang_manage_image: true
           - manylinux_tag: manylinux_2_34_x86_64
             manylinux_image: quay.io/pypa/manylinux_2_34_x86_64:latest
+            slang_build_from_source: false
+            slang_manage_image: false
     steps:
     - uses: actions/checkout@v4
       with:
@@ -779,7 +763,7 @@ jobs:
         grep "name =" pymodule/pyproject.toml
 
     - name: Report Slang image resolution
-      if: ${{ inputs.manage_slang_image && inputs.linux_x86_build_slang_from_source }}
+      if: ${{ (matrix.slang_manage_image || inputs.manage_slang_image) && (matrix.slang_build_from_source || inputs.linux_x86_build_slang_from_source) }}
       shell: bash
       run: |
         set -euo pipefail
@@ -790,7 +774,7 @@ jobs:
         echo "Publish result: ${{ needs.publish_slang_image.result }}"
 
     - name: Reuse Slang image libraries
-      if: ${{ inputs.manage_slang_image && inputs.linux_x86_build_slang_from_source }}
+      if: ${{ (matrix.slang_manage_image || inputs.manage_slang_image) && (matrix.slang_build_from_source || inputs.linux_x86_build_slang_from_source) && (needs.lookup_slang_image.outputs.exists == 'true' || needs.publish_slang_image.result == 'success') }}
       shell: bash
       env:
         GHCR_USER: ${{ secrets.GHCR_PUSH_USERNAME }}
@@ -803,8 +787,7 @@ jobs:
         if [[ -n "${GHCR_TOKEN:-}" && -n "${GHCR_USER:-}" ]]; then
           echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin >/dev/null 2>&1
         else
-          echo "GHCR credentials not available for image pull" >&2
-          exit 1
+          echo "GHCR credentials not available for image pull; attempting anonymous pull"
         fi
         docker pull "${IMAGE_REF}"
         rm -rf "${LOCAL_LIB_DIR}"
@@ -1026,7 +1009,7 @@ jobs:
           run_auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat "${AUDITWHEEL_PLAT}"
         CIBW_TEST_REQUIRES: numpy
         CIBW_TEST_COMMAND: python -c "import nanovdb_editor; print('Import successful')"
-        CIBW_ENVIRONMENT: ${{ inputs.linux_x86_build_slang_from_source && inputs.manage_slang_image && 'CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=ON -DNANOVDB_SLANG_IMAGE_LIB_DIR=${NANOVDB_SLANG_IMAGE_LIB_DIR} -DFETCHCONTENT_QUIET=OFF" CPM_SOURCE_CACHE=/tmp/cpm-cache' || inputs.linux_x86_build_slang_from_source && 'CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=ON -DFETCHCONTENT_QUIET=OFF" CPM_SOURCE_CACHE=/tmp/cpm-cache' || 'CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=OFF -DFETCHCONTENT_QUIET=OFF" CPM_SOURCE_CACHE=/tmp/cpm-cache' }}
+        CIBW_ENVIRONMENT: ${{ ((matrix.slang_build_from_source || inputs.linux_x86_build_slang_from_source) && (matrix.slang_manage_image || inputs.manage_slang_image) && (needs.lookup_slang_image.outputs.exists == 'true' || needs.publish_slang_image.result == 'success')) && 'CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=ON -DNANOVDB_SLANG_IMAGE_LIB_DIR=${NANOVDB_SLANG_IMAGE_LIB_DIR} -DFETCHCONTENT_QUIET=OFF" CPM_SOURCE_CACHE=/tmp/cpm-cache' || (matrix.slang_build_from_source || inputs.linux_x86_build_slang_from_source) && 'CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=ON -DFETCHCONTENT_QUIET=OFF" CPM_SOURCE_CACHE=/tmp/cpm-cache' || 'CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=OFF -DFETCHCONTENT_QUIET=OFF" CPM_SOURCE_CACHE=/tmp/cpm-cache' }}
       with:
         package-dir: pymodule
 
