@@ -553,8 +553,8 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
-        mkdir -p slang-package/lib
-        rm -f slang-package/lib/*
+        rm -rf slang-package
+        mkdir -p slang-package/lib slang-package/include
 
         SLANG_VERSION="${{ needs.resolve_slang_version.outputs.slang_version }}"
         LLVM_VERSION="$(python3 - <<'PY'
@@ -657,7 +657,7 @@ jobs:
         echo "=== Installing Slang ${SLANG_VERSION} runtime libraries ==="
         cmake -DSLANG_EP_BINARY_DIR=/tmp/slang-build -P /project/cmake/slang_ep_install.cmake
 
-        echo "=== Collecting built Slang runtime libraries ==="
+        echo "=== Collecting built Slang package ==="
         /opt/python/cp311-cp311/bin/python - <<'PY'
         import pathlib
         import shutil
@@ -668,7 +668,10 @@ jobs:
             pathlib.Path("/tmp/slang-build"),
         ]
         dst = pathlib.Path("/project/slang-package/lib")
+        include_root = pathlib.Path("/tmp/slang-install/include")
+        include_dst = pathlib.Path("/project/slang-package/include")
         dst.mkdir(parents=True, exist_ok=True)
+        include_dst.mkdir(parents=True, exist_ok=True)
 
         copied = []
         seen = set()
@@ -687,6 +690,14 @@ jobs:
                     shutil.copy2(lib, target)
                     seen.add(target.name)
                     copied.append(target.name)
+
+        if not include_root.exists():
+            print(f"Slang include directory was not found: {include_root}", file=sys.stderr)
+            raise SystemExit(1)
+        shutil.copytree(include_root, include_dst, dirs_exist_ok=True)
+        if not any(p.is_file() for p in include_dst.rglob("*")):
+            print(f"Slang include directory is empty: {include_dst}", file=sys.stderr)
+            raise SystemExit(1)
 
         if not any(name.startswith("libslang-llvm") for name in copied):
             print("libslang-llvm was not found in built Slang libraries", file=sys.stderr)
@@ -709,7 +720,7 @@ jobs:
     - uses: actions/upload-artifact@v4
       with:
         name: slang-libs-ubuntu-latest-x86_64
-        path: slang-package/lib/*
+        path: slang-package
         if-no-files-found: error
 
   publish_slang_image:
@@ -773,7 +784,7 @@ jobs:
         echo "Lookup result: ${{ needs.lookup_slang_image.outputs.exists }}"
         echo "Publish result: ${{ needs.publish_slang_image.result }}"
 
-    - name: Reuse Slang image libraries
+    - name: Reuse Slang image package
       if: ${{ (matrix.slang_manage_image || inputs.manage_slang_image) && (matrix.slang_build_from_source || inputs.linux_x86_build_slang_from_source) && (needs.lookup_slang_image.outputs.exists == 'true' || needs.publish_slang_image.result == 'success') }}
       shell: bash
       env:
@@ -782,7 +793,10 @@ jobs:
       run: |
         set -euo pipefail
         IMAGE_REF="${{ needs.lookup_slang_image.outputs.image_ref }}"
-        LOCAL_LIB_DIR="${GITHUB_WORKSPACE}/.ci/slang-image-lib"
+        LOCAL_ROOT_DIR="${GITHUB_WORKSPACE}/.ci/slang-image"
+        LOCAL_LIB_DIR="${LOCAL_ROOT_DIR}/lib"
+        LOCAL_INCLUDE_DIR="${LOCAL_ROOT_DIR}/include"
+        echo "NANOVDB_SLANG_IMAGE_ROOT_DIR=" >> "$GITHUB_ENV"
         echo "NANOVDB_SLANG_IMAGE_LIB_DIR=" >> "$GITHUB_ENV"
         if [[ -n "${GHCR_TOKEN:-}" && -n "${GHCR_USER:-}" ]]; then
           echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin >/dev/null 2>&1
@@ -790,8 +804,8 @@ jobs:
           echo "GHCR credentials not available for image pull; attempting anonymous pull"
         fi
         docker pull "${IMAGE_REF}"
-        rm -rf "${LOCAL_LIB_DIR}"
-        mkdir -p "${LOCAL_LIB_DIR}"
+        rm -rf "${LOCAL_ROOT_DIR}"
+        mkdir -p "${LOCAL_LIB_DIR}" "${LOCAL_INCLUDE_DIR}"
 
         cid=""
         cleanup() {
@@ -803,14 +817,17 @@ jobs:
 
         cid="$(docker create "${IMAGE_REF}" /bin/true)"
         docker cp "${cid}:/opt/slang/lib/." "${LOCAL_LIB_DIR}/"
+        docker cp "${cid}:/opt/slang/include/." "${LOCAL_INCLUDE_DIR}/"
         rm -f "${LOCAL_LIB_DIR}"/*.dwarf
 
-        if ls "${LOCAL_LIB_DIR}"/libslang*.so* >/dev/null 2>&1; then
+        if ls "${LOCAL_LIB_DIR}"/libslang*.so* >/dev/null 2>&1 && find "${LOCAL_INCLUDE_DIR}" -type f | read -r _; then
+          CONTAINER_ROOT_DIR="/project${LOCAL_ROOT_DIR#${GITHUB_WORKSPACE}}"
           CONTAINER_LIB_DIR="/project${LOCAL_LIB_DIR#${GITHUB_WORKSPACE}}"
+          echo "NANOVDB_SLANG_IMAGE_ROOT_DIR=${CONTAINER_ROOT_DIR}" >> "$GITHUB_ENV"
           echo "NANOVDB_SLANG_IMAGE_LIB_DIR=${CONTAINER_LIB_DIR}" >> "$GITHUB_ENV"
-          echo "Reusing Slang libs from cached image via ${LOCAL_LIB_DIR}"
+          echo "Reusing Slang package from cached image via ${LOCAL_ROOT_DIR}"
         else
-          echo "Cached image extracted but no libslang*.so* found" >&2
+          echo "Cached image extracted but required Slang package files were not found" >&2
           exit 1
         fi
 
@@ -821,7 +838,7 @@ jobs:
         CIBW_MANYLINUX_X86_64_IMAGE: ${{ matrix.manylinux_image }}
         CIBW_BUILD_VERBOSITY: 1
         CIBW_TEST_SKIP: cp311-manylinux_x86_64
-        CIBW_ENVIRONMENT_PASS_LINUX: NANOVDB_SLANG_IMAGE_LIB_DIR
+        CIBW_ENVIRONMENT_PASS_LINUX: NANOVDB_SLANG_IMAGE_ROOT_DIR NANOVDB_SLANG_IMAGE_LIB_DIR
         NANOVDB_MANYLINUX_X86_64_TAG: ${{ matrix.manylinux_tag }}
         CIBW_BEFORE_ALL_LINUX: |
           if command -v dnf &> /dev/null; then
@@ -1009,7 +1026,7 @@ jobs:
           run_auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat "${AUDITWHEEL_PLAT}"
         CIBW_TEST_REQUIRES: numpy
         CIBW_TEST_COMMAND: python -c "import nanovdb_editor; print('Import successful')"
-        CIBW_ENVIRONMENT: ${{ ((matrix.slang_build_from_source || inputs.linux_x86_build_slang_from_source) && (matrix.slang_manage_image || inputs.manage_slang_image) && (needs.lookup_slang_image.outputs.exists == 'true' || needs.publish_slang_image.result == 'success')) && 'CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=ON -DNANOVDB_SLANG_IMAGE_LIB_DIR=${NANOVDB_SLANG_IMAGE_LIB_DIR} -DFETCHCONTENT_QUIET=OFF" CPM_SOURCE_CACHE=/tmp/cpm-cache' || (matrix.slang_build_from_source || inputs.linux_x86_build_slang_from_source) && 'CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=ON -DFETCHCONTENT_QUIET=OFF" CPM_SOURCE_CACHE=/tmp/cpm-cache' || 'CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=OFF -DFETCHCONTENT_QUIET=OFF" CPM_SOURCE_CACHE=/tmp/cpm-cache' }}
+        CIBW_ENVIRONMENT: ${{ ((matrix.slang_build_from_source || inputs.linux_x86_build_slang_from_source) && (matrix.slang_manage_image || inputs.manage_slang_image) && (needs.lookup_slang_image.outputs.exists == 'true' || needs.publish_slang_image.result == 'success')) && 'CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=OFF -DNANOVDB_SLANG_IMAGE_ROOT_DIR=${NANOVDB_SLANG_IMAGE_ROOT_DIR} -DFETCHCONTENT_QUIET=OFF" CPM_SOURCE_CACHE=/tmp/cpm-cache' || (matrix.slang_build_from_source || inputs.linux_x86_build_slang_from_source) && 'CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=ON -DFETCHCONTENT_QUIET=OFF" CPM_SOURCE_CACHE=/tmp/cpm-cache' || 'CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=OFF -DFETCHCONTENT_QUIET=OFF" CPM_SOURCE_CACHE=/tmp/cpm-cache' }}
       with:
         package-dir: pymodule
 
