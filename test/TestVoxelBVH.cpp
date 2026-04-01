@@ -68,8 +68,10 @@ void voxelbvh_test()
 
     auto voxelbvh_ctx = voxel_bvh.create_context(&compute, queue);
 
+#if 0
     voxel_bvh.voxelbvh_from_gaussians_file(&compute, queue, voxelbvh_ctx, "./data/splats.npz");
-
+#endif
+#if 0
     pnanovdb_compute_array_t* nanovdb_arr = compute.load_nanovdb("./data/dragon.nvdb");
 
     pnanovdb_compute_array_t* node_mask_arr =
@@ -93,6 +95,7 @@ void voxelbvh_test()
     }
     compute.destroy_array(node_mask_arr);
     compute.destroy_array(nanovdb_arr);
+#endif
 
     uint64_t ijkl_count = 16u * 1024u;
     pnanovdb_compute_array_t* ijkl_array = compute.create_array(8u, ijkl_count, nullptr);
@@ -101,8 +104,33 @@ void voxelbvh_test()
     uint64_t* mapped_range = (uint64_t*)compute.map_array(range_array);
     for (uint64_t idx = 0u; idx < ijkl_count; idx++)
     {
-        mapped_ijkl[idx] = (uint64_t(rand() & 4095) << 16u) | (uint64_t(rand() & 4095) << 32u) |
-                           (uint64_t(rand() & 4095) << 48u) | uint64_t(rand() % 12);
+        while (true)
+        {
+            int i = rand() & 4095;
+            int j = rand() & 4095;
+            int k = rand() & 4095;
+            int l = rand() % 12;
+            int lmask = ~((1 << l) - 1);
+            i &= lmask;
+            j &= lmask;
+            k &= lmask;
+            mapped_ijkl[idx] = (uint64_t(i << 16u) | (uint64_t(j) << 32u) |
+                            (uint64_t(k) << 48u) | uint64_t(l));
+            // verify uniqueness
+            bool is_unique = true;
+            for (uint64_t cmp_idx = 0u; cmp_idx < idx; cmp_idx++)
+            {
+                if (mapped_ijkl[idx] == mapped_ijkl[cmp_idx])
+                {
+                    is_unique = false;
+                    break;
+                }
+            }
+            if (is_unique)
+            {
+                break;
+            }
+        }
         mapped_range[idx] = uint64_t(idx) | (uint64_t(idx + 1u) << 32u);
     }
 
@@ -135,6 +163,8 @@ void voxelbvh_test()
     pnanovdb_uint32_t upper_count_bad = 0u;
     pnanovdb_uint32_t lower_count_bad = 0u;
     pnanovdb_uint32_t leaf_count_bad = 0u;
+    pnanovdb_uint32_t max_list_idx = 0u;
+    pnanovdb_uint64_t bit_count = 0u;
     for (pnanovdb_uint32_t root_n = 0u; root_n < root_tile_count; root_n++)
     {
         pnanovdb_root_tile_handle_t tile = pnanovdb_root_get_tile(grid_type, root, root_n);
@@ -183,14 +213,59 @@ void voxelbvh_test()
                             {
                                 printf("leaf[%zu]\n", leaf.address.byte_offset);
                             }
+                            for (pnanovdb_uint32_t leaf_n = 0u; leaf_n < PNANOVDB_LEAF_TABLE_COUNT; leaf_n++)
+                            {
+                                pnanovdb_address_t val_addr = pnanovdb_leaf_get_table_address(grid_type, buf, leaf, leaf_n);
+                                pnanovdb_uint64_t val = pnanovdb_read_uint64(buf, val_addr);
+                                pnanovdb_uint32_t list_idx = pnanovdb_uint32_t(val >> 32u);
+                                if (list_idx > max_list_idx)
+                                {
+                                    max_list_idx = list_idx;
+                                }
+                                bit_count += pnanovdb_uint64_countbits(val & 0xFFFF);
+                            }
+                        }
+                        else
+                        {
+                            pnanovdb_address_t val_addr = pnanovdb_lower_get_table_address(grid_type, buf, lower, lower_n);
+                            pnanovdb_uint64_t val = pnanovdb_read_uint64(buf, val_addr);
+                            pnanovdb_uint32_t list_idx = pnanovdb_uint32_t(val >> 32u);
+                            if (list_idx > max_list_idx)
+                            {
+                                max_list_idx = list_idx;
+                            }
+                            bit_count += pnanovdb_uint64_countbits(val & 0xFFFF);
                         }
                     }
                 }
+                else
+                {
+                    pnanovdb_address_t val_addr = pnanovdb_upper_get_table_address(grid_type, buf, upper, upper_n);
+                    pnanovdb_uint64_t val = pnanovdb_read_uint64(buf, val_addr);
+                    pnanovdb_uint32_t list_idx = pnanovdb_uint32_t(val >> 32u);
+                    if (list_idx > max_list_idx)
+                    {
+                        max_list_idx = list_idx;
+                    }
+                    bit_count += pnanovdb_uint64_countbits(val & 0xFFFF);
+                }
             }
+        }
+        else
+        {
+            pnanovdb_address_t val_addr = pnanovdb_root_tile_get_value_address(grid_type, buf, tile);
+            pnanovdb_uint64_t val = pnanovdb_read_uint64(buf, val_addr);
+            pnanovdb_uint32_t list_idx = pnanovdb_uint32_t(val >> 32u);
+            if (list_idx > max_list_idx)
+            {
+                max_list_idx = list_idx;
+            }
+            bit_count += pnanovdb_uint64_countbits(val & 0xFFFF);
         }
     }
     printf("node_counts: root(%u) upper(%u) lower(%u) leaf(%u)\n", root_tile_count, upper_count, lower_count, leaf_count);
     printf("bad node_counts: upper(%u) lower(%u) leaf(%u)\n", upper_count_bad, lower_count_bad, leaf_count_bad);
+    printf("max_list_idx(%u) bit_count(%zu)\n", max_list_idx, bit_count);
 
     pnanovdb_readaccessor_t acc;
     pnanovdb_readaccessor_init(PNANOVDB_REF(acc), root);
@@ -198,12 +273,21 @@ void voxelbvh_test()
     uint64_t unique_count = 0llu;
     uint64_t val_pass_count = 0llu;
     uint64_t not_leaf_count = 0llu;
+    uint64_t list_mismatch_count = 0llu;
     pnanovdb_address_t addr_old = {};
     for (uint64_t idx = 0u; idx < ijkl_count; idx++)
     {
         uint64_t ijkl_raw = mapped_ijkl[idx];
         pnanovdb_coord_t ijk = { int(ijkl_raw >> 48u) & 0xFFFF, int(ijkl_raw >> 32u) & 0xFFFF,
                                  int(ijkl_raw >> 16u) & 0xFFFF };
+
+        // apply mask to go directly to expected voxel/tile
+        int l = int(ijkl_raw) & 0xFFFF;
+        int lmask = ~((1 << l) - 1);
+        ijk.x &= lmask;
+        ijk.y &= lmask;
+        ijk.z &= lmask;
+
         pnanovdb_uint32_t level = 0u;
         pnanovdb_address_t addr = pnanovdb_readaccessor_get_value_address_and_level(
             grid_type, buf, PNANOVDB_REF(acc), PNANOVDB_REF(ijk), PNANOVDB_REF(level));
@@ -212,6 +296,24 @@ void voxelbvh_test()
         {
             val_pass_count++;
         }
+
+        uint active_lmask = uint(val & 0xFFFF);
+        pnanovdb_uint32_t list_begin_idx = pnanovdb_uint32_t(val >> 32u);
+        pnanovdb_uint32_t list_countbits = pnanovdb_uint32_countbits(active_lmask & ~lmask);
+        pnanovdb_uint32_t list_idx = list_begin_idx + list_countbits;
+        uint64_t range_val = range_flat_ptr[list_idx];
+        if (range_val != mapped_range[idx])
+        {
+            if (list_mismatch_count < 32u)
+            {
+                printf("range_val(%u,%u) vs idx(%u,%d) list_countbits(%u) l(%u) ~lmask(0x%x)\n",
+                    int(range_val >> 32u), int(range_val),
+                    int(mapped_range[idx] >> 32u), int(mapped_range[idx]),
+                    list_countbits, l, ~lmask);
+            }
+            list_mismatch_count++;
+        }
+
         if (addr.byte_offset != addr_old.byte_offset)
         {
             unique_count++;
@@ -234,6 +336,7 @@ void voxelbvh_test()
 
     printf("grid_size(%zu) unique_count(%zu) val_pass_count(%zu) not_leaf_count(%zu)\n", grid_size, unique_count,
            val_pass_count, not_leaf_count);
+    printf("list_mismatch_count(%zu)\n", list_mismatch_count);
 
     // print out some range_flat values
     for (uint64_t idx = 0u; idx < 64u; idx++)

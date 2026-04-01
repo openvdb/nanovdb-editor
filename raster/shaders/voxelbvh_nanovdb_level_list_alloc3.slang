@@ -21,13 +21,8 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     if (!pnanovdb_address_is_null(val_addr))
     {
         val = pnanovdb_read_uint64(buf, val_addr);
-        uint level_mask = uint(val) & 0xFFFF;
-        alloc_count = countbits(level_mask);
-        // only allocate background once
-        if (level == 4u && n != 0u)
-        {
-            alloc_count = 0u;
-        }
+        uint active_lmask = uint(val) & 0xFFFF;
+        alloc_count = countbits(active_lmask);
     }
 
     uint64_t4 alloc_count4 = uint64_t4(alloc_count, 0llu, 0llu, 0llu);
@@ -39,7 +34,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     {
         uint64_t val_alloc_idx = user_state.workgroup_alloc_idx + scan_alloc_count4.x - alloc_count4.x;
         // voxel value is only 32-bit for now
-        uint val_alloc_idx32 = uint(val_alloc_idx);
+        uint val_alloc_idx32 = alloc_count == 0u ? 0u : uint(val_alloc_idx);
         val = val | (uint64_t(val_alloc_idx32) << 32u);
         pnanovdb_write_uint64(buf, val_addr, val);
     }

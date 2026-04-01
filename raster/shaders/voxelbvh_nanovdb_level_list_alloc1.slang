@@ -18,13 +18,8 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     if (!pnanovdb_address_is_null(val_addr))
     {
         pnanovdb_uint32_t val = pnanovdb_read_uint32(buf, val_addr);
-        uint level_mask = val & 0xFFFF;
-        alloc_count = countbits(level_mask);
-        // only allocate background once
-        if (level == 4u && n != 0u)
-        {
-            alloc_count = 0u;
-        }
+        uint active_lmask = val & 0xFFFF;
+        alloc_count = countbits(active_lmask);
     }
     user_state.element_count = user_state.element_count + alloc_count;
 }

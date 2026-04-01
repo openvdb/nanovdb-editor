@@ -65,9 +65,9 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 
     pnanovdb_uint64_t val = pnanovdb_read_uint64(buf, address);
 
-    uint level_mask = uint(val & 0xFFFF);
+    uint active_lmask = uint(val & 0xFFFF);
     uint list_begin_idx = uint(val >> 32u);
-    uint list_idx = list_begin_idx + countbits(level_mask & ~lmask);
+    uint list_idx = list_begin_idx + countbits(active_lmask & ~lmask);
 
     range_flat_out[list_idx] = range;
 }
