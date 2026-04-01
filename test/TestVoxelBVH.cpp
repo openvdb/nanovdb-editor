@@ -274,6 +274,7 @@ void voxelbvh_test()
     uint64_t val_pass_count = 0llu;
     uint64_t not_leaf_count = 0llu;
     uint64_t list_mismatch_count = 0llu;
+    uint64_t collision_count = 0llu;
     pnanovdb_address_t addr_old = {};
     for (uint64_t idx = 0u; idx < ijkl_count; idx++)
     {
@@ -302,6 +303,10 @@ void voxelbvh_test()
         pnanovdb_uint32_t list_countbits = pnanovdb_uint32_countbits(active_lmask & ~lmask);
         pnanovdb_uint32_t list_idx = list_begin_idx + list_countbits;
         uint64_t range_val = range_flat_ptr[list_idx];
+        if (list_countbits != 0u)
+        {
+            collision_count++;
+        }
         if (range_val != mapped_range[idx])
         {
             if (list_mismatch_count < 32u)
@@ -336,7 +341,7 @@ void voxelbvh_test()
 
     printf("grid_size(%zu) unique_count(%zu) val_pass_count(%zu) not_leaf_count(%zu)\n", grid_size, unique_count,
            val_pass_count, not_leaf_count);
-    printf("list_mismatch_count(%zu)\n", list_mismatch_count);
+    printf("list_mismatch_count(%zu) collision_count(%zu)\n", list_mismatch_count, collision_count);
 
     // print out some range_flat values
     for (uint64_t idx = 0u; idx < 64u; idx++)
