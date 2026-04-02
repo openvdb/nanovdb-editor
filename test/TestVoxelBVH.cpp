@@ -286,6 +286,7 @@ void voxelbvh_test()
     uint64_t not_leaf_count = 0llu;
     uint64_t list_mismatch_count = 0llu;
     uint64_t collision_count = 0llu;
+    uint32_t range_count_max = 0u;
     pnanovdb_address_t addr_old = {};
     for (uint64_t range_idx = 0u; range_idx < range_count; range_idx++)
     {
@@ -308,6 +309,13 @@ void voxelbvh_test()
             ijk.x &= lmask;
             ijk.y &= lmask;
             ijk.z &= lmask;
+
+            // track max range size only for valid keys
+            uint32_t range_count = range_end - range_begin;
+            if (range_count > range_count_max)
+            {
+                range_count_max = range_count;
+            }
 
             pnanovdb_uint32_t level = 0u;
             pnanovdb_address_t addr = pnanovdb_readaccessor_get_value_address_and_level(
@@ -362,7 +370,8 @@ void voxelbvh_test()
 
     printf("unique_count(%zu) val_pass_count(%zu) not_leaf_count(%zu)\n", unique_count,
            val_pass_count, not_leaf_count);
-    printf("list_mismatch_count(%zu) collision_count(%zu)\n", list_mismatch_count, collision_count);
+    printf("list_mismatch_count(%zu) collision_count(%zu) range_count_max(%d)\n",
+           list_mismatch_count, collision_count, range_count_max);
 
     // print out some range_flat values
     for (uint64_t idx = 0u; idx < 64u; idx++)
