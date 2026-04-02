@@ -26,7 +26,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     pnanovdb_uint64_t ref_val = pnanovdb_read_uint64(buf, val_addr);
     if (uint(ref_val & 0xFFFF) != 0)
     {
-        for (uint l = 0u; l <= 12; l++)
+        for (uint l = 0u; l < 12; l++)
         {
             if ((uint(ref_val & 0xFFFF) & (1u << l)) != 0u)
             {

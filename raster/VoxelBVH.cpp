@@ -730,7 +730,7 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
     }
 
     // merge
-    for (uint l = 1u; l <= 12; l++)
+    for (uint l = 0u; l < 12; l++)
     {
         struct merge_arg_t
         {

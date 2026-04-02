@@ -174,7 +174,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 
     uint write_subidx = 0u;
     bool hit_max = false;
-    for (uint level = 12u; level < 13u; level-=level_step)
+    for (uint level = 11u; level < 12u; level-=level_step)
     {
         int3 ijk_min_level = ijk_min & ~((1 << level) - 1);
         int3 ijk_max_level = ijk_max & ~((1 << level) - 1);

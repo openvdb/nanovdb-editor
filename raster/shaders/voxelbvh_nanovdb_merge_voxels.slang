@@ -30,9 +30,9 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     pnanovdb_uint64_t val = pnanovdb_read_uint64(buf, val_addr);
 
     uint l = merge_arg_in.level;
-    int flip_mask = 1 << (l - 1u);
+    int flip_mask = 1 << l;
 
-    if ((uint(val >> 16u) & 0xFFFF) == (l - 1))
+    if ((uint(val >> 16u) & 0xFFFF) == l)
     {
         bool all_match = true;
         for (uint i = 1u; i < 8; i++)
@@ -59,7 +59,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
         }
         if (all_match)
         {
-            val = (val & ~uint64_t(0xFFFF0000)) | uint64_t((l & 0xFFFF) << 16u);
+            val = (val & ~uint64_t(0xFFFF0000)) | uint64_t(((l + 1) & 0xFFFF) << 16u);
         }
     }
 
