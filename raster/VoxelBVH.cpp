@@ -847,10 +847,9 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
                                                                                  // sh0, shn
                              pnanovdb_uint32_t gaussian_array_count,
                              pnanovdb_uint64_t gaussian_count,
-                             pnanovdb_compute_buffer_t* nanovdb_out,
-                             pnanovdb_uint64_t nanovdb_word_count,
-                             pnanovdb_compute_buffer_t* range_flat_out,
-                             pnanovdb_uint64_t range_flat_count)
+                             pnanovdb_compute_buffer_t* ijkl_out,
+                             pnanovdb_compute_buffer_t* prim_id_out,
+                             pnanovdb_compute_buffer_t* range_out)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -910,21 +909,21 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
     buf_desc.size_in_bytes = 6u * 4u;
     pnanovdb_compute_buffer_t* bbox_reduce2_buffer =
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
-    buf_desc.size_in_bytes = 8u * constants.voxel_count;
-    pnanovdb_compute_buffer_t* keys_buffer =
-        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
-    buf_desc.size_in_bytes = 4u * constants.voxel_count;
-    pnanovdb_compute_buffer_t* bbox_ids_buffer =
-        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+    //buf_desc.size_in_bytes = 8u * constants.voxel_count;
+    //pnanovdb_compute_buffer_t* keys_buffer =
+    //    compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+    //buf_desc.size_in_bytes = 4u * constants.voxel_count;
+    //pnanovdb_compute_buffer_t* bbox_ids_buffer =
+    //    compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
 
     pnanovdb_compute_buffer_transient_t* bbox_reduce1_transient =
         compute_interface->register_buffer_as_transient(context, bbox_reduce1_buffer);
     pnanovdb_compute_buffer_transient_t* bbox_reduce2_transient =
         compute_interface->register_buffer_as_transient(context, bbox_reduce2_buffer);
-    pnanovdb_compute_buffer_transient_t* keys_transient =
-        compute_interface->register_buffer_as_transient(context, keys_buffer);
-    pnanovdb_compute_buffer_transient_t* bbox_ids_transient =
-        compute_interface->register_buffer_as_transient(context, bbox_ids_buffer);
+    pnanovdb_compute_buffer_transient_t* ijkl_transient =
+        compute_interface->register_buffer_as_transient(context, ijkl_out);
+    pnanovdb_compute_buffer_transient_t* prim_id_transient =
+        compute_interface->register_buffer_as_transient(context, prim_id_out);
 
     // gaussian to ijk-level request
     // voxelbvh_gaussians_bbox_reduce1.slang
@@ -959,8 +958,8 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
         resources[3u].buffer_transient = quats_transient;
         resources[4u].buffer_transient = scales_transient;
         resources[5u].buffer_transient = bbox_reduce2_transient;
-        resources[6u].buffer_transient = keys_transient;
-        resources[7u].buffer_transient = bbox_ids_transient;
+        resources[6u].buffer_transient = ijkl_transient;
+        resources[7u].buffer_transient = prim_id_transient;
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_gaussians_to_ijkl_slang],
                                  resources, constants.workgroup_count, 1u, 1u, "voxelbvh_gaussians_to_ijkl");
@@ -969,8 +968,8 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
     // sort ijk-level requests to bring requests together
     // radix sort
     {
-        ctx->parallel_primitives.radix_sort_key64(compute, queue, ctx->parallel_primitives_ctx, keys_buffer,
-                                                  bbox_ids_buffer, constants.voxel_count, constants.voxel_count, 64u);
+        ctx->parallel_primitives.radix_sort_key64(compute, queue, ctx->parallel_primitives_ctx, ijkl_out,
+                                                  prim_id_out, constants.voxel_count, constants.voxel_count, 64u);
     }
 
     buf_desc.size_in_bytes = 4u * constants.voxel_count;
@@ -978,25 +977,25 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
     pnanovdb_compute_buffer_t* range_scan_buffer =
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
-    buf_desc.size_in_bytes = 2u * 4u * constants.voxel_count;
-    pnanovdb_compute_buffer_t* range_headers_buffer =
-        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+    //buf_desc.size_in_bytes = 2u * 4u * constants.voxel_count;
+    //pnanovdb_compute_buffer_t* range_headers_buffer =
+    //    compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
 
     pnanovdb_compute_buffer_transient_t* range_starts_transient =
         compute_interface->register_buffer_as_transient(context, range_starts_buffer);
     pnanovdb_compute_buffer_transient_t* range_scan_transient =
         compute_interface->register_buffer_as_transient(context, range_scan_buffer);
-    pnanovdb_compute_buffer_transient_t* range_headers_transient =
-        compute_interface->register_buffer_as_transient(context, range_headers_buffer);
+    pnanovdb_compute_buffer_transient_t* range_transient =
+        compute_interface->register_buffer_as_transient(context, range_out);
 
     // identify range starts
     // voxelbvh_find_range_starts.slang
     {
         pnanovdb_compute_resource_t resources[4u] = {};
         resources[0u].buffer_transient = constant_transient;
-        resources[1u].buffer_transient = keys_transient;
+        resources[1u].buffer_transient = ijkl_transient;
         resources[2u].buffer_transient = range_starts_transient;
-        resources[3u].buffer_transient = range_headers_transient;
+        resources[3u].buffer_transient = range_transient;
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_find_range_starts_slang],
                                  resources, constants.voxel_workgroup_count, 1u, 1u, "voxelbvh_find_range_starts");
@@ -1013,57 +1012,34 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
     {
         pnanovdb_compute_resource_t resources[5u] = {};
         resources[0u].buffer_transient = constant_transient;
-        resources[1u].buffer_transient = keys_transient;
+        resources[1u].buffer_transient = ijkl_transient;
         resources[2u].buffer_transient = range_starts_transient;
         resources[3u].buffer_transient = range_scan_transient;
-        resources[4u].buffer_transient = range_headers_transient;
+        resources[4u].buffer_transient = range_transient;
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_scatter_range_headers_slang],
                                  resources, constants.voxel_workgroup_count, 1u, 1u, "voxelbvh_scatter_range_headers");
     }
 
-#if 0
-    pnanovdb_coord_t root_coords[1u] = {};
-    voxelbvh_nanovdb_init(
-        compute, queue, voxelbvh_context, nanovdb_out, nanovdb_word_count, root_coords, 1u);
-
-    voxelbvh_nanovdb_add_nodes_from_key_buffer(compute, queue, voxelbvh_context, nanovdb_out,
-                                               nanovdb_word_count, range_flat_out,
-                                               range_flat_count, keys_buffer,
-                                               range_headers_buffer, constants.voxel_count, constants.voxel_count);
-#endif
     compute_interface->destroy_buffer(context, constant_buffer);
     compute_interface->destroy_buffer(context, bbox_reduce1_buffer);
     compute_interface->destroy_buffer(context, bbox_reduce2_buffer);
-    compute_interface->destroy_buffer(context, keys_buffer);
-    compute_interface->destroy_buffer(context, bbox_ids_buffer);
 
     compute_interface->destroy_buffer(context, range_starts_buffer);
     compute_interface->destroy_buffer(context, range_scan_buffer);
-    compute_interface->destroy_buffer(context, range_headers_buffer);
 }
 
 void voxelbvh_from_gaussians_file(const pnanovdb_compute_t* compute,
                                   pnanovdb_compute_queue_t* queue,
                                   pnanovdb_voxelbvh_context_t* voxelbvh_context,
-                                  const char* filename)
+                                  const char* filename,
+                                  pnanovdb_compute_array_t** ijkl_out,
+                                  pnanovdb_compute_array_t** prim_id_out,
+                                  pnanovdb_compute_array_t** range_out)
 {
 
     pnanovdb_fileformat_t fileformat = {};
     pnanovdb_fileformat_load(&fileformat, compute);
-
-    // default to 1GB return for now
-    uint64_t buf_size = 1024llu * 1024llu * 1024llu;
-    uint64_t nanovdb_uint64_count = (buf_size + 7u) / 8u;
-
-    pnanovdb_compute_array_t* nanovdb_array = compute->create_array(8u, nanovdb_uint64_count, nullptr);
-    pnanovdb_compute_array_t* flat_range_array = compute->create_array(8u, nanovdb_uint64_count, nullptr);
-
-    compute_gpu_array_t* nanovdb_gpu_array = gpu_array_create();
-    compute_gpu_array_t* flat_range_gpu_array = gpu_array_create();
-
-    gpu_array_alloc_device(compute, queue, nanovdb_gpu_array, nanovdb_array);
-    gpu_array_alloc_device(compute, queue, flat_range_gpu_array, flat_range_array);
 
     const char* array_names_gaussian[] = { "means", "opacities", "quaternions", "scales", "sh_0", "sh_n" };
     pnanovdb_compute_array_t* arrays_gaussian[6] = {};
@@ -1072,6 +1048,20 @@ void voxelbvh_from_gaussians_file(const pnanovdb_compute_t* compute,
     if (loaded_gaussian == PNANOVDB_TRUE)
     {
         pnanovdb_uint64_t gaussian_count = arrays_gaussian[1]->element_count;
+
+        pnanovdb_uint64_t voxel_count = 8u* gaussian_count;
+
+        pnanovdb_compute_array_t* ijkl_array = compute->create_array(8u, voxel_count, nullptr);
+        pnanovdb_compute_array_t* prim_id_array = compute->create_array(4u, voxel_count, nullptr);
+        pnanovdb_compute_array_t* range_array = compute->create_array(8u, voxel_count, nullptr);
+
+        compute_gpu_array_t* ijkl_gpu_array = gpu_array_create();
+        compute_gpu_array_t* prim_id_gpu_array = gpu_array_create();
+        compute_gpu_array_t* range_gpu_array = gpu_array_create();
+
+        gpu_array_alloc_device(compute, queue, ijkl_gpu_array, ijkl_array);
+        gpu_array_alloc_device(compute, queue, prim_id_gpu_array, prim_id_array);
+        gpu_array_alloc_device(compute, queue, range_gpu_array, range_array);
 
         // normalize quats
         float* mapped_quat = (float*)compute->map_array(arrays_gaussian[2]);
@@ -1129,10 +1119,9 @@ void voxelbvh_from_gaussians_file(const pnanovdb_compute_t* compute,
         };
 
         voxelbvh_from_gaussians(compute, queue, voxelbvh_context, gpu_buffers, 6u, gaussian_count,
-            nanovdb_gpu_array->device_buffer,
-            nanovdb_uint64_count * 2u,
-            flat_range_gpu_array->device_buffer,
-            nanovdb_uint64_count);
+            ijkl_gpu_array->device_buffer,
+            prim_id_gpu_array->device_buffer,
+            range_gpu_array->device_buffer);
 
         gpu_array_destroy(compute, queue, means_gpu_array);
         gpu_array_destroy(compute, queue, opacities_gpu_array);
@@ -1140,23 +1129,29 @@ void voxelbvh_from_gaussians_file(const pnanovdb_compute_t* compute,
         gpu_array_destroy(compute, queue, scales_gpu_array);
         gpu_array_destroy(compute, queue, sh_0_gpu_array);
         gpu_array_destroy(compute, queue, sh_n_gpu_array);
+
+        // readback results
+        gpu_array_readback(compute, queue, ijkl_gpu_array, ijkl_array);
+        gpu_array_readback(compute, queue, prim_id_gpu_array, prim_id_array);
+        gpu_array_readback(compute, queue, range_gpu_array, range_array);
+
+        pnanovdb_uint64_t flushed_frame = 0llu;
+        compute->device_interface.flush(queue, &flushed_frame, nullptr, nullptr);
+
+        compute->device_interface.wait_idle(queue);
+
+        gpu_array_map(compute, queue, ijkl_gpu_array, ijkl_array);
+        gpu_array_map(compute, queue, prim_id_gpu_array, prim_id_array);
+        gpu_array_map(compute, queue, range_gpu_array, range_array);
+
+        *ijkl_out = ijkl_array;
+        *prim_id_out = prim_id_array;
+        *range_out = range_array;
+
+        gpu_array_destroy(compute, queue, ijkl_gpu_array);
+        gpu_array_destroy(compute, queue, prim_id_gpu_array);
+        gpu_array_destroy(compute, queue, range_gpu_array);
     }
-
-    gpu_array_readback(compute, queue, nanovdb_gpu_array, nanovdb_array);
-    gpu_array_readback(compute, queue, flat_range_gpu_array, flat_range_array);
-
-    pnanovdb_uint64_t flushed_frame = 0llu;
-    compute->device_interface.flush(queue, &flushed_frame, nullptr, nullptr);
-
-    compute->device_interface.wait_idle(queue);
-
-    gpu_array_map(compute, queue, nanovdb_gpu_array, nanovdb_array);
-    gpu_array_map(compute, queue, flat_range_gpu_array, flat_range_array);
-
-
-
-    gpu_array_destroy(compute, queue, nanovdb_gpu_array);
-    gpu_array_destroy(compute, queue, flat_range_gpu_array);
 
     for (pnanovdb_uint32_t idx = 0u; idx < 6u; idx++)
     {

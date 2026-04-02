@@ -69,9 +69,6 @@ void voxelbvh_test()
     auto voxelbvh_ctx = voxel_bvh.create_context(&compute, queue);
 
 #if 0
-    voxel_bvh.voxelbvh_from_gaussians_file(&compute, queue, voxelbvh_ctx, "./data/splats.npz");
-#endif
-#if 0
     pnanovdb_compute_array_t* nanovdb_arr = compute.load_nanovdb("./data/dragon.nvdb");
 
     pnanovdb_compute_array_t* node_mask_arr =
@@ -97,6 +94,8 @@ void voxelbvh_test()
     compute.destroy_array(nanovdb_arr);
 #endif
 
+#if 0
+    uint64_t range_count = 16u * 1024u;
     uint64_t ijkl_count = 16u * 1024u;
     pnanovdb_compute_array_t* ijkl_array = compute.create_array(8u, ijkl_count, nullptr);
     pnanovdb_compute_array_t* range_array = compute.create_array(8u, ijkl_count, nullptr);
@@ -133,6 +132,17 @@ void voxelbvh_test()
         }
         mapped_range[idx] = uint64_t(idx) | (uint64_t(idx + 1u) << 32u);
     }
+#else
+    pnanovdb_compute_array_t* ijkl_array = nullptr;
+    pnanovdb_compute_array_t* prim_id_array = nullptr;
+    pnanovdb_compute_array_t* range_array = nullptr;
+    voxel_bvh.voxelbvh_from_gaussians_file(&compute, queue, voxelbvh_ctx, "./data/splats.npz", &ijkl_array, &prim_id_array, &range_array);
+
+    uint64_t range_count = range_array->element_count;
+    uint64_t ijkl_count = ijkl_array->element_count;
+    uint64_t* mapped_ijkl = (uint64_t*)compute.map_array(ijkl_array);
+    uint64_t* mapped_range = (uint64_t*)compute.map_array(range_array);
+#endif
 
     pnanovdb_compute_array_t* built_nanovdb_array = nullptr;
     pnanovdb_compute_array_t* built_flat_range_array = nullptr;
@@ -276,67 +286,73 @@ void voxelbvh_test()
     uint64_t list_mismatch_count = 0llu;
     uint64_t collision_count = 0llu;
     pnanovdb_address_t addr_old = {};
-    for (uint64_t idx = 0u; idx < ijkl_count; idx++)
+    for (uint64_t range_idx = 0u; range_idx < range_count; range_idx++)
     {
-        uint64_t ijkl_raw = mapped_ijkl[idx];
-        pnanovdb_coord_t ijk = { int(ijkl_raw >> 48u) & 0xFFFF, int(ijkl_raw >> 32u) & 0xFFFF,
-                                 int(ijkl_raw >> 16u) & 0xFFFF };
-
-        // apply mask to go directly to expected voxel/tile
-        int l = int(ijkl_raw) & 0xFFFF;
-        int lmask = ~((1 << l) - 1);
-        ijk.x &= lmask;
-        ijk.y &= lmask;
-        ijk.z &= lmask;
-
-        pnanovdb_uint32_t level = 0u;
-        pnanovdb_address_t addr = pnanovdb_readaccessor_get_value_address_and_level(
-            grid_type, buf, PNANOVDB_REF(acc), PNANOVDB_REF(ijk), PNANOVDB_REF(level));
-        pnanovdb_int64_t val = pnanovdb_read_int64(buf, addr);
-        if ((val & (1llu << (ijkl_raw & 0xFFFF))) != 0u)
+        uint64_t range = mapped_range[range_idx];
+        uint32_t range_begin = uint32_t(range);
+        uint32_t range_end = uint32_t(range >> 32u);
+        for (uint32_t ijkl_idx = range_begin; ijkl_idx < range_end; ijkl_idx++)
         {
-            val_pass_count++;
-        }
+            uint64_t ijkl_raw = mapped_ijkl[ijkl_idx];
+            pnanovdb_coord_t ijk = { int(ijkl_raw >> 48u) & 0xFFFF, int(ijkl_raw >> 32u) & 0xFFFF,
+                                        int(ijkl_raw >> 16u) & 0xFFFF };
 
-        uint active_lmask = uint(val & 0xFFFF);
-        pnanovdb_uint32_t list_begin_idx = pnanovdb_uint32_t(val >> 32u);
-        pnanovdb_uint32_t list_countbits = pnanovdb_uint32_countbits(active_lmask & ~lmask);
-        pnanovdb_uint32_t list_idx = list_begin_idx + list_countbits;
-        uint64_t range_val = range_flat_ptr[list_idx];
-        if (list_countbits != 0u)
-        {
-            collision_count++;
-        }
-        if (range_val != mapped_range[idx])
-        {
-            if (list_mismatch_count < 32u)
+            // apply mask to go directly to expected voxel/tile
+            int l = int(ijkl_raw) & 0xFFFF;
+            int lmask = ~((1 << l) - 1);
+            ijk.x &= lmask;
+            ijk.y &= lmask;
+            ijk.z &= lmask;
+
+            pnanovdb_uint32_t level = 0u;
+            pnanovdb_address_t addr = pnanovdb_readaccessor_get_value_address_and_level(
+                grid_type, buf, PNANOVDB_REF(acc), PNANOVDB_REF(ijk), PNANOVDB_REF(level));
+            pnanovdb_int64_t val = pnanovdb_read_int64(buf, addr);
+            if ((val & (1llu << (ijkl_raw & 0xFFFF))) != 0u)
             {
-                printf("range_val(%u,%u) vs idx(%u,%d) list_countbits(%u) l(%u) ~lmask(0x%x)\n",
-                    int(range_val >> 32u), int(range_val),
-                    int(mapped_range[idx] >> 32u), int(mapped_range[idx]),
-                    list_countbits, l, ~lmask);
+                val_pass_count++;
             }
-            list_mismatch_count++;
-        }
 
-        if (addr.byte_offset != addr_old.byte_offset)
-        {
-            unique_count++;
-        }
-        if (level == 0u)
-        {
-            if (idx < 64u)
+            uint active_lmask = uint(val & 0xFFFF);
+            pnanovdb_uint32_t list_begin_idx = pnanovdb_uint32_t(val >> 32u);
+            pnanovdb_uint32_t list_countbits = pnanovdb_uint32_countbits(active_lmask & ~lmask);
+            pnanovdb_uint32_t list_idx = list_begin_idx + list_countbits;
+            uint64_t range_val = range_flat_ptr[list_idx];
+            if (list_countbits != 0u)
             {
-                pnanovdb_coord_t leaf_ijk = pnanovdb_leaf_get_bbox_min(buf, acc.leaf);
-                printf("leaf ijk(%d,%d,%d) vs point ijk(%d,%d,%d) val(%d, 0x%x)\n", leaf_ijk.x, leaf_ijk.y, leaf_ijk.z,
-                       ijk.x, ijk.y, ijk.z, uint32_t(val >> 32u), uint32_t(val));
+                collision_count++;
             }
+            if (range_val != range)
+            {
+                if (list_mismatch_count < 32u)
+                {
+                    printf("range_val(%u,%u) vs idx(%u,%d) list_countbits(%u) l(%u) ~lmask(0x%x)\n",
+                        int(range_val >> 32u), int(range_val),
+                        int(range >> 32u), int(range),
+                        list_countbits, l, ~lmask);
+                }
+                list_mismatch_count++;
+            }
+
+            if (addr.byte_offset != addr_old.byte_offset)
+            {
+                unique_count++;
+            }
+            if (level == 0u)
+            {
+                if (range_idx < 64u)
+                {
+                    pnanovdb_coord_t leaf_ijk = pnanovdb_leaf_get_bbox_min(buf, acc.leaf);
+                    printf("leaf ijk(%d,%d,%d) vs point ijk(%d,%d,%d) val(%d, 0x%x)\n", leaf_ijk.x, leaf_ijk.y, leaf_ijk.z,
+                            ijk.x, ijk.y, ijk.z, uint32_t(val >> 32u), uint32_t(val));
+                }
+            }
+            else
+            {
+                not_leaf_count++;
+            }
+            addr_old = addr;
         }
-        else
-        {
-            not_leaf_count++;
-        }
-        addr_old = addr;
     }
 
     printf("grid_size(%zu) unique_count(%zu) val_pass_count(%zu) not_leaf_count(%zu)\n", grid_size, unique_count,
