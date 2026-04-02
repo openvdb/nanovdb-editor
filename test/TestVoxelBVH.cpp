@@ -299,6 +299,10 @@ void voxelbvh_test()
 
             // apply mask to go directly to expected voxel/tile
             int l = int(ijkl_raw) & 0xFFFF;
+            if (l == 65535)
+            {
+                continue;
+            }
             int lmask = ~((1 << l) - 1);
             ijk.x &= lmask;
             ijk.y &= lmask;

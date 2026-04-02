@@ -47,6 +47,10 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         int(ijkl_raw.x) >> 16,
         int(ijkl_raw.x << 16) >> 16
     );
+    if (ijkl.w == 65535)
+    {
+        return;
+    }
     // squash lsbs to zero for higher levels
     uint lmask = ~((1u << ijkl.w) - 1u);
     ijkl.xyz = ijkl.xyz & lmask;
