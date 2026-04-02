@@ -276,6 +276,7 @@ void voxelbvh_test()
     printf("node_counts: root(%u) upper(%u) lower(%u) leaf(%u)\n", root_tile_count, upper_count, lower_count, leaf_count);
     printf("bad node_counts: upper(%u) lower(%u) leaf(%u)\n", upper_count_bad, lower_count_bad, leaf_count_bad);
     printf("max_list_idx(%u) bit_count(%zu)\n", max_list_idx, bit_count);
+    printf("grid_size(%zu)\n", grid_size);
 
     pnanovdb_readaccessor_t acc;
     pnanovdb_readaccessor_init(PNANOVDB_REF(acc), root);
@@ -359,7 +360,7 @@ void voxelbvh_test()
         }
     }
 
-    printf("grid_size(%zu) unique_count(%zu) val_pass_count(%zu) not_leaf_count(%zu)\n", grid_size, unique_count,
+    printf("unique_count(%zu) val_pass_count(%zu) not_leaf_count(%zu)\n", unique_count,
            val_pass_count, not_leaf_count);
     printf("list_mismatch_count(%zu) collision_count(%zu)\n", list_mismatch_count, collision_count);
 
