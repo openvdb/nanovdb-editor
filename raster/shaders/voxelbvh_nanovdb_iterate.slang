@@ -87,7 +87,8 @@ void do_iteration(uint group_idx, uint thread_idx, inout user_state_t user_state
                             val_addr = pnanovdb_root_get_background_address(grid_type, buf, root);
                         }
 
-                        pnanovdb_coord_t ijk = {0, 0, 0};
+                        // send this to most negative space, in practice it will keep local offsets hitting the background
+                        pnanovdb_coord_t ijk = {0x80000000, 0x80000000, 0x80000000};
                         iterate_main(root.address, val_addr, 4u, thread_idx, ijk, user_state);
                     }
                     pnanovdb_uint32_t root_tile_count = pnanovdb_root_get_tile_count(buf, root);

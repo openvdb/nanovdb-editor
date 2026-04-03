@@ -39,6 +39,7 @@ pnanovdb_coord_t key_to_coord(pnanovdb_uint64_t key)
 groupshared uint s_types[256u];
 
 #include <workgroup_scan_uint64.slang>
+#include <workgroup_scan.slang>
 
 [shader("compute")][numthreads(256, 1, 1)]
 void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
@@ -177,6 +178,9 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                 {
                     pnanovdb_root_handle_t root = {uint64_t(chunk_idx) << 5u};
 
+                    pnanovdb_coord_t root_ijk = int3(0x7FFFFFFF, 0x7FFFFFFF, 0x7FFFFFFF);
+                    pnanovdb_coord_t root_ijk_max = int3(0x80000000, 0x80000000, 0x80000000);
+
                     pnanovdb_uint32_t count = pnanovdb_root_get_tile_count(buf, root);
                     for (uint tile_idx = thread_idx.x; tile_idx < count; tile_idx += 256u)
                     {
@@ -194,7 +198,32 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                             pnanovdb_coord_t ijk_max = ijk + int3(4095, 4095, 4095);
                             pnanovdb_upper_set_bbox_min(buf, child, ijk);
                             pnanovdb_upper_set_bbox_max(buf, child, ijk_max);
+
+                            root_ijk = min(root_ijk, ijk);
+                            root_ijk_max = max(root_ijk_max, ijk_max);
                         }
+                        // accumulate root bbox
+                        {
+                            pnanovdb_uint64_t key = pnanovdb_root_tile_get_key(buf, tile);
+                            pnanovdb_coord_t ijk = key_to_coord(key);
+                            pnanovdb_coord_t ijk_max = ijk + int3(4095, 4095, 4095);
+
+                            root_ijk = min(root_ijk, ijk);
+                            root_ijk_max = max(root_ijk_max, ijk_max);
+                        }
+                    }
+
+                    // set root bbox
+                    workgroup_reduce_min_int(thread_idx.x, root_ijk.x, root_ijk.x);
+                    workgroup_reduce_min_int(thread_idx.x, root_ijk.y, root_ijk.y);
+                    workgroup_reduce_min_int(thread_idx.x, root_ijk.z, root_ijk.z);
+                    workgroup_reduce_max_int(thread_idx.x, root_ijk_max.x, root_ijk_max.x);
+                    workgroup_reduce_max_int(thread_idx.x, root_ijk_max.y, root_ijk_max.y);
+                    workgroup_reduce_max_int(thread_idx.x, root_ijk_max.z, root_ijk_max.z);
+                    if (thread_idx.x == 0u)
+                    {
+                        pnanovdb_root_set_bbox_min(buf, root, root_ijk);
+                        pnanovdb_root_set_bbox_max(buf, root, root_ijk_max);
                     }
                 }
                 else if (type == 2u)

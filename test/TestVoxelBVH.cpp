@@ -287,6 +287,8 @@ void voxelbvh_test()
     uint64_t list_mismatch_count = 0llu;
     uint64_t collision_count = 0llu;
     uint32_t range_count_max = 0u;
+    uint32_t range_flat_count_max = 0u;
+    uint32_t range_flat_mask_max = 0u;
     pnanovdb_address_t addr_old = {};
     for (uint64_t range_idx = 0u; range_idx < range_count; range_idx++)
     {
@@ -347,6 +349,22 @@ void voxelbvh_test()
                 list_mismatch_count++;
             }
 
+            pnanovdb_uint32_t range_flat_count = 0u;
+            pnanovdb_uint32_t list_flat_countbits = pnanovdb_uint32_countbits(active_lmask & 0xFFFF);
+            for (pnanovdb_uint32_t sub_idx = 0u; sub_idx < list_flat_countbits; sub_idx++)
+            {
+                uint64_t range_flat_val = range_flat_ptr[list_begin_idx + sub_idx];
+                uint32_t range_flat_begin = uint32_t(range_flat_val);
+                uint32_t range_flat_end = uint32_t(range_flat_val >> 32u);
+                range_flat_count += range_flat_end - range_flat_begin;
+
+            }
+            if (range_flat_count > range_flat_count_max)
+            {
+                range_flat_count_max = range_flat_count;
+                range_flat_mask_max = active_lmask;
+            }
+
             if (addr.byte_offset != addr_old.byte_offset)
             {
                 unique_count++;
@@ -370,8 +388,8 @@ void voxelbvh_test()
 
     printf("unique_count(%zu) val_pass_count(%zu) not_leaf_count(%zu)\n", unique_count,
            val_pass_count, not_leaf_count);
-    printf("list_mismatch_count(%zu) collision_count(%zu) range_count_max(%d)\n",
-           list_mismatch_count, collision_count, range_count_max);
+    printf("list_mismatch_count(%zu) collision_count(%zu) range_count_max(%d) range_flat_count_max(%d,0x%x)\n",
+           list_mismatch_count, collision_count, range_count_max, range_flat_count_max, range_flat_mask_max);
 
     // print out some range_flat values
     for (uint64_t idx = 0u; idx < 64u; idx++)
@@ -384,6 +402,9 @@ void voxelbvh_test()
 
     compute.destroy_array(ijkl_array);
     compute.destroy_array(range_array);
+
+    // save NanoVDB out to disk
+    compute.save_nanovdb(built_nanovdb_array, "./data/voxelbvh.nvdb");
 
     compute.destroy_array(built_nanovdb_array);
     compute.destroy_array(built_flat_range_array);
