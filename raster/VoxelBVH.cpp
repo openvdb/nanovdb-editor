@@ -1201,7 +1201,7 @@ static void nanovdb_append_metadata(const pnanovdb_compute_t* compute,
     memcpy(buf.data, src_buf.data, src_grid_size);
 
     // add metadata headers
-    pnanovdb_grid_set_blind_metadata_offset(buf, grid, src_grid_size);
+    pnanovdb_grid_set_blind_metadata_offset(buf, grid, src_grid_size - grid.address.byte_offset);
     pnanovdb_grid_set_blind_metadata_count(buf, grid, metadata_count);
 
     pnanovdb_address_t meta_addr = { src_grid_size + PNANOVDB_GRIDBLINDMETADATA_SIZE * metadata_count };
@@ -1209,9 +1209,12 @@ static void nanovdb_append_metadata(const pnanovdb_compute_t* compute,
     {
         pnanovdb_gridblindmetadata_handle_t meta = pnanovdb_grid_get_gridblindmetadata(buf, grid, metadata_idx);
 
-        pnanovdb_gridblindmetadata_set_data_offset(buf, meta, pnanovdb_address_diff(meta.address, grid.address));
+        pnanovdb_gridblindmetadata_set_data_offset(buf, meta, pnanovdb_address_diff(meta_addr, meta.address));
         pnanovdb_gridblindmetadata_set_value_count(buf, meta, metadata_arrays[metadata_idx]->element_count);
         pnanovdb_gridblindmetadata_set_value_size(buf, meta, metadata_arrays[metadata_idx]->element_size);
+
+        memcpy(((uint8_t*)buf.data) + meta_addr.byte_offset, metadata_arrays[metadata_idx]->data,
+               metadata_arrays[metadata_idx]->element_count * metadata_arrays[metadata_idx]->element_size);
 
         meta_addr = pnanovdb_address_offset64(
             meta_addr, metadata_arrays[metadata_idx]->element_size * metadata_arrays[metadata_idx]->element_count);

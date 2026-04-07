@@ -436,6 +436,36 @@ void voxelbvh_test()
     pnanovdb_compute_array_t* nanovdb_meta = nullptr;
     voxel_bvh.nanovdb_append_metadata(&compute, built_nanovdb_array, &nanovdb_meta, metadata_arrays, 8u);
 
+    // check metadata
+    {
+        buf = pnanovdb_make_buf(
+            (uint32_t*)nanovdb_meta->data, nanovdb_meta->element_size * nanovdb_meta->element_count / 4u);
+
+        for (uint32_t list_begin_idx = 0u; list_begin_idx < 32u; list_begin_idx++)
+        {
+            pnanovdb_address_t range_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 0u);
+            pnanovdb_uint64_t range =
+                pnanovdb_read_uint64(buf, pnanovdb_address_offset_product(range_addr, 8u, list_begin_idx));
+            uint range_begin = uint(range);
+            uint range_end = uint(range >> 32u);
+            printf("list_begin_idx[%u] range_addr(%zu) range(%u,%u) ", list_begin_idx, range_addr.byte_offset,
+                   range_begin, range_end);
+            if (range_begin < range_end)
+            {
+                pnanovdb_address_t prim_id_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
+                pnanovdb_uint32_t prim_id =
+                    pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, range_begin));
+
+                pnanovdb_address_t sh0_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 6u);
+                pnanovdb_vec3_t sh0 = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(sh0_addr, 12u, prim_id));
+
+                printf("prim_id_addr(%zu) prim_id(%u) sh0_addr(%zu) sh0(%f,%f,%f)", prim_id_addr.byte_offset, prim_id,
+                       sh0_addr.byte_offset, sh0.x, sh0.y, sh0.z);
+            }
+            printf("\n");
+        }
+    }
+
     // save NanoVDB out to disk
     compute.save_nanovdb(nanovdb_meta, "./data/voxelbvh.nvdb");
 
