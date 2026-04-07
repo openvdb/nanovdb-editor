@@ -411,6 +411,12 @@ void voxelbvh_test()
     // save NanoVDB out to disk
     compute.save_nanovdb(nanovdb_meta, "./data/voxelbvh.nvdb");
 
+    compute.destroy_array(nanovdb_meta);
+    for (uint32_t idx = 0u; idx < 6u; idx++)
+    {
+        compute.destroy_array(gaussian_arrays[idx]);
+    }
+
     compute.destroy_array(built_nanovdb_array);
     compute.destroy_array(built_flat_range_array);
 
