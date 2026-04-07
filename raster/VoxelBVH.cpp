@@ -152,13 +152,13 @@ static void destroy_context(const pnanovdb_compute_t* compute,
     delete ctx;
 }
 
-void voxelbvh_generate_node_mask(const pnanovdb_compute_t* compute,
-                                 pnanovdb_compute_queue_t* queue,
-                                 pnanovdb_voxelbvh_context_t* voxelbvh_context,
-                                 pnanovdb_compute_buffer_t* nanovdb_inout,
-                                 pnanovdb_uint64_t nanovdb_word_count,
-                                 pnanovdb_compute_buffer_t* node_mask_out,
-                                 pnanovdb_uint64_t node_mask_uint64_count)
+void nanovdb_generate_node_mask(const pnanovdb_compute_t* compute,
+                                pnanovdb_compute_queue_t* queue,
+                                pnanovdb_voxelbvh_context_t* voxelbvh_context,
+                                pnanovdb_compute_buffer_t* nanovdb_inout,
+                                pnanovdb_uint64_t nanovdb_word_count,
+                                pnanovdb_compute_buffer_t* node_mask_out,
+                                pnanovdb_uint64_t node_mask_uint64_count)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -219,10 +219,10 @@ void voxelbvh_generate_node_mask(const pnanovdb_compute_t* compute,
     compute_interface->destroy_buffer(context, constant_buffer);
 }
 
-pnanovdb_compute_array_t* voxelbvh_generate_node_mask_array(const pnanovdb_compute_t* compute,
-                                                            pnanovdb_compute_queue_t* queue,
-                                                            pnanovdb_voxelbvh_context_t* voxelbvh_context,
-                                                            pnanovdb_compute_array_t* nanovdb_array)
+static pnanovdb_compute_array_t* nanovdb_generate_node_mask_array(const pnanovdb_compute_t* compute,
+                                                                  pnanovdb_compute_queue_t* queue,
+                                                                  pnanovdb_voxelbvh_context_t* voxelbvh_context,
+                                                                  pnanovdb_compute_array_t* nanovdb_array)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -243,8 +243,8 @@ pnanovdb_compute_array_t* voxelbvh_generate_node_mask_array(const pnanovdb_compu
     gpu_array_upload(compute, queue, nanovdb_gpu_array, nanovdb_array);
     gpu_array_alloc_device(compute, queue, node_mask_gpu_array, node_mask_array);
 
-    voxelbvh_generate_node_mask(compute, queue, voxelbvh_context, nanovdb_gpu_array->device_buffer, nanovdb_word_count,
-                                node_mask_gpu_array->device_buffer, node_mask_uint64_count);
+    nanovdb_generate_node_mask(compute, queue, voxelbvh_context, nanovdb_gpu_array->device_buffer, nanovdb_word_count,
+                               node_mask_gpu_array->device_buffer, node_mask_uint64_count);
 
     gpu_array_readback(compute, queue, node_mask_gpu_array, node_mask_array);
 
@@ -261,11 +261,11 @@ pnanovdb_compute_array_t* voxelbvh_generate_node_mask_array(const pnanovdb_compu
     return node_mask_array;
 }
 
-void voxelbvh_nanovdb_clear(const pnanovdb_compute_t* compute,
-                            pnanovdb_compute_queue_t* queue,
-                            pnanovdb_voxelbvh_context_t* voxelbvh_context,
-                            pnanovdb_compute_buffer_t* nanovdb_inout,
-                            pnanovdb_uint64_t nanovdb_word_count)
+static void nanovdb_clear(const pnanovdb_compute_t* compute,
+                          pnanovdb_compute_queue_t* queue,
+                          pnanovdb_voxelbvh_context_t* voxelbvh_context,
+                          pnanovdb_compute_buffer_t* nanovdb_inout,
+                          pnanovdb_uint64_t nanovdb_word_count)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -310,13 +310,13 @@ void voxelbvh_nanovdb_clear(const pnanovdb_compute_t* compute,
     compute_interface->destroy_buffer(context, constant_buffer);
 }
 
-void voxelbvh_nanovdb_init(const pnanovdb_compute_t* compute,
-                           pnanovdb_compute_queue_t* queue,
-                           pnanovdb_voxelbvh_context_t* voxelbvh_context,
-                           pnanovdb_compute_buffer_t* nanovdb_inout,
-                           pnanovdb_uint64_t nanovdb_word_count,
-                           const pnanovdb_coord_t* root_tile_coords,
-                           pnanovdb_uint32_t root_tile_count)
+static void nanovdb_init(const pnanovdb_compute_t* compute,
+                         pnanovdb_compute_queue_t* queue,
+                         pnanovdb_voxelbvh_context_t* voxelbvh_context,
+                         pnanovdb_compute_buffer_t* nanovdb_inout,
+                         pnanovdb_uint64_t nanovdb_word_count,
+                         const pnanovdb_coord_t* root_tile_coords,
+                         pnanovdb_uint32_t root_tile_count)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -399,7 +399,7 @@ void voxelbvh_nanovdb_init(const pnanovdb_compute_t* compute,
         compute_interface->register_buffer_as_transient(context, nanovdb_inout);
 
     // clear buffer before initialization, to ensure everything starts 0
-    voxelbvh_nanovdb_clear(compute, queue, voxelbvh_context, nanovdb_inout, nanovdb_word_count);
+    nanovdb_clear(compute, queue, voxelbvh_context, nanovdb_inout, nanovdb_word_count);
 
     // voxelbvh_nanovdb_init.slang
     {
@@ -414,11 +414,11 @@ void voxelbvh_nanovdb_init(const pnanovdb_compute_t* compute,
     }
 }
 
-void voxelbvh_nanovdb_add_nodes(const pnanovdb_compute_t* compute,
-                                pnanovdb_compute_queue_t* queue,
-                                pnanovdb_voxelbvh_context_t* voxelbvh_context,
-                                pnanovdb_compute_buffer_t* nanovdb_inout,
-                                pnanovdb_uint64_t nanovdb_word_count)
+static void nanovdb_add_nodes(const pnanovdb_compute_t* compute,
+                              pnanovdb_compute_queue_t* queue,
+                              pnanovdb_voxelbvh_context_t* voxelbvh_context,
+                              pnanovdb_compute_buffer_t* nanovdb_inout,
+                              pnanovdb_uint64_t nanovdb_word_count)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -437,7 +437,7 @@ void voxelbvh_nanovdb_add_nodes(const pnanovdb_compute_t* compute,
     pnanovdb_compute_buffer_t* node_mask_buffer =
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
 
-    voxelbvh_generate_node_mask(
+    nanovdb_generate_node_mask(
         compute, queue, voxelbvh_context, nanovdb_inout, nanovdb_word_count, node_mask_buffer, node_mask_uint64_count);
 
     // allocate workgroup counters
@@ -521,17 +521,17 @@ void voxelbvh_nanovdb_add_nodes(const pnanovdb_compute_t* compute,
     compute_interface->destroy_buffer(context, constant_buffer);
 }
 
-void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* compute,
-                                                pnanovdb_compute_queue_t* queue,
-                                                pnanovdb_voxelbvh_context_t* voxelbvh_context,
-                                                pnanovdb_compute_buffer_t* nanovdb_inout,
-                                                pnanovdb_uint64_t nanovdb_word_count,
-                                                pnanovdb_compute_buffer_t* range_flat_inout,
-                                                pnanovdb_uint64_t range_flat_count,
-                                                pnanovdb_compute_buffer_t* ijkl_in,
-                                                pnanovdb_compute_buffer_t* range_in,
-                                                pnanovdb_uint64_t ijkl_count,
-                                                pnanovdb_uint64_t range_count)
+static void nanovdb_add_nodes_from_ijkl_buffer(const pnanovdb_compute_t* compute,
+                                               pnanovdb_compute_queue_t* queue,
+                                               pnanovdb_voxelbvh_context_t* voxelbvh_context,
+                                               pnanovdb_compute_buffer_t* nanovdb_inout,
+                                               pnanovdb_uint64_t nanovdb_word_count,
+                                               pnanovdb_compute_buffer_t* range_flat_inout,
+                                               pnanovdb_uint64_t range_flat_count,
+                                               pnanovdb_compute_buffer_t* ijkl_in,
+                                               pnanovdb_compute_buffer_t* range_in,
+                                               pnanovdb_uint64_t ijkl_count,
+                                               pnanovdb_uint64_t range_count)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -552,7 +552,7 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
 
     // clear scratch buffer for now
-    voxelbvh_nanovdb_clear(compute, queue, voxelbvh_context, scratch_buffer, nanovdb_word_count);
+    nanovdb_clear(compute, queue, voxelbvh_context, scratch_buffer, nanovdb_word_count);
 
     buf_desc.size_in_bytes = 8u * 256u * 2u;
     pnanovdb_compute_buffer_t* workgroup_counter_buffer =
@@ -621,7 +621,7 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
             break;
         }
 
-        voxelbvh_nanovdb_add_nodes(compute, queue, voxelbvh_context, nanovdb_inout, nanovdb_word_count);
+        nanovdb_add_nodes(compute, queue, voxelbvh_context, nanovdb_inout, nanovdb_word_count);
     }
 
     // set grid values to form level masks
@@ -648,8 +648,8 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
         buf_desc.size_in_bytes = node_mask_uint64_count * 8u;
         node_mask_buffer = compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
 
-        voxelbvh_generate_node_mask(compute, queue, voxelbvh_context, nanovdb_inout, nanovdb_word_count,
-                                    node_mask_buffer, node_mask_uint64_count);
+        nanovdb_generate_node_mask(compute, queue, voxelbvh_context, nanovdb_inout, nanovdb_word_count,
+                                   node_mask_buffer, node_mask_uint64_count);
     }
     pnanovdb_compute_buffer_transient_t* node_mask_transient =
         compute_interface->register_buffer_as_transient(context, node_mask_buffer);
@@ -775,13 +775,13 @@ void voxelbvh_nanovdb_add_nodes_from_key_buffer(const pnanovdb_compute_t* comput
     compute_interface->destroy_buffer(context, workgroup_counter_buffer);
 }
 
-void voxelbvh_nanovdb_add_nodes_from_key_array(const pnanovdb_compute_t* compute,
-                                               pnanovdb_compute_queue_t* queue,
-                                               pnanovdb_voxelbvh_context_t* voxelbvh_context,
-                                               pnanovdb_compute_array_t** out_nanovdb,
-                                               pnanovdb_compute_array_t** out_flat_range,
-                                               pnanovdb_compute_array_t* ijkl_in,
-                                               pnanovdb_compute_array_t* range_in)
+static void nanovdb_add_nodes_from_ijkl_array(const pnanovdb_compute_t* compute,
+                                              pnanovdb_compute_queue_t* queue,
+                                              pnanovdb_voxelbvh_context_t* voxelbvh_context,
+                                              pnanovdb_compute_array_t** out_nanovdb,
+                                              pnanovdb_compute_array_t** out_flat_range,
+                                              pnanovdb_compute_array_t* ijkl_in,
+                                              pnanovdb_compute_array_t* range_in)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -810,13 +810,13 @@ void voxelbvh_nanovdb_add_nodes_from_key_array(const pnanovdb_compute_t* compute
     gpu_array_alloc_device(compute, queue, nanovdb_gpu_array, nanovdb_array);
     gpu_array_alloc_device(compute, queue, flat_range_gpu_array, flat_range_array);
 
-    voxelbvh_nanovdb_init(
+    nanovdb_init(
         compute, queue, voxelbvh_context, nanovdb_gpu_array->device_buffer, 2u * nanovdb_uint64_count, root_coords, 1u);
 
-    voxelbvh_nanovdb_add_nodes_from_key_buffer(compute, queue, voxelbvh_context, nanovdb_gpu_array->device_buffer,
-                                               2u * nanovdb_uint64_count, flat_range_gpu_array->device_buffer,
-                                               nanovdb_uint64_count, ijkl_gpu_array->device_buffer,
-                                               range_gpu_array->device_buffer, ijkl_count, range_count);
+    nanovdb_add_nodes_from_ijkl_buffer(compute, queue, voxelbvh_context, nanovdb_gpu_array->device_buffer,
+                                       2u * nanovdb_uint64_count, flat_range_gpu_array->device_buffer,
+                                       nanovdb_uint64_count, ijkl_gpu_array->device_buffer,
+                                       range_gpu_array->device_buffer, ijkl_count, range_count);
 
     gpu_array_readback(compute, queue, nanovdb_gpu_array, nanovdb_array);
     gpu_array_readback(compute, queue, flat_range_gpu_array, flat_range_array);
@@ -838,16 +838,16 @@ void voxelbvh_nanovdb_add_nodes_from_key_array(const pnanovdb_compute_t* compute
     *out_flat_range = flat_range_array;
 }
 
-void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
-                             pnanovdb_compute_queue_t* queue,
-                             pnanovdb_voxelbvh_context_t* voxelbvh_context,
-                             pnanovdb_compute_buffer_t** gaussian_array_buffers, // means, opacities, quats, scales,
-                                                                                 // sh0, shn
-                             pnanovdb_uint32_t gaussian_array_count,
-                             pnanovdb_uint64_t gaussian_count,
-                             pnanovdb_compute_buffer_t* ijkl_out,
-                             pnanovdb_compute_buffer_t* prim_id_out,
-                             pnanovdb_compute_buffer_t* range_out)
+static void ijkl_from_gaussians(const pnanovdb_compute_t* compute,
+                                pnanovdb_compute_queue_t* queue,
+                                pnanovdb_voxelbvh_context_t* voxelbvh_context,
+                                pnanovdb_compute_buffer_t** gaussian_array_buffers, // means, opacities, quats, scales,
+                                                                                    // sh0, shn
+                                pnanovdb_uint32_t gaussian_array_count,
+                                pnanovdb_uint64_t gaussian_count,
+                                pnanovdb_compute_buffer_t* ijkl_out,
+                                pnanovdb_compute_buffer_t* prim_id_out,
+                                pnanovdb_compute_buffer_t* range_out)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -907,12 +907,12 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
     buf_desc.size_in_bytes = 6u * 4u;
     pnanovdb_compute_buffer_t* bbox_reduce2_buffer =
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
-    //buf_desc.size_in_bytes = 8u * constants.voxel_count;
-    //pnanovdb_compute_buffer_t* keys_buffer =
-    //    compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
-    //buf_desc.size_in_bytes = 4u * constants.voxel_count;
-    //pnanovdb_compute_buffer_t* bbox_ids_buffer =
-    //    compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+    // buf_desc.size_in_bytes = 8u * constants.voxel_count;
+    // pnanovdb_compute_buffer_t* keys_buffer =
+    //     compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+    // buf_desc.size_in_bytes = 4u * constants.voxel_count;
+    // pnanovdb_compute_buffer_t* bbox_ids_buffer =
+    //     compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
 
     pnanovdb_compute_buffer_transient_t* bbox_reduce1_transient =
         compute_interface->register_buffer_as_transient(context, bbox_reduce1_buffer);
@@ -966,8 +966,8 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
     // sort ijk-level requests to bring requests together
     // radix sort
     {
-        ctx->parallel_primitives.radix_sort_key64(compute, queue, ctx->parallel_primitives_ctx, ijkl_out,
-                                                  prim_id_out, constants.voxel_count, constants.voxel_count, 64u);
+        ctx->parallel_primitives.radix_sort_key64(compute, queue, ctx->parallel_primitives_ctx, ijkl_out, prim_id_out,
+                                                  constants.voxel_count, constants.voxel_count, 64u);
     }
 
     buf_desc.size_in_bytes = 4u * constants.voxel_count;
@@ -975,9 +975,9 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
     pnanovdb_compute_buffer_t* range_scan_buffer =
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
-    //buf_desc.size_in_bytes = 2u * 4u * constants.voxel_count;
-    //pnanovdb_compute_buffer_t* range_headers_buffer =
-    //    compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+    // buf_desc.size_in_bytes = 2u * 4u * constants.voxel_count;
+    // pnanovdb_compute_buffer_t* range_headers_buffer =
+    //     compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
 
     pnanovdb_compute_buffer_transient_t* range_starts_transient =
         compute_interface->register_buffer_as_transient(context, range_starts_buffer);
@@ -1027,13 +1027,13 @@ void voxelbvh_from_gaussians(const pnanovdb_compute_t* compute,
     compute_interface->destroy_buffer(context, range_scan_buffer);
 }
 
-void voxelbvh_from_gaussians_file(const pnanovdb_compute_t* compute,
-                                  pnanovdb_compute_queue_t* queue,
-                                  pnanovdb_voxelbvh_context_t* voxelbvh_context,
-                                  const char* filename,
-                                  pnanovdb_compute_array_t** ijkl_out,
-                                  pnanovdb_compute_array_t** prim_id_out,
-                                  pnanovdb_compute_array_t** range_out)
+static void ijkl_from_gaussians_file(const pnanovdb_compute_t* compute,
+                                     pnanovdb_compute_queue_t* queue,
+                                     pnanovdb_voxelbvh_context_t* voxelbvh_context,
+                                     const char* filename,
+                                     pnanovdb_compute_array_t** ijkl_out,
+                                     pnanovdb_compute_array_t** prim_id_out,
+                                     pnanovdb_compute_array_t** range_out)
 {
 
     pnanovdb_fileformat_t fileformat = {};
@@ -1047,7 +1047,7 @@ void voxelbvh_from_gaussians_file(const pnanovdb_compute_t* compute,
     {
         pnanovdb_uint64_t gaussian_count = arrays_gaussian[1]->element_count;
 
-        pnanovdb_uint64_t voxel_count = 8u* gaussian_count;
+        pnanovdb_uint64_t voxel_count = 8u * gaussian_count;
 
         pnanovdb_compute_array_t* ijkl_array = compute->create_array(8u, voxel_count, nullptr);
         pnanovdb_compute_array_t* prim_id_array = compute->create_array(4u, voxel_count, nullptr);
@@ -1116,10 +1116,9 @@ void voxelbvh_from_gaussians_file(const pnanovdb_compute_t* compute,
             scales_gpu_array->device_buffer, sh_0_gpu_array->device_buffer,      sh_n_gpu_array->device_buffer
         };
 
-        voxelbvh_from_gaussians(compute, queue, voxelbvh_context, gpu_buffers, 6u, gaussian_count,
-            ijkl_gpu_array->device_buffer,
-            prim_id_gpu_array->device_buffer,
-            range_gpu_array->device_buffer);
+        ijkl_from_gaussians(compute, queue, voxelbvh_context, gpu_buffers, 6u, gaussian_count,
+                            ijkl_gpu_array->device_buffer, prim_id_gpu_array->device_buffer,
+                            range_gpu_array->device_buffer);
 
         gpu_array_destroy(compute, queue, means_gpu_array);
         gpu_array_destroy(compute, queue, opacities_gpu_array);
@@ -1160,6 +1159,55 @@ void voxelbvh_from_gaussians_file(const pnanovdb_compute_t* compute,
     }
 }
 
+static void nanovdb_append_metadata(const pnanovdb_compute_t* compute,
+                                    pnanovdb_compute_array_t* nanovdb_in,
+                                    pnanovdb_compute_array_t** nanovdb_out,
+                                    const pnanovdb_compute_array_t** metadata_arrays,
+                                    pnanovdb_uint32_t metadata_count)
+{
+    pnanovdb_buf_t src_buf =
+        pnanovdb_make_buf((uint32_t*)nanovdb_in->data, nanovdb_in->element_size * nanovdb_in->element_count / 4u);
+    pnanovdb_grid_handle_t src_grid = {};
+    pnanovdb_uint64_t src_grid_size = pnanovdb_grid_get_grid_size(src_buf, src_grid);
+
+    pnanovdb_uint64_t total_size = src_grid_size;
+    for (pnanovdb_uint32_t metadata_idx = 0u; metadata_idx < metadata_count; metadata_idx++)
+    {
+        total_size += metadata_arrays[metadata_idx]->element_size * metadata_arrays[metadata_idx]->element_count;
+        total_size += PNANOVDB_GRIDBLINDMETADATA_SIZE;
+    }
+
+    pnanovdb_uint64_t nanovdb_uint64_count = (total_size + 7u) / 8u;
+    *nanovdb_out = compute->create_array(8u, nanovdb_uint64_count, nullptr);
+
+    pnanovdb_buf_t buf = pnanovdb_make_buf(
+        (uint32_t*)(*nanovdb_out)->data, (*nanovdb_out)->element_size * (*nanovdb_out)->element_count / 4u);
+    pnanovdb_grid_handle_t grid = {};
+    pnanovdb_uint64_t grid_size = pnanovdb_grid_get_grid_size(buf, grid);
+
+    // copy original grid
+    memcpy(buf.data, src_buf.data, src_grid_size);
+
+    // add metadata headers
+    pnanovdb_grid_set_blind_metadata_offset(buf, grid, src_grid_size);
+    pnanovdb_grid_set_blind_metadata_count(buf, grid, metadata_count);
+
+    pnanovdb_address_t meta_addr = { src_grid_size + PNANOVDB_GRIDBLINDMETADATA_SIZE * metadata_count };
+    for (pnanovdb_uint32_t metadata_idx = 0u; metadata_idx < metadata_count; metadata_idx++)
+    {
+        pnanovdb_gridblindmetadata_handle_t meta = pnanovdb_grid_get_gridblindmetadata(buf, grid, metadata_idx);
+
+        pnanovdb_gridblindmetadata_set_data_offset(buf, meta, pnanovdb_address_diff(meta.address, grid.address));
+        pnanovdb_gridblindmetadata_set_value_count(buf, meta, metadata_arrays[metadata_idx]->element_count);
+        pnanovdb_gridblindmetadata_set_value_size(buf, meta, metadata_arrays[metadata_idx]->element_size);
+
+        meta_addr = pnanovdb_address_offset64(
+            meta_addr, metadata_arrays[metadata_idx]->element_size * metadata_arrays[metadata_idx]->element_count);
+    }
+
+    pnanovdb_grid_set_grid_size(buf, grid, pnanovdb_address_diff(meta_addr, pnanovdb_address_null()));
+}
+
 }
 
 pnanovdb_voxelbvh_t* pnanovdb_get_voxelbvh()
@@ -1168,14 +1216,15 @@ pnanovdb_voxelbvh_t* pnanovdb_get_voxelbvh()
 
     iface.create_context = create_context;
     iface.destroy_context = destroy_context;
-    iface.voxelbvh_generate_node_mask = voxelbvh_generate_node_mask;
-    iface.voxelbvh_generate_node_mask_array = voxelbvh_generate_node_mask_array;
-    iface.voxelbvh_nanovdb_init = voxelbvh_nanovdb_init;
-    iface.voxelbvh_nanovdb_add_nodes = voxelbvh_nanovdb_add_nodes;
-    iface.voxelbvh_nanovdb_add_nodes_from_key_buffer = voxelbvh_nanovdb_add_nodes_from_key_buffer;
-    iface.voxelbvh_nanovdb_add_nodes_from_key_array = voxelbvh_nanovdb_add_nodes_from_key_array;
-    iface.voxelbvh_from_gaussians = voxelbvh_from_gaussians;
-    iface.voxelbvh_from_gaussians_file = voxelbvh_from_gaussians_file;
+    iface.nanovdb_generate_node_mask = nanovdb_generate_node_mask;
+    iface.nanovdb_generate_node_mask_array = nanovdb_generate_node_mask_array;
+    iface.nanovdb_init = nanovdb_init;
+    iface.nanovdb_add_nodes = nanovdb_add_nodes;
+    iface.nanovdb_add_nodes_from_ijkl_buffer = nanovdb_add_nodes_from_ijkl_buffer;
+    iface.nanovdb_add_nodes_from_ijkl_array = nanovdb_add_nodes_from_ijkl_array;
+    iface.ijkl_from_gaussians = ijkl_from_gaussians;
+    iface.ijkl_from_gaussians_file = ijkl_from_gaussians_file;
+    iface.nanovdb_append_metadata = nanovdb_append_metadata;
 
     return &iface;
 }

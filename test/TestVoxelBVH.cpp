@@ -136,7 +136,8 @@ void voxelbvh_test()
     pnanovdb_compute_array_t* ijkl_array = nullptr;
     pnanovdb_compute_array_t* prim_id_array = nullptr;
     pnanovdb_compute_array_t* range_array = nullptr;
-    voxel_bvh.voxelbvh_from_gaussians_file(&compute, queue, voxelbvh_ctx, "./data/splats.npz", &ijkl_array, &prim_id_array, &range_array);
+    voxel_bvh.ijkl_from_gaussians_file(
+        &compute, queue, voxelbvh_ctx, "./data/garden_eps2d03.ply", &ijkl_array, &prim_id_array, &range_array);
 
     uint64_t range_count = range_array->element_count;
     uint64_t ijkl_count = ijkl_array->element_count;
@@ -146,7 +147,7 @@ void voxelbvh_test()
 
     pnanovdb_compute_array_t* built_nanovdb_array = nullptr;
     pnanovdb_compute_array_t* built_flat_range_array = nullptr;
-    voxel_bvh.voxelbvh_nanovdb_add_nodes_from_key_array(
+    voxel_bvh.nanovdb_add_nodes_from_ijkl_array(
         &compute, queue, voxelbvh_ctx, &built_nanovdb_array, &built_flat_range_array, ijkl_array, range_array);
 
     pnanovdb_buf_t buf = pnanovdb_make_buf((uint32_t*)built_nanovdb_array->data,
@@ -225,7 +226,8 @@ void voxelbvh_test()
                             }
                             for (pnanovdb_uint32_t leaf_n = 0u; leaf_n < PNANOVDB_LEAF_TABLE_COUNT; leaf_n++)
                             {
-                                pnanovdb_address_t val_addr = pnanovdb_leaf_get_table_address(grid_type, buf, leaf, leaf_n);
+                                pnanovdb_address_t val_addr =
+                                    pnanovdb_leaf_get_table_address(grid_type, buf, leaf, leaf_n);
                                 pnanovdb_uint64_t val = pnanovdb_read_uint64(buf, val_addr);
                                 pnanovdb_uint32_t list_idx = pnanovdb_uint32_t(val >> 32u);
                                 if (list_idx > max_list_idx)
@@ -237,7 +239,8 @@ void voxelbvh_test()
                         }
                         else
                         {
-                            pnanovdb_address_t val_addr = pnanovdb_lower_get_table_address(grid_type, buf, lower, lower_n);
+                            pnanovdb_address_t val_addr =
+                                pnanovdb_lower_get_table_address(grid_type, buf, lower, lower_n);
                             pnanovdb_uint64_t val = pnanovdb_read_uint64(buf, val_addr);
                             pnanovdb_uint32_t list_idx = pnanovdb_uint32_t(val >> 32u);
                             if (list_idx > max_list_idx)
@@ -299,7 +302,7 @@ void voxelbvh_test()
         {
             uint64_t ijkl_raw = mapped_ijkl[ijkl_idx];
             pnanovdb_coord_t ijk = { int(ijkl_raw >> 48u) & 0xFFFF, int(ijkl_raw >> 32u) & 0xFFFF,
-                                        int(ijkl_raw >> 16u) & 0xFFFF };
+                                     int(ijkl_raw >> 16u) & 0xFFFF };
 
             // apply mask to go directly to expected voxel/tile
             int l = int(ijkl_raw) & 0xFFFF;
@@ -342,9 +345,8 @@ void voxelbvh_test()
                 if (list_mismatch_count < 32u)
                 {
                     printf("range_val(%u,%u) vs idx(%u,%d) list_countbits(%u) l(%u) ~lmask(0x%x)\n",
-                        int(range_val >> 32u), int(range_val),
-                        int(range >> 32u), int(range),
-                        list_countbits, l, ~lmask);
+                           int(range_val >> 32u), int(range_val), int(range >> 32u), int(range), list_countbits, l,
+                           ~lmask);
                 }
                 list_mismatch_count++;
             }
@@ -357,7 +359,6 @@ void voxelbvh_test()
                 uint32_t range_flat_begin = uint32_t(range_flat_val);
                 uint32_t range_flat_end = uint32_t(range_flat_val >> 32u);
                 range_flat_count += range_flat_end - range_flat_begin;
-
             }
             if (range_flat_count > range_flat_count_max)
             {
@@ -374,8 +375,8 @@ void voxelbvh_test()
                 if (range_idx < 64u)
                 {
                     pnanovdb_coord_t leaf_ijk = pnanovdb_leaf_get_bbox_min(buf, acc.leaf);
-                    printf("leaf ijk(%d,%d,%d) vs point ijk(%d,%d,%d) val(%d, 0x%x)\n", leaf_ijk.x, leaf_ijk.y, leaf_ijk.z,
-                            ijk.x, ijk.y, ijk.z, uint32_t(val >> 32u), uint32_t(val));
+                    printf("leaf ijk(%d,%d,%d) vs point ijk(%d,%d,%d) val(%d, 0x%x)\n", leaf_ijk.x, leaf_ijk.y,
+                           leaf_ijk.z, ijk.x, ijk.y, ijk.z, uint32_t(val >> 32u), uint32_t(val));
                 }
             }
             else
@@ -386,8 +387,7 @@ void voxelbvh_test()
         }
     }
 
-    printf("unique_count(%zu) val_pass_count(%zu) not_leaf_count(%zu)\n", unique_count,
-           val_pass_count, not_leaf_count);
+    printf("unique_count(%zu) val_pass_count(%zu) not_leaf_count(%zu)\n", unique_count, val_pass_count, not_leaf_count);
     printf("list_mismatch_count(%zu) collision_count(%zu) range_count_max(%d) range_flat_count_max(%d,0x%x)\n",
            list_mismatch_count, collision_count, range_count_max, range_flat_count_max, range_flat_mask_max);
 
