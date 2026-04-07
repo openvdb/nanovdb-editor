@@ -1033,7 +1033,9 @@ static void ijkl_from_gaussians_file(const pnanovdb_compute_t* compute,
                                      const char* filename,
                                      pnanovdb_compute_array_t** ijkl_out,
                                      pnanovdb_compute_array_t** prim_id_out,
-                                     pnanovdb_compute_array_t** range_out)
+                                     pnanovdb_compute_array_t** range_out,
+                                     pnanovdb_compute_array_t** gaussian_arrays_out,
+                                     pnanovdb_uint32_t gaussian_array_count)
 {
 
     pnanovdb_fileformat_t fileformat = {};
@@ -1150,11 +1152,21 @@ static void ijkl_from_gaussians_file(const pnanovdb_compute_t* compute,
         gpu_array_destroy(compute, queue, range_gpu_array);
     }
 
-    for (pnanovdb_uint32_t idx = 0u; idx < 6u; idx++)
+    if (gaussian_arrays_out && gaussian_array_count == 6u)
     {
-        if (arrays_gaussian[idx])
+        for (pnanovdb_uint32_t idx = 0u; idx < 6u; idx++)
         {
-            compute->destroy_array(arrays_gaussian[idx]);
+            gaussian_arrays_out[idx] = arrays_gaussian[idx];
+        }
+    }
+    else
+    {
+        for (pnanovdb_uint32_t idx = 0u; idx < 6u; idx++)
+        {
+            if (arrays_gaussian[idx])
+            {
+                compute->destroy_array(arrays_gaussian[idx]);
+            }
         }
     }
 }
@@ -1162,7 +1174,7 @@ static void ijkl_from_gaussians_file(const pnanovdb_compute_t* compute,
 static void nanovdb_append_metadata(const pnanovdb_compute_t* compute,
                                     pnanovdb_compute_array_t* nanovdb_in,
                                     pnanovdb_compute_array_t** nanovdb_out,
-                                    const pnanovdb_compute_array_t** metadata_arrays,
+                                    pnanovdb_compute_array_t** metadata_arrays,
                                     pnanovdb_uint32_t metadata_count)
 {
     pnanovdb_buf_t src_buf =

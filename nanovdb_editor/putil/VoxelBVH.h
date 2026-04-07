@@ -97,12 +97,14 @@ typedef struct pnanovdb_voxelbvh_t
                                                  const char* filename,
                                                  pnanovdb_compute_array_t** ijkl_out,
                                                  pnanovdb_compute_array_t** prim_id_out,
-                                                 pnanovdb_compute_array_t** range_out);
+                                                 pnanovdb_compute_array_t** range_out,
+                                                 pnanovdb_compute_array_t** gaussian_arrays_out,
+                                                 pnanovdb_uint32_t gaussian_array_count);
 
     void(PNANOVDB_ABI* nanovdb_append_metadata)(const pnanovdb_compute_t* compute,
                                                 pnanovdb_compute_array_t* nanovdb_in,
                                                 pnanovdb_compute_array_t** nanovdb_out,
-                                                const pnanovdb_compute_array_t** metadata_arrays,
+                                                pnanovdb_compute_array_t** metadata_arrays,
                                                 pnanovdb_uint32_t metadata_count);
 
 } pnanovdb_voxelbvh_t;
