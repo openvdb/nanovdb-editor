@@ -6,7 +6,7 @@ on:
       image_name:
         required: false
         type: string
-        default: nanovdb-editor-slang
+        default: nanovdb-editor_slang
       libs_artifact:
         required: true
         type: string

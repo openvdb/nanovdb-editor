@@ -87,7 +87,7 @@ jobs:
         image_tag="${slang_version}-ml28-v1"
         echo "slang_version=${slang_version}" >> "$GITHUB_OUTPUT"
         echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
-        echo "image_name=nanovdb-editor-slang" >> "$GITHUB_OUTPUT"
+        echo "image_name=nanovdb-editor_slang" >> "$GITHUB_OUTPUT"
         echo "Resolved Slang version: ${slang_version}"
         echo "Resolved Slang image tag: ${image_tag}"
 
