@@ -138,8 +138,8 @@ void voxelbvh_test()
     pnanovdb_compute_array_t* ijkl_array = nullptr;
     pnanovdb_compute_array_t* prim_id_array = nullptr;
     pnanovdb_compute_array_t* range_array = nullptr;
-    voxel_bvh.ijkl_from_gaussians_file(
-        &compute, queue, voxelbvh_ctx, "./data/garden_eps2d03.ply", &ijkl_array, &prim_id_array, &range_array, gaussian_arrays, 6u);
+    voxel_bvh.ijkl_from_gaussians_file(&compute, queue, voxelbvh_ctx, "./data/garden_eps2d03.ply", &ijkl_array,
+                                       &prim_id_array, &range_array, gaussian_arrays, 6u);
 
     uint64_t range_count = range_array->element_count;
     uint64_t ijkl_count = ijkl_array->element_count;
@@ -402,11 +402,39 @@ void voxelbvh_test()
         printf("range_flat[%zu] (%d, %d)\n", idx, range_begin, range_end);
     }
 
-    compute.destroy_array(ijkl_array);
-    compute.destroy_array(range_array);
+    // find first invalid key
+    uint64_t last_valid_key = ijkl_count;
+    for (uint64_t idx = 0u; idx < ijkl_count; idx++)
+    {
+        if ((mapped_ijkl[idx] & 0xFFFF) != 0xFFFF)
+        {
+            last_valid_key = idx;
+        }
+    }
+    // shrink prim_id array
+    prim_id_array->element_count = last_valid_key + 1u;
+
+    // find first invalid range
+    uint64_t last_valid_range = range_count;
+    for (uint64_t idx = 0u; idx < range_count; idx++)
+    {
+        if (mapped_range[idx] != 0u)
+        {
+            last_valid_range = idx;
+        }
+    }
+    // shrink ranges array
+    range_array->element_count = last_valid_range + 1u;
+
+    printf("Shrinking arrays prim_id(%zu vs %zu) range(%zu vs %zu)\n", prim_id_array->element_count, ijkl_count,
+           range_array->element_count, range_count);
+
+    pnanovdb_compute_array_t* metadata_arrays[8u] = { range_array,        prim_id_array,      gaussian_arrays[0],
+                                                      gaussian_arrays[1], gaussian_arrays[2], gaussian_arrays[3],
+                                                      gaussian_arrays[4], gaussian_arrays[5] };
 
     pnanovdb_compute_array_t* nanovdb_meta = nullptr;
-    voxel_bvh.nanovdb_append_metadata(&compute, built_nanovdb_array, &nanovdb_meta, gaussian_arrays, 6u);
+    voxel_bvh.nanovdb_append_metadata(&compute, built_nanovdb_array, &nanovdb_meta, metadata_arrays, 8u);
 
     // save NanoVDB out to disk
     compute.save_nanovdb(nanovdb_meta, "./data/voxelbvh.nvdb");
@@ -417,6 +445,9 @@ void voxelbvh_test()
         compute.destroy_array(gaussian_arrays[idx]);
     }
 
+    compute.destroy_array(ijkl_array);
+    compute.destroy_array(prim_id_array);
+    compute.destroy_array(range_array);
     compute.destroy_array(built_nanovdb_array);
     compute.destroy_array(built_flat_range_array);
 
