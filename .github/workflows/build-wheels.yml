@@ -84,7 +84,7 @@ jobs:
         print(match.group(1))
         PY
         )"
-        image_tag="${slang_version}-ml28-v2"
+        image_tag="${slang_version}-ml27"
         echo "slang_version=${slang_version}" >> "$GITHUB_OUTPUT"
         echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
         echo "image_name=nanovdb-editor_slang" >> "$GITHUB_OUTPUT"
@@ -541,8 +541,8 @@ jobs:
     name: Build Slang Runtime Libs
     runs-on: ubuntu-latest
     needs: [validate_version, resolve_slang_version, lookup_slang_image]
-    # Always prepare the reusable manylinux_2_28 Slang runtime image because the
-    # x86_64 manylinux_2_28 wheel row depends on these older-baseline libs.
+    # Always prepare the reusable Slang runtime image because the x86_64
+    # manylinux_2_27 wheel row depends on these older-baseline libs.
     if: ${{ !cancelled() && !failure() && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || needs.validate_version.outputs.version_valid == 'true') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.lookup_slang_image.outputs.exists != 'true' }}
     steps:
     - uses: actions/checkout@v4
@@ -750,7 +750,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - manylinux_tag: manylinux_2_28_x86_64
+          - manylinux_tag: manylinux_2_27_x86_64
             manylinux_image: quay.io/pypa/manylinux_2_28_x86_64:latest
             slang_build_from_source: true
             slang_manage_image: true
