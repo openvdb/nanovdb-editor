@@ -84,7 +84,7 @@ jobs:
         print(match.group(1))
         PY
         )"
-        image_tag="${slang_version}-ml28-v1"
+        image_tag="${slang_version}-ml28-v2"
         echo "slang_version=${slang_version}" >> "$GITHUB_OUTPUT"
         echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
         echo "image_name=nanovdb-editor_slang" >> "$GITHUB_OUTPUT"
@@ -678,7 +678,7 @@ jobs:
         for root in roots:
             if not root.exists():
                 continue
-            for pattern in ("libslang*.so*", "libglslang.so*", "libSPIRV.so*"):
+            for pattern in ("libslang*.so*", "libglslang.so*", "libSPIRV.so*", "libminiz.so*"):
                 for lib in sorted(root.rglob(pattern)):
                     if not lib.is_file():
                         continue
@@ -710,6 +710,9 @@ jobs:
             if not any(name.startswith("libSPIRV.so") for name in copied):
                 print("libslang-glslang is present but libSPIRV.so* is missing", file=sys.stderr)
                 raise SystemExit(1)
+        if not any(name.startswith("libminiz.so") for name in copied):
+            print("libminiz.so* was not found in built Slang libraries", file=sys.stderr)
+            raise SystemExit(1)
 
         print("Built Slang libraries:")
         for name in copied:
