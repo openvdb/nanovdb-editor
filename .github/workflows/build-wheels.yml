@@ -787,8 +787,28 @@ jobs:
         echo "Lookup result: ${{ needs.lookup_slang_image.outputs.exists }}"
         echo "Publish result: ${{ needs.publish_slang_image.result }}"
 
+    - name: Decide whether to build Linux x86_64 wheel
+      id: linux_x86_gate
+      shell: bash
+      env:
+        LOOKUP_EXISTS: ${{ needs.lookup_slang_image.outputs.exists }}
+        PUBLISH_RESULT: ${{ needs.publish_slang_image.result }}
+        EVENT_NAME: ${{ github.event_name }}
+        IS_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        MANYLINUX_TAG: ${{ matrix.manylinux_tag }}
+        SLANG_MANAGE_IMAGE: ${{ matrix.slang_manage_image || inputs.manage_slang_image }}
+        SLANG_BUILD_FROM_SOURCE: ${{ matrix.slang_build_from_source || inputs.linux_x86_build_slang_from_source }}
+      run: |
+        set -euo pipefail
+        should_build=true
+        if [[ "${SLANG_MANAGE_IMAGE}" == "true" && "${SLANG_BUILD_FROM_SOURCE}" == "true" && "${EVENT_NAME}" == "pull_request" && "${IS_FORK_PR}" == "true" && "${LOOKUP_EXISTS}" != "true" && "${PUBLISH_RESULT}" != "success" ]]; then
+          should_build=false
+          echo "Skipping ${MANYLINUX_TAG} on fork PR because the reusable Slang image is unavailable and publishing is disabled."
+        fi
+        echo "should_build=${should_build}" >> "$GITHUB_OUTPUT"
+
     - name: Reuse Slang image package
-      if: ${{ (matrix.slang_manage_image || inputs.manage_slang_image) && (matrix.slang_build_from_source || inputs.linux_x86_build_slang_from_source) && (needs.lookup_slang_image.outputs.exists == 'true' || needs.publish_slang_image.result == 'success') }}
+      if: ${{ steps.linux_x86_gate.outputs.should_build == 'true' && (matrix.slang_manage_image || inputs.manage_slang_image) && (matrix.slang_build_from_source || inputs.linux_x86_build_slang_from_source) && (needs.lookup_slang_image.outputs.exists == 'true' || needs.publish_slang_image.result == 'success') }}
       shell: bash
       env:
         GHCR_USER: ${{ secrets.GHCR_PUSH_USERNAME }}
@@ -835,6 +855,7 @@ jobs:
         fi
 
     - name: Build Linux x86_64 wheel
+      if: ${{ steps.linux_x86_gate.outputs.should_build == 'true' }}
       uses: pypa/cibuildwheel@v2.21.3
       env:
         CIBW_BUILD: cp311-manylinux_x86_64
@@ -1064,6 +1085,7 @@ jobs:
     #     PY
 
     - name: Smoke test Linux x86_64 wheel on runner
+      if: ${{ steps.linux_x86_gate.outputs.should_build == 'true' }}
       shell: bash
       run: |
         set -euo pipefail
@@ -1074,6 +1096,7 @@ jobs:
         "${TEST_VENV}/bin/python" -c "import nanovdb_editor; print('Import successful')"
 
     - uses: actions/upload-artifact@v4
+      if: ${{ steps.linux_x86_gate.outputs.should_build == 'true' }}
       with:
         name: wheels-ubuntu-latest-x86_64-${{ matrix.manylinux_tag }}
         path: ./wheelhouse/*.whl
