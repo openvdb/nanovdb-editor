@@ -542,7 +542,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [validate_version, resolve_slang_version, lookup_slang_image]
     # Always prepare the reusable Slang runtime image because the x86_64
-    # manylinux_2_27 wheel row depends on these older-baseline libs.
+    # wheel row reuses these Slang libs and auditwheel later constrains the
+    # final wheel tag to manylinux_2_27_x86_64 from the actual symbol usage.
     if: ${{ !cancelled() && !failure() && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || needs.validate_version.outputs.version_valid == 'true') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.lookup_slang_image.outputs.exists != 'true' }}
     steps:
     - uses: actions/checkout@v4
@@ -751,6 +752,9 @@ jobs:
       matrix:
         include:
           - manylinux_tag: manylinux_2_27_x86_64
+            # quay.io/pypa does not publish a manylinux_2_27_x86_64 image.
+            # Build in the oldest available 2_28 container and let auditwheel
+            # derive the compatible wheel tag from the linked symbols.
             manylinux_image: quay.io/pypa/manylinux_2_28_x86_64:latest
             slang_build_from_source: true
             slang_manage_image: true
@@ -1054,35 +1058,36 @@ jobs:
       with:
         package-dir: pymodule
 
-    # - name: Verify libslang-llvm is present in Linux x86_64 wheel
-    #   shell: bash
-    #   run: |
-    #     set -euo pipefail
-    #     python - <<'PY'
-    #     import pathlib
-    #     import zipfile
-    #     import sys
+    - name: Verify libslang-llvm is present in Linux x86_64 wheel
+      if: ${{ steps.linux_x86_gate.outputs.should_build == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        python - <<'PY'
+        import pathlib
+        import zipfile
+        import sys
 
-    #     wheels = sorted(pathlib.Path("wheelhouse").glob("nanovdb_editor*.whl"))
-    #     if not wheels:
-    #         print("No nanovdb_editor wheel found in wheelhouse/", file=sys.stderr)
-    #         raise SystemExit(1)
+        wheels = sorted(pathlib.Path("wheelhouse").glob("nanovdb_editor*.whl"))
+        if not wheels:
+            print("No nanovdb_editor wheel found in wheelhouse/", file=sys.stderr)
+            raise SystemExit(1)
 
-    #     wheel = wheels[0]
-    #     print(f"Inspecting wheel: {wheel}")
-    #     with zipfile.ZipFile(wheel) as zf:
-    #         names = zf.namelist()
-    #     llvm_hits = [n for n in names if n.startswith("nanovdb_editor/lib/") and "libslang-llvm" in n]
-    #     if not llvm_hits:
-    #         slang_libs = [n for n in names if n.startswith("nanovdb_editor/lib/") and "libslang" in n]
-    #         print("libslang-llvm was not found in wheel; available Slang libs:", file=sys.stderr)
-    #         for name in slang_libs:
-    #             print(f" - {name}", file=sys.stderr)
-    #         raise SystemExit(1)
-    #     print("Found libslang-llvm entries:")
-    #     for name in llvm_hits:
-    #         print(f" - {name}")
-    #     PY
+        wheel = wheels[0]
+        print(f"Inspecting wheel: {wheel}")
+        with zipfile.ZipFile(wheel) as zf:
+            names = zf.namelist()
+        llvm_hits = [n for n in names if n.startswith("nanovdb_editor/lib/") and "libslang-llvm" in n]
+        if not llvm_hits:
+            slang_libs = [n for n in names if n.startswith("nanovdb_editor/lib/") and "libslang" in n]
+            print("libslang-llvm was not found in wheel; available Slang libs:", file=sys.stderr)
+            for name in slang_libs:
+                print(f" - {name}", file=sys.stderr)
+            raise SystemExit(1)
+        print("Found libslang-llvm entries:")
+        for name in llvm_hits:
+            print(f" - {name}")
+        PY
 
     - name: Smoke test Linux x86_64 wheel on runner
       if: ${{ steps.linux_x86_gate.outputs.should_build == 'true' }}
