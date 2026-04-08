@@ -309,10 +309,20 @@ void ray_march_nanovdb(StructuredBuffer<uint2> buf,
 
             // align HDDA tmin/tmax to current voxel size
             int dim = 1 << skip_level;
+            if (dim > 1)
+            {
+                dim /= 2u;
+            }
             hdda_update(hdda, rayOrigin, rayDir, rayDirInv, dim);
 
+            // can break if it's not possible for next ellipsoids to be closer
+            if (nominalT > 0.f && nominalT < hdda.tmin * rayDirMagnInv)
+            {
+                break;
+            }
+
             // show only smallest three voxel sizes for now
-            uint filter_mask = 0x001;
+            uint filter_mask = 0x7;
 
             float4 color = float4(0.f, 0.f, 0.f, 0.f);
             uint active_level_count = countbits(active_level_mask & filter_mask);
@@ -323,42 +333,11 @@ void ray_march_nanovdb(StructuredBuffer<uint2> buf,
                 uint range_begin = uint(range);
                 uint range_end = uint(range >> 32u);
                 uint range_count = range_end - range_begin;
-                if (range_begin >= 29605626)
-                {
-                    float currentT = hdda.tmin;
-
-                    color = float4(1.f, 0.f, 1.f, 0.5f);
-
-                    color = max(float4(0.f, 0.f, 0.f, 0.f), color);
-                    color.a = min(1.f, color.a);
-                    color.a *= shader_params.alpha_scale;
-
-                    nominalT = sum.a * (color.a * currentT) + nominalT;
-                    sum.rgb = sum.a * (color.a * color.rgb) + sum.rgb;
-                    sum.a = (1.f - color.a) * sum.a;
-                    continue;
-                }
-                for (uint range_idx = 0u; range_idx < range_count && range_idx < 16u; range_idx++)
+                for (uint range_idx = 0u; range_idx < range_count; range_idx++)
                 {
                     pnanovdb_address_t prim_id_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
                     pnanovdb_uint32_t prim_id = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, range_begin + range_idx));
-                    if (prim_id >= 23611493)
-                    {
-                        float currentT = hdda.tmin;
-
-                        color = float4(1.f, 0.f, 0.f, 0.5f);
-
-                        color = max(float4(0.f, 0.f, 0.f, 0.f), color);
-                        color.a = min(1.f, color.a);
-                        color.a *= shader_params.alpha_scale;
-
-                        nominalT = sum.a * (color.a * currentT) + nominalT;
-                        sum.rgb = sum.a * (color.a * color.rgb) + sum.rgb;
-                        sum.a = (1.f - color.a) * sum.a;
-                        continue;
-                    }
-
-#if 0
+#if 1
                     pnanovdb_address_t mean_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
                     pnanovdb_vec3_t meanf = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(mean_addr, 12u, prim_id));
 
@@ -379,7 +358,7 @@ void ray_march_nanovdb(StructuredBuffer<uint2> buf,
                     pnanovdb_address_t opacity_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 3u);
                     float opacity = pnanovdb_read_float(buf, pnanovdb_address_offset_product(opacity_addr, 4u, prim_id));
 
-#if 1
+#if 0
                     color.rgb = 0.2820947917738781f * sh0 + 0.5f;
                     color.a = opacity;
 
@@ -393,10 +372,6 @@ void ray_march_nanovdb(StructuredBuffer<uint2> buf,
                     sum.rgb = sum.a * (color.a * color.rgb) + sum.rgb;
                     sum.a = (1.f - color.a) * sum.a;
 #else
-                    quatf = float4(0.f, 0.f, 0.f, 1.f);
-                    scalef = float3(0.01f, 0.01f, 0.01f);
-                    //sh0 = float3(0.f, 1.f, 0.f);
-
                     intersect_gaussian(
                         meanf,
                         quatf,
@@ -417,7 +392,7 @@ void ray_march_nanovdb(StructuredBuffer<uint2> buf,
 
             hdda_step(hdda, rayOrigin, rayDir, rayDirInv, dim);
 
-        } while (hdda.tmin < boxMaxT && sum.a > 0.0001f);
+        } while (hdda.tmin < boxMaxT);// && sum.a > 0.0001f);
     }
 }
 
