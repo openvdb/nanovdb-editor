@@ -50,6 +50,7 @@ typedef struct pnanovdb_voxelbvh_t
                                      pnanovdb_voxelbvh_context_t* context,
                                      pnanovdb_compute_buffer_t* nanovdb_inout,
                                      pnanovdb_uint64_t nanovdb_word_count,
+                                     pnanovdb_compute_buffer_t* world_bbox_in,
                                      const pnanovdb_coord_t* root_tile_coords,
                                      pnanovdb_uint32_t root_tile_count);
 
@@ -77,7 +78,8 @@ typedef struct pnanovdb_voxelbvh_t
                                                           pnanovdb_compute_array_t** out_nanovdb,
                                                           pnanovdb_compute_array_t** out_flat_range,
                                                           pnanovdb_compute_array_t* ijkl_in,
-                                                          pnanovdb_compute_array_t* range_in);
+                                                          pnanovdb_compute_array_t* range_in,
+                                                          pnanovdb_compute_array_t* world_bbox_in);
 
     void(PNANOVDB_ABI* ijkl_from_gaussians)(const pnanovdb_compute_t* compute,
                                             pnanovdb_compute_queue_t* queue,
@@ -89,7 +91,8 @@ typedef struct pnanovdb_voxelbvh_t
                                             pnanovdb_uint64_t gaussian_count,
                                             pnanovdb_compute_buffer_t* ijkl_out,
                                             pnanovdb_compute_buffer_t* prim_id_out,
-                                            pnanovdb_compute_buffer_t* range_out);
+                                            pnanovdb_compute_buffer_t* range_out,
+                                            pnanovdb_compute_buffer_t* world_bbox_out);
 
     void(PNANOVDB_ABI* ijkl_from_gaussians_file)(const pnanovdb_compute_t* compute,
                                                  pnanovdb_compute_queue_t* queue,
@@ -98,6 +101,7 @@ typedef struct pnanovdb_voxelbvh_t
                                                  pnanovdb_compute_array_t** ijkl_out,
                                                  pnanovdb_compute_array_t** prim_id_out,
                                                  pnanovdb_compute_array_t** range_out,
+                                                 pnanovdb_compute_array_t** world_bbox_out,
                                                  pnanovdb_compute_array_t** gaussian_arrays_out,
                                                  pnanovdb_uint32_t gaussian_array_count);
 

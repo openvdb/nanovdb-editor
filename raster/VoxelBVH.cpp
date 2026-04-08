@@ -315,6 +315,7 @@ static void nanovdb_init(const pnanovdb_compute_t* compute,
                          pnanovdb_voxelbvh_context_t* voxelbvh_context,
                          pnanovdb_compute_buffer_t* nanovdb_inout,
                          pnanovdb_uint64_t nanovdb_word_count,
+                         pnanovdb_compute_buffer_t* world_bbox_in,
                          const pnanovdb_coord_t* root_tile_coords,
                          pnanovdb_uint32_t root_tile_count)
 {
@@ -397,15 +398,18 @@ static void nanovdb_init(const pnanovdb_compute_t* compute,
         compute_interface->register_buffer_as_transient(context, upload_buffer);
     pnanovdb_compute_buffer_transient_t* nanovdb_transient =
         compute_interface->register_buffer_as_transient(context, nanovdb_inout);
+    pnanovdb_compute_buffer_transient_t* world_bbox_transient =
+        compute_interface->register_buffer_as_transient(context, world_bbox_in);
 
     // clear buffer before initialization, to ensure everything starts 0
     nanovdb_clear(compute, queue, voxelbvh_context, nanovdb_inout, nanovdb_word_count);
 
     // voxelbvh_nanovdb_init.slang
     {
-        pnanovdb_compute_resource_t resources[2u] = {};
+        pnanovdb_compute_resource_t resources[3u] = {};
         resources[0u].buffer_transient = upload_transient;
         resources[1u].buffer_transient = nanovdb_transient;
+        resources[2u].buffer_transient = world_bbox_transient;
 
         pnanovdb_uint32_t workgroup_count = ((size / 8u) + 255u) / 256u;
 
@@ -781,7 +785,8 @@ static void nanovdb_add_nodes_from_ijkl_array(const pnanovdb_compute_t* compute,
                                               pnanovdb_compute_array_t** out_nanovdb,
                                               pnanovdb_compute_array_t** out_flat_range,
                                               pnanovdb_compute_array_t* ijkl_in,
-                                              pnanovdb_compute_array_t* range_in)
+                                              pnanovdb_compute_array_t* range_in,
+                                              pnanovdb_compute_array_t* world_bbox_in)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -802,16 +807,18 @@ static void nanovdb_add_nodes_from_ijkl_array(const pnanovdb_compute_t* compute,
 
     compute_gpu_array_t* ijkl_gpu_array = gpu_array_create();
     compute_gpu_array_t* range_gpu_array = gpu_array_create();
+    compute_gpu_array_t* world_bbox_gpu_array = gpu_array_create();
     compute_gpu_array_t* nanovdb_gpu_array = gpu_array_create();
     compute_gpu_array_t* flat_range_gpu_array = gpu_array_create();
 
     gpu_array_upload(compute, queue, ijkl_gpu_array, ijkl_in);
     gpu_array_upload(compute, queue, range_gpu_array, range_in);
+    gpu_array_upload(compute, queue, world_bbox_gpu_array, world_bbox_in);
     gpu_array_alloc_device(compute, queue, nanovdb_gpu_array, nanovdb_array);
     gpu_array_alloc_device(compute, queue, flat_range_gpu_array, flat_range_array);
 
-    nanovdb_init(
-        compute, queue, voxelbvh_context, nanovdb_gpu_array->device_buffer, 2u * nanovdb_uint64_count, root_coords, 1u);
+    nanovdb_init(compute, queue, voxelbvh_context, nanovdb_gpu_array->device_buffer, 2u * nanovdb_uint64_count,
+                 world_bbox_gpu_array->device_buffer, root_coords, 1u);
 
     nanovdb_add_nodes_from_ijkl_buffer(compute, queue, voxelbvh_context, nanovdb_gpu_array->device_buffer,
                                        2u * nanovdb_uint64_count, flat_range_gpu_array->device_buffer,
@@ -831,6 +838,7 @@ static void nanovdb_add_nodes_from_ijkl_array(const pnanovdb_compute_t* compute,
 
     gpu_array_destroy(compute, queue, ijkl_gpu_array);
     gpu_array_destroy(compute, queue, range_gpu_array);
+    gpu_array_destroy(compute, queue, world_bbox_gpu_array);
     gpu_array_destroy(compute, queue, nanovdb_gpu_array);
     gpu_array_destroy(compute, queue, flat_range_gpu_array);
 
@@ -847,7 +855,8 @@ static void ijkl_from_gaussians(const pnanovdb_compute_t* compute,
                                 pnanovdb_uint64_t gaussian_count,
                                 pnanovdb_compute_buffer_t* ijkl_out,
                                 pnanovdb_compute_buffer_t* prim_id_out,
-                                pnanovdb_compute_buffer_t* range_out)
+                                pnanovdb_compute_buffer_t* range_out,
+                                pnanovdb_compute_buffer_t* world_bbox_out)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -904,9 +913,6 @@ static void ijkl_from_gaussians(const pnanovdb_compute_t* compute,
     buf_desc.size_in_bytes = 6u * 4u * constants.workgroup_count;
     pnanovdb_compute_buffer_t* bbox_reduce1_buffer =
         compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
-    buf_desc.size_in_bytes = 6u * 4u;
-    pnanovdb_compute_buffer_t* bbox_reduce2_buffer =
-        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
     // buf_desc.size_in_bytes = 8u * constants.voxel_count;
     // pnanovdb_compute_buffer_t* keys_buffer =
     //     compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
@@ -916,12 +922,12 @@ static void ijkl_from_gaussians(const pnanovdb_compute_t* compute,
 
     pnanovdb_compute_buffer_transient_t* bbox_reduce1_transient =
         compute_interface->register_buffer_as_transient(context, bbox_reduce1_buffer);
-    pnanovdb_compute_buffer_transient_t* bbox_reduce2_transient =
-        compute_interface->register_buffer_as_transient(context, bbox_reduce2_buffer);
     pnanovdb_compute_buffer_transient_t* ijkl_transient =
         compute_interface->register_buffer_as_transient(context, ijkl_out);
     pnanovdb_compute_buffer_transient_t* prim_id_transient =
         compute_interface->register_buffer_as_transient(context, prim_id_out);
+    pnanovdb_compute_buffer_transient_t* world_bbox_transient =
+        compute_interface->register_buffer_as_transient(context, world_bbox_out);
 
     // gaussian to ijk-level request
     // voxelbvh_gaussians_bbox_reduce1.slang
@@ -943,7 +949,7 @@ static void ijkl_from_gaussians(const pnanovdb_compute_t* compute,
         pnanovdb_compute_resource_t resources[3u] = {};
         resources[0u].buffer_transient = constant_transient;
         resources[1u].buffer_transient = bbox_reduce1_transient;
-        resources[2u].buffer_transient = bbox_reduce2_transient;
+        resources[2u].buffer_transient = world_bbox_transient;
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_gaussians_bbox_reduce2_slang],
                                  resources, 1u, 1u, 1u, "voxelbvh_gaussians_bbox_reduce2");
@@ -955,7 +961,7 @@ static void ijkl_from_gaussians(const pnanovdb_compute_t* compute,
         resources[2u].buffer_transient = opacities_transient;
         resources[3u].buffer_transient = quats_transient;
         resources[4u].buffer_transient = scales_transient;
-        resources[5u].buffer_transient = bbox_reduce2_transient;
+        resources[5u].buffer_transient = world_bbox_transient;
         resources[6u].buffer_transient = ijkl_transient;
         resources[7u].buffer_transient = prim_id_transient;
 
@@ -1021,7 +1027,6 @@ static void ijkl_from_gaussians(const pnanovdb_compute_t* compute,
 
     compute_interface->destroy_buffer(context, constant_buffer);
     compute_interface->destroy_buffer(context, bbox_reduce1_buffer);
-    compute_interface->destroy_buffer(context, bbox_reduce2_buffer);
 
     compute_interface->destroy_buffer(context, range_starts_buffer);
     compute_interface->destroy_buffer(context, range_scan_buffer);
@@ -1034,6 +1039,7 @@ static void ijkl_from_gaussians_file(const pnanovdb_compute_t* compute,
                                      pnanovdb_compute_array_t** ijkl_out,
                                      pnanovdb_compute_array_t** prim_id_out,
                                      pnanovdb_compute_array_t** range_out,
+                                     pnanovdb_compute_array_t** world_bbox_out,
                                      pnanovdb_compute_array_t** gaussian_arrays_out,
                                      pnanovdb_uint32_t gaussian_array_count)
 {
@@ -1054,14 +1060,17 @@ static void ijkl_from_gaussians_file(const pnanovdb_compute_t* compute,
         pnanovdb_compute_array_t* ijkl_array = compute->create_array(8u, voxel_count, nullptr);
         pnanovdb_compute_array_t* prim_id_array = compute->create_array(4u, voxel_count, nullptr);
         pnanovdb_compute_array_t* range_array = compute->create_array(8u, voxel_count, nullptr);
+        pnanovdb_compute_array_t* world_bbox_array = compute->create_array(4u, 6u, nullptr);
 
         compute_gpu_array_t* ijkl_gpu_array = gpu_array_create();
         compute_gpu_array_t* prim_id_gpu_array = gpu_array_create();
         compute_gpu_array_t* range_gpu_array = gpu_array_create();
+        compute_gpu_array_t* world_bbox_gpu_array = gpu_array_create();
 
         gpu_array_alloc_device(compute, queue, ijkl_gpu_array, ijkl_array);
         gpu_array_alloc_device(compute, queue, prim_id_gpu_array, prim_id_array);
         gpu_array_alloc_device(compute, queue, range_gpu_array, range_array);
+        gpu_array_alloc_device(compute, queue, world_bbox_gpu_array, world_bbox_array);
 
         // normalize quats
         float* mapped_quat = (float*)compute->map_array(arrays_gaussian[2]);
@@ -1120,7 +1129,7 @@ static void ijkl_from_gaussians_file(const pnanovdb_compute_t* compute,
 
         ijkl_from_gaussians(compute, queue, voxelbvh_context, gpu_buffers, 6u, gaussian_count,
                             ijkl_gpu_array->device_buffer, prim_id_gpu_array->device_buffer,
-                            range_gpu_array->device_buffer);
+                            range_gpu_array->device_buffer, world_bbox_gpu_array->device_buffer);
 
         gpu_array_destroy(compute, queue, means_gpu_array);
         gpu_array_destroy(compute, queue, opacities_gpu_array);
@@ -1133,6 +1142,7 @@ static void ijkl_from_gaussians_file(const pnanovdb_compute_t* compute,
         gpu_array_readback(compute, queue, ijkl_gpu_array, ijkl_array);
         gpu_array_readback(compute, queue, prim_id_gpu_array, prim_id_array);
         gpu_array_readback(compute, queue, range_gpu_array, range_array);
+        gpu_array_readback(compute, queue, world_bbox_gpu_array, world_bbox_array);
 
         pnanovdb_uint64_t flushed_frame = 0llu;
         compute->device_interface.flush(queue, &flushed_frame, nullptr, nullptr);
@@ -1142,14 +1152,17 @@ static void ijkl_from_gaussians_file(const pnanovdb_compute_t* compute,
         gpu_array_map(compute, queue, ijkl_gpu_array, ijkl_array);
         gpu_array_map(compute, queue, prim_id_gpu_array, prim_id_array);
         gpu_array_map(compute, queue, range_gpu_array, range_array);
+        gpu_array_map(compute, queue, world_bbox_gpu_array, world_bbox_array);
 
         *ijkl_out = ijkl_array;
         *prim_id_out = prim_id_array;
         *range_out = range_array;
+        *world_bbox_out = world_bbox_array;
 
         gpu_array_destroy(compute, queue, ijkl_gpu_array);
         gpu_array_destroy(compute, queue, prim_id_gpu_array);
         gpu_array_destroy(compute, queue, range_gpu_array);
+        gpu_array_destroy(compute, queue, world_bbox_gpu_array);
     }
 
     if (gaussian_arrays_out && gaussian_array_count == 6u)
