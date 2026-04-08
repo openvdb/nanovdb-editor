@@ -416,21 +416,22 @@ void voxelbvh_test()
     prim_id_array->element_count = last_valid_key + 1u;
 
     // find first invalid range
-    uint64_t last_valid_range = range_count;
-    for (uint64_t idx = 0u; idx < range_count; idx++)
+    uint64_t flat_range_count = built_flat_range_array->element_count;
+    uint64_t last_valid_range = flat_range_count;
+    for (uint64_t idx = 0u; idx < built_flat_range_array->element_count; idx++)
     {
-        if (mapped_range[idx] != 0u)
+        if (range_flat_ptr[idx] != 0u)
         {
             last_valid_range = idx;
         }
     }
     // shrink ranges array
-    range_array->element_count = last_valid_range + 1u;
+    built_flat_range_array->element_count = last_valid_range + 1u;
 
     printf("Shrinking arrays prim_id(%zu vs %zu) range(%zu vs %zu)\n", prim_id_array->element_count, ijkl_count,
-           range_array->element_count, range_count);
+           built_flat_range_array->element_count, flat_range_count);
 
-    pnanovdb_compute_array_t* metadata_arrays[8u] = { range_array,        prim_id_array,      gaussian_arrays[0],
+    pnanovdb_compute_array_t* metadata_arrays[8u] = { built_flat_range_array,        prim_id_array,      gaussian_arrays[0],
                                                       gaussian_arrays[1], gaussian_arrays[2], gaussian_arrays[3],
                                                       gaussian_arrays[4], gaussian_arrays[5] };
 

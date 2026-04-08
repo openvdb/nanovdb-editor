@@ -323,10 +323,40 @@ void ray_march_nanovdb(StructuredBuffer<uint2> buf,
                 uint range_begin = uint(range);
                 uint range_end = uint(range >> 32u);
                 uint range_count = range_end - range_begin;
-                for (uint range_idx = 0u; range_idx < range_count && range_idx < 8u; range_idx++)
+                if (range_begin >= 29605626)
+                {
+                    float currentT = hdda.tmin;
+
+                    color = float4(1.f, 0.f, 1.f, 0.5f);
+
+                    color = max(float4(0.f, 0.f, 0.f, 0.f), color);
+                    color.a = min(1.f, color.a);
+                    color.a *= shader_params.alpha_scale;
+
+                    nominalT = sum.a * (color.a * currentT) + nominalT;
+                    sum.rgb = sum.a * (color.a * color.rgb) + sum.rgb;
+                    sum.a = (1.f - color.a) * sum.a;
+                    continue;
+                }
+                for (uint range_idx = 0u; range_idx < range_count && range_idx < 16u; range_idx++)
                 {
                     pnanovdb_address_t prim_id_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
                     pnanovdb_uint32_t prim_id = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, range_begin + range_idx));
+                    if (prim_id >= 23611493)
+                    {
+                        float currentT = hdda.tmin;
+
+                        color = float4(1.f, 0.f, 0.f, 0.5f);
+
+                        color = max(float4(0.f, 0.f, 0.f, 0.f), color);
+                        color.a = min(1.f, color.a);
+                        color.a *= shader_params.alpha_scale;
+
+                        nominalT = sum.a * (color.a * currentT) + nominalT;
+                        sum.rgb = sum.a * (color.a * color.rgb) + sum.rgb;
+                        sum.a = (1.f - color.a) * sum.a;
+                        continue;
+                    }
 
 #if 0
                     pnanovdb_address_t mean_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
