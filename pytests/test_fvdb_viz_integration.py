@@ -82,8 +82,14 @@ def _fvdb_core_release_tag() -> str:
 def _upstream_test_urls() -> list[str]:
     release_tag = _fvdb_core_release_tag()
     return [
-        ("https://raw.githubusercontent.com/openvdb/fvdb-core/" f"{release_tag}/{UPSTREAM_TEST_RELATIVE_PATH}"),
-        ("https://raw.githubusercontent.com/openvdb/fvdb-core/main/" f"{UPSTREAM_TEST_RELATIVE_PATH}"),
+        (
+            "https://raw.githubusercontent.com/openvdb/fvdb-core/"
+            f"{release_tag}/{UPSTREAM_TEST_RELATIVE_PATH}"
+        ),
+        (
+            "https://raw.githubusercontent.com/openvdb/fvdb-core/main/"
+            f"{UPSTREAM_TEST_RELATIVE_PATH}"
+        ),
     ]
 
 
@@ -106,7 +112,9 @@ def _resolve_upstream_test_path(work_dir: Path) -> Path:
     if last_error is None:
         raise RuntimeError("Could not resolve an fvdb upstream viz test URL")
 
-    raise RuntimeError("Failed to fetch upstream fvdb viz test from any known URL") from last_error
+    raise RuntimeError(
+        "Failed to fetch upstream fvdb viz test from any known URL"
+    ) from last_error
 
 
 def _run(cmd: list[str], env: dict[str, str], **kwargs):
@@ -118,7 +126,16 @@ def _run(cmd: list[str], env: dict[str, str], **kwargs):
             **kwargs,
         )
     except subprocess.CalledProcessError as exc:  # pragma: no cover
-        raise RuntimeError(f"Command {cmd} failed with code {exc.returncode}") from exc
+        raise RuntimeError(
+            f"Command {cmd} failed with code {exc.returncode}"
+        ) from exc
+
+
+def _resolved_local_path(path_str: str) -> Path:
+    path = Path(path_str).expanduser()
+    if not path.is_absolute():
+        path = (Path.cwd() / path).resolve()
+    return path
 
 
 def _venv_bin_path(venv_path: Path, binary: str) -> Path:
@@ -167,7 +184,7 @@ def _fvdb_viz_env(tmp_path_factory):
             pip_cmd
             + [
                 "install",
-                f"fvdb-core=={FVDB_CORE_VERSION}",
+                f"fvdb-core[viewer]=={FVDB_CORE_VERSION}",
                 "--extra-index-url",
                 FVDB_CORE_INDEX_URL,
             ],
@@ -315,7 +332,9 @@ def test_fvdb_viz_with_dev_package(fvdb_viz_env):
 @pytest.mark.slow
 @pytest.mark.skipif(
     not LOCAL_DIST_SPEC,
-    reason=("Set FVDB_VIZ_LOCAL_DIST to the local wheel or source path to test it."),
+    reason=(
+        "Set FVDB_VIZ_LOCAL_DIST to the local wheel or source path to test it."
+    ),
 )
 def test_fvdb_viz_with_local_package(fvdb_viz_env):
     """
@@ -324,11 +343,11 @@ def test_fvdb_viz_with_local_package(fvdb_viz_env):
     file (dist/*.whl) or a source directory (for example the repo root for
     `pip install .`).
     """
-    local_spec = Path(LOCAL_DIST_SPEC).expanduser()
-    if not local_spec.is_absolute():
-        local_spec = (Path.cwd() / local_spec).resolve()
+    local_spec = _resolved_local_path(LOCAL_DIST_SPEC)
     if not local_spec.exists():
-        raise AssertionError(f"FVDB_VIZ_LOCAL_DIST target does not exist: {local_spec}")
+        raise AssertionError(
+            f"FVDB_VIZ_LOCAL_DIST target does not exist: {local_spec}"
+        )
 
     _install_nanovdb_distribution(fvdb_viz_env, str(local_spec))
     _run_upstream_viz_suite(fvdb_viz_env)
