@@ -124,8 +124,6 @@ void intersect_gaussian(
 
     const float local_scale = sqrt(2.f * log(max(0.01f, opacity) / 0.01f));
     scalef *= local_scale;
-
-    scalef = max(scalef, float3(0.001f));
     float3 scalef_inv = float3(1.f) / scalef;
 
     localRayOrigin *= scalef_inv;
@@ -136,7 +134,32 @@ void intersect_gaussian(
         localRayDir /= localRayDirMagn;
     }
 
-    float2 t_range = intersect_sphere(localRayOrigin, localRayDir);
+    // intersect box first, because it avoids precision problems
+    float2 t_range = float2(-1.f, -1.f);
+    bool did_hit = intersect_box(localRayDir, float3(1.f) / localRayDir,
+        float3(-1.1f, -1.1f, -1.1f) - localRayOrigin, float3(1.1f, 1.1f, 1.1f) - localRayOrigin,
+        t_range.x, t_range.y);
+    if (did_hit)
+    {
+        // advance ray to hit point
+        float3 localRayOrigin_delta = localRayOrigin + localRayDir * t_range.x;
+        // shoot ray at sphere
+        float2 t_range_delta = intersect_sphere(localRayOrigin_delta, localRayDir);
+        // refine original hit T
+        if (t_range_delta.x > 0.f)
+        {
+            t_range.y = t_range.x + t_range_delta.y;
+            t_range.x = t_range.x + t_range_delta.x;
+        }
+        else
+        {
+            t_range = float2(-1.f, -1.f);
+        }
+    }
+    else
+    {
+        t_range = float2(-1.f, -1.f);
+    }
     float t = t_range.x / localRayDirMagn;
 
     if (t > 0.f && t >= tmin && t < tmax)
