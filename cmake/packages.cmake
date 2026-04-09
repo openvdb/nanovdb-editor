@@ -321,7 +321,40 @@ CPMAddPackage(
 # Shader compilation
 set(SLANG_VERSION 2025.24)
 
-if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
+if(DEFINED NANOVDB_SLANG_IMAGE_ROOT_DIR AND NOT "${NANOVDB_SLANG_IMAGE_ROOT_DIR}" STREQUAL "")
+    if(NOT EXISTS "${NANOVDB_SLANG_IMAGE_ROOT_DIR}/include")
+        message(FATAL_ERROR "NANOVDB_SLANG_IMAGE_ROOT_DIR is missing include/: ${NANOVDB_SLANG_IMAGE_ROOT_DIR}")
+    endif()
+    if(WIN32)
+        if(NOT EXISTS "${NANOVDB_SLANG_IMAGE_ROOT_DIR}/bin/slang.dll")
+            message(FATAL_ERROR "NANOVDB_SLANG_IMAGE_ROOT_DIR is missing bin/slang.dll: ${NANOVDB_SLANG_IMAGE_ROOT_DIR}")
+        endif()
+    else()
+        if(NOT EXISTS "${NANOVDB_SLANG_IMAGE_ROOT_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}")
+            message(FATAL_ERROR "NANOVDB_SLANG_IMAGE_ROOT_DIR is missing libslang${CMAKE_SHARED_LIBRARY_SUFFIX}: ${NANOVDB_SLANG_IMAGE_ROOT_DIR}")
+        endif()
+    endif()
+    if(UNIX AND NOT APPLE AND NOT SKBUILD)
+        set(_nanovdb_required_slang_libs
+            "lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}.0.${SLANG_VERSION}"
+            "lib/libslang-glslang-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        )
+        foreach(_nanovdb_required_slang_lib IN LISTS _nanovdb_required_slang_libs)
+            if(NOT EXISTS "${NANOVDB_SLANG_IMAGE_ROOT_DIR}/${_nanovdb_required_slang_lib}")
+                message(FATAL_ERROR
+                    "NANOVDB_SLANG_IMAGE_ROOT_DIR is missing required Slang runtime library "
+                    "${_nanovdb_required_slang_lib}: ${NANOVDB_SLANG_IMAGE_ROOT_DIR}"
+                )
+            endif()
+        endforeach()
+        unset(_nanovdb_required_slang_libs)
+        unset(_nanovdb_required_slang_lib)
+    endif()
+
+    message(STATUS "Reusing Slang package from ${NANOVDB_SLANG_IMAGE_ROOT_DIR}")
+    set(Slang_SOURCE_DIR "${NANOVDB_SLANG_IMAGE_ROOT_DIR}")
+    set(Slang_ADDED TRUE)
+elseif(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
     if(NOT (UNIX AND NOT APPLE) OR CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
         message(FATAL_ERROR "NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE is only supported on Linux x86_64")
     endif()
