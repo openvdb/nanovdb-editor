@@ -251,7 +251,7 @@ We keep the Vulkan headless FVDB viewer validated in both CI and local developme
 ```
 
 Highlights:
-- Ensures (and caches) the `nanovdd-editor_fvdb-<fvdb-core-version>-r<revision>` Docker image with matching Torch/fvdb-core versions.
+- Ensures (and caches) the `nanovdb-editor_fvdb-<fvdb-core-version>-r<revision>` Docker image with matching Torch/fvdb-core versions.
 - Prints the installed `nanovdb_editor` version inside the container before running `pytests/test_fvdb_viz_integration.py -vv -s --full-trace`.
 - Prints the available Vulkan ICDs plus `vulkaninfo --summary`, then fails fast if `fvdb.viz` cannot initialize instead of reporting a skipped upstream suite.
 - Accepts `--force-rebuild` to bypass the local `.cache` tarball when you need a fresh base image.
