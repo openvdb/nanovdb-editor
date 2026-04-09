@@ -139,8 +139,7 @@ void intersect_gaussian(
     float2 t_range = intersect_sphere(localRayOrigin, localRayDir);
     float t = t_range.x / localRayDirMagn;
 
-    //if (t > 0.f && t >= tmin && t < tmax)
-    if (t > 0.f)
+    if (t > 0.f && t >= tmin && t < tmax)
     {
         float4 color = float4(
             float3(0.2820947917738781f * sh0 + 0.5f),
@@ -315,12 +314,6 @@ void ray_march_nanovdb(StructuredBuffer<uint2> buf,
             }
             hdda_update(hdda, rayOrigin, rayDir, rayDirInv, dim);
 
-            // can break if it's not possible for next ellipsoids to be closer
-            if (nominalT > 0.f && nominalT < hdda.tmin * rayDirMagnInv)
-            {
-                break;
-            }
-
             // show only smallest three voxel sizes for now
             uint filter_mask = 0x7;
 
@@ -392,7 +385,7 @@ void ray_march_nanovdb(StructuredBuffer<uint2> buf,
 
             hdda_step(hdda, rayOrigin, rayDir, rayDirInv, dim);
 
-        } while (hdda.tmin < boxMaxT);// && sum.a > 0.0001f);
+        } while (hdda.tmin < boxMaxT && sum.a > 0.0001f);
     }
 }
 
