@@ -541,10 +541,12 @@ jobs:
     name: Build Slang Runtime Libs
     runs-on: ubuntu-latest
     needs: [validate_version, resolve_slang_version, lookup_slang_image]
-    # Always prepare the reusable Slang runtime image because the x86_64
-    # wheel row reuses these Slang libs and auditwheel later constrains the
-    # final wheel tag to manylinux_2_27_x86_64 from the actual symbol usage.
-    if: ${{ !cancelled() && !failure() && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || needs.validate_version.outputs.version_valid == 'true') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.lookup_slang_image.outputs.exists != 'true' }}
+    # Prepare the reusable Slang runtime image only when image management is
+    # enabled and the Linux x86_64 wheel is configured to build Slang from
+    # source; the wheel row then reuses these Slang libs and auditwheel later
+    # constrains the final wheel tag to manylinux_2_27_x86_64 from the actual
+    # symbol usage.
+    if: ${{ !cancelled() && !failure() && inputs.manage_slang_image && inputs.linux_x86_build_slang_from_source && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || needs.validate_version.outputs.version_valid == 'true') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.lookup_slang_image.outputs.exists != 'true' }}
     steps:
     - uses: actions/checkout@v4
       with:
@@ -730,7 +732,7 @@ jobs:
   publish_slang_image:
     name: Publish Slang Runtime Image (if missing)
     needs: [build_slang_libraries, resolve_slang_version, lookup_slang_image]
-    if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.lookup_slang_image.outputs.exists != 'true' && !cancelled() && !failure() }}
+    if: ${{ inputs.manage_slang_image && inputs.linux_x86_build_slang_from_source && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.lookup_slang_image.outputs.exists != 'true' && !cancelled() && !failure() }}
     permissions:
       contents: read
       packages: write

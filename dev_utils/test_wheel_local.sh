@@ -24,6 +24,9 @@ if [ -z "${LOCAL_BUILD_SLANG_FROM_SOURCE+x}" ]; then
 fi
 echo "LOCAL_BUILD_SLANG_FROM_SOURCE=${LOCAL_BUILD_SLANG_FROM_SOURCE}"
 LOCAL_WHEEL_TAG="${LOCAL_WHEEL_TAG:-${LOCAL_MANYLINUX_X86_64_TAG:-manylinux_2_27_x86_64}}"
+# quay.io/pypa does not publish a manylinux_2_27_x86_64 image. Build in the
+# oldest available 2_28 container and let auditwheel emit the final compatible
+# 2_27 wheel tag from the linked symbol versions.
 LOCAL_BUILD_IMAGE="${LOCAL_BUILD_IMAGE:-${LOCAL_MANYLINUX_X86_64_IMAGE:-quay.io/pypa/manylinux_2_28_x86_64:latest}}"
 LOCAL_MANYLINUX_X86_64_TAG="${LOCAL_WHEEL_TAG}"
 LOCAL_MANYLINUX_X86_64_IMAGE="${LOCAL_BUILD_IMAGE}"
