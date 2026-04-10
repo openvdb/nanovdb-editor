@@ -29,50 +29,10 @@ on:
         default: ""
 
 jobs:
-  resolve-fvdb-versions:
-    name: Resolve fVDB Versions
-    runs-on: ubuntu-latest
-    outputs:
-      torch_version: ${{ steps.fvdb.outputs.torch_version }}
-      torch_index_url: ${{ steps.fvdb.outputs.torch_index_url }}
-      core_version: ${{ steps.fvdb.outputs.core_version }}
-      core_index_url: ${{ steps.fvdb.outputs.core_index_url }}
-      test_image_revision: ${{ steps.fvdb.outputs.test_image_revision }}
-      script_timeout: ${{ steps.fvdb.outputs.script_timeout }}
-      test_image: ${{ steps.fvdb.outputs.test_image }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Export fvdb defaults
-        id: fvdb
-        run: |
-          set -euo pipefail
-          source scripts/fvdb_viz_versions.sh
-          core_tag="${FVDB_VIZ_CORE_VERSION_DEFAULT%%+*}"
-          {
-            echo "torch_version=${FVDB_VIZ_TORCH_VERSION_DEFAULT}"
-            echo "torch_index_url=${FVDB_VIZ_TORCH_INDEX_URL_DEFAULT}"
-            echo "core_version=${FVDB_VIZ_CORE_VERSION_DEFAULT}"
-            echo "core_index_url=${FVDB_VIZ_CORE_INDEX_URL_DEFAULT}"
-            echo "test_image_revision=${FVDB_VIZ_TEST_IMAGE_REVISION_DEFAULT}"
-            echo "script_timeout=${FVDB_VIZ_SCRIPT_TIMEOUT_DEFAULT}"
-            echo "test_image=${FVDB_VIZ_TEST_IMAGE_BASE_DEFAULT}"
-          } >> "$GITHUB_OUTPUT"
-
   run-integration-tests:
     name: Run Tests
-    needs: resolve-fvdb-versions
-    if: ${{ !cancelled() && !failure() }}
     runs-on: ubuntu-latest
     env:
-      FVDB_VIZ_TORCH_VERSION: ${{ needs.resolve-fvdb-versions.outputs.torch_version }}
-      FVDB_VIZ_TORCH_INDEX_URL: ${{ needs.resolve-fvdb-versions.outputs.torch_index_url }}
-      FVDB_VIZ_CORE_VERSION: ${{ needs.resolve-fvdb-versions.outputs.core_version }}
-      FVDB_VIZ_CORE_INDEX_URL: ${{ needs.resolve-fvdb-versions.outputs.core_index_url }}
-      FVDB_VIZ_TEST_IMAGE_BASE: ${{ needs.resolve-fvdb-versions.outputs.test_image }}
-      FVDB_VIZ_TEST_IMAGE_REVISION: ${{ needs.resolve-fvdb-versions.outputs.test_image_revision }}
-      FVDB_VIZ_SCRIPT_TIMEOUT: ${{ needs.resolve-fvdb-versions.outputs.script_timeout }}
       FVDB_VIZ_SKIP_BASE_INSTALL: 1
       FVDB_VIZ_IMAGE_CACHE_ENABLED: 0
     steps:
@@ -101,6 +61,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Export fvdb defaults
+        run: |
+          set -euo pipefail
+          source scripts/fvdb_viz_versions.sh
+          {
+            echo "FVDB_VIZ_TORCH_VERSION=${FVDB_VIZ_TORCH_VERSION_DEFAULT}"
+            echo "FVDB_VIZ_TORCH_INDEX_URL=${FVDB_VIZ_TORCH_INDEX_URL_DEFAULT}"
+            echo "FVDB_VIZ_CORE_VERSION=${FVDB_VIZ_CORE_VERSION_DEFAULT}"
+            echo "FVDB_VIZ_CORE_INDEX_URL=${FVDB_VIZ_CORE_INDEX_URL_DEFAULT}"
+            echo "FVDB_VIZ_TEST_IMAGE_BASE=${FVDB_VIZ_TEST_IMAGE_BASE_DEFAULT}"
+            echo "FVDB_VIZ_TEST_IMAGE_REVISION=${FVDB_VIZ_TEST_IMAGE_REVISION_DEFAULT}"
+            echo "FVDB_VIZ_SCRIPT_TIMEOUT=${FVDB_VIZ_SCRIPT_TIMEOUT_DEFAULT}"
+          } >> "$GITHUB_ENV"
+
       - name: Prepare wheel directory
         run: |
           rm -rf pymodule/dist
@@ -128,13 +102,7 @@ jobs:
 
       - name: Free disk space
         run: |
-          set -euo pipefail
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/lib/jvm
-          sudo rm -rf "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}"
-          sudo apt-get clean
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android
           sudo docker system prune --all --force --volumes || true
 
       - name: Run fvdb.viz tests
