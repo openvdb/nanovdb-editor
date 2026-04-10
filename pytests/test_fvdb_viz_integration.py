@@ -121,6 +121,13 @@ def _run(cmd: list[str], env: dict[str, str], **kwargs):
         raise RuntimeError(f"Command {cmd} failed with code {exc.returncode}") from exc
 
 
+def _resolved_local_path(path_str: str) -> Path:
+    path = Path(path_str).expanduser()
+    if not path.is_absolute():
+        path = (Path.cwd() / path).resolve()
+    return path
+
+
 def _venv_bin_path(venv_path: Path, binary: str) -> Path:
     scripts_dir = "Scripts" if os.name == "nt" else "bin"
     return venv_path / scripts_dir / binary
@@ -167,7 +174,7 @@ def _fvdb_viz_env(tmp_path_factory):
             pip_cmd
             + [
                 "install",
-                f"fvdb-core=={FVDB_CORE_VERSION}",
+                f"fvdb-core[viewer]=={FVDB_CORE_VERSION}",
                 "--extra-index-url",
                 FVDB_CORE_INDEX_URL,
             ],
@@ -324,9 +331,7 @@ def test_fvdb_viz_with_local_package(fvdb_viz_env):
     file (dist/*.whl) or a source directory (for example the repo root for
     `pip install .`).
     """
-    local_spec = Path(LOCAL_DIST_SPEC).expanduser()
-    if not local_spec.is_absolute():
-        local_spec = (Path.cwd() / local_spec).resolve()
+    local_spec = _resolved_local_path(LOCAL_DIST_SPEC)
     if not local_spec.exists():
         raise AssertionError(f"FVDB_VIZ_LOCAL_DIST target does not exist: {local_spec}")
 

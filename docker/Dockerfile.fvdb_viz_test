@@ -36,7 +36,7 @@ RUN if [ -n "$TORCH_INDEX_URL" ]; then \
     fi
 
 RUN python3 -m pip install \
-        "fvdb-core==${FVDB_CORE_VERSION:?FVDB_CORE_VERSION build arg is required}" \
+        "fvdb-core[viewer]==${FVDB_CORE_VERSION:?FVDB_CORE_VERSION build arg is required}" \
         --extra-index-url "${FVDB_CORE_INDEX_URL:?FVDB_CORE_INDEX_URL build arg is required}" \
         --break-system-packages && \
     python3 -m pip install numpy pytest --break-system-packages
