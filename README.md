@@ -230,7 +230,7 @@ gdb -p <PID>
 
 ## fvdb.viz Integration Tests
 
-We keep the Vulkan headless FVDB viewer validated in both CI and local development by sharing a cached Docker image and integration suite.
+We keep the Vulkan headless FVDB viewer validated in both CI and local development with a shared integration suite and a consistent Docker image recipe.
 
 ### Local workflow
 
@@ -260,7 +260,7 @@ Highlights:
 
 `.github/workflows/fvdb-viz-integration.yml` runs on `workflow_dispatch` or `workflow_call` and:
 - Resolves the package stream (release/dev) plus optional wheel artifact.
-- Restores a cached Docker image with the latest `fvdb-core` installed, then builds and runs the same pytest selector in Docker.
+- Builds the fvdb viewer Docker image locally on the runner, then runs the same pytest selector in Docker.
 
 Use the workflow dispatch inputs in GitHub Actions to pick the stream or supply a wheel artifact.
 

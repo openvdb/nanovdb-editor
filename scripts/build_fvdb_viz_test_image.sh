@@ -25,6 +25,7 @@ FVDB_CORE_VERSION="${FVDB_VIZ_CORE_VERSION:-${FVDB_VIZ_CORE_VERSION_DEFAULT}}"
 FVDB_CORE_INDEX_URL="${FVDB_VIZ_CORE_INDEX_URL:-${FVDB_VIZ_CORE_INDEX_URL_DEFAULT}}"
 IMAGE_BASE_NAME="${FVDB_VIZ_TEST_IMAGE_BASE:-${FVDB_VIZ_TEST_IMAGE_BASE_DEFAULT}}"
 IMAGE_REVISION="${FVDB_VIZ_TEST_IMAGE_REVISION:-${FVDB_VIZ_TEST_IMAGE_REVISION_DEFAULT}}"
+IMAGE_CACHE_ENABLED="${FVDB_VIZ_IMAGE_CACHE_ENABLED:-1}"
 CORE_VERSION_TAG="${FVDB_CORE_VERSION%%+*}"
 if [[ -z "${CORE_VERSION_TAG}" ]]; then
   CORE_VERSION_TAG="${FVDB_CORE_VERSION}"
@@ -95,6 +96,10 @@ load_from_cache() {
 }
 
 save_to_cache() {
+  if [[ "${IMAGE_CACHE_ENABLED}" != "1" ]]; then
+    echo "Skipping local image tarball cache for ${IMAGE_NAME}"
+    return
+  fi
   ensure_cache_dir
   echo "Saving ${IMAGE_NAME} image tarball to ${TAR_PATH}"
   docker save "${IMAGE_NAME}" -o "${TAR_PATH}"
@@ -124,13 +129,17 @@ if image_exists; then
   exit 0
 fi
 
-if cache_metadata_matches && load_from_cache; then
-  echo "Loaded ${IMAGE_NAME} from cache."
-  exit 0
-fi
+if [[ "${IMAGE_CACHE_ENABLED}" == "1" ]]; then
+  if cache_metadata_matches && load_from_cache; then
+    echo "Loaded ${IMAGE_NAME} from cache."
+    exit 0
+  fi
 
-if [[ -f "${META_PATH}" && ! cache_metadata_matches ]]; then
-  echo "Cached ${IMAGE_NAME} metadata out of date; rebuilding image."
+  if [[ -f "${META_PATH}" && ! cache_metadata_matches ]]; then
+    echo "Cached ${IMAGE_NAME} metadata out of date; rebuilding image."
+  fi
+else
+  echo "Image tarball cache disabled for ${IMAGE_NAME}"
 fi
 
 ensure_cache_dir

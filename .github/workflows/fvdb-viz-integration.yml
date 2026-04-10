@@ -2,7 +2,6 @@ name: fVDB Viewer Integration
 
 permissions:
   contents: read
-  packages: read
   actions: read
 
 on:
@@ -61,73 +60,21 @@ jobs:
             echo "test_image=${FVDB_VIZ_TEST_IMAGE_BASE_DEFAULT}"
           } >> "$GITHUB_OUTPUT"
 
-  lookup-test-image:
-    name: Check Image Exists
-    needs: resolve-fvdb-versions
-    runs-on: ubuntu-latest
-    outputs:
-      exists: ${{ steps.lookup.outputs.exists }}
-      image_ref: ${{ steps.lookup.outputs.image_ref }}
-    env:
-      IMAGE_NAME: ${{ needs.resolve-fvdb-versions.outputs.test_image }}
-      CORE_VERSION: ${{ needs.resolve-fvdb-versions.outputs.core_version }}
-      IMAGE_REVISION: ${{ needs.resolve-fvdb-versions.outputs.test_image_revision }}
-    steps:
-      - name: Look up cached image
-        id: lookup
-        env:
-          GHCR_USER: ${{ secrets.GHCR_PUSH_USERNAME }}
-          GHCR_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN }}
-        run: |
-          set -euo pipefail
-          core_tag="${CORE_VERSION//[^0-9a-zA-Z.-]/-}"
-          image_ref="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${core_tag}-r${IMAGE_REVISION}"
-          echo "image_ref=${image_ref}" >> "$GITHUB_OUTPUT"
-
-          # Login only when credentials are present (not available in fork PRs)
-          if [[ -n "${GHCR_TOKEN:-}" && -n "${GHCR_USER:-}" ]]; then
-            echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin >/dev/null 2>&1
-          else
-            echo "GHCR credentials not available (e.g. fork PR); checking image without login (works for public packages)"
-          fi
-
-          if docker manifest inspect "${image_ref}" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Found cached image: ${image_ref}"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "Image not found, build required: ${image_ref}"
-          fi
-
-  build-test-image:
-    name: Build Image
-    needs: [resolve-fvdb-versions, lookup-test-image]
-    # Skip on fork PRs: no GHCR credentials to push
-    if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.lookup-test-image.outputs.exists != 'true' }}
-    uses: ./.github/workflows/build-fvdb-viz-test-image.yml
-    with:
-      image_name: ${{ needs.resolve-fvdb-versions.outputs.test_image }}
-      image_revision: ${{ needs.resolve-fvdb-versions.outputs.test_image_revision }}
-      torch_version: ${{ needs.resolve-fvdb-versions.outputs.torch_version }}
-      torch_index_url: ${{ needs.resolve-fvdb-versions.outputs.torch_index_url }}
-      fvdb_core_version: ${{ needs.resolve-fvdb-versions.outputs.core_version }}
-      fvdb_core_index_url: ${{ needs.resolve-fvdb-versions.outputs.core_index_url }}
-    secrets: inherit
-
   run-integration-tests:
     name: Run Tests
-    needs: [resolve-fvdb-versions, lookup-test-image, build-test-image]
-    # Skip on fork PRs: no GHCR credentials to pull image; run when build skipped (image exists) or after build
-    if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && !cancelled() && !failure() }}
+    needs: resolve-fvdb-versions
+    if: ${{ !cancelled() && !failure() }}
     runs-on: ubuntu-latest
     env:
       FVDB_VIZ_TORCH_VERSION: ${{ needs.resolve-fvdb-versions.outputs.torch_version }}
       FVDB_VIZ_TORCH_INDEX_URL: ${{ needs.resolve-fvdb-versions.outputs.torch_index_url }}
       FVDB_VIZ_CORE_VERSION: ${{ needs.resolve-fvdb-versions.outputs.core_version }}
       FVDB_VIZ_CORE_INDEX_URL: ${{ needs.resolve-fvdb-versions.outputs.core_index_url }}
+      FVDB_VIZ_TEST_IMAGE_BASE: ${{ needs.resolve-fvdb-versions.outputs.test_image }}
+      FVDB_VIZ_TEST_IMAGE_REVISION: ${{ needs.resolve-fvdb-versions.outputs.test_image_revision }}
       FVDB_VIZ_SCRIPT_TIMEOUT: ${{ needs.resolve-fvdb-versions.outputs.script_timeout }}
       FVDB_VIZ_SKIP_BASE_INSTALL: 1
-      FVDB_VIZ_TEST_IMAGE: ${{ needs.lookup-test-image.outputs.image_ref }}
+      FVDB_VIZ_IMAGE_CACHE_ENABLED: 0
     steps:
       - name: Resolve package selection
         id: config
@@ -153,13 +100,6 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ secrets.GHCR_PUSH_USERNAME }}
-          password: ${{ secrets.GHCR_PUSH_TOKEN }}
 
       - name: Prepare wheel directory
         run: |
@@ -197,18 +137,11 @@ jobs:
           sudo apt-get clean
           sudo docker system prune --all --force --volumes || true
 
-      - name: Pull fvdb.viz test image
-        run: |
-          set -euo pipefail
-          docker pull "${{ needs.lookup-test-image.outputs.image_ref }}"
-
       - name: Run fvdb.viz tests
-        env:
-          FVDB_VIZ_TEST_IMAGE: ${{ needs.lookup-test-image.outputs.image_ref }}
         run: |
           set -euo pipefail
 
-          SCRIPT_ARGS=("--stream" "${{ steps.config.outputs.package_stream }}" "--skip-image-build")
+          SCRIPT_ARGS=("--stream" "${{ steps.config.outputs.package_stream }}")
 
           if [[ "${{ steps.config.outputs.use_local }}" == "true" ]]; then
             SCRIPT_ARGS+=("--local-wheel" "${{ steps.local_wheel.outputs.host_path }}")
