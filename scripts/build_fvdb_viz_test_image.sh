@@ -142,5 +142,4 @@ else
   echo "Image tarball cache disabled for ${IMAGE_NAME}"
 fi
 
-ensure_cache_dir
 build_image
