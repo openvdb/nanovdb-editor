@@ -267,7 +267,21 @@ void hdda_step(inout hdda_t hdda, float3 ray_origin, float3 ray_dir, float3 ray_
     hdda.tmin = hdda.tmax;
 }
 
-void ray_march_nanovdb(StructuredBuffer<uint2> buf,
+groupshared uint s_active[4u];
+groupshared uint s_tmin[128u];
+groupshared uint64_t s_voxel_val[128u];
+groupshared uint64_t s_min_voxel_val;
+groupshared uint s_min_tmin;
+
+uint sort_asuint(float f)
+{
+    uint f_uint = asuint(f);
+    uint mask = -int(f_uint >> 31) | 0x80000000;
+    return f_uint ^ mask;
+}
+
+void ray_march_nanovdb(uint thread_idx,
+                       StructuredBuffer<uint2> buf,
                        float3 worldRayOrigin,
                        float rayMinT,
                        float3 worldRayDir,
@@ -315,27 +329,74 @@ void ray_march_nanovdb(StructuredBuffer<uint2> buf,
         isHit = false;
     }
 
-    if (isHit)
+    bool is_active = isHit;
+    hdda_t hdda = {};
+    if (is_active)
     {
-        hdda_t hdda;
         hdda_init(hdda, rayOrigin, rayDir, rayDirInv, boxMinT);
         hdda_update(hdda, rayOrigin, rayDir, rayDirInv, 1);
+    }
+    bool hdda_needs_update = true;
 
-        do
+    bool has_set_inactive = false;
+    do
+    {
+        GroupMemoryBarrierWithGroupSync();
+
+        // update HDDA state as needed
+        if (is_active)
         {
-            pnanovdb_address_t addr = pnanovdb_readaccessor_get_value_address(grid_type, buf, acc, hdda.ijk);
-            uint64_t val_raw = pnanovdb_read_uint64(buf, addr);
-            uint active_level_mask = uint(val_raw) & 0xFFFF;
-            uint skip_level = (uint(val_raw) >> 16u) & 0xFFFF;
-            uint list_begin_idx = uint(val_raw >> 32u);
-
-            // align HDDA tmin/tmax to current voxel size
-            int dim = 1 << skip_level;
-            if (dim > 1)
+            if (hdda_needs_update)
             {
-                dim /= 2u;
+                hdda_needs_update = false;
+
+                pnanovdb_address_t addr = pnanovdb_readaccessor_get_value_address(grid_type, buf, acc, hdda.ijk);
+                uint64_t val_raw = pnanovdb_read_uint64(buf, addr);
+                uint active_level_mask = uint(val_raw) & 0xFFFF;
+                uint skip_level = (uint(val_raw) >> 16u) & 0xFFFF;
+                uint list_begin_idx = uint(val_raw >> 32u);
+
+                // align HDDA tmin/tmax to current voxel size
+                int dim = 1 << skip_level;
+                if (dim > 1)
+                {
+                    dim /= 2u;
+                }
+                hdda_update(hdda, rayOrigin, rayDir, rayDirInv, dim);
+
+                s_voxel_val[thread_idx] = val_raw;
+                s_tmin[thread_idx] = sort_asuint(hdda.tmin);
             }
-            hdda_update(hdda, rayOrigin, rayDir, rayDirInv, dim);
+        }
+        else
+        {
+            s_voxel_val[thread_idx] = ~uint64_t(0u);
+            s_tmin[thread_idx] = sort_asuint(1.f / 0.f);
+        }
+
+        // vote for voxel val to update cooperatively
+        if (thread_idx == 0u)
+        {
+            s_min_tmin = sort_asuint(1.f / 0.f);
+            s_min_voxel_val = ~uint64_t(0u);
+        }
+        GroupMemoryBarrierWithGroupSync();
+        if (is_active)
+        {
+            InterlockedMin(s_min_tmin, s_tmin[thread_idx]);
+        }
+        GroupMemoryBarrierWithGroupSync();
+        if (is_active && s_min_tmin == s_tmin[thread_idx])
+        {
+            InterlockedMin(s_min_voxel_val, s_voxel_val[thread_idx]);
+        }
+        GroupMemoryBarrierWithGroupSync();
+
+        // cooperatively process min_voxel_val
+        if (s_min_voxel_val != ~uint64_t(0u))
+        {
+            uint active_level_mask = uint(s_min_voxel_val) & 0xFFFF;
+            uint list_begin_idx = uint(s_min_voxel_val >> 32u);
 
             // show only smallest three voxel sizes for now
             uint filter_mask = 0x7;
@@ -353,10 +414,9 @@ void ray_march_nanovdb(StructuredBuffer<uint2> buf,
                 {
                     pnanovdb_address_t prim_id_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
                     pnanovdb_uint32_t prim_id = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, range_begin + range_idx));
-#if 1
+
                     pnanovdb_address_t mean_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
                     pnanovdb_vec3_t meanf = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(mean_addr, 12u, prim_id));
-
                     pnanovdb_address_t quat_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 4u);
                     float4 quatf = float4(
                         pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 1u)),
@@ -364,30 +424,14 @@ void ray_march_nanovdb(StructuredBuffer<uint2> buf,
                         pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 3u)),
                         pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 0u))
                     );
-
                     pnanovdb_address_t scale_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 5u);
                     pnanovdb_vec3_t scalef = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(scale_addr, 12u, prim_id));
-#endif
+
                     pnanovdb_address_t sh0_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 6u);
                     pnanovdb_vec3_t sh0 = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(sh0_addr, 12u, prim_id));
-
                     pnanovdb_address_t opacity_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 3u);
                     float opacity = pnanovdb_read_float(buf, pnanovdb_address_offset_product(opacity_addr, 4u, prim_id));
 
-#if 0
-                    color.rgb = 0.2820947917738781f * sh0 + 0.5f;
-                    color.a = opacity;
-
-                    float currentT = hdda.tmin;
-
-                    color = max(float4(0.f, 0.f, 0.f, 0.f), color);
-                    color.a = min(1.f, color.a);
-                    color.a *= shader_params.alpha_scale;
-
-                    nominalT = sum.a * (color.a * currentT) + nominalT;
-                    sum.rgb = sum.a * (color.a * color.rgb) + sum.rgb;
-                    sum.a = (1.f - color.a) * sum.a;
-#else
                     intersect_gaussian(
                         meanf,
                         quatf,
@@ -402,14 +446,47 @@ void ray_march_nanovdb(StructuredBuffer<uint2> buf,
                         sum,
                         nominalT
                     );
-#endif
                 }
             }
+        }
 
-            hdda_step(hdda, rayOrigin, rayDir, rayDirInv, dim);
+        if (is_active)
+        {
+            // only step if target voxel was processed
+            if (s_min_voxel_val == s_voxel_val[thread_idx])
+            {
+                hdda_needs_update = true;
 
-        } while (hdda.tmin < boxMaxT && sum.a > 0.0001f);
-    }
+                uint skip_level = (uint(s_min_voxel_val) >> 16u) & 0xFFFF;
+                // align HDDA tmin/tmax to current voxel size
+                int dim = 1 << skip_level;
+                if (dim > 1)
+                {
+                    dim /= 2u;
+                }
+                hdda_step(hdda, rayOrigin, rayDir, rayDirInv, dim);
+            }
+        }
+
+        if (!(hdda.tmin < boxMaxT && sum.a > 0.0001f))
+        {
+            is_active = false;
+        }
+        // failed to excute anything meaningful, exit due to lack of progress
+        if (s_min_voxel_val == ~uint64_t(0u))
+        {
+            is_active = false;
+            //sum.r = 1.f;
+        }
+
+        if (!is_active && !has_set_inactive)
+        {
+            has_set_inactive = true;
+            InterlockedAnd(s_active[thread_idx >> 5u], ~(1u << (thread_idx & 31)));
+        }
+        GroupMemoryBarrierWithGroupSync();
+
+    } while (s_active[0] != 0u || s_active[1] != 0u || s_active[2] != 0u || s_active[3] != 0u);
 }
 
 float4 mat_mul(float4 v, float4 x, float4 y, float4 z, float4 w)
@@ -418,9 +495,17 @@ float4 mat_mul(float4 v, float4 x, float4 y, float4 z, float4 w)
 }
 
 [shader("compute")][numthreads(32, 4, 1)]
-void main(uint3 dispatchThreadID : SV_DispatchThreadID)
+void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 thread_idx : SV_GroupThreadID)
 {
     int2 tidx = int2(dispatchThreadID.xy);
+    uint thread_idx1d = thread_idx.x | (thread_idx.y << 5);
+
+    // initialize active mask
+    if (thread_idx1d < 4u)
+    {
+        s_active[thread_idx1d] = ~0u;
+    }
+    GroupMemoryBarrierWithGroupSync();
 
     float2 ndc = float2(2.f * ((float(tidx.x) + 0.5f) / float(editor_params.width)) - 1.f,
                         -2.f * ((float(tidx.y) + 0.5f) / float(editor_params.height)) + 1.f);
@@ -459,7 +544,7 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
 
     float4 sum = float4(0.f, 0.f, 0.f, 1.f);
     float nominalT = 0.f;
-    ray_march_nanovdb(buf, rayOrigin, 0.f, rayDir, 1e9f, rayDirInv, sum, nominalT);
+    ray_march_nanovdb(thread_idx1d, buf, rayOrigin, 0.f, rayDir, 1e9f, rayDirInv, sum, nominalT);
 
     float4 value = sum;
     // Note: BGRA target
