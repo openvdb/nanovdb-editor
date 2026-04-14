@@ -273,6 +273,20 @@ groupshared uint64_t s_voxel_val[128u];
 groupshared uint64_t s_min_voxel_val;
 groupshared uint s_min_tmin;
 
+groupshared uint64_t s_range[12u];
+
+struct prim_t
+{
+    float3 mean;
+    uint id;
+    float4 quat;
+    float3 scale;
+    float opacity;
+    float3 sh0;
+    float pad;
+};
+groupshared prim_t s_prims[128u];
+
 uint sort_asuint(float f)
 {
     uint f_uint = asuint(f);
@@ -400,53 +414,105 @@ void ray_march_nanovdb(uint thread_idx,
 
             // show only smallest three voxel sizes for now
             uint filter_mask = 0x7;
-
-            float4 color = float4(0.f, 0.f, 0.f, 0.f);
             uint active_level_count = countbits(active_level_mask & filter_mask);
+
+            if (thread_idx < 12u)
+            {
+                pnanovdb_uint64_t range = {};
+                if (thread_idx < active_level_count)
+                {
+                    pnanovdb_address_t range_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 0u);
+                    range_addr = pnanovdb_address_offset_product(range_addr, 8u, list_begin_idx);
+                    range = pnanovdb_read_uint64(buf, pnanovdb_address_offset(range_addr, 8u * thread_idx));
+                }
+                s_range[thread_idx] = range;
+            }
+            GroupMemoryBarrierWithGroupSync();
+            uint total_count = 0u;
             for (uint active_level_idx = 0u; active_level_idx < active_level_count; active_level_idx++)
             {
-                pnanovdb_address_t range_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 0u);
-                pnanovdb_uint64_t range = pnanovdb_read_uint64(buf, pnanovdb_address_offset_product(range_addr, 8u, list_begin_idx + active_level_idx));
-                uint range_begin = uint(range);
-                uint range_end = uint(range >> 32u);
-                uint range_count = range_end - range_begin;
-                for (uint range_idx = 0u; range_idx < range_count; range_idx++)
+                pnanovdb_uint64_t range = s_range[active_level_idx];
+                total_count += uint(range >> 32u) - uint(range);
+            }
+
+            uint pass_count = (total_count + 127u) / 128u;
+            for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
+            {
+                uint lprim_idx = 128u * pass_idx + thread_idx;
+
+                uint active_level_idx = 0u;
+                uint range_accum = 0u;
+                uint range_begin = 0u;
+                uint range_end = 0u;
+                uint range_idx = 0u;
+                while (active_level_idx < active_level_count)
+                {
+                    range_begin = uint(s_range[active_level_idx]);
+                    range_end = uint(s_range[active_level_idx] >> 32u);
+                    range_idx = lprim_idx - range_accum;
+                    if (range_begin + range_idx < range_end)
+                    {
+                        break;
+                    }
+                    range_accum += (range_end - range_begin);
+                    active_level_idx++;
+                }
+
+                if (range_begin + range_idx < range_end)
                 {
                     pnanovdb_address_t prim_id_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
-                    pnanovdb_uint32_t prim_id = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, range_begin + range_idx));
+                    uint prim_id = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, range_begin + range_idx));
+                    s_prims[thread_idx].id = prim_id;
 
                     pnanovdb_address_t mean_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
-                    pnanovdb_vec3_t meanf = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(mean_addr, 12u, prim_id));
+                    s_prims[thread_idx].mean = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(mean_addr, 12u, prim_id));
                     pnanovdb_address_t quat_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 4u);
-                    float4 quatf = float4(
+                    s_prims[thread_idx].quat = float4(
                         pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 1u)),
                         pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 2u)),
                         pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 3u)),
                         pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 0u))
                     );
                     pnanovdb_address_t scale_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 5u);
-                    pnanovdb_vec3_t scalef = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(scale_addr, 12u, prim_id));
+                    s_prims[thread_idx].scale = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(scale_addr, 12u, prim_id));
 
                     pnanovdb_address_t sh0_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 6u);
-                    pnanovdb_vec3_t sh0 = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(sh0_addr, 12u, prim_id));
+                    s_prims[thread_idx].sh0 = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(sh0_addr, 12u, prim_id));
                     pnanovdb_address_t opacity_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 3u);
-                    float opacity = pnanovdb_read_float(buf, pnanovdb_address_offset_product(opacity_addr, 4u, prim_id));
-
-                    intersect_gaussian(
-                        meanf,
-                        quatf,
-                        scalef,
-                        sh0,
-                        opacity,
-                        worldRayOrigin,
-                        hdda.tmin * rayDirMagnInv,
-                        worldRayDir,
-                        hdda.tmax * rayDirMagnInv,
-                        worldRayDirInv,
-                        sum,
-                        nominalT
-                    );
+                    s_prims[thread_idx].opacity = pnanovdb_read_float(buf, pnanovdb_address_offset_product(opacity_addr, 4u, prim_id));
                 }
+
+                GroupMemoryBarrierWithGroupSync();
+
+                uint prim_count = total_count - 128u * pass_idx;
+                if (prim_count > 128u)
+                {
+                    prim_count = 128u;
+                }
+
+                // only participate if this pixel actually wanted this data
+                if (s_min_voxel_val == s_voxel_val[thread_idx])
+                {
+                    for (uint s_idx = 0u; s_idx < prim_count; s_idx++)
+                    {
+                        intersect_gaussian(
+                            s_prims[s_idx].mean,
+                            s_prims[s_idx].quat,
+                            s_prims[s_idx].scale,
+                            s_prims[s_idx].sh0,
+                            s_prims[s_idx].opacity,
+                            worldRayOrigin,
+                            hdda.tmin * rayDirMagnInv,
+                            worldRayDir,
+                            hdda.tmax * rayDirMagnInv,
+                            worldRayDirInv,
+                            sum,
+                            nominalT
+                        );
+                    }
+                }
+
+                GroupMemoryBarrierWithGroupSync();
             }
         }
 
