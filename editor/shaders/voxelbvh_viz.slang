@@ -429,6 +429,67 @@ groupshared uint64_t s_range[12u];
 
 groupshared float2 s_cull_range[128u];
 
+groupshared uint s_prim_ids[1024u];
+groupshared uint s_prim_keys[1024u];
+
+groupshared uint smem[256u];
+uint read_smem_idx(uint addr, uint idx)
+{
+    return smem[addr + idx];
+}
+void write_smem_idx(uint addr, uint idx, uint val)
+{
+    smem[addr + idx] = val;
+}
+void workgroup_scan(uint thread_idx, uint val, inout uint result, inout uint total_count)
+{
+    uint sdata0_addr = 0;
+    uint sdata1_addr = 128u;
+
+    uint local_val = val;
+    write_smem_idx(sdata0_addr, thread_idx, local_val);
+
+    GroupMemoryBarrierWithGroupSync();
+
+    if (thread_idx >= 1)
+        local_val += read_smem_idx(sdata0_addr, thread_idx - 1);
+    if (thread_idx >= 2)
+        local_val += read_smem_idx(sdata0_addr, thread_idx - 2);
+    if (thread_idx >= 3)
+        local_val += read_smem_idx(sdata0_addr, thread_idx - 3);
+    write_smem_idx(sdata1_addr, thread_idx, local_val);
+
+    GroupMemoryBarrierWithGroupSync();
+
+    if (thread_idx >= 4)
+        local_val += read_smem_idx(sdata1_addr, thread_idx - 4);
+    if (thread_idx >= 8)
+        local_val += read_smem_idx(sdata1_addr, thread_idx - 8);
+    if (thread_idx >= 12)
+        local_val += read_smem_idx(sdata1_addr, thread_idx - 12);
+    write_smem_idx(sdata0_addr, thread_idx, local_val);
+
+    GroupMemoryBarrierWithGroupSync();
+
+    if (thread_idx >= 16)
+        local_val += read_smem_idx(sdata0_addr, thread_idx - 16);
+    if (thread_idx >= 32)
+        local_val += read_smem_idx(sdata0_addr, thread_idx - 32);
+    if (thread_idx >= 48)
+        local_val += read_smem_idx(sdata0_addr, thread_idx - 48);
+    write_smem_idx(sdata1_addr, thread_idx, local_val);
+
+    GroupMemoryBarrierWithGroupSync();
+
+    if (thread_idx >= 64)
+        local_val += read_smem_idx(sdata1_addr, thread_idx - 64);
+
+    result = local_val;
+
+    // compute total_count
+    total_count = read_smem_idx(sdata1_addr, 63) + read_smem_idx(sdata1_addr, 127);
+}
+
 struct prim_t
 {
     float3 mean;
@@ -617,6 +678,7 @@ void ray_march_nanovdb(uint thread_idx,
                 total_count += uint(range >> 32u) - uint(range);
             }
 
+            uint workgroup_scan_accum = 0u;
             uint pass_count = (total_count + 127u) / 128u;
             for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
             {
@@ -640,61 +702,87 @@ void ray_march_nanovdb(uint thread_idx,
                     active_level_idx++;
                 }
 
+                uint prim_id = ~0u;
+                float cull_t = 1.f / 0.f;
                 if (range_begin + range_idx < range_end)
                 {
-                    // load gaussians into shared memory and performance projection
-
+                    // culling stage
                     pnanovdb_address_t prim_id_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
-                    uint prim_id = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, range_begin + range_idx));
+                    prim_id = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, range_begin + range_idx));
+
+                    pnanovdb_address_t mean_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
+                    float3 meanf = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(mean_addr, 12u, prim_id));
+
+                    // see if mean falls within cull range
+                    cull_t = dot(meanf, worldRayDirCenter);
+                    bool should_cull = !(cull_t >= s_cull_range[s_min_hdda_idx].x && cull_t <= s_cull_range[s_min_hdda_idx].y);
+                    if (should_cull)
+                    {
+                        prim_id = ~0u;
+                    }
+                }
+
+                uint scan_val = 0u;
+                uint scan_total = 0u;
+                workgroup_scan(thread_idx, prim_id != ~0u ? 1u : 0u, scan_val, scan_total);
+                if (prim_id != ~0u)
+                {
+                    uint write_idx = scan_val - 1u + workgroup_scan_accum;
+                    if (write_idx < 1024u)
+                    {
+                        s_prim_ids[write_idx] = prim_id;
+                        s_prim_keys[write_idx] = sort_asuint(cull_t);
+                    }
+                }
+                workgroup_scan_accum += scan_total;
+            }
+
+            if (workgroup_scan_accum > 1024u)
+            {
+                workgroup_scan_accum = 1024u;
+            }
+
+            pass_count = (workgroup_scan_accum + 127u) / 128u;
+            for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
+            {
+                uint list_idx = 128u * pass_idx + thread_idx;
+
+                if (list_idx < workgroup_scan_accum)
+                {
+                    // load gaussians into shared memory and performance projection
+                    uint prim_id = s_prim_ids[list_idx];
+
                     s_prims[thread_idx].id = prim_id;
 
                     pnanovdb_address_t mean_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
                     float3 meanf = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(mean_addr, 12u, prim_id));
                     s_prims[thread_idx].mean = meanf;
 
-                    // see if mean falls within cull range
-                    float cull_t = dot(meanf, worldRayDirCenter);
-                    bool should_cull = !(cull_t >= s_cull_range[s_min_hdda_idx].x && cull_t <= s_cull_range[s_min_hdda_idx].y);
+                    pnanovdb_address_t quat_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 4u);
+                    float4 quatf = float4(
+                        pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 1u)),
+                        pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 2u)),
+                        pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 3u)),
+                        pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 0u))
+                    );
+                    pnanovdb_address_t scale_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 5u);
+                    float3 scalef = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(scale_addr, 12u, prim_id));
 
-                    if (!should_cull)
-                    {
-                        pnanovdb_address_t quat_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 4u);
-                        float4 quatf = float4(
-                            pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 1u)),
-                            pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 2u)),
-                            pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 3u)),
-                            pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 0u))
-                        );
-                        pnanovdb_address_t scale_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 5u);
-                        float3 scalef = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(scale_addr, 12u, prim_id));
+                    float3 conic = {};
+                    project_conic(s_prims[thread_idx].mean, quatf, scalef, conic);
+                    s_prims[thread_idx].conic = conic;
 
-                        float3 conic = {};
-                        project_conic(s_prims[thread_idx].mean, quatf, scalef, conic);
-                        s_prims[thread_idx].conic = conic;
+                    pnanovdb_address_t sh0_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 6u);
+                    float3 sh0 = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(sh0_addr, 12u, prim_id));
+                    s_prims[thread_idx].color = float3(0.2820947917738781f * sh0 + 0.5f);
 
-                        pnanovdb_address_t sh0_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 6u);
-                        float3 sh0 = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(sh0_addr, 12u, prim_id));
-                        s_prims[thread_idx].color = float3(0.2820947917738781f * sh0 + 0.5f);
-
-                        pnanovdb_address_t opacity_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 3u);
-                        s_prims[thread_idx].opacity = pnanovdb_read_float(buf, pnanovdb_address_offset_product(opacity_addr, 4u, prim_id));
-                    }
-
-                    if (should_cull)
-                    {
-                        // mark prim as culled
-                        s_prims[thread_idx].id = ~0u;
-                    }
-                }
-                else
-                {
-                    // mark prim as culled
-                    s_prims[thread_idx].id = ~0u;
+                    pnanovdb_address_t opacity_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 3u);
+                    s_prims[thread_idx].opacity = pnanovdb_read_float(buf, pnanovdb_address_offset_product(opacity_addr, 4u, prim_id));
                 }
 
                 GroupMemoryBarrierWithGroupSync();
 
-                uint prim_count = total_count - 128u * pass_idx;
+                uint prim_count = workgroup_scan_accum - 128u * pass_idx;
                 if (prim_count > 128u)
                 {
                     prim_count = 128u;
