@@ -85,11 +85,198 @@ float2 intersect_sphere(float3 rayOrigin, float3 rayDir)
     return float2(-b - h, -b + h);
 }
 
-void intersect_gaussian(
+float3x3 quat_to_mat(float4 quatf)
+{
+    float3 rot0 = float3(
+        1.f - 2.f * (quatf.y * quatf.y + quatf.z * quatf.z),
+        2.f * (quatf.x * quatf.y - quatf.z * quatf.w),
+        2.f * (quatf.x * quatf.z + quatf.y * quatf.w));
+    float3 rot1 = float3(
+        2.f * (quatf.x * quatf.y + quatf.z * quatf.w),
+        1.f - 2.f * (quatf.x * quatf.x + quatf.z * quatf.z),
+        2.f * (quatf.y * quatf.z - quatf.x * quatf.w));
+    float3 rot2 = float3(
+        2.f * (quatf.x * quatf.z - quatf.y * quatf.w),
+        2.f * (quatf.y * quatf.z + quatf.x * quatf.w),
+        1.f - 2.f * (quatf.x * quatf.x + quatf.y * quatf.y));
+    return float3x3(rot0, rot1, rot2);
+}
+
+float3x3 quat_and_scale_to_mat(float4 quatf, float3 scalef)
+{
+    float3x3 R = quat_to_mat(quatf);
+    float3x3 S = float3x3(scalef.x, 0.f, 0.f, 0.f, scalef.y, 0.f, 0.f, 0.f, scalef.z);
+    float3x3 M = mul(R, S);
+    return mul(M, transpose(M));
+}
+
+float3x3 covar_world_to_cam(float3x3 R, float3x3 covar)
+{
+    return mul(mul(R, covar), transpose(R));
+}
+
+void persp_proj(
+    float3 mean3d,
+    float3x3 cov3d,
+    float fx, float fy,
+    float cx, float cy,
+    uint width, uint height,
+    inout float2x2 cov2d,
+    inout float2 mean2d)
+{
+    float x = mean3d.x;
+    float y = mean3d.y;
+    float z = mean3d.z;
+
+    // for right handed projection, flip z sign
+    float J_off_sign = -1.f;
+    // if (constants.near_plane < 0.f)
+    if (editor_params.projection_w.z < 0.f)
+    {
+        z = -z;
+        J_off_sign = 1.f;
+    }
+
+    float tan_fovx = 0.5f * float(width) / fx;
+    float tan_fovy = 0.5f * float(height) / fy;
+    float lim_x_pos = (width - cx) / fx + 0.3f * tan_fovx;
+    float lim_x_neg = cx / fx + 0.3f * tan_fovx;
+    float lim_y_pos = (height - cy) / fy + 0.3f * tan_fovy;
+    float lim_y_neg = cy / fy + 0.3f * tan_fovy;
+
+    float rz = 1.f / z;
+    float rz2 = rz * rz;
+    float tx = z * min(lim_x_pos, max(-lim_x_neg, x * rz));
+    float ty = z * min(lim_y_pos, max(-lim_y_neg, y * rz));
+
+    float2x3 J = float2x3(
+        fx * rz, 0.f, J_off_sign * fx * tx * rz2,
+        0.f, fy * rz, J_off_sign * fy * ty * rz2
+    );
+
+    cov2d = mul(mul(J, cov3d), transpose(J));
+    mean2d = float2(fx * x * rz + cx, fy * y * rz + cy);
+}
+
+void ortho_proj(
+    float3 mean3d,
+    float3x3 cov3d,
+    float fx, float fy,
+    float cx, float cy,
+    uint width, uint height,
+    inout float2x2 cov2d,
+    inout float2 mean2d)
+{
+    float x = mean3d.x;
+    float y = mean3d.y;
+
+    float2x3 J = float2x3(
+        fx, 0.f, 0.f,
+        0.f, fy, 0.f
+    );
+
+    cov2d = mul(mul(J, cov3d), transpose(J));
+    mean2d = float2(fx * x + cx, fy * y + cy);
+}
+
+float add_blur(float eps2d, inout float2x2 covar, inout float compensation)
+{
+    float det_orig = covar[0][0] * covar[1][1] - covar[0][1] * covar[1][0];
+    covar[0][0] += eps2d;
+    covar[1][1] += eps2d;
+    float det_blur = covar[0][0] * covar[1][1] - covar[0][1] * covar[1][0];
+    compensation = sqrt(max(0.f, det_orig / det_blur));
+    return det_blur;
+}
+
+float inverse(float2x2 M, inout float2x2 Minv)
+{
+    float det = M[0][0] * M[1][1] - M[0][1] * M[1][0];
+    if (det <= 0.f) {
+        return det;
+    }
+    float invDet = 1.f / det;
+    Minv = float2x2(
+        M[1][1] * invDet, -M[0][1] * invDet,
+        -M[1][0] * invDet, M[0][0] * invDet);
+    return det;
+}
+
+void project_conic(
     float3 meanf,
     float4 quatf,
     float3 scalef,
-    float3 sh0,
+    inout float3 conic)
+{
+    float4 mean_c = mat_mul(float4(meanf, 1.f),
+                            editor_params.view_x, editor_params.view_y,
+                            editor_params.view_z, editor_params.view_w);
+
+    float3x3 covar = quat_and_scale_to_mat(quatf, scalef);
+
+    float3x3 view_rot = float3x3(
+        editor_params.view_x.x, editor_params.view_x.y, editor_params.view_x.z,
+        editor_params.view_y.x, editor_params.view_y.y, editor_params.view_y.z,
+        editor_params.view_z.x, editor_params.view_z.y, editor_params.view_z.z);
+    float3x3 covar_c = covar_world_to_cam(view_rot, covar);
+
+    float fx = float(editor_params.width) * 0.5f * editor_params.projection_x.x;
+    float fy = float(editor_params.height) * 0.5f * editor_params.projection_y.y;
+    // TODO: should extract from proj matrix to cover non-centered cases
+    float cx = float(editor_params.width) * 0.5f;
+    float cy = float(editor_params.height) * 0.5f;
+
+    float2x2 covar2d;
+    float2 mean2d;
+    if (editor_params.projection_w.z == 0.f)
+    {
+        ortho_proj(
+            mean_c.xyz, covar_c,
+            fx, fy,
+            cx, cy,
+            editor_params.width, editor_params.height,
+            covar2d,
+            mean2d
+        );
+    }
+    else
+    {
+        persp_proj(
+            mean_c.xyz, covar_c,
+            fx, fy,
+            cx, cy,
+            editor_params.width, editor_params.height,
+            covar2d,
+            mean2d
+        );
+    }
+
+    const float eps2d = 0.3f;
+    float compensation;
+    float det = add_blur(eps2d, covar2d, compensation);
+
+    float2x2 covar2d_inv;
+    inverse(covar2d, covar2d_inv);
+
+    conic = float3(covar2d_inv[0][0], covar2d_inv[0][1], covar2d_inv[1][1]);
+
+    // move conic to camera space
+    float conic_cam_scale = 1.f;
+    if (editor_params.projection_w.z == 0.f)
+    {
+        conic_cam_scale = 0.5f * float(editor_params.width) * editor_params.projection_x.x;
+    }
+    else
+    {
+        conic_cam_scale = 0.5f * float(editor_params.width) * editor_params.projection_x.x / abs(mean_c.z);
+    }
+    conic *= (conic_cam_scale * conic_cam_scale);
+}
+
+void intersect_gaussian(
+    float3 meanf,
+    float3 conic,
+    float3 color,
     float opacity,
     float3 rayOrigin,
     float tmin,
@@ -99,91 +286,56 @@ void intersect_gaussian(
     inout float4 sum,
     inout float nominalT)
 {
-    float3 rot0_inv = float3(
-        1.f - 2.f * (quatf.y * quatf.y + quatf.z * quatf.z),
-        2.f * (quatf.x * quatf.y + quatf.z * quatf.w),
-        2.f * (quatf.x * quatf.z - quatf.y * quatf.w));
-    float3 rot1_inv = float3(
-        2.f * (quatf.x * quatf.y - quatf.z * quatf.w),
-        1.f - 2.f * (quatf.x * quatf.x + quatf.z * quatf.z),
-        2.f * (quatf.y * quatf.z + quatf.x * quatf.w));
-    float3 rot2_inv = float3(
-        2.f * (quatf.x * quatf.z + quatf.y * quatf.w),
-        2.f * (quatf.y * quatf.z - quatf.x * quatf.w),
-        1.f - 2.f * (quatf.x * quatf.x + quatf.y * quatf.y));
+    float4x4 view = float4x4(
+        editor_params.view_x.x, editor_params.view_y.x, editor_params.view_z.x, editor_params.view_w.x,
+        editor_params.view_x.y, editor_params.view_y.y, editor_params.view_z.y, editor_params.view_w.y,
+        editor_params.view_x.z, editor_params.view_y.z, editor_params.view_z.z, editor_params.view_w.z,
+        editor_params.view_x.w, editor_params.view_y.w, editor_params.view_z.w, editor_params.view_w.w
+    );
 
-    // translate/rotate ray into local space
-    float3 localRayOrigin = float3(
-        dot(rayOrigin - meanf, rot0_inv),
-        dot(rayOrigin - meanf, rot1_inv),
-        dot(rayOrigin - meanf, rot2_inv));
-    float3 localRayDir = float3(
-        dot(rayDir, rot0_inv),
-        dot(rayDir, rot1_inv),
-        dot(rayDir, rot2_inv));
+    // put mean and ray into view space
+    float4 mean_c = mul(float4(meanf, 1.f), view);
+    float4 rayOrigin_c = mul(float4(rayOrigin, 1.f), view);
+    float4 rayDir_c = mul(float4(rayDir, 0.f), view);
 
-    const float local_scale = sqrt(2.f * log(max(0.01f, opacity) / 0.01f));
-    scalef *= local_scale;
-    float3 scalef_inv = float3(1.f) / scalef;
+    rayDir_c.xyz = normalize(rayDir_c.xyz);
 
-    localRayOrigin *= scalef_inv;
-    localRayDir *= scalef_inv;
-    float localRayDirMagn = length(localRayDir);
-    if (localRayDirMagn > 0.f)
-    {
-        localRayDir /= localRayDirMagn;
-    }
+    // find t to intersect on z plane
+    float t = abs(rayDir_c.z != 0.f ? (mean_c.z - rayOrigin_c.z) / rayDir_c.z : 0.f);
 
-    // intersect box first, because it avoids precision problems
-    float2 t_range = float2(-1.f, -1.f);
-    bool did_hit = intersect_box(localRayDir, float3(1.f) / localRayDir,
-        float3(-1.1f, -1.1f, -1.1f) - localRayOrigin, float3(1.1f, 1.1f, 1.1f) - localRayOrigin,
-        t_range.x, t_range.y);
-    if (did_hit)
-    {
-        // advance ray to hit point
-        float3 localRayOrigin_delta = localRayOrigin + localRayDir * t_range.x;
-        // shoot ray at sphere
-        float2 t_range_delta = intersect_sphere(localRayOrigin_delta, localRayDir);
-        // refine original hit T
-        if (t_range_delta.x > 0.f)
-        {
-            t_range.y = t_range.x + t_range_delta.y;
-            t_range.x = t_range.x + t_range_delta.x;
-        }
-        else
-        {
-            t_range = float2(-1.f, -1.f);
-        }
-    }
-    else
-    {
-        t_range = float2(-1.f, -1.f);
-    }
-    float t = t_range.x / localRayDirMagn;
+    // apply t to move xy
+    float2 hit_2d = rayDir_c.xy * t + rayOrigin_c.xy;
 
+    float2 delta = (hit_2d.xy - mean_c.xy);
+
+    float sigma = 0.5f * (conic.x * delta.x * delta.x + conic.z * delta.y * delta.y) +
+                    conic.y * delta.x * delta.y;
+    float alpha = min(0.999f, opacity * exp(-sigma));
+#if 1
     if (t > 0.f && t >= tmin && t < tmax)
     {
-        float4 color = float4(
-            float3(0.2820947917738781f * sh0 + 0.5f),
-            opacity);
-
-        //color.a = color.a * exp(-dot(pos, pos));
-        color.a = 1.f;
-
-        #if 1
-        if (t < nominalT || nominalT == 0.f)
+        if (!(sigma < 0.f || alpha < 0.01f))
         {
-            nominalT = t;
-            sum.rgb = color.a * color.rgb;
-            sum.a = 0.f;
+            nominalT = sum.a * (alpha * t) + nominalT;
+            sum.rgb = sum.a * (alpha * color) + sum.rgb;
+            sum.a = (1.f - alpha) * sum.a;
         }
-        #else
-        nominalT = sum.a * (color.a * t) + nominalT;
-        sum.rgb = sum.a * (color.a * color.rgb) + sum.rgb;
-        sum.a = (1.f - color.a) * sum.a;
-        #endif
     }
+#else
+    if (!(sigma < 0.f || alpha < 0.01f))
+    {
+        alpha = 1.f;
+        if (t > 0.f && t >= tmin && t < tmax)
+        {
+            if (t < nominalT || nominalT == 0.f)
+            {
+                nominalT = t;
+                sum.rgb = alpha * color;
+                sum.a = 0.f;
+            }
+        }
+    }
+#endif
 }
 
 struct hdda_t
@@ -279,11 +431,10 @@ struct prim_t
 {
     float3 mean;
     uint id;
-    float4 quat;
-    float3 scale;
-    float opacity;
-    float3 sh0;
+    float3 conic;
     float pad;
+    float3 color;
+    float opacity;
 };
 groupshared prim_t s_prims[128u];
 
@@ -301,6 +452,7 @@ void ray_march_nanovdb(uint thread_idx,
                        float3 worldRayDir,
                        float rayMaxT,
                        float3 worldRayDirInv,
+                       float3 worldRayDirCenter,
                        inout float4 sum,
                        inout float nominalT)
 {
@@ -413,7 +565,7 @@ void ray_march_nanovdb(uint thread_idx,
             uint list_begin_idx = uint(s_min_voxel_val >> 32u);
 
             // show only smallest three voxel sizes for now
-            uint filter_mask = 0x7;
+            uint filter_mask = 0x007;
             uint active_level_count = countbits(active_level_mask & filter_mask);
 
             if (thread_idx < 12u)
@@ -460,24 +612,33 @@ void ray_march_nanovdb(uint thread_idx,
 
                 if (range_begin + range_idx < range_end)
                 {
+                    // load gaussians into shared memory and performance projection
+
                     pnanovdb_address_t prim_id_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
                     uint prim_id = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, range_begin + range_idx));
                     s_prims[thread_idx].id = prim_id;
 
                     pnanovdb_address_t mean_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
                     s_prims[thread_idx].mean = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(mean_addr, 12u, prim_id));
+
                     pnanovdb_address_t quat_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 4u);
-                    s_prims[thread_idx].quat = float4(
+                    float4 quatf = float4(
                         pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 1u)),
                         pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 2u)),
                         pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 3u)),
                         pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 0u))
                     );
                     pnanovdb_address_t scale_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 5u);
-                    s_prims[thread_idx].scale = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(scale_addr, 12u, prim_id));
+                    float3 scalef = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(scale_addr, 12u, prim_id));
+
+                    float3 conic = {};
+                    project_conic(s_prims[thread_idx].mean, quatf, scalef, conic);
+                    s_prims[thread_idx].conic = conic;
 
                     pnanovdb_address_t sh0_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 6u);
-                    s_prims[thread_idx].sh0 = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(sh0_addr, 12u, prim_id));
+                    float3 sh0 = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(sh0_addr, 12u, prim_id));
+                    s_prims[thread_idx].color = float3(0.2820947917738781f * sh0 + 0.5f);
+
                     pnanovdb_address_t opacity_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 3u);
                     s_prims[thread_idx].opacity = pnanovdb_read_float(buf, pnanovdb_address_offset_product(opacity_addr, 4u, prim_id));
                 }
@@ -497,9 +658,8 @@ void ray_march_nanovdb(uint thread_idx,
                     {
                         intersect_gaussian(
                             s_prims[s_idx].mean,
-                            s_prims[s_idx].quat,
-                            s_prims[s_idx].scale,
-                            s_prims[s_idx].sh0,
+                            s_prims[s_idx].conic,
+                            s_prims[s_idx].color,
                             s_prims[s_idx].opacity,
                             worldRayOrigin,
                             hdda.tmin * rayDirMagnInv,
@@ -560,6 +720,36 @@ float4 mat_mul(float4 v, float4 x, float4 y, float4 z, float4 w)
     return float4(dot(v, x), dot(v, y), dot(v, z), dot(v, w));
 }
 
+void get_center_ray_dir(out float3 rayDir)
+{
+    float2 ndc = float2(0.f, 0.f);
+    float4 pos_d0 = mat_mul(float4(ndc.xy, 0.f, 1.f),
+                            editor_params.projection_inv_x, editor_params.projection_inv_y,
+                            editor_params.projection_inv_z, editor_params.projection_inv_w);
+    float4 pos_d1 = mat_mul(float4(ndc.xy, 1.f, 1.f),
+                            editor_params.projection_inv_x, editor_params.projection_inv_y,
+                            editor_params.projection_inv_z, editor_params.projection_inv_w);
+
+    float z_d0 = pos_d0.z * (1.f / pos_d0.w);
+    float z_d1 = pos_d1.z * (1.f / pos_d1.w);
+    bool is_reverse_z = abs(z_d0) > abs(z_d1);
+    float4 ray_dir_near = is_reverse_z ? pos_d1 : pos_d0;
+
+    float4 ray_dir_far = ray_dir_near + mat_mul(float4(0.f, 0.f, 1.f, 0.f),
+                                                editor_params.projection_inv_x, editor_params.projection_inv_y,
+                                                editor_params.projection_inv_z, editor_params.projection_inv_w);
+    rayDir = normalize((ray_dir_far.xyz / ray_dir_far.w) - (ray_dir_near.xyz / ray_dir_near.w));
+    if (is_reverse_z)
+    {
+        rayDir = -rayDir;
+    }
+
+    rayDir = mat_mul(float4(rayDir, 0.f),
+                     editor_params.view_inv_x, editor_params.view_inv_y,
+                     editor_params.view_inv_z, editor_params.view_inv_w) .xyz;
+    rayDir = normalize(rayDir);
+}
+
 [shader("compute")][numthreads(32, 4, 1)]
 void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 thread_idx : SV_GroupThreadID)
 {
@@ -605,12 +795,15 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 thread_idx : SV_Gr
                          editor_params.view_inv_w);
     float3 rayOrigin = rayOrigin4.xyz / rayOrigin4.w;
 
+    float3 rayDirCenter = {};
+    get_center_ray_dir(rayDirCenter);
+
     pnanovdb_grid_handle_t grid = { pnanovdb_address_null() };
     pnanovdb_uint32_t grid_type = pnanovdb_grid_get_grid_type(buf, grid);
 
     float4 sum = float4(0.f, 0.f, 0.f, 1.f);
     float nominalT = 0.f;
-    ray_march_nanovdb(thread_idx1d, buf, rayOrigin, 0.f, rayDir, 1e9f, rayDirInv, sum, nominalT);
+    ray_march_nanovdb(thread_idx1d, buf, rayOrigin, 0.f, rayDir, 1e9f, rayDirInv, rayDirCenter, sum, nominalT);
 
     float4 value = sum;
     // Note: BGRA target
