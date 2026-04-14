@@ -422,10 +422,12 @@ void hdda_step(inout hdda_t hdda, float3 ray_origin, float3 ray_dir, float3 ray_
 groupshared uint s_active[4u];
 groupshared uint s_tmin[128u];
 groupshared uint64_t s_voxel_val[128u];
-groupshared uint64_t s_min_voxel_val;
 groupshared uint s_min_tmin;
+groupshared uint s_min_hdda_idx;
 
 groupshared uint64_t s_range[12u];
+
+groupshared float2 s_cull_range[128u];
 
 struct prim_t
 {
@@ -443,6 +445,32 @@ uint sort_asuint(float f)
     uint f_uint = asuint(f);
     uint mask = -int(f_uint >> 31) | 0x80000000;
     return f_uint ^ mask;
+}
+
+float2 compute_hdda_culling_range(StructuredBuffer<uint2> buf,
+                                  pnanovdb_grid_handle_t grid,
+                                  float3 worldRayDirCenter,
+                                  int3 ijk,
+                                  int dim)
+{
+    int dim_mask = dim - 1;
+    int3 ijk_min = ijk & ~dim_mask;
+    int3 ijk_max = ijk_min + int3(dim);
+    float3 world_min = pnanovdb_grid_index_to_worldf(buf, grid, float3(ijk_min));
+    float3 world_max = pnanovdb_grid_index_to_worldf(buf, grid, float3(ijk_max));
+    float2 range = float2(1.f / 0.f, -1.f / 0.f);
+    for (int i = 0u; i < 8; i++)
+    {
+        float3 pos = float3(
+            (i & 1) == 0 ? world_min.x : world_max.x,
+            (i & 2) == 0 ? world_min.y : world_max.y,
+            (i & 4) == 0 ? world_min.z : world_max.z
+        );
+        float t = dot(pos, worldRayDirCenter);
+        range.x = min(range.x, t);
+        range.y = max(range.y, t);
+    }
+    return range;
 }
 
 void ray_march_nanovdb(uint thread_idx,
@@ -532,19 +560,21 @@ void ray_march_nanovdb(uint thread_idx,
 
                 s_voxel_val[thread_idx] = val_raw;
                 s_tmin[thread_idx] = sort_asuint(hdda.tmin);
+                s_cull_range[thread_idx] = compute_hdda_culling_range(buf, grid, worldRayDirCenter, hdda.ijk, dim);
             }
         }
         else
         {
             s_voxel_val[thread_idx] = ~uint64_t(0u);
             s_tmin[thread_idx] = sort_asuint(1.f / 0.f);
+            s_cull_range[thread_idx] = float2(1.f / 0.f, 1.f / 0.f);
         }
 
         // vote for voxel val to update cooperatively
         if (thread_idx == 0u)
         {
             s_min_tmin = sort_asuint(1.f / 0.f);
-            s_min_voxel_val = ~uint64_t(0u);
+            s_min_hdda_idx = ~0u;
         }
         GroupMemoryBarrierWithGroupSync();
         if (is_active)
@@ -554,18 +584,18 @@ void ray_march_nanovdb(uint thread_idx,
         GroupMemoryBarrierWithGroupSync();
         if (is_active && s_min_tmin == s_tmin[thread_idx])
         {
-            InterlockedMin(s_min_voxel_val, s_voxel_val[thread_idx]);
+            InterlockedMin(s_min_hdda_idx, thread_idx);
         }
         GroupMemoryBarrierWithGroupSync();
 
         // cooperatively process min_voxel_val
-        if (s_min_voxel_val != ~uint64_t(0u))
+        if (s_voxel_val[s_min_hdda_idx] != ~uint64_t(0u))
         {
-            uint active_level_mask = uint(s_min_voxel_val) & 0xFFFF;
-            uint list_begin_idx = uint(s_min_voxel_val >> 32u);
+            uint active_level_mask = uint(s_voxel_val[s_min_hdda_idx]) & 0xFFFF;
+            uint list_begin_idx = uint(s_voxel_val[s_min_hdda_idx] >> 32u);
 
             // show only smallest three voxel sizes for now
-            uint filter_mask = 0x007;
+            uint filter_mask = 0xFFF;
             uint active_level_count = countbits(active_level_mask & filter_mask);
 
             if (thread_idx < 12u)
@@ -619,28 +649,47 @@ void ray_march_nanovdb(uint thread_idx,
                     s_prims[thread_idx].id = prim_id;
 
                     pnanovdb_address_t mean_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
-                    s_prims[thread_idx].mean = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(mean_addr, 12u, prim_id));
+                    float3 meanf = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(mean_addr, 12u, prim_id));
+                    s_prims[thread_idx].mean = meanf;
 
-                    pnanovdb_address_t quat_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 4u);
-                    float4 quatf = float4(
-                        pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 1u)),
-                        pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 2u)),
-                        pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 3u)),
-                        pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 0u))
-                    );
-                    pnanovdb_address_t scale_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 5u);
-                    float3 scalef = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(scale_addr, 12u, prim_id));
+                    // see if mean falls within cull range
+                    float cull_t = dot(meanf, worldRayDirCenter);
+                    bool should_cull = !(cull_t >= s_cull_range[s_min_hdda_idx].x && cull_t <= s_cull_range[s_min_hdda_idx].y);
 
-                    float3 conic = {};
-                    project_conic(s_prims[thread_idx].mean, quatf, scalef, conic);
-                    s_prims[thread_idx].conic = conic;
+                    if (!should_cull)
+                    {
+                        pnanovdb_address_t quat_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 4u);
+                        float4 quatf = float4(
+                            pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 1u)),
+                            pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 2u)),
+                            pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 3u)),
+                            pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 0u))
+                        );
+                        pnanovdb_address_t scale_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 5u);
+                        float3 scalef = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(scale_addr, 12u, prim_id));
 
-                    pnanovdb_address_t sh0_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 6u);
-                    float3 sh0 = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(sh0_addr, 12u, prim_id));
-                    s_prims[thread_idx].color = float3(0.2820947917738781f * sh0 + 0.5f);
+                        float3 conic = {};
+                        project_conic(s_prims[thread_idx].mean, quatf, scalef, conic);
+                        s_prims[thread_idx].conic = conic;
 
-                    pnanovdb_address_t opacity_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 3u);
-                    s_prims[thread_idx].opacity = pnanovdb_read_float(buf, pnanovdb_address_offset_product(opacity_addr, 4u, prim_id));
+                        pnanovdb_address_t sh0_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 6u);
+                        float3 sh0 = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(sh0_addr, 12u, prim_id));
+                        s_prims[thread_idx].color = float3(0.2820947917738781f * sh0 + 0.5f);
+
+                        pnanovdb_address_t opacity_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 3u);
+                        s_prims[thread_idx].opacity = pnanovdb_read_float(buf, pnanovdb_address_offset_product(opacity_addr, 4u, prim_id));
+                    }
+
+                    if (should_cull)
+                    {
+                        // mark prim as culled
+                        s_prims[thread_idx].id = ~0u;
+                    }
+                }
+                else
+                {
+                    // mark prim as culled
+                    s_prims[thread_idx].id = ~0u;
                 }
 
                 GroupMemoryBarrierWithGroupSync();
@@ -652,23 +701,26 @@ void ray_march_nanovdb(uint thread_idx,
                 }
 
                 // only participate if this pixel actually wanted this data
-                if (s_min_voxel_val == s_voxel_val[thread_idx])
+                if (s_voxel_val[s_min_hdda_idx] == s_voxel_val[thread_idx])
                 {
                     for (uint s_idx = 0u; s_idx < prim_count; s_idx++)
                     {
-                        intersect_gaussian(
-                            s_prims[s_idx].mean,
-                            s_prims[s_idx].conic,
-                            s_prims[s_idx].color,
-                            s_prims[s_idx].opacity,
-                            worldRayOrigin,
-                            hdda.tmin * rayDirMagnInv,
-                            worldRayDir,
-                            hdda.tmax * rayDirMagnInv,
-                            worldRayDirInv,
-                            sum,
-                            nominalT
-                        );
+                        if (s_prims[s_idx].id != ~0u)
+                        {
+                            intersect_gaussian(
+                                s_prims[s_idx].mean,
+                                s_prims[s_idx].conic,
+                                s_prims[s_idx].color,
+                                s_prims[s_idx].opacity,
+                                worldRayOrigin,
+                                hdda.tmin * rayDirMagnInv,
+                                worldRayDir,
+                                hdda.tmax * rayDirMagnInv,
+                                worldRayDirInv,
+                                sum,
+                                nominalT
+                            );
+                        }
                     }
                 }
 
@@ -679,11 +731,11 @@ void ray_march_nanovdb(uint thread_idx,
         if (is_active)
         {
             // only step if target voxel was processed
-            if (s_min_voxel_val == s_voxel_val[thread_idx])
+            if (s_voxel_val[s_min_hdda_idx] == s_voxel_val[thread_idx])
             {
                 hdda_needs_update = true;
 
-                uint skip_level = (uint(s_min_voxel_val) >> 16u) & 0xFFFF;
+                uint skip_level = (uint(s_voxel_val[s_min_hdda_idx]) >> 16u) & 0xFFFF;
                 // align HDDA tmin/tmax to current voxel size
                 int dim = 1 << skip_level;
                 if (dim > 1)
@@ -699,7 +751,7 @@ void ray_march_nanovdb(uint thread_idx,
             is_active = false;
         }
         // failed to excute anything meaningful, exit due to lack of progress
-        if (s_min_voxel_val == ~uint64_t(0u))
+        if (s_voxel_val[s_min_hdda_idx] == ~uint64_t(0u))
         {
             is_active = false;
             //sum.r = 1.f;
