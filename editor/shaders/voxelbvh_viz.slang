@@ -489,6 +489,117 @@ void workgroup_scan(uint thread_idx, uint val, inout uint result, inout uint tot
     // compute total_count
     total_count = read_smem_idx(sdata1_addr, 63) + read_smem_idx(sdata1_addr, 127);
 }
+void workgroup_scan_uint4(uint thread_idx, uint4 val, inout uint4 result, inout uint total_count)
+{
+    uint val1 = val.x + val.y + val.z + val.w;
+    uint result1 = 0u;
+    workgroup_scan(thread_idx, val1, result1, total_count);
+    result.w = result1;
+    result.z = result.w - val.w;
+    result.y = result.z - val.z;
+    result.x = result.y - val.y;
+}
+void split4_dual(uint thread_idx, uint4 pred_low, uint4 pred_high, out uint4 rank_low, out uint4 rank_high)
+{
+    uint count_low, count_high;
+    uint4 scan_low, scan_high;
+    workgroup_scan_uint4(thread_idx, pred_low, scan_low, count_low);
+    workgroup_scan_uint4(thread_idx, pred_high, scan_high, count_high);
+
+    uint count = count_low + count_high;
+    rank_low.x = pred_low.x != 0u ? scan_low.x - 1u : 4u * thread_idx + 0u - scan_low.x + count;
+    rank_low.y = pred_low.y != 0u ? scan_low.y - 1u : 4u * thread_idx + 1u - scan_low.y + count;
+    rank_low.z = pred_low.z != 0u ? scan_low.z - 1u : 4u * thread_idx + 2u - scan_low.z + count;
+    rank_low.w = pred_low.w != 0u ? scan_low.w - 1u : 4u * thread_idx + 3u - scan_low.w + count;
+    rank_high.x = pred_high.x != 0u ? scan_high.x - 1u + count_low : 4u * thread_idx + 512u + 0u - (scan_high.x + count_low) + count;
+    rank_high.y = pred_high.y != 0u ? scan_high.y - 1u + count_low : 4u * thread_idx + 512u + 1u - (scan_high.y + count_low) + count;
+    rank_high.z = pred_high.z != 0u ? scan_high.z - 1u + count_low : 4u * thread_idx + 512u + 2u - (scan_high.z + count_low) + count;
+    rank_high.w = pred_high.w != 0u ? scan_high.w - 1u + count_low : 4u * thread_idx + 512u + 3u - (scan_high.w + count_low) + count;
+}
+void radix_sort(uint thread_idx)
+{
+    uint4 key_low = uint4(
+        s_prim_keys[4u * thread_idx + 0u],
+        s_prim_keys[4u * thread_idx + 1u],
+        s_prim_keys[4u * thread_idx + 2u],
+        s_prim_keys[4u * thread_idx + 3u]);
+    uint4 key_high = uint4(
+        s_prim_keys[4u * thread_idx + 0u + 512u],
+        s_prim_keys[4u * thread_idx + 1u + 512u],
+        s_prim_keys[4u * thread_idx + 2u + 512u],
+        s_prim_keys[4u * thread_idx + 3u + 512u]);
+    uint4 val_low = uint4(
+        s_prim_ids[4u * thread_idx + 0u],
+        s_prim_ids[4u * thread_idx + 1u],
+        s_prim_ids[4u * thread_idx + 2u],
+        s_prim_ids[4u * thread_idx + 3u]);
+    uint4 val_high = uint4(
+        s_prim_ids[4u * thread_idx + 0u + 512u],
+        s_prim_ids[4u * thread_idx + 1u + 512u],
+        s_prim_ids[4u * thread_idx + 2u + 512u],
+        s_prim_ids[4u * thread_idx + 3u + 512u]);
+
+    GroupMemoryBarrierWithGroupSync();
+
+    for (uint pass_idx = 0u; pass_idx < 4u; pass_idx++)
+    {
+        uint4 pred_low = uint4(
+            ((key_low.x >> pass_idx) & 1u) ^ 1u,
+            ((key_low.y >> pass_idx) & 1u) ^ 1u,
+            ((key_low.z >> pass_idx) & 1u) ^ 1u,
+            ((key_low.w >> pass_idx) & 1u) ^ 1u
+        );
+        uint4 pred_high = uint4(
+            ((key_high.x >> pass_idx) & 1u) ^ 1u,
+            ((key_high.y >> pass_idx) & 1u) ^ 1u,
+            ((key_high.z >> pass_idx) & 1u) ^ 1u,
+            ((key_high.w >> pass_idx) & 1u) ^ 1u
+        );
+
+        uint4 rank_low, rank_high;
+        split4_dual(thread_idx, pred_low, pred_high, rank_low, rank_high);
+
+        s_prim_keys[rank_low.x] = key_low.x;
+        s_prim_keys[rank_low.y] = key_low.y;
+        s_prim_keys[rank_low.z] = key_low.z;
+        s_prim_keys[rank_low.w] = key_low.w;
+        s_prim_keys[rank_high.x] = key_high.x;
+        s_prim_keys[rank_high.y] = key_high.y;
+        s_prim_keys[rank_high.z] = key_high.z;
+        s_prim_keys[rank_high.w] = key_high.w;
+        s_prim_ids[rank_low.x] = val_low.x;
+        s_prim_ids[rank_low.y] = val_low.y;
+        s_prim_ids[rank_low.z] = val_low.z;
+        s_prim_ids[rank_low.w] = val_low.w;
+        s_prim_ids[rank_high.x] = val_high.x;
+        s_prim_ids[rank_high.y] = val_high.y;
+        s_prim_ids[rank_high.z] = val_high.z;
+        s_prim_ids[rank_high.w] = val_high.w;
+
+        GroupMemoryBarrierWithGroupSync();
+
+        key_low = uint4(
+            s_prim_keys[4u * thread_idx + 0u],
+            s_prim_keys[4u * thread_idx + 1u],
+            s_prim_keys[4u * thread_idx + 2u],
+            s_prim_keys[4u * thread_idx + 3u]);
+        key_high = uint4(
+            s_prim_keys[4u * thread_idx + 0u + 512u],
+            s_prim_keys[4u * thread_idx + 1u + 512u],
+            s_prim_keys[4u * thread_idx + 2u + 512u],
+            s_prim_keys[4u * thread_idx + 3u + 512u]);
+        val_low = uint4(
+            s_prim_ids[4u * thread_idx + 0u],
+            s_prim_ids[4u * thread_idx + 1u],
+            s_prim_ids[4u * thread_idx + 2u],
+            s_prim_ids[4u * thread_idx + 3u]);
+        val_high = uint4(
+            s_prim_ids[4u * thread_idx + 0u + 512u],
+            s_prim_ids[4u * thread_idx + 1u + 512u],
+            s_prim_ids[4u * thread_idx + 2u + 512u],
+            s_prim_ids[4u * thread_idx + 3u + 512u]);
+    }
+}
 
 struct prim_t
 {
@@ -731,7 +842,16 @@ void ray_march_nanovdb(uint thread_idx,
                     if (write_idx < 1024u)
                     {
                         s_prim_ids[write_idx] = prim_id;
-                        s_prim_keys[write_idx] = sort_asuint(cull_t);
+
+                        // generate 16 bit sort key
+                        float key_norm = (cull_t - s_cull_range[s_min_hdda_idx].x) /
+                            (s_cull_range[s_min_hdda_idx].y - s_cull_range[s_min_hdda_idx].x);
+                        key_norm = key_norm < 0.f ? 0.f : key_norm;
+                        key_norm = key_norm > 1.f ? 1.f : key_norm;
+                        uint key_val = uint(15.f * key_norm);
+
+                        s_prim_keys[write_idx] = key_val;
+                        //s_prim_keys[write_idx] = sort_asuint(cull_t);
                     }
                 }
                 workgroup_scan_accum += scan_total;
@@ -741,6 +861,18 @@ void ray_march_nanovdb(uint thread_idx,
             {
                 workgroup_scan_accum = 1024u;
             }
+
+            for (uint write_idx = thread_idx; write_idx < 1024u; write_idx += 128u)
+            {
+                if (write_idx >= workgroup_scan_accum)
+                {
+                    s_prim_keys[write_idx] = ~0u;
+                }
+            }
+
+            GroupMemoryBarrierWithGroupSync();
+
+            radix_sort(thread_idx);
 
             pass_count = (workgroup_scan_accum + 127u) / 128u;
             for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
