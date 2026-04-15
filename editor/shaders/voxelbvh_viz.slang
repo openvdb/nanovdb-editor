@@ -354,16 +354,15 @@ float2 compute_hdda_culling_range(StructuredBuffer<uint2> buf,
     int dim_mask = dim - 1;
     int3 ijk_min = ijk & ~dim_mask;
     int3 ijk_max = ijk_min + int3(dim);
-    float3 world_min = pnanovdb_grid_index_to_worldf(buf, grid, float3(ijk_min) - 1.f); // TODO: Figure out why this is needed
-    float3 world_max = pnanovdb_grid_index_to_worldf(buf, grid, float3(ijk_max) + 1.f);
     float2 range = float2(1.f / 0.f, -1.f / 0.f);
     for (int i = 0u; i < 8; i++)
     {
-        float3 pos = float3(
-            (i & 1) == 0 ? world_min.x : world_max.x,
-            (i & 2) == 0 ? world_min.y : world_max.y,
-            (i & 4) == 0 ? world_min.z : world_max.z
+        int3 cmp_ijk = int3(
+            (i & 1) == 0 ? ijk_min.x : ijk_max.x,
+            (i & 2) == 0 ? ijk_min.y : ijk_max.y,
+            (i & 4) == 0 ? ijk_min.z : ijk_max.z
         );
+        float3 pos = pnanovdb_grid_index_to_worldf(buf, grid, float3(cmp_ijk));
         float t = dot(pos, worldRayDirCenter);
         range.x = min(range.x, t);
         range.y = max(range.y, t);
@@ -455,6 +454,7 @@ void hdda_step(inout hdda_t hdda, float3 ray_origin, float3 ray_dir, float3 ray_
 groupshared uint s_active[4u];
 groupshared uint s_tmin[128u];
 groupshared uint64_t s_voxel_val[128u];
+groupshared uint64_t s_ijkl[128u];
 groupshared uint s_min_tmin;
 groupshared uint s_min_hdda_idx;
 
@@ -730,7 +730,17 @@ void ray_march_nanovdb(uint thread_idx,
                 }
                 hdda_update(hdda, rayOrigin, rayDir, rayDirInv, dim);
 
+                int4 ijkl = int4(
+                  hdda.ijk.x & ~(dim - 1),
+                  hdda.ijk.y & ~(dim - 1),
+                  hdda.ijk.z & ~(dim - 1),
+                  skip_level > 0u ? skip_level - 1u : 0u
+                );
+                uint64_t ijkl_64 = (uint64_t(ijkl.x) << 48u) | (uint64_t(ijkl.y) << 32u) |
+                                   (uint64_t(ijkl.z) << 16u) | uint64_t(ijkl.w);
+
                 s_voxel_val[thread_idx] = val_raw;
+                s_ijkl[thread_idx] = ijkl_64;
                 s_tmin[thread_idx] = sort_asuint(hdda.tmin);
                 s_cull_range[thread_idx] = compute_hdda_culling_range(buf, grid, worldRayDirCenter, hdda.ijk, dim);
             }
@@ -921,7 +931,7 @@ void ray_march_nanovdb(uint thread_idx,
                 }
 
                 // only participate if this pixel actually wanted this data
-                if (s_voxel_val[s_min_hdda_idx] == s_voxel_val[thread_idx])
+                if (s_ijkl[s_min_hdda_idx] == s_ijkl[thread_idx])
                 {
                     for (uint s_idx = 0u; s_idx < prim_count; s_idx++)
                     {
@@ -951,7 +961,7 @@ void ray_march_nanovdb(uint thread_idx,
         if (is_active)
         {
             // only step if target voxel was processed
-            if (s_voxel_val[s_min_hdda_idx] == s_voxel_val[thread_idx])
+            if (s_ijkl[s_min_hdda_idx] == s_ijkl[thread_idx])
             {
                 hdda_needs_update = true;
 
