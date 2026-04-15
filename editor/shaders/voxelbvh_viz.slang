@@ -338,6 +338,39 @@ void intersect_gaussian(
 #endif
 }
 
+uint sort_asuint(float f)
+{
+    uint f_uint = asuint(f);
+    uint mask = -int(f_uint >> 31) | 0x80000000;
+    return f_uint ^ mask;
+}
+
+float2 compute_hdda_culling_range(StructuredBuffer<uint2> buf,
+                                  pnanovdb_grid_handle_t grid,
+                                  float3 worldRayDirCenter,
+                                  int3 ijk,
+                                  int dim)
+{
+    int dim_mask = dim - 1;
+    int3 ijk_min = ijk & ~dim_mask;
+    int3 ijk_max = ijk_min + int3(dim);
+    float3 world_min = pnanovdb_grid_index_to_worldf(buf, grid, float3(ijk_min) - 1.f); // TODO: Figure out why this is needed
+    float3 world_max = pnanovdb_grid_index_to_worldf(buf, grid, float3(ijk_max) + 1.f);
+    float2 range = float2(1.f / 0.f, -1.f / 0.f);
+    for (int i = 0u; i < 8; i++)
+    {
+        float3 pos = float3(
+            (i & 1) == 0 ? world_min.x : world_max.x,
+            (i & 2) == 0 ? world_min.y : world_max.y,
+            (i & 4) == 0 ? world_min.z : world_max.z
+        );
+        float t = dot(pos, worldRayDirCenter);
+        range.x = min(range.x, t);
+        range.y = max(range.y, t);
+    }
+    return range;
+}
+
 struct hdda_t
 {
     int3 ijk;
@@ -611,39 +644,6 @@ struct prim_t
     float opacity;
 };
 groupshared prim_t s_prims[128u];
-
-uint sort_asuint(float f)
-{
-    uint f_uint = asuint(f);
-    uint mask = -int(f_uint >> 31) | 0x80000000;
-    return f_uint ^ mask;
-}
-
-float2 compute_hdda_culling_range(StructuredBuffer<uint2> buf,
-                                  pnanovdb_grid_handle_t grid,
-                                  float3 worldRayDirCenter,
-                                  int3 ijk,
-                                  int dim)
-{
-    int dim_mask = dim - 1;
-    int3 ijk_min = ijk & ~dim_mask;
-    int3 ijk_max = ijk_min + int3(dim);
-    float3 world_min = pnanovdb_grid_index_to_worldf(buf, grid, float3(ijk_min) - 1.f); // TODO: Figure out why this is needed
-    float3 world_max = pnanovdb_grid_index_to_worldf(buf, grid, float3(ijk_max) + 1.f);
-    float2 range = float2(1.f / 0.f, -1.f / 0.f);
-    for (int i = 0u; i < 8; i++)
-    {
-        float3 pos = float3(
-            (i & 1) == 0 ? world_min.x : world_max.x,
-            (i & 2) == 0 ? world_min.y : world_max.y,
-            (i & 4) == 0 ? world_min.z : world_max.z
-        );
-        float t = dot(pos, worldRayDirCenter);
-        range.x = min(range.x, t);
-        range.y = max(range.y, t);
-    }
-    return range;
-}
 
 void ray_march_nanovdb(uint thread_idx,
                        StructuredBuffer<uint2> buf,
