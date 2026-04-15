@@ -628,8 +628,8 @@ float2 compute_hdda_culling_range(StructuredBuffer<uint2> buf,
     int dim_mask = dim - 1;
     int3 ijk_min = ijk & ~dim_mask;
     int3 ijk_max = ijk_min + int3(dim);
-    float3 world_min = pnanovdb_grid_index_to_worldf(buf, grid, float3(ijk_min));
-    float3 world_max = pnanovdb_grid_index_to_worldf(buf, grid, float3(ijk_max));
+    float3 world_min = pnanovdb_grid_index_to_worldf(buf, grid, float3(ijk_min) - 1.f); // TODO: Figure out why this is needed
+    float3 world_max = pnanovdb_grid_index_to_worldf(buf, grid, float3(ijk_max) + 1.f);
     float2 range = float2(1.f / 0.f, -1.f / 0.f);
     for (int i = 0u; i < 8; i++)
     {
