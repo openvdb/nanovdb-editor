@@ -156,7 +156,7 @@ jobs:
             --driver docker-container \
             --driver-opt "memory=12g" \
             --driver-opt "memory-swap=24g" \
-            --driver-opt "cpuset-cpus=0,1" \
+            --driver-opt "cpuset-cpus=0-1" \
             --use \
             --bootstrap
           docker buildx inspect "${FVDB_VIZ_DOCKER_BUILDER}"
