@@ -60,6 +60,8 @@ jobs:
       FVDB_VIZ_CORE_BUILD_JOBS: 1
       FVDB_VIZ_SKIP_BASE_INSTALL: 1
       FVDB_VIZ_IMAGE_CACHE_ENABLED: 0
+      FVDB_VIZ_DOCKER_BUILD_CPUS: 2
+      FVDB_VIZ_DOCKER_BUILD_MEMORY: 12g
     steps:
       - name: Resolve package selection
         id: config
@@ -131,6 +133,20 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/lib/jvm /opt/hostedtoolcache
           sudo apt-get clean
           sudo docker system prune --all --force --volumes || true
+
+      - name: Add swap space
+        run: |
+          set -euo pipefail
+          if sudo swapon --show | grep -q .; then
+            echo "Swap already configured; leaving it as-is."
+            exit 0
+          fi
+          sudo fallocate -l 12G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          free -h
+          sudo swapon --show
 
       - name: Run fvdb.viz tests
         run: |
