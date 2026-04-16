@@ -30,8 +30,7 @@ IMAGE_BASE_NAME="${FVDB_VIZ_TEST_IMAGE_BASE:-${FVDB_VIZ_TEST_IMAGE_BASE_DEFAULT}
 IMAGE_REVISION="${FVDB_VIZ_TEST_IMAGE_REVISION:-${FVDB_VIZ_TEST_IMAGE_REVISION_DEFAULT}}"
 IMAGE_CACHE_ENABLED="${FVDB_VIZ_IMAGE_CACHE_ENABLED:-1}"
 DOCKER_BUILD_NETWORK="${FVDB_VIZ_DOCKER_BUILD_NETWORK:-}"
-DOCKER_BUILD_CPUS="${FVDB_VIZ_DOCKER_BUILD_CPUS:-}"
-DOCKER_BUILD_MEMORY="${FVDB_VIZ_DOCKER_BUILD_MEMORY:-}"
+DOCKER_BUILDER="${FVDB_VIZ_DOCKER_BUILDER:-}"
 CORE_VERSION_TAG="${FVDB_CORE_VERSION%%+*}"
 if [[ -z "${CORE_VERSION_TAG}" ]]; then
   CORE_VERSION_TAG="${FVDB_CORE_VERSION}"
@@ -79,8 +78,7 @@ FVDB_CORE_VERSION=${FVDB_CORE_VERSION}
 FVDB_CORE_INDEX_URL=${FVDB_CORE_INDEX_URL}
 FVDB_CORE_GIT_REF=${FVDB_CORE_GIT_REF}
 FVDB_CORE_BUILD_JOBS=${FVDB_CORE_BUILD_JOBS}
-DOCKER_BUILD_CPUS=${DOCKER_BUILD_CPUS}
-DOCKER_BUILD_MEMORY=${DOCKER_BUILD_MEMORY}
+DOCKER_BUILDER=${DOCKER_BUILDER}
 IMAGE_REVISION=${IMAGE_REVISION}
 EOF
 }
@@ -145,15 +143,17 @@ build_image() {
   if [[ -n "${DOCKER_BUILD_NETWORK}" ]]; then
     docker_build_args+=(--network "${DOCKER_BUILD_NETWORK}")
   fi
-  if [[ -n "${DOCKER_BUILD_CPUS}" ]]; then
-    docker_build_args+=(--cpus "${DOCKER_BUILD_CPUS}")
+  if [[ -n "${DOCKER_BUILDER}" ]]; then
+    docker buildx build \
+      --builder "${DOCKER_BUILDER}" \
+      --load \
+      "${docker_build_args[@]}" \
+      "${REPO_ROOT}"
+  else
+    docker build \
+      "${docker_build_args[@]}" \
+      "${REPO_ROOT}"
   fi
-  if [[ -n "${DOCKER_BUILD_MEMORY}" ]]; then
-    docker_build_args+=(--memory "${DOCKER_BUILD_MEMORY}")
-  fi
-  docker build \
-    "${docker_build_args[@]}" \
-    "${REPO_ROOT}"
   save_to_cache
 }
 

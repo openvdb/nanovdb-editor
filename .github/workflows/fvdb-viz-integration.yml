@@ -60,8 +60,7 @@ jobs:
       FVDB_VIZ_CORE_BUILD_JOBS: 1
       FVDB_VIZ_SKIP_BASE_INSTALL: 1
       FVDB_VIZ_IMAGE_CACHE_ENABLED: 0
-      FVDB_VIZ_DOCKER_BUILD_CPUS: 2
-      FVDB_VIZ_DOCKER_BUILD_MEMORY: 12g
+      FVDB_VIZ_DOCKER_BUILDER: fvdb-viz-ci
     steps:
       - name: Resolve package selection
         id: config
@@ -147,6 +146,20 @@ jobs:
           sudo swapon /swapfile
           free -h
           sudo swapon --show
+
+      - name: Configure resource-limited buildx builder
+        run: |
+          set -euo pipefail
+          docker buildx rm "${FVDB_VIZ_DOCKER_BUILDER}" >/dev/null 2>&1 || true
+          docker buildx create \
+            --name "${FVDB_VIZ_DOCKER_BUILDER}" \
+            --driver docker-container \
+            --driver-opt "memory=12g" \
+            --driver-opt "memory-swap=24g" \
+            --driver-opt "cpuset-cpus=0,1" \
+            --use \
+            --bootstrap
+          docker buildx inspect "${FVDB_VIZ_DOCKER_BUILDER}"
 
       - name: Run fvdb.viz tests
         run: |
