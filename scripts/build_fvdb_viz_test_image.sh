@@ -21,16 +21,25 @@ source "${SCRIPT_DIR}/fvdb_viz_versions.sh"
 
 TORCH_VERSION="${FVDB_VIZ_TORCH_VERSION:-${FVDB_VIZ_TORCH_VERSION_DEFAULT}}"
 TORCH_INDEX_URL="${FVDB_VIZ_TORCH_INDEX_URL:-${FVDB_VIZ_TORCH_INDEX_URL_DEFAULT}}"
+CUDA_ARCH_LIST="${FVDB_VIZ_CUDA_ARCH_LIST:-${FVDB_VIZ_CUDA_ARCH_LIST_DEFAULT}}"
 FVDB_CORE_VERSION="${FVDB_VIZ_CORE_VERSION:-${FVDB_VIZ_CORE_VERSION_DEFAULT}}"
 FVDB_CORE_INDEX_URL="${FVDB_VIZ_CORE_INDEX_URL:-${FVDB_VIZ_CORE_INDEX_URL_DEFAULT}}"
+FVDB_CORE_GIT_REF="${FVDB_VIZ_CORE_GIT_REF:-}"
+FVDB_CORE_BUILD_JOBS="${FVDB_VIZ_CORE_BUILD_JOBS:-1}"
 IMAGE_BASE_NAME="${FVDB_VIZ_TEST_IMAGE_BASE:-${FVDB_VIZ_TEST_IMAGE_BASE_DEFAULT}}"
 IMAGE_REVISION="${FVDB_VIZ_TEST_IMAGE_REVISION:-${FVDB_VIZ_TEST_IMAGE_REVISION_DEFAULT}}"
 IMAGE_CACHE_ENABLED="${FVDB_VIZ_IMAGE_CACHE_ENABLED:-1}"
+DOCKER_BUILD_NETWORK="${FVDB_VIZ_DOCKER_BUILD_NETWORK:-}"
 CORE_VERSION_TAG="${FVDB_CORE_VERSION%%+*}"
 if [[ -z "${CORE_VERSION_TAG}" ]]; then
   CORE_VERSION_TAG="${FVDB_CORE_VERSION}"
 fi
-IMAGE_NAME="${FVDB_VIZ_TEST_IMAGE:-${IMAGE_BASE_NAME}-${CORE_VERSION_TAG}-r${IMAGE_REVISION}}"
+if [[ -n "${FVDB_CORE_GIT_REF}" ]]; then
+  CORE_SOURCE_TAG="git-${FVDB_CORE_GIT_REF//[^0-9A-Za-z._-]/-}"
+else
+  CORE_SOURCE_TAG="${CORE_VERSION_TAG}"
+fi
+IMAGE_NAME="${FVDB_VIZ_TEST_IMAGE:-${IMAGE_BASE_NAME}-${CORE_SOURCE_TAG}-r${IMAGE_REVISION}}"
 FORCE_REBUILD="${FVDB_VIZ_FORCE_IMAGE_REBUILD:-0}"
 
 while [[ $# -gt 0 ]]; do
@@ -63,8 +72,11 @@ metadata_content() {
 IMAGE_NAME=${IMAGE_NAME}
 TORCH_VERSION=${TORCH_VERSION}
 TORCH_INDEX_URL=${TORCH_INDEX_URL}
+CUDA_ARCH_LIST=${CUDA_ARCH_LIST}
 FVDB_CORE_VERSION=${FVDB_CORE_VERSION}
 FVDB_CORE_INDEX_URL=${FVDB_CORE_INDEX_URL}
+FVDB_CORE_GIT_REF=${FVDB_CORE_GIT_REF}
+FVDB_CORE_BUILD_JOBS=${FVDB_CORE_BUILD_JOBS}
 IMAGE_REVISION=${IMAGE_REVISION}
 EOF
 }
@@ -102,19 +114,35 @@ save_to_cache() {
   fi
   ensure_cache_dir
   echo "Saving ${IMAGE_NAME} image tarball to ${TAR_PATH}"
-  docker save "${IMAGE_NAME}" -o "${TAR_PATH}"
-  write_metadata
+  if ! docker save "${IMAGE_NAME}" -o "${TAR_PATH}"; then
+    echo "Warning: failed to save local image tarball cache for ${IMAGE_NAME}; continuing without cache." >&2
+    rm -f "${TAR_PATH}" "${META_PATH}"
+    return 0
+  fi
+  if ! write_metadata; then
+    echo "Warning: failed to write local image cache metadata for ${IMAGE_NAME}; continuing without cache metadata." >&2
+    rm -f "${META_PATH}"
+  fi
 }
 
 build_image() {
   echo "Building ${IMAGE_NAME} for fvdb viz tests (Torch ${TORCH_VERSION})"
+  local docker_build_args=(
+    -f "${REPO_ROOT}/docker/Dockerfile.fvdb_viz_test"
+    --build-arg "TORCH_VERSION=${TORCH_VERSION}"
+    --build-arg "TORCH_INDEX_URL=${TORCH_INDEX_URL}"
+    --build-arg "FVDB_CORE_CUDA_ARCH_LIST=${CUDA_ARCH_LIST}"
+    --build-arg "FVDB_CORE_VERSION=${FVDB_CORE_VERSION}"
+    --build-arg "FVDB_CORE_INDEX_URL=${FVDB_CORE_INDEX_URL}"
+    --build-arg "FVDB_CORE_GIT_REF=${FVDB_CORE_GIT_REF}"
+    --build-arg "FVDB_CORE_BUILD_JOBS=${FVDB_CORE_BUILD_JOBS}"
+    -t "${IMAGE_NAME}"
+  )
+  if [[ -n "${DOCKER_BUILD_NETWORK}" ]]; then
+    docker_build_args+=(--network "${DOCKER_BUILD_NETWORK}")
+  fi
   docker build \
-    -f "${REPO_ROOT}/docker/Dockerfile.fvdb_viz_test" \
-    --build-arg "TORCH_VERSION=${TORCH_VERSION}" \
-    --build-arg "TORCH_INDEX_URL=${TORCH_INDEX_URL}" \
-    --build-arg "FVDB_CORE_VERSION=${FVDB_CORE_VERSION}" \
-    --build-arg "FVDB_CORE_INDEX_URL=${FVDB_CORE_INDEX_URL}" \
-    -t "${IMAGE_NAME}" \
+    "${docker_build_args[@]}" \
     "${REPO_ROOT}"
   save_to_cache
 }

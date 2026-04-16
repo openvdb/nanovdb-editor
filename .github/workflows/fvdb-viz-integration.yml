@@ -15,10 +15,34 @@ on:
         options:
           - release
           - dev
+      fvdb_source_ref:
+        description: "Install fvdb-core[viewer] from openvdb/fvdb-core@REF when building the test image"
+        required: false
+        type: string
+        default: ""
+      upstream_test_ref:
+        description: "Which upstream fvdb viz test source to use"
+        required: false
+        type: choice
+        default: main
+        options:
+          - release_or_main
+          - main
+          - release
   workflow_call:
     inputs:
       package:
         description: "Package stream to validate (release/dev)"
+        required: false
+        type: string
+        default: release
+      fvdb_source_ref:
+        description: "Install fvdb-core[viewer] from openvdb/fvdb-core@REF when building the test image"
+        required: false
+        type: string
+        default: ""
+      upstream_test_ref:
+        description: "Which upstream fvdb viz test source to use (release_or_main/main/release)"
         required: false
         type: string
         default: release
@@ -33,6 +57,7 @@ jobs:
     name: Run Tests
     runs-on: ubuntu-latest
     env:
+      FVDB_VIZ_CORE_BUILD_JOBS: 1
       FVDB_VIZ_SKIP_BASE_INSTALL: 1
       FVDB_VIZ_IMAGE_CACHE_ENABLED: 0
     steps:
@@ -68,6 +93,7 @@ jobs:
           {
             echo "FVDB_VIZ_TORCH_VERSION=${FVDB_VIZ_TORCH_VERSION_DEFAULT}"
             echo "FVDB_VIZ_TORCH_INDEX_URL=${FVDB_VIZ_TORCH_INDEX_URL_DEFAULT}"
+            echo "FVDB_VIZ_CUDA_ARCH_LIST=${FVDB_VIZ_CUDA_ARCH_LIST_DEFAULT}"
             echo "FVDB_VIZ_CORE_VERSION=${FVDB_VIZ_CORE_VERSION_DEFAULT}"
             echo "FVDB_VIZ_CORE_INDEX_URL=${FVDB_VIZ_CORE_INDEX_URL_DEFAULT}"
             echo "FVDB_VIZ_TEST_IMAGE_BASE=${FVDB_VIZ_TEST_IMAGE_BASE_DEFAULT}"
@@ -114,6 +140,14 @@ jobs:
 
           if [[ "${{ steps.config.outputs.use_local }}" == "true" ]]; then
             SCRIPT_ARGS+=("--local-wheel" "${{ steps.local_wheel.outputs.host_path }}")
+          fi
+
+          if [[ -n "${{ inputs.fvdb_source_ref }}" ]]; then
+            SCRIPT_ARGS+=("--fvdb-source-ref" "${{ inputs.fvdb_source_ref }}")
+          fi
+
+          if [[ -n "${{ inputs.upstream_test_ref }}" ]]; then
+            SCRIPT_ARGS+=("--upstream-test-ref" "${{ inputs.upstream_test_ref }}")
           fi
 
           ./scripts/run_fvdb_viz_integration.sh "${SCRIPT_ARGS[@]}"

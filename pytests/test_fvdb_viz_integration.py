@@ -55,6 +55,7 @@ def _default_version(var_name: str, fallback: str | None = None) -> str:
 
 RUNS_ON_FVDB_VIZ_ENV = os.environ.get("FVDB_VIZ_TESTS") == "1"
 LOCAL_DIST_SPEC = os.environ.get("FVDB_VIZ_LOCAL_DIST")
+UPSTREAM_TEST_REF = os.environ.get("FVDB_VIZ_UPSTREAM_TEST_REF", "main")
 
 pytestmark = pytest.mark.skipif(
     not RUNS_ON_FVDB_VIZ_ENV,
@@ -81,10 +82,14 @@ def _fvdb_core_release_tag() -> str:
 
 def _upstream_test_urls() -> list[str]:
     release_tag = _fvdb_core_release_tag()
-    return [
-        ("https://raw.githubusercontent.com/openvdb/fvdb-core/" f"{release_tag}/{UPSTREAM_TEST_RELATIVE_PATH}"),
-        ("https://raw.githubusercontent.com/openvdb/fvdb-core/main/" f"{UPSTREAM_TEST_RELATIVE_PATH}"),
-    ]
+    release_url = "https://raw.githubusercontent.com/openvdb/fvdb-core/" f"{release_tag}/{UPSTREAM_TEST_RELATIVE_PATH}"
+    main_url = "https://raw.githubusercontent.com/openvdb/fvdb-core/main/" f"{UPSTREAM_TEST_RELATIVE_PATH}"
+
+    if UPSTREAM_TEST_REF == "main":
+        return [main_url]
+    if UPSTREAM_TEST_REF == "release":
+        return [release_url]
+    return [release_url, main_url]
 
 
 def _resolve_upstream_test_path(work_dir: Path) -> Path:
@@ -263,6 +268,117 @@ def _assert_viz_server_initializes(env_ctx: dict):
         ) from exc
 
 
+def _apply_fvdb_point_cloud_compat():
+    import fvdb.viz._point_cloud_view as point_cloud_view_module
+    import torch
+
+    point_cloud_view_cls = point_cloud_view_module.PointCloudView
+    if getattr(point_cloud_view_cls, "__nanovdb_editor_point_cloud_compat__", False):
+        return
+
+    gaussian_splat_cls = point_cloud_view_module.GaussianSplat3d
+    get_viewer_server_cpp = point_cloud_view_module._get_viewer_server_cpp
+
+    def _add_gaussian_splat_view_compat(
+        *,
+        server,
+        scene_name: str,
+        name: str,
+        means,
+        quats,
+        log_scales,
+        logit_opacities,
+        sh0,
+        shN,
+    ):
+        # `fvdb-core@main` switched `add_gaussian_splat_3d_view()` to take raw
+        # tensors directly, while older releases expected a wrapped
+        # `GaussianSplat3d` implementation object.
+        try:
+            return server.add_gaussian_splat_3d_view(
+                scene_name=scene_name,
+                name=name,
+                means=means,
+                quats=quats,
+                log_scales=log_scales,
+                logit_opacities=logit_opacities,
+                sh0=sh0,
+                shN=shN,
+            )
+        except TypeError:
+            gaussian_splat = gaussian_splat_cls.from_tensors(
+                means=means,
+                quats=quats,
+                log_scales=log_scales,
+                logit_opacities=logit_opacities,
+                sh0=sh0,
+                shN=shN,
+            )
+
+        gaussian_splat_impl = getattr(gaussian_splat, "_impl", gaussian_splat)
+        try:
+            return server.add_gaussian_splat_3d_view(
+                scene_name=scene_name,
+                name=name,
+                gaussian_splat_3d=gaussian_splat_impl,
+            )
+        except TypeError:
+            return server.add_gaussian_splat_3d_view(
+                scene_name,
+                name,
+                gaussian_splat_impl,
+            )
+
+    def _compat_point_cloud_init(
+        self,
+        scene_name: str,
+        name: str,
+        positions,
+        colors,
+        point_size: float,
+        _private=None,
+    ):
+        if _private is not self.__PRIVATE__:
+            raise ValueError("PointCloudView constructor is private. Use Viewer.register_point_cloud_view() instead.")
+
+        self._name = name
+        self._scene_name = scene_name
+
+        server = get_viewer_server_cpp()
+
+        def _rgb_to_sh(rgb: torch.Tensor) -> torch.Tensor:
+            c0 = 0.28209479177387814
+            return (rgb - 0.5) / c0
+
+        means = positions
+        quats = torch.zeros((positions.shape[0], 4), dtype=torch.float32)
+        quats[:, 0] = 1.0
+        logit_opacities = torch.full((positions.shape[0],), 10.0, dtype=torch.float32)
+        log_scales = torch.full((positions.shape[0], 3), -20.0, dtype=torch.float32)
+        sh0 = _rgb_to_sh(colors)
+        shN = torch.zeros((positions.shape[0], 0, 3), dtype=torch.float32)
+
+        view = _add_gaussian_splat_view_compat(
+            server=server,
+            scene_name=scene_name,
+            name=name,
+            means=means,
+            quats=quats,
+            log_scales=log_scales,
+            logit_opacities=logit_opacities,
+            sh0=sh0,
+            shN=shN,
+        )
+        view.tile_size = 16
+        view.min_radius_2d = 0.0
+        view.eps_2d = point_size / 2.0
+        view.antialias = False
+        view.sh_degree_to_use = 0
+
+    point_cloud_view_cls.__init__ = _compat_point_cloud_init
+    point_cloud_view_cls.__nanovdb_editor_point_cloud_compat__ = True
+
+
 def _run_upstream_viz_suite(env_ctx: dict):
     python_exe = env_ctx["python"]
     env = env_ctx["env"]
@@ -275,8 +391,11 @@ import traceback
 
 import pytest
 
+from pytests.test_fvdb_viz_integration import _apply_fvdb_point_cloud_compat
+
 exit_code = 1
 try:
+    _apply_fvdb_point_cloud_compat()
     exit_code = int(pytest.main(sys.argv[1:]))
 except BaseException:
     traceback.print_exc()
