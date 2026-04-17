@@ -5,7 +5,7 @@ struct user_state_t
     int unused;
 };
 
-#include "voxelbvh_nanovdb_iterate.slang"
+#include "voxelbvh/voxelbvh_nanovdb_iterate.slang"
 
 void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint level, uint n,
                   pnanovdb_coord_t ijk, inout user_state_t user_state)

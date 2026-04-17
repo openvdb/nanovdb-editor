@@ -1,11 +1,11 @@
-// voxelbvh_nanovdb_level_mask_flatten.slang
+// voxelbvh_nanovdb_level_list_spread.slang
 
 struct user_state_t
 {
     int unused;
 }
 
-#include "voxelbvh_nanovdb_iterate.slang"
+#include "voxelbvh/voxelbvh_nanovdb_iterate.slang"
 
 void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint level, uint n,
                   pnanovdb_coord_t ijk, inout user_state_t user_state)
@@ -22,7 +22,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     pnanovdb_root_handle_t root = pnanovdb_tree_get_root(buf, tree);
 
     pnanovdb_uint64_t val = pnanovdb_read_uint64(buf, val_addr);
-    if ((uint(val) & 0xFFFF) != 0u)
+    if (uint(val & 0xFFFF) == 0)
     {
         for (uint l = 0u; l < 12; l++)
         {
@@ -30,12 +30,16 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
             pnanovdb_coord_t ijkmask = ijk & lmask;
 
             pnanovdb_address_t read_val_addr = pnanovdb_root_get_value_address(grid_type, buf, root, ijkmask);
+            pnanovdb_uint64_t read_val = pnanovdb_read_uint64(buf, read_val_addr);
 
-            pnanovdb_uint32_t val_read = pnanovdb_read_uint32(buf, read_val_addr);
-
-            val = val | (val_read & (1u << l));
+            if (read_val != uint64_t(0u))
+            {
+                val = read_val;
+                break;
+            }
         }
     }
+
     pnanovdb_write_uint64(buf_scratch, val_addr, val);
 }
 

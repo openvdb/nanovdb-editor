@@ -5,7 +5,7 @@ struct user_state_t
    uint64_t element_count;
 };
 
-#include "voxelbvh_nanovdb_iterate.slang"
+#include "voxelbvh/voxelbvh_nanovdb_iterate.slang"
 
 RWStructuredBuffer<uint2> workgroup_counters_inout;
 

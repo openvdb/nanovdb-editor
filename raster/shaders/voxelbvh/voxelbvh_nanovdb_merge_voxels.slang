@@ -5,7 +5,7 @@ struct user_state_t
     int unused;
 }
 
-#include "voxelbvh_nanovdb_iterate.slang"
+#include "voxelbvh/voxelbvh_nanovdb_iterate.slang"
 
 struct merge_arg_t
 {
