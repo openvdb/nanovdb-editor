@@ -138,9 +138,11 @@ jobs:
           set -euo pipefail
           if sudo swapon --show | grep -q .; then
             echo "Swap already configured; leaving it as-is."
+            free -h
+            sudo swapon --show
             exit 0
           fi
-          sudo fallocate -l 12G /swapfile
+          sudo fallocate -l 16G /swapfile
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
@@ -154,8 +156,8 @@ jobs:
           docker buildx create \
             --name "${FVDB_VIZ_DOCKER_BUILDER}" \
             --driver docker-container \
-            --driver-opt "memory=12g" \
-            --driver-opt "memory-swap=24g" \
+            --driver-opt "memory=14g" \
+            --driver-opt "memory-swap=30g" \
             --driver-opt "cpuset-cpus=0-1" \
             --use \
             --bootstrap
