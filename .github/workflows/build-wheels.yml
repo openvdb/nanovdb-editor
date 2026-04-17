@@ -7,6 +7,21 @@ on:
         description: 'Whether to build as dev package (nanovdb-editor-dev) with -dev version suffix'
         required: true
         type: boolean
+      run_fvdb_viz_integration:
+        description: 'Whether to run the fVDB integration workflow against the built Linux wheel'
+        required: false
+        type: boolean
+        default: false
+      fvdb_nightly:
+        description: 'Install the latest fvdb-core nightly wheel in the fVDB integration job (tracks fvdb-core main)'
+        required: false
+        type: boolean
+        default: true
+      upstream_test_ref:
+        description: 'Which upstream fvdb viz test source to use in the fVDB integration job (main/release)'
+        required: false
+        type: string
+        default: release
       manage_slang_image:
         description: 'Whether to check/publish Slang GHCR image from Linux x86_64 wheels'
         required: false
@@ -28,6 +43,24 @@ on:
         required: false
         type: boolean
         default: false
+      run_fvdb_viz_integration:
+        description: 'Run the fVDB integration workflow against the built Linux wheel'
+        required: false
+        type: boolean
+        default: false
+      fvdb_nightly:
+        description: 'Install the latest fvdb-core nightly wheel in the fVDB integration job (tracks fvdb-core main)'
+        required: false
+        type: boolean
+        default: true
+      upstream_test_ref:
+        description: 'Which upstream fvdb viz test source to use'
+        required: false
+        type: choice
+        default: release
+        options:
+          - main
+          - release
       manage_slang_image:
         description: 'Check/publish Slang GHCR image from Linux x86_64 wheels'
         required: false
@@ -1107,6 +1140,18 @@ jobs:
       with:
         name: wheels-ubuntu-latest-x86_64-${{ matrix.wheel_tag }}
         path: ./wheelhouse/*.whl
+
+  fvdb-viz-integration:
+    name: fVDB Integration (current branch wheel)
+    needs: [build_linux_x86_wheel]
+    if: ${{ !failure() && inputs.run_fvdb_viz_integration }}
+    uses: ./.github/workflows/fvdb-viz-integration.yml
+    with:
+      package: ${{ inputs.is_dev && 'dev' || 'release' }}
+      fvdb_nightly: ${{ inputs.fvdb_nightly }}
+      upstream_test_ref: ${{ inputs.upstream_test_ref }}
+      wheel_artifact: wheels-ubuntu-latest-x86_64-manylinux_2_27_x86_64
+    secrets: inherit
 
 
   build_sdist:
