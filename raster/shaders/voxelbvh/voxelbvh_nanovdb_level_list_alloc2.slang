@@ -5,7 +5,7 @@ struct user_state_t
     int unused;
 };
 
-#include "voxelbvh/voxelbvh_nanovdb_iterate.slang"
+#include "voxelbvh_nanovdb_iterate.slang"
 
 RWStructuredBuffer<uint2> workgroup_counters_inout;
 

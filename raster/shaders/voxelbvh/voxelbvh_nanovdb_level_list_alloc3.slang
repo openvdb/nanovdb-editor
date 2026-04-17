@@ -5,7 +5,7 @@ struct user_state_t
    uint64_t workgroup_alloc_idx;
 };
 
-#include "voxelbvh/voxelbvh_nanovdb_iterate.slang"
+#include "voxelbvh_nanovdb_iterate.slang"
 
 StructuredBuffer<uint2> workgroup_counters_inout;
 
