@@ -5,18 +5,30 @@ permissions:
   actions: read
 
 on:
+  # Direct workflow_dispatch validates the PUBLISHED nanovdb-editor wheel
+  # (release/dev) against either the pinned fvdb-core release or the nightly
+  # main branch. To test the nanovdb-editor wheel built from the CURRENT
+  # BRANCH, dispatch `build-wheels.yml` instead with
+  # `run_fvdb_viz_integration=true` (plus `fvdb_nightly` / `upstream_test_ref`
+  # as desired); that workflow builds the manylinux wheel and forwards it
+  # here via `wheel_artifact`.
   workflow_dispatch:
     inputs:
       package:
-        description: "Package stream to validate"
+        description: "Package stream to validate (published nanovdb-editor release/dev wheel)"
         required: true
         type: choice
         default: release
         options:
           - release
           - dev
+      fvdb_nightly:
+        description: "Install the latest fvdb-core[viewer] nightly wheel (tracks fvdb-core main; no runner compile)"
+        required: false
+        type: boolean
+        default: true
       fvdb_source_ref:
-        description: "Install fvdb-core[viewer] from openvdb/fvdb-core@REF when building the test image"
+        description: "Advanced: install fvdb-core[viewer] from openvdb/fvdb-core@REF (git source build; heavy, not recommended on hosted runners)"
         required: false
         type: string
         default: ""
@@ -26,7 +38,6 @@ on:
         type: choice
         default: main
         options:
-          - release_or_main
           - main
           - release
   workflow_call:
@@ -36,13 +47,18 @@ on:
         required: false
         type: string
         default: release
+      fvdb_nightly:
+        description: "Install the latest fvdb-core[viewer] nightly wheel (tracks fvdb-core main)"
+        required: false
+        type: boolean
+        default: true
       fvdb_source_ref:
-        description: "Install fvdb-core[viewer] from openvdb/fvdb-core@REF when building the test image"
+        description: "Advanced: install fvdb-core[viewer] from openvdb/fvdb-core@REF (git source build; heavy)"
         required: false
         type: string
         default: ""
       upstream_test_ref:
-        description: "Which upstream fvdb viz test source to use (release_or_main/main/release)"
+        description: "Which upstream fvdb viz test source to use (main/release)"
         required: false
         type: string
         default: release
@@ -60,7 +76,6 @@ jobs:
       FVDB_VIZ_CORE_BUILD_JOBS: 1
       FVDB_VIZ_SKIP_BASE_INSTALL: 1
       FVDB_VIZ_IMAGE_CACHE_ENABLED: 0
-      FVDB_VIZ_DOCKER_BUILDER: fvdb-viz-ci
     steps:
       - name: Resolve package selection
         id: config
@@ -133,36 +148,6 @@ jobs:
           sudo apt-get clean
           sudo docker system prune --all --force --volumes || true
 
-      - name: Add swap space
-        run: |
-          set -euo pipefail
-          if sudo swapon --show | grep -q .; then
-            echo "Swap already configured; leaving it as-is."
-            free -h
-            sudo swapon --show
-            exit 0
-          fi
-          sudo fallocate -l 16G /swapfile
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          free -h
-          sudo swapon --show
-
-      - name: Configure resource-limited buildx builder
-        run: |
-          set -euo pipefail
-          docker buildx rm "${FVDB_VIZ_DOCKER_BUILDER}" >/dev/null 2>&1 || true
-          docker buildx create \
-            --name "${FVDB_VIZ_DOCKER_BUILDER}" \
-            --driver docker-container \
-            --driver-opt "memory=14g" \
-            --driver-opt "memory-swap=30g" \
-            --driver-opt "cpuset-cpus=0-1" \
-            --use \
-            --bootstrap
-          docker buildx inspect "${FVDB_VIZ_DOCKER_BUILDER}"
-
       - name: Run fvdb.viz tests
         run: |
           set -euo pipefail
@@ -175,6 +160,8 @@ jobs:
 
           if [[ -n "${{ inputs.fvdb_source_ref }}" ]]; then
             SCRIPT_ARGS+=("--fvdb-source-ref" "${{ inputs.fvdb_source_ref }}")
+          elif [[ "${{ inputs.fvdb_nightly }}" == "true" ]]; then
+            SCRIPT_ARGS+=("--fvdb-nightly")
           fi
 
           if [[ -n "${{ inputs.upstream_test_ref }}" ]]; then

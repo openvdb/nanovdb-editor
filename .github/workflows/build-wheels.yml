@@ -12,6 +12,16 @@ on:
         required: false
         type: boolean
         default: false
+      fvdb_nightly:
+        description: 'Install the latest fvdb-core nightly wheel in the fVDB integration job (tracks fvdb-core main)'
+        required: false
+        type: boolean
+        default: true
+      upstream_test_ref:
+        description: 'Which upstream fvdb viz test source to use in the fVDB integration job (main/release)'
+        required: false
+        type: string
+        default: release
       manage_slang_image:
         description: 'Whether to check/publish Slang GHCR image from Linux x86_64 wheels'
         required: false
@@ -38,6 +48,19 @@ on:
         required: false
         type: boolean
         default: false
+      fvdb_nightly:
+        description: 'Install the latest fvdb-core nightly wheel in the fVDB integration job (tracks fvdb-core main)'
+        required: false
+        type: boolean
+        default: true
+      upstream_test_ref:
+        description: 'Which upstream fvdb viz test source to use'
+        required: false
+        type: choice
+        default: release
+        options:
+          - main
+          - release
       manage_slang_image:
         description: 'Check/publish Slang GHCR image from Linux x86_64 wheels'
         required: false
@@ -1125,7 +1148,8 @@ jobs:
     uses: ./.github/workflows/fvdb-viz-integration.yml
     with:
       package: ${{ inputs.is_dev && 'dev' || 'release' }}
-      upstream_test_ref: release
+      fvdb_nightly: ${{ inputs.fvdb_nightly }}
+      upstream_test_ref: ${{ inputs.upstream_test_ref }}
       wheel_artifact: wheels-ubuntu-latest-x86_64-manylinux_2_27_x86_64
     secrets: inherit
 

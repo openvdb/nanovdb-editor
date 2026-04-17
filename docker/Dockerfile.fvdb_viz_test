@@ -9,6 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         build-essential \
+        curl \
         git \
         python3 \
         python3-dev \
@@ -34,6 +35,14 @@ ARG TORCH_INDEX_URL
 ARG FVDB_CORE_CUDA_ARCH_LIST="7.5;8.0;9.0;10.0;12.0+PTX"
 ARG FVDB_CORE_VERSION
 ARG FVDB_CORE_INDEX_URL
+ARG FVDB_CORE_NIGHTLY=""
+ARG FVDB_CORE_NIGHTLY_INDEX_URL=""
+# Restrict nightly wheel selection to the local-version suffix matching the
+# base image's CUDA/PyTorch (default: +pt210.cu128 for torch 2.10 + CUDA 12.8).
+# pip has no specifier for local identifiers, so we resolve the wheel URL
+# ourselves at build time.
+ARG FVDB_CORE_NIGHTLY_LOCAL_SUFFIX="+pt210.cu128"
+ARG FVDB_CORE_NIGHTLY_PYTHON_TAG="cp312-cp312"
 ARG FVDB_CORE_GIT_REF=""
 ARG FVDB_CORE_BUILD_JOBS="1"
 
@@ -43,12 +52,44 @@ RUN if [ -n "$TORCH_INDEX_URL" ]; then \
         python3 -m pip install "torch==${TORCH_VERSION:?TORCH_VERSION build arg is required}" --break-system-packages; \
     fi
 
+# fvdb-core install path (in priority order):
+#   1) FVDB_CORE_GIT_REF  -> source build from git (heavy; local/advanced use only).
+#   2) FVDB_CORE_NIGHTLY  -> install latest pre-release wheel from upstream nightly
+#      simple index (tracks fvdb-core main; no CUDA compile on this runner).
+#   3) otherwise          -> install the pinned FVDB_CORE_VERSION release wheel.
 RUN if [ -n "$FVDB_CORE_GIT_REF" ]; then \
         TORCH_CUDA_ARCH_LIST="${FVDB_CORE_CUDA_ARCH_LIST}" \
         CMAKE_BUILD_PARALLEL_LEVEL="${FVDB_CORE_BUILD_JOBS}" \
         MAX_JOBS="${FVDB_CORE_BUILD_JOBS}" \
         python3 -m pip install \
           "git+https://github.com/openvdb/fvdb-core.git@${FVDB_CORE_GIT_REF}#egg=fvdb-core[viewer]" \
+          --break-system-packages; \
+    elif [ -n "$FVDB_CORE_NIGHTLY" ] && [ "$FVDB_CORE_NIGHTLY" != "0" ]; then \
+        # pip has no specifier for PEP 440 local version identifiers, and the
+        # nightly simple index hosts multiple CUDA/PyTorch variants of each
+        # build (e.g. +pt210.cu128 and +pt210.cu130). Pick the latest wheel
+        # whose local-version suffix + python tag match this image, then
+        # install it by URL so pip can't fall back to a PyPI sdist (which
+        # would trigger a source compile). We also install `nanovdb-editor`
+        # explicitly because nightly fvdb-core drops the `[viewer]` extra.
+        : "${FVDB_CORE_NIGHTLY_INDEX_URL:?FVDB_CORE_NIGHTLY_INDEX_URL build arg is required}" && \
+        FVDB_NIGHTLY_BASE="${FVDB_CORE_NIGHTLY_INDEX_URL%/}/fvdb-core/" && \
+        FVDB_NIGHTLY_WHEEL="$(curl -fsSL "${FVDB_NIGHTLY_BASE}" \
+            | grep -oE '[^">]+\.whl' \
+            | awk -F/ '{print $NF}' \
+            | grep -F "${FVDB_CORE_NIGHTLY_PYTHON_TAG}" \
+            | grep -F "${FVDB_CORE_NIGHTLY_LOCAL_SUFFIX}" \
+            | sort -u | tail -n 1)" && \
+        if [ -z "$FVDB_NIGHTLY_WHEEL" ]; then \
+            echo "ERROR: no fvdb-core nightly wheel matches python_tag=${FVDB_CORE_NIGHTLY_PYTHON_TAG} suffix=${FVDB_CORE_NIGHTLY_LOCAL_SUFFIX}" >&2; \
+            exit 1; \
+        fi && \
+        FVDB_NIGHTLY_URL="${FVDB_NIGHTLY_BASE}${FVDB_NIGHTLY_WHEEL}" && \
+        echo "Selected nightly wheel: ${FVDB_NIGHTLY_URL}" && \
+        python3 -m pip install --pre \
+          "fvdb-core @ ${FVDB_NIGHTLY_URL}" \
+          "nanovdb-editor" \
+          --extra-index-url "${FVDB_CORE_NIGHTLY_INDEX_URL}" \
           --break-system-packages; \
     else \
         python3 -m pip install \

@@ -18,9 +18,11 @@ Options:
                              Mirrors the GitHub Actions behavior when a local
                              wheel artifact is provided.
   --fvdb-source-ref REF      Install fvdb-core[viewer] from openvdb/fvdb-core@REF
-                             when building the test image.
+                             (git source build; heavy, local/advanced use only).
+  --fvdb-nightly             Install the latest fvdb-core[viewer] nightly wheel
+                             (prebuilt, tracks fvdb-core main; no CUDA compile).
   --upstream-test-ref REF    Upstream fvdb viz test source to use:
-                             main (default), release_or_main, or release
+                             main (default) or release
   -i, --image-name NAME      Override the Docker image tag (default derived
                              from stream, e.g. fvdb-viz-release)
   -f, --force-rebuild        Force a rebuild of the fvdb-viz test image cache
@@ -37,6 +39,7 @@ source "${SCRIPT_DIR}/fvdb_viz_versions.sh"
 PACKAGE_STREAM="release"
 LOCAL_WHEEL=""
 FVDB_SOURCE_REF=""
+FVDB_NIGHTLY="1"
 UPSTREAM_TEST_REF="main"
 IMAGE_NAME=""
 FORCE_REBUILD="0"
@@ -65,6 +68,10 @@ while [[ $# -gt 0 ]]; do
     --fvdb-source-ref)
       FVDB_SOURCE_REF="${2:-}"
       shift 2
+      ;;
+    --fvdb-nightly)
+      FVDB_NIGHTLY="1"
+      shift 1
       ;;
     -i|--image-name)
       IMAGE_NAME="${2:-}"
@@ -99,12 +106,17 @@ case "$PACKAGE_STREAM" in
 esac
 
 case "$UPSTREAM_TEST_REF" in
-  release_or_main|main|release) ;;
+  main|release) ;;
   *)
     echo "Unsupported upstream test ref: $UPSTREAM_TEST_REF" >&2
     exit 1
     ;;
 esac
+
+if [[ -n "$FVDB_SOURCE_REF" && "$FVDB_NIGHTLY" == "1" ]]; then
+  echo "--fvdb-source-ref and --fvdb-nightly are mutually exclusive." >&2
+  exit 1
+fi
 
 USE_LOCAL="false"
 LOCAL_WHEEL_ABS=""
@@ -143,6 +155,7 @@ fi
 : "${FVDB_VIZ_CUDA_ARCH_LIST:=${FVDB_VIZ_CUDA_ARCH_LIST_DEFAULT}}"
 : "${FVDB_VIZ_CORE_VERSION:=${FVDB_VIZ_CORE_VERSION_DEFAULT}}"
 : "${FVDB_VIZ_CORE_INDEX_URL:=${FVDB_VIZ_CORE_INDEX_URL_DEFAULT}}"
+: "${FVDB_VIZ_CORE_NIGHTLY_INDEX_URL:=${FVDB_VIZ_CORE_NIGHTLY_INDEX_URL_DEFAULT}}"
 : "${FVDB_VIZ_TEST_IMAGE_BASE:=${FVDB_VIZ_TEST_IMAGE_BASE_DEFAULT}}"
 : "${FVDB_VIZ_TEST_IMAGE_REVISION:=${FVDB_VIZ_TEST_IMAGE_REVISION_DEFAULT}}"
 : "${FVDB_VIZ_SCRIPT_TIMEOUT:=${FVDB_VIZ_SCRIPT_TIMEOUT_DEFAULT}}"
@@ -154,6 +167,8 @@ if [[ -z "${CORE_VERSION_TAG}" ]]; then
 fi
 if [[ -n "${FVDB_SOURCE_REF}" ]]; then
   CORE_SOURCE_TAG="git-${FVDB_SOURCE_REF//[^0-9A-Za-z._-]/-}"
+elif [[ "${FVDB_NIGHTLY}" == "1" ]]; then
+  CORE_SOURCE_TAG="nightly"
 else
   CORE_SOURCE_TAG="${CORE_VERSION_TAG}"
 fi
@@ -176,6 +191,8 @@ if [[ "$SKIP_IMAGE_BUILD" != "1" ]]; then
     FVDB_VIZ_CUDA_ARCH_LIST="${FVDB_VIZ_CUDA_ARCH_LIST}" \
     FVDB_VIZ_CORE_VERSION="${FVDB_VIZ_CORE_VERSION}" \
     FVDB_VIZ_CORE_INDEX_URL="${FVDB_VIZ_CORE_INDEX_URL}" \
+    FVDB_VIZ_CORE_NIGHTLY_INDEX_URL="${FVDB_VIZ_CORE_NIGHTLY_INDEX_URL}" \
+    FVDB_VIZ_CORE_NIGHTLY="${FVDB_NIGHTLY}" \
     FVDB_VIZ_CORE_GIT_REF="${FVDB_SOURCE_REF}" \
     FVDB_VIZ_FORCE_IMAGE_REBUILD="${FORCE_REBUILD}" \
       ./scripts/build_fvdb_viz_test_image.sh
