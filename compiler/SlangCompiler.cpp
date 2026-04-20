@@ -9,8 +9,6 @@
     \brief
 */
 
-#define _DEBUG
-
 #include "SlangCompiler.h"
 #include "nanovdb_editor/putil/Shader.hpp"
 
