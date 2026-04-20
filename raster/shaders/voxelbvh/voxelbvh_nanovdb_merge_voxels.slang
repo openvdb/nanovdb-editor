@@ -40,15 +40,15 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
             pnanovdb_coord_t ijkmask = ijk;
             if ((i & 1) != 0u)
             {
-                ijk.z = ijk.z ^ flip_mask;
+                ijkmask.z = ijkmask.z ^ flip_mask;
             }
             if ((i & 2) != 0u)
             {
-                ijk.y = ijk.y ^ flip_mask;
+                ijkmask.y = ijkmask.y ^ flip_mask;
             }
             if ((i & 4) != 0u)
             {
-                ijk.x = ijk.x ^ flip_mask;
+                ijkmask.x = ijkmask.x ^ flip_mask;
             }
             pnanovdb_address_t read_val_addr = pnanovdb_root_get_value_address(grid_type, buf, root, ijkmask);
             pnanovdb_uint64_t read_val = pnanovdb_read_uint64(buf, read_val_addr);

@@ -724,8 +724,6 @@ void ray_march_nanovdb(uint thread_idx,
 
                 // align HDDA tmin/tmax to current voxel size
                 int dim = 1 << skip_level;
-                // this resolves artifact, but need to investigate why
-                if (dim > 32u) { dim = 32u; }
                 hdda_update(hdda, rayOrigin, rayDir, rayDirInv, dim);
 
                 int4 ijkl = int4(
@@ -966,8 +964,6 @@ void ray_march_nanovdb(uint thread_idx,
                 uint skip_level = (uint(s_voxel_val[s_min_hdda_idx]) >> 16u) & 0xFFFF;
                 // align HDDA tmin/tmax to current voxel size
                 int dim = 1 << skip_level;
-                // this resolves artifact, but need to investigate why
-                if (dim > 32u) { dim = 32u; }
                 hdda_step(hdda, rayOrigin, rayDir, rayDirInv, dim);
             }
         }
