@@ -436,6 +436,9 @@ except BaseException:
 finally:
     sys.stdout.flush()
     sys.stderr.flush()
+    for mod_name in list(sys.modules):
+        if mod_name == "fvdb" or mod_name.startswith("fvdb."):
+            del sys.modules[mod_name]
     os._exit(exit_code)
 """
     cmd = [
