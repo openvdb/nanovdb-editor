@@ -107,6 +107,7 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
     if (skip_level == 9u) { value = float4(0.f, 0.5f, 0.5f, 0.f);}
     if (skip_level == 10u) { value = float4(0.0f, 0.f, 0.5f, 0.f);}
     if (skip_level == 11u) { value = float4(0.5f, 0.f, 0.5f, 0.f);}
+    if (skip_level == 12u) { value = float4(0.33f, 0.33f, 0.33f, 0.f);}
 
     if (((ijk.x ^ ijk.y ^ ijk.z) & 1) != 0u)
     {
