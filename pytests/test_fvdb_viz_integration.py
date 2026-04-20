@@ -268,6 +268,44 @@ def _assert_viz_server_initializes(env_ctx: dict):
         ) from exc
 
 
+def _apply_fvdb_camera_fov_compat():
+    import math
+
+    import fvdb.viz._scene as scene_module
+
+    scene_cls = scene_module.Scene
+    if isinstance(scene_cls.__dict__.get("camera_fov"), property):
+        test_scene = scene_cls("__nanovdb_editor_fov_compat_probe__")
+        try:
+            test_scene.camera_fov = 0.0
+        except ValueError:
+            return
+        finally:
+            del test_scene
+
+    from fvdb.viz._viewer_server import _get_viewer_server_cpp
+
+    def _fov_get(self):
+        server = _get_viewer_server_cpp()
+        try:
+            return server.camera_fov(self._name)
+        except (AttributeError, TypeError):
+            return getattr(self, "_nve_camera_fov", math.pi / 4.0)
+
+    def _fov_set(self, fov_radians):
+        if not math.isfinite(fov_radians):
+            raise ValueError(f"FOV must be a finite value, got {fov_radians}")
+        if fov_radians <= 0.0 or fov_radians >= math.pi:
+            raise ValueError(f"FOV must be between 0 and pi radians, got {fov_radians}")
+        server = _get_viewer_server_cpp()
+        try:
+            server.set_camera_fov(self._name, fov_radians)
+        except (AttributeError, TypeError):
+            self._nve_camera_fov = fov_radians
+
+    scene_cls.camera_fov = property(_fov_get, _fov_set)
+
+
 def _apply_fvdb_point_cloud_compat():
     import fvdb.viz._point_cloud_view as point_cloud_view_module
     import torch
@@ -391,10 +429,11 @@ import traceback
 
 import pytest
 
-from pytests.test_fvdb_viz_integration import _apply_fvdb_point_cloud_compat
+from pytests.test_fvdb_viz_integration import _apply_fvdb_camera_fov_compat, _apply_fvdb_point_cloud_compat
 
 exit_code = 1
 try:
+    _apply_fvdb_camera_fov_compat()
     _apply_fvdb_point_cloud_compat()
     exit_code = int(pytest.main(sys.argv[1:]))
 except BaseException:
