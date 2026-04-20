@@ -274,14 +274,8 @@ def _apply_fvdb_camera_fov_compat():
     import fvdb.viz._scene as scene_module
 
     scene_cls = scene_module.Scene
-    if isinstance(scene_cls.__dict__.get("camera_fov"), property):
-        test_scene = scene_cls("__nanovdb_editor_fov_compat_probe__")
-        try:
-            test_scene.camera_fov = 0.0
-        except ValueError:
-            return
-        finally:
-            del test_scene
+    if getattr(scene_cls, "_nve_camera_fov_compat", False):
+        return
 
     from fvdb.viz._viewer_server import _get_viewer_server_cpp
 
@@ -304,6 +298,7 @@ def _apply_fvdb_camera_fov_compat():
             self._nve_camera_fov = fov_radians
 
     scene_cls.camera_fov = property(_fov_get, _fov_set)
+    scene_cls._nve_camera_fov_compat = True
 
 
 def _apply_fvdb_point_cloud_compat():
