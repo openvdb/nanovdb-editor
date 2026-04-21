@@ -63,7 +63,11 @@ jobs:
         run: |
           set -e
           chmod +x ./build.sh
-          ./build.sh -rfv
+          ./build.sh -rcv
+
+      - name: Verify incremental build is a no-op
+        run: |
+          bash ./scripts/ci/check_incremental_build.sh "./build.sh -r"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -176,7 +180,7 @@ jobs:
 
       - name: Build NanoVDB Editor (GLFW enabled)
         run: |
-          ./build.bat -rv
+          ./build.bat -rcv
 
       - name: Verify GLFW runtime DLL is present
         run: |
@@ -191,6 +195,10 @@ jobs:
             exit 1
           }
           Write-Host "Found GLFW runtime DLL: $GlfwDll"
+
+      - name: Verify incremental build is a no-op
+        run: |
+          ./scripts/ci/check_incremental_build.ps1 -Command "build.bat -r"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -302,7 +310,7 @@ jobs:
 
       - name: Build NanoVDB Editor (GLFW enabled)
         run: |
-          ./build.bat -rv
+          ./build.bat -rcv
         env:
           VCPKG_ROOT: ${{ github.workspace }}/vcpkg
           USE_VCPKG: ON
@@ -320,6 +328,10 @@ jobs:
             exit 1
           }
           Write-Host "Found GLFW runtime DLL: $GlfwDll"
+
+      - name: Verify incremental build is a no-op
+        run: |
+          ./scripts/ci/check_incremental_build.ps1 -Command "build.bat -r"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -443,7 +455,11 @@ jobs:
         run: |
           set -e
           chmod +x ./build.sh
-          ./build.sh -rfv
+          ./build.sh -rcv
+
+      - name: Verify incremental build is a no-op
+        run: |
+          bash ./scripts/ci/check_incremental_build.sh "./build.sh -r"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

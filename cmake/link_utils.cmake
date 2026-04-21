@@ -9,25 +9,33 @@ function(create_platform_file_link TARGET_NAME SOURCE_FILE TARGET_FILE COMMENT_T
     get_filename_component(TARGET_DIR "${TARGET_FILE}" DIRECTORY)
 
     if(WIN32)
-        # Windows: Use mklink for files (hard link) with proper path conversion
-        file(TO_NATIVE_PATH "${TARGET_FILE}" TARGET_FILE_NATIVE)
-        file(TO_NATIVE_PATH "${SOURCE_FILE}" SOURCE_FILE_NATIVE)
+        # Windows: Use mklink for files (hard link) and fall back to a copy when
+        # link creation is unavailable. Keep the whole decision in a CMake script
+        # so MSBuild does not have to parse fragile inline cmd conditionals.
         add_custom_command(
             TARGET ${TARGET_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory "${TARGET_DIR}"
-            COMMAND ${CMAKE_COMMAND} -E remove -f "${TARGET_FILE}"
-            COMMAND cmd /c "mklink /H \"${TARGET_FILE_NATIVE}\" \"${SOURCE_FILE_NATIVE}\" || exit 0"
-            COMMAND if not exist "${TARGET_FILE}" ${CMAKE_COMMAND} -E copy_if_different "${SOURCE_FILE}" "${TARGET_FILE}"
+            COMMAND ${CMAKE_COMMAND}
+                -DTARGET_PATH="${TARGET_FILE}"
+                -DSOURCE_PATH="${SOURCE_FILE}"
+                -DLINK_KIND=file
+                -P "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/ensure_windows_link.cmake"
             COMMENT "${COMMENT_TEXT}"
+            VERBATIM
         )
     else()
-        # Linux/Mac: Use symbolic links
+        # Linux/Mac: Keep a valid symlink, but repair broken or stale ones.
         add_custom_command(
             TARGET ${TARGET_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory "${TARGET_DIR}"
-            COMMAND ${CMAKE_COMMAND} -E remove -f "${TARGET_FILE}"
-            COMMAND ${CMAKE_COMMAND} -E create_symlink "${SOURCE_FILE}" "${TARGET_FILE}"
+            COMMAND ${CMAKE_COMMAND}
+                -DLINK_PATH="${TARGET_FILE}"
+                -DSOURCE_PATH="${SOURCE_FILE}"
+                -DLINK_KIND=file
+                -P "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/repair_symlink.cmake"
+            COMMAND test -e "${TARGET_FILE}" || ${CMAKE_COMMAND} -E create_symlink "${SOURCE_FILE}" "${TARGET_FILE}"
             COMMENT "${COMMENT_TEXT}"
+            VERBATIM
         )
     endif()
 endfunction()
@@ -36,25 +44,32 @@ function(create_platform_directory_link TARGET_NAME SOURCE_DIR TARGET_DIR COMMEN
     get_filename_component(TARGET_PARENT_DIR "${TARGET_DIR}" DIRECTORY)
 
     if(WIN32)
-        # Windows: Use mklink /J for directories (junction) with proper path conversion
-        file(TO_NATIVE_PATH "${TARGET_DIR}" TARGET_DIR_NATIVE)
-        file(TO_NATIVE_PATH "${SOURCE_DIR}" SOURCE_DIR_NATIVE)
+        # Windows: Use mklink /J for directories and fall back to a copied
+        # directory when junction creation is unavailable.
         add_custom_command(
             TARGET ${TARGET_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory "${TARGET_PARENT_DIR}"
-            COMMAND ${CMAKE_COMMAND} -E remove_directory "${TARGET_DIR}"
-            COMMAND cmd /c "mklink /J \"${TARGET_DIR_NATIVE}\" \"${SOURCE_DIR_NATIVE}\" || exit 0"
-            COMMAND if not exist "${TARGET_DIR}" ${CMAKE_COMMAND} -E copy_directory "${SOURCE_DIR}" "${TARGET_DIR}"
+            COMMAND ${CMAKE_COMMAND}
+                -DTARGET_PATH="${TARGET_DIR}"
+                -DSOURCE_PATH="${SOURCE_DIR}"
+                -DLINK_KIND=directory
+                -P "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/ensure_windows_link.cmake"
             COMMENT "${COMMENT_TEXT}"
+            VERBATIM
         )
     else()
-        # Linux/Mac: Use symbolic links
+        # Linux/Mac: Keep a valid symlink, but repair broken or stale ones.
         add_custom_command(
             TARGET ${TARGET_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory "${TARGET_PARENT_DIR}"
-            COMMAND ${CMAKE_COMMAND} -E remove_directory "${TARGET_DIR}"
-            COMMAND ${CMAKE_COMMAND} -E create_symlink "${SOURCE_DIR}" "${TARGET_DIR}"
+            COMMAND ${CMAKE_COMMAND}
+                -DLINK_PATH="${TARGET_DIR}"
+                -DSOURCE_PATH="${SOURCE_DIR}"
+                -DLINK_KIND=directory
+                -P "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/repair_symlink.cmake"
+            COMMAND test -e "${TARGET_DIR}" || ${CMAKE_COMMAND} -E create_symlink "${SOURCE_DIR}" "${TARGET_DIR}"
             COMMENT "${COMMENT_TEXT}"
+            VERBATIM
         )
     endif()
 endfunction()

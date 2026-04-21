@@ -85,8 +85,6 @@ if(NANOVDB_EDITOR_USE_VCPKG)
     list(PREPEND CMAKE_PREFIX_PATH "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}")
   endif()
 
-  find_package(blosc CONFIG REQUIRED)
-
   if(NANOVDB_EDITOR_E57_FORMAT)
     find_package(E57Format CONFIG REQUIRED)
   endif()
@@ -271,18 +269,13 @@ create_nanovdb_library(pnanovdbeditor
         ${EDITOR_SOURCE_FILES}
         ${SERVER_SOURCE_FILES}
         ${VULKAN_IMGUI_SOURCE_FILES}
-        ${IMGUI_SOURCE_FILES}
-        ${imgui_SOURCE_DIR}/misc/cpp/imgui_stdlib.cpp    # for std::string text input
     HEADERS ${EDITOR_HEADER_FILES}
     INCLUDES
         ./
         ./imgui
         ${nanovdb_SOURCE_DIR}/nanovdb
-        ${imgui_SOURCE_DIR}
         ${glfw_SOURCE_DIR}/include
         ${FileWatch_SOURCE_DIR}
-        ${ImGuiFileDialog_SOURCE_DIR}
-        ${ImGuiColorTextEdit_SOURCE_DIR}
         ${llhttp_SOURCE_DIR}/include
         ${asio_SOURCE_DIR}/asio/include
         ${expected_SOURCE_DIR}/include
@@ -290,6 +283,7 @@ create_nanovdb_library(pnanovdbeditor
     LIBS
         nlohmann_json::nlohmann_json
         llhttp_static
+        imgui
         ImGuiColorTextEdit
         ImGuiFileDialog
         fmt::fmt
@@ -394,6 +388,42 @@ if(SKBUILD)
         DESTINATION nanovdb_editor/lib
         COMPONENT python_libs
     )
+
+    if(WIN32 AND VCPKG_INSTALLED_DIR AND VCPKG_TARGET_TRIPLET)
+        # Mirror the Linux wheel layout on Windows: bundle the exact runtime
+        # DLLs we intentionally depend on instead of scanning the full process
+        # dependency graph during install.
+        set(_python_runtime_vcpkg_release_patterns
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin/lz4*.dll"
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin/zlib*.dll"
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin/zstd*.dll"
+        )
+        foreach(_python_runtime_pattern IN LISTS _python_runtime_vcpkg_release_patterns)
+            file(GLOB _python_runtime_matches LIST_DIRECTORIES FALSE "${_python_runtime_pattern}")
+            if(_python_runtime_matches)
+                install(FILES ${_python_runtime_matches}
+                    DESTINATION nanovdb_editor/lib
+                    COMPONENT python_libs
+                )
+            endif()
+        endforeach()
+
+        set(_python_runtime_vcpkg_debug_patterns
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/bin/lz4*.dll"
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/bin/zlib*.dll"
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/bin/zstd*.dll"
+        )
+        foreach(_python_runtime_pattern IN LISTS _python_runtime_vcpkg_debug_patterns)
+            file(GLOB _python_runtime_matches LIST_DIRECTORIES FALSE "${_python_runtime_pattern}")
+            if(_python_runtime_matches)
+                install(FILES ${_python_runtime_matches}
+                    CONFIGURATIONS Debug
+                    DESTINATION nanovdb_editor/lib
+                    COMPONENT python_libs
+                )
+            endif()
+        endforeach()
+    endif()
 
     if(WIN32 AND NANOVDB_EDITOR_USE_H264)
         # Install OpenH264 runtime DLL using config-specific lists from packages.cmake
@@ -633,6 +663,10 @@ if(SKBUILD)
                 COMPONENT python_libs
             )
         endif()
+    endif()
+
+    if(WIN32 AND NOT TARGET vulkan)
+        message(FATAL_ERROR "Windows Python wheel builds must bundle vulkan-1.dll, but the Vulkan loader target 'vulkan' is unavailable")
     endif()
 
     if(TARGET vulkan)

@@ -82,14 +82,8 @@ def _fvdb_core_release_tag() -> str:
 def _upstream_test_urls() -> list[str]:
     release_tag = _fvdb_core_release_tag()
     return [
-        (
-            "https://raw.githubusercontent.com/openvdb/fvdb-core/"
-            f"{release_tag}/{UPSTREAM_TEST_RELATIVE_PATH}"
-        ),
-        (
-            "https://raw.githubusercontent.com/openvdb/fvdb-core/main/"
-            f"{UPSTREAM_TEST_RELATIVE_PATH}"
-        ),
+        ("https://raw.githubusercontent.com/openvdb/fvdb-core/" f"{release_tag}/{UPSTREAM_TEST_RELATIVE_PATH}"),
+        ("https://raw.githubusercontent.com/openvdb/fvdb-core/main/" f"{UPSTREAM_TEST_RELATIVE_PATH}"),
     ]
 
 
@@ -112,9 +106,7 @@ def _resolve_upstream_test_path(work_dir: Path) -> Path:
     if last_error is None:
         raise RuntimeError("Could not resolve an fvdb upstream viz test URL")
 
-    raise RuntimeError(
-        "Failed to fetch upstream fvdb viz test from any known URL"
-    ) from last_error
+    raise RuntimeError("Failed to fetch upstream fvdb viz test from any known URL") from last_error
 
 
 def _run(cmd: list[str], env: dict[str, str], **kwargs):
@@ -228,14 +220,68 @@ def _log_nanovdb_version(env_ctx: dict):
     )
 
 
+def _assert_viz_server_initializes(env_ctx: dict):
+    python_exe = env_ctx["python"]
+    env = env_ctx["env"]
+    try:
+        subprocess.run(
+            [
+                str(python_exe),
+                "-c",
+                (
+                    "import os; "
+                    "import fvdb; "
+                    "print("
+                    "'VK_ICD_FILENAMES:', "
+                    "os.environ.get('VK_ICD_FILENAMES', '<unset>')"
+                    "); "
+                    "print("
+                    "'VK_DRIVER_FILES:', "
+                    "os.environ.get('VK_DRIVER_FILES', '<unset>')"
+                    "); "
+                    "fvdb.viz.init("
+                    "ip_address='127.0.0.1', port=8080, verbose=False"
+                    "); "
+                    "print('fvdb.viz init preflight: ok')"
+                ),
+            ],
+            env=env,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise AssertionError(
+            "fvdb.viz viewer initialization failed during preflight. "
+            "Treating this as a hard failure instead of allowing the upstream "
+            "suite to skip."
+        ) from exc
+
+
 def _run_upstream_viz_suite(env_ctx: dict):
     python_exe = env_ctx["python"]
     env = env_ctx["env"]
     upstream_test_path = env_ctx["upstream_test_path"]
+    _assert_viz_server_initializes(env_ctx)
+    runner = """
+import os
+import sys
+import traceback
+
+import pytest
+
+exit_code = 1
+try:
+    exit_code = int(pytest.main(sys.argv[1:]))
+except BaseException:
+    traceback.print_exc()
+finally:
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(exit_code)
+"""
     cmd = [
         str(python_exe),
-        "-m",
-        "pytest",
+        "-c",
+        runner,
         str(upstream_test_path),
         "-vv",
         "-s",

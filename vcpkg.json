@@ -2,11 +2,17 @@
   "name": "nanovdb-editor",
   "version": "1.0.0",
   "dependencies": [
-    "blosc",
-    "libe57format",
     {
       "name": "openh264",
       "platform": "windows"
     }
-  ]
+  ],
+  "features": {
+    "e57": {
+      "description": "Enable E57 file format support",
+      "dependencies": [
+        "libe57format"
+      ]
+    }
+  }
 }

@@ -10,6 +10,7 @@ set BUILD_DIR=%PROJECT_DIR%build
 set CONFIG_FILE=config.ini
 set SLANG_DEBUG_OUTPUT=OFF
 set CLEAN_SHADERS=OFF
+if not defined NANOVDB_EDITOR_E57_FORMAT set NANOVDB_EDITOR_E57_FORMAT=OFF
 if not defined USE_VCPKG set USE_VCPKG=OFF
 set GLFW_ON=ON
 
@@ -19,6 +20,7 @@ set debug=0
 set verbose=0
 set python_only=0
 set test_only=0
+set force_configure=0
 
 :parse_args
 set args=%1
@@ -65,6 +67,10 @@ if "%arg:~0,1%"=="t" (
 )
 if "%arg:~0,1%"=="f" (
     set GLFW_ON=OFF
+    goto check_next_char
+)
+if "%arg:~0,1%"=="c" (
+    set force_configure=1
     goto check_next_char
 )
 if "%arg:~0,1%"=="h" (
@@ -115,8 +121,12 @@ if "%USE_VCPKG%"=="ON" (
     :: Install dependencies using vcpkg.json (run from repo root so manifest is found)
     if exist "%VCPKG_ROOT%\vcpkg.exe" (
         echo -- Installing dependencies with vcpkg, triplet %VCPKG_TRIPLET%
+        set VCPKG_FEATURE_ARGS=
+        if /I "%NANOVDB_EDITOR_E57_FORMAT%"=="ON" (
+            set VCPKG_FEATURE_ARGS=--x-feature=e57
+        )
         pushd "%PROJECT_DIR%"
-        call "%VCPKG_ROOT%\vcpkg.exe" install --triplet %VCPKG_TRIPLET%
+        call "%VCPKG_ROOT%\vcpkg.exe" install --triplet %VCPKG_TRIPLET% %VCPKG_FEATURE_ARGS%
         if errorlevel 1 (
             popd
             echo vcpkg install failed
@@ -152,7 +162,7 @@ echo Failure while building %PROJECT_NAME%
 exit /b %BUILD_ERROR%
 
 :Usage
-echo Usage: build [-x] [-r] [-d] [-v] [-s] [-p] [-t] [-f]
+echo Usage: build [-x] [-r] [-d] [-v] [-s] [-p] [-t] [-f] [-c]
 echo        -x  Perform a clean build
 echo        -r  Build in release (default)
 echo        -d  Build in debug
@@ -161,6 +171,7 @@ echo        -s  Compile slang into ASM
 echo        -p  Build only python module (requires Python 3.8+, auto-installs scikit-build ^& wheel)
 echo        -t  Run only tests using ctest
 echo        -f  Disable GLFW (headless build)
+echo        -c  Force CMake reconfigure
 exit /b 1
 
 :Build
@@ -218,6 +229,16 @@ if "%debug%"=="1" (
 
 echo -- Building %PROJECT_NAME%...
 
+if "%clean_build%"=="1" goto RunConfigure
+if "%force_configure%"=="1" goto RunConfigure
+if not exist "%BUILD_DIR%\CMakeCache.txt" goto RunConfigure
+
+echo -- Skipping CMake configure (already configured, use -c to force)
+goto SkipConfigure
+
+:RunConfigure
+echo -- Configuring %PROJECT_NAME%...
+
 set SLANG_PROFILE_ARG=
 if defined SLANG_PROFILE (
     set SLANG_PROFILE_ARG=-DNANOVDB_EDITOR_SLANG_PROFILE=%SLANG_PROFILE%
@@ -228,6 +249,7 @@ set CMAKE_ARGS=%PROJECT_DIR% -B %BUILD_DIR% ^
     -DCMAKE_PREFIX_PATH=%VCPKG_PREFIX_PATH% ^
     %VCPKG_INSTALLED_DIR_ARG% ^
     -DNANOVDB_EDITOR_USE_VCPKG=%USE_VCPKG% ^
+    -DNANOVDB_EDITOR_E57_FORMAT=%NANOVDB_EDITOR_E57_FORMAT% ^
     -DNANOVDB_EDITOR_CLEAN_SHADERS=%CLEAN_SHADERS% ^
     -DNANOVDB_EDITOR_SLANG_DEBUG_OUTPUT=%SLANG_DEBUG_OUTPUT% ^
     -DNANOVDB_EDITOR_BUILD_TESTS=ON ^
@@ -247,6 +269,8 @@ if "%BUILD_ERROR%" neq "0" (
     echo CMake configuration failed
     goto Error
 )
+
+:SkipConfigure
 
 if "%release%"=="1" (
     call :BuildConfig Release
@@ -336,7 +360,7 @@ del /q *.whl 2>nul
 if "%USE_VCPKG%"=="ON" (
     set "PY_VCPKG_CMAKE=%VCPKG_CMAKE:\=/%"
     set "PY_VCPKG_INSTALLED_DIR=%VCPKG_INSTALLED_DIR:\=/%"
-    set "CMAKE_ARGS=-DCMAKE_TOOLCHAIN_FILE=%PY_VCPKG_CMAKE% -DVCPKG_INSTALLED_DIR=%PY_VCPKG_INSTALLED_DIR% -DVCPKG_TARGET_TRIPLET=%VCPKG_TRIPLET% -DNANOVDB_EDITOR_USE_VCPKG=ON"
+    set "CMAKE_ARGS=-DCMAKE_TOOLCHAIN_FILE=%PY_VCPKG_CMAKE% -DVCPKG_INSTALLED_DIR=%PY_VCPKG_INSTALLED_DIR% -DVCPKG_TARGET_TRIPLET=%VCPKG_TRIPLET% -DNANOVDB_EDITOR_USE_VCPKG=ON -DNANOVDB_EDITOR_E57_FORMAT=%NANOVDB_EDITOR_E57_FORMAT%"
 ) else (
     set "CMAKE_ARGS="
 )

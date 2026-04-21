@@ -16,6 +16,7 @@ option(NANOVDB_EDITOR_DIST_PACKAGE "Create distribution package" OFF)
 option(NANOVDB_EDITOR_FORCE_REBUILD_DEPS "Force rebuild all dependencies (clears dependencies cache)" OFF)
 option(NANOVDB_EDITOR_USE_GLFW "Use GLFW, not needed for streaming only, when OFF, Vulkan loadeer is built to ensure streaming compatibility" ON)
 option(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE "Build Slang from source instead of downloading prebuilt binaries (Linux x86 only; intended for wheel builds)" OFF)
+set(NANOVDB_SLANG_IMAGE_ROOT_DIR "" CACHE PATH "Path to a prebuilt Slang package root containing include/ and lib/ directories on Unix-like platforms, or include/ and bin/ directories on Windows")
 
 # On Windows, H264 support relies on the vcpkg-packaged OpenH264 library instead
 # of the Unix-only source build used on other platforms.
@@ -26,6 +27,12 @@ else()
 endif()
 
 option(NANOVDB_EDITOR_BUILD_TESTS "Configure CMake to build gtests for NanoVDB Editor" ON)
+
+# Select optional vcpkg manifest features before project() enables the toolchain
+if(NANOVDB_EDITOR_USE_VCPKG AND NANOVDB_EDITOR_E57_FORMAT)
+    list(APPEND VCPKG_MANIFEST_FEATURES e57)
+    list(REMOVE_DUPLICATES VCPKG_MANIFEST_FEATURES)
+endif()
 
 set(NANOVDB_EDITOR_COMMIT_HASH "" CACHE STRING "NanoVDB Editor commit hash for provenance")
 set(NANOVDB_EDITOR_FVDB_COMMIT_HASH "" CACHE STRING "FVDB commit hash for provenance")
@@ -120,15 +127,22 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 # If switching from headless (GLFW OFF) to GLFW ON, remove the built Vulkan loader to use system one
+# Uses a stamp file to avoid deleting the loader on every configure run
 if(NANOVDB_EDITOR_USE_GLFW)
-  file(GLOB VULKAN_LOADER_FILES
-       "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libvulkan*"
-       "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/vulkan*"
-  )
-  if(VULKAN_LOADER_FILES)
-    message(STATUS "Removing previously built Vulkan loader: ${VULKAN_LOADER_FILES}")
-    file(REMOVE ${VULKAN_LOADER_FILES})
+  set(_glfw_stamp "${CMAKE_BINARY_DIR}/.glfw_mode_stamp")
+  if(NOT EXISTS "${_glfw_stamp}")
+    file(GLOB VULKAN_LOADER_FILES
+         "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libvulkan*"
+         "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/vulkan*"
+    )
+    if(VULKAN_LOADER_FILES)
+      message(STATUS "Removing previously built Vulkan loader: ${VULKAN_LOADER_FILES}")
+      file(REMOVE ${VULKAN_LOADER_FILES})
+    endif()
+    file(WRITE "${_glfw_stamp}" "GLFW_ON")
   endif()
+else()
+  file(REMOVE "${CMAKE_BINARY_DIR}/.glfw_mode_stamp")
 endif()
 
 # Print configuration summary
