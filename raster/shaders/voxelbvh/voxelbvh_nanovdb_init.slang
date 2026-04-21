@@ -31,7 +31,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     {
         pnanovdb_grid_handle_t grid = {};
 
-        const uint integer_space_max = 4095;
+        const uint integer_space_max = 2047;
         float3 g_aabb_min = float3(world_bbox_in[0], world_bbox_in[1], world_bbox_in[2]);
         float3 g_aabb_max = float3(world_bbox_in[3], world_bbox_in[4], world_bbox_in[5]);
         float3 g_aabb_delta = g_aabb_max - g_aabb_min;

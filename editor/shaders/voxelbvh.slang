@@ -1024,11 +1024,16 @@ void get_center_ray_dir(out float3 rayDir)
     rayDir = normalize(rayDir);
 }
 
-[shader("compute")][numthreads(32, 4, 1)]
+[shader("compute")][numthreads(16, 8, 1)]
 void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 thread_idx : SV_GroupThreadID)
 {
     int2 tidx = int2(dispatchThreadID.xy);
-    uint thread_idx1d = thread_idx.x | (thread_idx.y << 5);
+    if (tidx.y >= editor_params.height)
+    {
+        tidx.y -= editor_params.height;
+        tidx.x += editor_params.width / 2u;
+    }
+    uint thread_idx1d = thread_idx.x | (thread_idx.y << 4);
 
     // initialize active mask
     if (thread_idx1d < 4u)
