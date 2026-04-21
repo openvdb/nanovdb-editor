@@ -38,6 +38,7 @@
 // #define TEST_E57
 // #define TEST_CAMERA
 // #define TEST_IMAGE2D
+// #define TEST_VOXELBVH
 
 struct constants_t
 {
@@ -196,8 +197,10 @@ void voxelbvh_test();
 
 int main(int argc, char* argv[])
 {
+#if TEST_VOXELBVH
     voxelbvh_test();
     return 0;
+#endif
 
     auto args = argparse::parse<NanoVDBEditorArgs>(argc, argv);
 

@@ -1235,7 +1235,8 @@ static void nanovdb_append_metadata(const pnanovdb_compute_t* compute,
     pnanovdb_uint64_t total_size = src_grid_size;
     for (pnanovdb_uint32_t metadata_idx = 0u; metadata_idx < metadata_count; metadata_idx++)
     {
-        pnanovdb_uint64_t raw_size = metadata_arrays[metadata_idx]->element_size * metadata_arrays[metadata_idx]->element_count;
+        pnanovdb_uint64_t raw_size =
+            metadata_arrays[metadata_idx]->element_size * metadata_arrays[metadata_idx]->element_count;
         pnanovdb_uint64_t aligned_size = 32u * ((raw_size + 31u) / 32u);
         total_size += aligned_size;
         total_size += PNANOVDB_GRIDBLINDMETADATA_SIZE;
@@ -1259,7 +1260,8 @@ static void nanovdb_append_metadata(const pnanovdb_compute_t* compute,
     pnanovdb_address_t meta_addr = { src_grid_size + PNANOVDB_GRIDBLINDMETADATA_SIZE * metadata_count };
     for (pnanovdb_uint32_t metadata_idx = 0u; metadata_idx < metadata_count; metadata_idx++)
     {
-        pnanovdb_uint64_t raw_size = metadata_arrays[metadata_idx]->element_size * metadata_arrays[metadata_idx]->element_count;
+        pnanovdb_uint64_t raw_size =
+            metadata_arrays[metadata_idx]->element_size * metadata_arrays[metadata_idx]->element_count;
         pnanovdb_uint64_t aligned_size = 32u * ((raw_size + 31u) / 32u);
 
         pnanovdb_gridblindmetadata_handle_t meta = pnanovdb_grid_get_gridblindmetadata(buf, grid, metadata_idx);
@@ -1270,8 +1272,7 @@ static void nanovdb_append_metadata(const pnanovdb_compute_t* compute,
 
         memcpy(((uint8_t*)buf.data) + meta_addr.byte_offset, metadata_arrays[metadata_idx]->data, raw_size);
 
-        meta_addr = pnanovdb_address_offset64(
-            meta_addr, aligned_size);
+        meta_addr = pnanovdb_address_offset64(meta_addr, aligned_size);
     }
 
     pnanovdb_grid_set_grid_size(buf, grid, pnanovdb_address_diff(meta_addr, pnanovdb_address_null()));
