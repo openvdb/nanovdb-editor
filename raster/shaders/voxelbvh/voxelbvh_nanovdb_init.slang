@@ -6,6 +6,13 @@
 #define PNANOVDB_BUF_HLSL_RW
 #include "PNanoVDB.h"
 
+struct constants_t
+{
+    uint grid_size;
+    uint integer_space_max;
+};
+ConstantBuffer<constants_t> constants;
+
 StructuredBuffer<uint2> upload;
 
 RWStructuredBuffer<uint2> buf;
@@ -17,10 +24,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
     uint idx = group_idx.x * 256u + thread_idx.x;
 
-    // grid size in NanoVDB is at 64-bit word index 4
-    uint2 grid_size = upload[4u];
-
-    if (8u * idx < grid_size.x)
+    if (8u * idx < constants.grid_size)
     {
         buf[idx] = upload[idx];
     }
@@ -31,12 +35,11 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     {
         pnanovdb_grid_handle_t grid = {};
 
-        const uint integer_space_max = 2047;
         float3 g_aabb_min = float3(world_bbox_in[0], world_bbox_in[1], world_bbox_in[2]);
         float3 g_aabb_max = float3(world_bbox_in[3], world_bbox_in[4], world_bbox_in[5]);
         float3 g_aabb_delta = g_aabb_max - g_aabb_min;
         float g_aabb_delta_max = max(g_aabb_delta.x, max(g_aabb_delta.y, g_aabb_delta.z));
-        float scale = float(integer_space_max) / (g_aabb_delta_max);
+        float scale = float(constants.integer_space_max) / (g_aabb_delta_max);
         float3 offset = -g_aabb_min * scale;
 
         float voxel_size = 1.f / scale;

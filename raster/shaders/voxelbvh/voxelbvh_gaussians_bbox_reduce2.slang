@@ -6,6 +6,7 @@ struct constants_t
     uint workgroup_count;
     uint voxel_count;
     uint voxel_workgroup_count;
+    uint integer_space_max;
 };
 
 ConstantBuffer<constants_t> constants;

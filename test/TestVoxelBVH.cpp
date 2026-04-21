@@ -135,12 +135,16 @@ void voxelbvh_test()
 #else
     pnanovdb_compute_array_t* gaussian_arrays[6u] = {};
 
+    const pnanovdb_uint32_t integer_space_max = 2047u;
+    const char* in_file = "./data/garden_eps2d03.ply";
+    const char* out_file = "./data/garden_eps2d03.nvdb";
+
     pnanovdb_compute_array_t* ijkl_array = nullptr;
     pnanovdb_compute_array_t* prim_id_array = nullptr;
     pnanovdb_compute_array_t* range_array = nullptr;
     pnanovdb_compute_array_t* world_bbox_array = nullptr;
-    voxel_bvh.ijkl_from_gaussians_file(&compute, queue, voxelbvh_ctx, "./data/garden_eps2d03.ply", &ijkl_array,
-                                       &prim_id_array, &range_array, &world_bbox_array, gaussian_arrays, 6u);
+    voxel_bvh.ijkl_from_gaussians_file(&compute, queue, voxelbvh_ctx, in_file, &ijkl_array,
+                                       &prim_id_array, &range_array, &world_bbox_array, integer_space_max, gaussian_arrays, 6u);
 
     uint64_t range_count = range_array->element_count;
     uint64_t ijkl_count = ijkl_array->element_count;
@@ -151,7 +155,7 @@ void voxelbvh_test()
     pnanovdb_compute_array_t* built_nanovdb_array = nullptr;
     pnanovdb_compute_array_t* built_flat_range_array = nullptr;
     voxel_bvh.nanovdb_add_nodes_from_ijkl_array(&compute, queue, voxelbvh_ctx, &built_nanovdb_array,
-                                                &built_flat_range_array, ijkl_array, range_array, world_bbox_array);
+                                                &built_flat_range_array, ijkl_array, range_array, world_bbox_array, integer_space_max);
 
     pnanovdb_buf_t buf = pnanovdb_make_buf((uint32_t*)built_nanovdb_array->data,
                                            built_nanovdb_array->element_size * built_nanovdb_array->element_count / 4u);
@@ -469,7 +473,7 @@ void voxelbvh_test()
     }
 
     // save NanoVDB out to disk
-    compute.save_nanovdb(nanovdb_meta, "./data/voxelbvh.nvdb");
+    compute.save_nanovdb(nanovdb_meta, out_file);
 
     compute.destroy_array(nanovdb_meta);
     for (uint32_t idx = 0u; idx < 6u; idx++)

@@ -6,6 +6,7 @@ struct constants_t
     uint workgroup_count;
     uint voxel_count;
     uint voxel_workgroup_count;
+    uint integer_space_max;
 };
 
 ConstantBuffer<constants_t> constants;
@@ -105,12 +106,11 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         return;
     }
 
-    const uint integer_space_max = 2047;
     float3 g_aabb_min = float3(bbox_in[0], bbox_in[1], bbox_in[2]);
     float3 g_aabb_max = float3(bbox_in[3], bbox_in[4], bbox_in[5]);
     float3 g_aabb_delta = g_aabb_max - g_aabb_min;
     float g_aabb_delta_max = max(g_aabb_delta.x, max(g_aabb_delta.y, g_aabb_delta.z));
-    float scale = float(integer_space_max) / (g_aabb_delta_max);
+    float scale = float(constants.integer_space_max) / (g_aabb_delta_max);
     float3 offset = -g_aabb_min * scale;
 
     float3 meansf = float3(
