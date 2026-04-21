@@ -766,7 +766,7 @@ static void nanovdb_add_nodes_from_ijkl_buffer(const pnanovdb_compute_t* compute
     }
 
     // merge
-    for (uint l = 0u; l < 12; l++)
+    for (pnanovdb_uint32_t l = 0u; l < 12; l++)
     {
         struct merge_arg_t
         {

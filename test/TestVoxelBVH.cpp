@@ -339,7 +339,7 @@ void voxelbvh_test()
                 val_pass_count++;
             }
 
-            uint active_lmask = uint(val & 0xFFFF);
+            pnanovdb_uint32_t active_lmask = pnanovdb_uint32_t(val & 0xFFFF);
             pnanovdb_uint32_t list_begin_idx = pnanovdb_uint32_t(val >> 32u);
             pnanovdb_uint32_t list_countbits = pnanovdb_uint32_countbits(active_lmask & ~lmask);
             pnanovdb_uint32_t list_idx = list_begin_idx + list_countbits;
@@ -453,8 +453,8 @@ void voxelbvh_test()
             pnanovdb_address_t range_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 0u);
             pnanovdb_uint64_t range =
                 pnanovdb_read_uint64(buf, pnanovdb_address_offset_product(range_addr, 8u, list_begin_idx));
-            uint range_begin = uint(range);
-            uint range_end = uint(range >> 32u);
+            pnanovdb_uint32_t range_begin = pnanovdb_uint32_t(range);
+            pnanovdb_uint32_t range_end = pnanovdb_uint32_t(range >> 32u);
             printf("list_begin_idx[%u] range_addr(%zu) range(%u,%u) ", list_begin_idx, range_addr.byte_offset,
                    range_begin, range_end);
             if (range_begin < range_end)
