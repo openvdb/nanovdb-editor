@@ -757,8 +757,10 @@ if (NOT SKBUILD)
 
     ### PNanoVDB Editor Test App
 
+    file(GLOB TEST_APP_SOURCE_FILES "test/*.cpp")
+
     create_nanovdb_executable(pnanovdbeditortestapp
-        SOURCES test/main.cpp
+        SOURCES ${TEST_APP_SOURCE_FILES}
         INCLUDES
             ./
             ./test

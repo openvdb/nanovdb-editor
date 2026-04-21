@@ -18,6 +18,7 @@
 
 #include <cstdarg>
 
+#include <cstdint>
 #include <slang.h>
 
 #define SLANG_PRELUDE_NAMESPACE CPPPrelude
@@ -191,8 +192,13 @@ void test_image_2d(pnanovdb_editor_t* editor,
     printf("Image2d '%s' added to scene\n", image_name);
 }
 
+void voxelbvh_test();
+
 int main(int argc, char* argv[])
 {
+    voxelbvh_test();
+    return 0;
+
     auto args = argparse::parse<NanoVDBEditorArgs>(argc, argv);
 
 #if TEST_NODE2
