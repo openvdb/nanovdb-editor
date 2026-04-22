@@ -39,6 +39,11 @@ on:
         options:
           - main
           - release
+      wheel_artifact:
+        description: "Artifact name for the wheel to test (leave empty to use the published wheel)"
+        required: false
+        type: string
+        default: ""
   workflow_call:
     inputs:
       package:

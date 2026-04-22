@@ -24,7 +24,7 @@ Options:
   --upstream-test-ref REF    Upstream fvdb viz test source to use:
                              main (default) or release
   -i, --image-name NAME      Override the Docker image tag (default derived
-                             from stream, e.g. fvdb-viz-release)
+                             from fvdb-core source, e.g. nanovdb-editor_fvdb-0.4.2-r1)
   -f, --force-rebuild        Force a rebuild of the fvdb-viz test image cache
   --skip-image-build         Skip building/checking the test image (assume it
                              already exists, useful in CI)
