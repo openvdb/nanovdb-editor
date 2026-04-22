@@ -33,14 +33,7 @@ struct EditorParams
 
 struct shader_params_t
 {
-    float alpha_scale;
-    uint narrow_band_only;
-    uint highlight_bbox;
-    float slice_plane_thickness;
-
-    float4 slice_plane;
-
-    uint auto_center;
+    uint sh_degree;
 };
 
 StructuredBuffer<uint2> buf;
@@ -883,7 +876,7 @@ void ray_march_nanovdb(uint thread_idx,
                         pnanovdb_address_t shn_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 7u);
 
                         // Note: this is assuming the typical PLY case for now
-                        float3 color = eval_sh_function(3u, sh0_addr, 3u * prim_id, shn_addr, 3u * 15u * prim_id, worldRayDirCenter);
+                        float3 color = eval_sh_function(shader_params.sh_degree, sh0_addr, 3u * prim_id, shn_addr, 3u * 15u * prim_id, worldRayDirCenter);
                         s_prims[thread_idx].color = color;
 
                         pnanovdb_address_t opacity_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 3u);
