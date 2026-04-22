@@ -766,159 +766,190 @@ void ray_march_nanovdb(uint thread_idx,
                 total_count += uint(range >> 32u) - uint(range);
             }
 
-            uint workgroup_scan_accum = 0u;
-            uint pass_count = (total_count + 127u) / 128u;
-            for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
+            for (uint layer = 0u; layer <= 16u; layer++)
             {
-                uint lprim_idx = 128u * pass_idx + thread_idx;
-
-                uint active_level_idx = 0u;
-                uint range_accum = 0u;
-                uint range_begin = 0u;
-                uint range_end = 0u;
-                uint range_idx = 0u;
-                while (active_level_idx < active_level_count)
+                uint workgroup_scan_accum = 0u;
+                uint pass_count = (total_count + 127u) / 128u;
+                for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
                 {
-                    range_begin = uint(s_range[active_level_idx]);
-                    range_end = uint(s_range[active_level_idx] >> 32u);
-                    range_idx = lprim_idx - range_accum;
+                    uint lprim_idx = 128u * pass_idx + thread_idx;
+
+                    uint active_level_idx = 0u;
+                    uint range_accum = 0u;
+                    uint range_begin = 0u;
+                    uint range_end = 0u;
+                    uint range_idx = 0u;
+                    while (active_level_idx < active_level_count)
+                    {
+                        range_begin = uint(s_range[active_level_idx]);
+                        range_end = uint(s_range[active_level_idx] >> 32u);
+                        range_idx = lprim_idx - range_accum;
+                        if (range_begin + range_idx < range_end)
+                        {
+                            break;
+                        }
+                        range_accum += (range_end - range_begin);
+                        active_level_idx++;
+                    }
+
+                    uint prim_id = ~0u;
+                    float cull_t = 1.f / 0.f;
                     if (range_begin + range_idx < range_end)
                     {
-                        break;
-                    }
-                    range_accum += (range_end - range_begin);
-                    active_level_idx++;
-                }
+                        // culling stage
+                        pnanovdb_address_t prim_id_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
+                        prim_id = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, range_begin + range_idx));
 
-                uint prim_id = ~0u;
-                float cull_t = 1.f / 0.f;
-                if (range_begin + range_idx < range_end)
-                {
-                    // culling stage
-                    pnanovdb_address_t prim_id_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
-                    prim_id = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, range_begin + range_idx));
+                        pnanovdb_address_t mean_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
+                        float3 meanf = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(mean_addr, 12u, prim_id));
 
-                    pnanovdb_address_t mean_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
-                    float3 meanf = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(mean_addr, 12u, prim_id));
-
-                    // see if mean falls within cull range
-                    cull_t = dot(meanf, worldRayDirCenter);
-                    bool should_cull = !(cull_t >= s_cull_range[s_min_hdda_idx].x && cull_t <= s_cull_range[s_min_hdda_idx].y);
-                    if (should_cull)
-                    {
-                        prim_id = ~0u;
-                    }
-                }
-
-                uint scan_val = 0u;
-                uint scan_total = 0u;
-                workgroup_scan(thread_idx, prim_id != ~0u ? 1u : 0u, scan_val, scan_total);
-                if (prim_id != ~0u)
-                {
-                    uint write_idx = scan_val - 1u + workgroup_scan_accum;
-                    if (write_idx < 1024u)
-                    {
-                        // generate 4 bit sort key
-                        float key_norm = (cull_t - s_cull_range[s_min_hdda_idx].x) /
-                            (s_cull_range[s_min_hdda_idx].y - s_cull_range[s_min_hdda_idx].x);
-                        key_norm = key_norm < 0.f ? 0.f : key_norm;
-                        key_norm = key_norm > 1.f ? 1.f : key_norm;
-                        uint key_val = uint(15.f * key_norm);
-
-                        s_prim_keys[write_idx] = (prim_id << 4u) | key_val;
-                    }
-                }
-                workgroup_scan_accum += scan_total;
-            }
-
-            if (workgroup_scan_accum > 1024u)
-            {
-                workgroup_scan_accum = 1024u;
-            }
-
-            for (uint write_idx = thread_idx; write_idx < 1024u; write_idx += 128u)
-            {
-                if (write_idx >= workgroup_scan_accum)
-                {
-                    s_prim_keys[write_idx] = ~0u;
-                }
-            }
-
-            GroupMemoryBarrierWithGroupSync();
-
-            radix_sort(thread_idx);
-
-            pass_count = (workgroup_scan_accum + 127u) / 128u;
-            for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
-            {
-                uint list_idx = 128u * pass_idx + thread_idx;
-
-                if (list_idx < workgroup_scan_accum)
-                {
-                    // load gaussians into shared memory and performance projection
-                    uint prim_id = (s_prim_keys[list_idx] >> 4u);
-
-                    s_prims[thread_idx].id = prim_id;
-
-                    pnanovdb_address_t mean_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
-                    float3 meanf = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(mean_addr, 12u, prim_id));
-                    s_prims[thread_idx].mean = meanf;
-
-                    pnanovdb_address_t quat_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 4u);
-                    float4 quatf = float4(
-                        pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 1u)),
-                        pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 2u)),
-                        pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 3u)),
-                        pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 0u))
-                    );
-                    pnanovdb_address_t scale_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 5u);
-                    float3 scalef = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(scale_addr, 12u, prim_id));
-
-                    float3 conic = {};
-                    project_conic(s_prims[thread_idx].mean, quatf, scalef, conic);
-                    s_prims[thread_idx].conic = conic;
-
-                    pnanovdb_address_t sh0_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 6u);
-                    float3 sh0 = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(sh0_addr, 12u, prim_id));
-                    s_prims[thread_idx].color = float3(0.2820947917738781f * sh0 + 0.5f);
-
-                    pnanovdb_address_t opacity_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 3u);
-                    s_prims[thread_idx].opacity = pnanovdb_read_float(buf, pnanovdb_address_offset_product(opacity_addr, 4u, prim_id));
-                }
-
-                GroupMemoryBarrierWithGroupSync();
-
-                uint prim_count = workgroup_scan_accum - 128u * pass_idx;
-                if (prim_count > 128u)
-                {
-                    prim_count = 128u;
-                }
-
-                // only participate if this pixel actually wanted this data
-                if (s_ijkl[s_min_hdda_idx] == s_ijkl[thread_idx])
-                {
-                    for (uint s_idx = 0u; s_idx < prim_count; s_idx++)
-                    {
-                        if (s_prims[s_idx].id != ~0u)
+                        // see if mean falls within cull range
+                        cull_t = dot(meanf, worldRayDirCenter);
+                        bool should_cull = !(cull_t >= s_cull_range[s_min_hdda_idx].x && cull_t <= s_cull_range[s_min_hdda_idx].y);
+                        if (should_cull)
                         {
-                            intersect_gaussian(
-                                s_prims[s_idx].mean,
-                                s_prims[s_idx].conic,
-                                s_prims[s_idx].color,
-                                s_prims[s_idx].opacity,
-                                worldRayOrigin,
-                                hdda.tmin * rayDirMagnInv,
-                                worldRayDir,
-                                hdda.tmax * rayDirMagnInv,
-                                worldRayDirInv,
-                                sum,
-                                nominalT
-                            );
+                            prim_id = ~0u;
+                        }
+
+                        if (layer > 0u)
+                        {
+                            // generate 4 bit sort key
+                            float key_norm = (cull_t - s_cull_range[s_min_hdda_idx].x) /
+                                (s_cull_range[s_min_hdda_idx].y - s_cull_range[s_min_hdda_idx].x);
+                            key_norm = key_norm < 0.f ? 0.f : key_norm;
+                            key_norm = key_norm > 1.f ? 1.f : key_norm;
+                            uint key_val = uint(15.f * key_norm);
+
+                            if (layer - 1u != key_val)
+                            {
+                                prim_id = ~0u;
+                            }
                         }
                     }
+
+                    uint scan_val = 0u;
+                    uint scan_total = 0u;
+                    workgroup_scan(thread_idx, prim_id != ~0u ? 1u : 0u, scan_val, scan_total);
+                    if (prim_id != ~0u)
+                    {
+                        uint write_idx = scan_val - 1u + workgroup_scan_accum;
+                        if (write_idx < 1024u)
+                        {
+                            // generate 4 bit sort key
+                            float key_norm = (cull_t - s_cull_range[s_min_hdda_idx].x) /
+                                (s_cull_range[s_min_hdda_idx].y - s_cull_range[s_min_hdda_idx].x);
+                            key_norm = key_norm < 0.f ? 0.f : key_norm;
+                            key_norm = key_norm > 1.f ? 1.f : key_norm;
+                            uint key_val = uint(15.f * key_norm);
+
+                            s_prim_keys[write_idx] = (prim_id << 4u) | key_val;
+                        }
+                    }
+                    workgroup_scan_accum += scan_total;
+                }
+
+                if (workgroup_scan_accum >= 1024u && layer == 0u)
+                {
+                    // single pass didn't work, need to go slice by slice
+                    continue;
+                }
+                if (workgroup_scan_accum > 1024u)
+                {
+                    workgroup_scan_accum = 1024u;
+                }
+
+                for (uint write_idx = thread_idx; write_idx < 1024u; write_idx += 128u)
+                {
+                    if (write_idx >= workgroup_scan_accum)
+                    {
+                        s_prim_keys[write_idx] = ~0u;
+                    }
                 }
 
                 GroupMemoryBarrierWithGroupSync();
+
+                if (layer == 0u)
+                {
+                    radix_sort(thread_idx);
+                }
+
+                pass_count = (workgroup_scan_accum + 127u) / 128u;
+                for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
+                {
+                    uint list_idx = 128u * pass_idx + thread_idx;
+
+                    if (list_idx < workgroup_scan_accum)
+                    {
+                        // load gaussians into shared memory and performance projection
+                        uint prim_id = (s_prim_keys[list_idx] >> 4u);
+
+                        s_prims[thread_idx].id = prim_id;
+
+                        pnanovdb_address_t mean_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
+                        float3 meanf = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(mean_addr, 12u, prim_id));
+                        s_prims[thread_idx].mean = meanf;
+
+                        pnanovdb_address_t quat_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 4u);
+                        float4 quatf = float4(
+                            pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 1u)),
+                            pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 2u)),
+                            pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 3u)),
+                            pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 0u))
+                        );
+                        pnanovdb_address_t scale_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 5u);
+                        float3 scalef = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(scale_addr, 12u, prim_id));
+
+                        float3 conic = {};
+                        project_conic(s_prims[thread_idx].mean, quatf, scalef, conic);
+                        s_prims[thread_idx].conic = conic;
+
+                        pnanovdb_address_t sh0_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 6u);
+                        float3 sh0 = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(sh0_addr, 12u, prim_id));
+                        s_prims[thread_idx].color = float3(0.2820947917738781f * sh0 + 0.5f);
+
+                        pnanovdb_address_t opacity_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 3u);
+                        s_prims[thread_idx].opacity = pnanovdb_read_float(buf, pnanovdb_address_offset_product(opacity_addr, 4u, prim_id));
+                    }
+
+                    GroupMemoryBarrierWithGroupSync();
+
+                    uint prim_count = workgroup_scan_accum - 128u * pass_idx;
+                    if (prim_count > 128u)
+                    {
+                        prim_count = 128u;
+                    }
+
+                    // only participate if this pixel actually wanted this data
+                    if (s_ijkl[s_min_hdda_idx] == s_ijkl[thread_idx])
+                    {
+                        for (uint s_idx = 0u; s_idx < prim_count; s_idx++)
+                        {
+                            if (s_prims[s_idx].id != ~0u)
+                            {
+                                intersect_gaussian(
+                                    s_prims[s_idx].mean,
+                                    s_prims[s_idx].conic,
+                                    s_prims[s_idx].color,
+                                    s_prims[s_idx].opacity,
+                                    worldRayOrigin,
+                                    hdda.tmin * rayDirMagnInv,
+                                    worldRayDir,
+                                    hdda.tmax * rayDirMagnInv,
+                                    worldRayDirInv,
+                                    sum,
+                                    nominalT
+                                );
+                            }
+                        }
+                    }
+
+                    GroupMemoryBarrierWithGroupSync();
+                }
+
+                if (workgroup_scan_accum < 1024u && layer == 0u)
+                {
+                    break;
+                }
             }
         }
 
