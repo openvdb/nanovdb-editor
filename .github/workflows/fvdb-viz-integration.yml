@@ -2,24 +2,67 @@ name: fVDB Viewer Integration
 
 permissions:
   contents: read
-  packages: read
   actions: read
 
 on:
+  # Direct workflow_dispatch validates the PUBLISHED nanovdb-editor wheel
+  # (release/dev) against either the pinned fvdb-core release or the nightly
+  # main branch. To test the nanovdb-editor wheel built from the CURRENT
+  # BRANCH, dispatch `build-wheels.yml` with `run_fvdb_viz_integration=true`;
+  # that workflow builds the manylinux wheel and forwards it here via
+  # `wheel_artifact` (both release and nightly jobs run in parallel).
   workflow_dispatch:
     inputs:
       package:
-        description: "Package stream to validate"
+        description: "Package stream to validate (published nanovdb-editor release/dev wheel)"
         required: true
         type: choice
         default: release
         options:
           - release
           - dev
+      fvdb_nightly:
+        description: "Install the latest fvdb-core[viewer] nightly wheel (tracks fvdb-core main; no runner compile)"
+        required: false
+        type: boolean
+        default: false
+      fvdb_source_ref:
+        description: "Advanced: install fvdb-core[viewer] from openvdb/fvdb-core@REF (git source build; heavy, not recommended on hosted runners)"
+        required: false
+        type: string
+        default: ""
+      upstream_test_ref:
+        description: "Which upstream fvdb viz test source to use"
+        required: false
+        type: choice
+        default: main
+        options:
+          - main
+          - release
+      wheel_artifact:
+        description: "Artifact name for the wheel to test (leave empty to use the published wheel)"
+        required: false
+        type: string
+        default: ""
   workflow_call:
     inputs:
       package:
         description: "Package stream to validate (release/dev)"
+        required: false
+        type: string
+        default: release
+      fvdb_nightly:
+        description: "Install the latest fvdb-core[viewer] nightly wheel (tracks fvdb-core main)"
+        required: false
+        type: boolean
+        default: false
+      fvdb_source_ref:
+        description: "Advanced: install fvdb-core[viewer] from openvdb/fvdb-core@REF (git source build; heavy)"
+        required: false
+        type: string
+        default: ""
+      upstream_test_ref:
+        description: "Which upstream fvdb viz test source to use (main/release)"
         required: false
         type: string
         default: release
@@ -30,104 +73,13 @@ on:
         default: ""
 
 jobs:
-  resolve-fvdb-versions:
-    name: Resolve fVDB Versions
-    runs-on: ubuntu-latest
-    outputs:
-      torch_version: ${{ steps.fvdb.outputs.torch_version }}
-      torch_index_url: ${{ steps.fvdb.outputs.torch_index_url }}
-      core_version: ${{ steps.fvdb.outputs.core_version }}
-      core_index_url: ${{ steps.fvdb.outputs.core_index_url }}
-      test_image_revision: ${{ steps.fvdb.outputs.test_image_revision }}
-      script_timeout: ${{ steps.fvdb.outputs.script_timeout }}
-      test_image: ${{ steps.fvdb.outputs.test_image }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Export fvdb defaults
-        id: fvdb
-        run: |
-          set -euo pipefail
-          source scripts/fvdb_viz_versions.sh
-          core_tag="${FVDB_VIZ_CORE_VERSION_DEFAULT%%+*}"
-          {
-            echo "torch_version=${FVDB_VIZ_TORCH_VERSION_DEFAULT}"
-            echo "torch_index_url=${FVDB_VIZ_TORCH_INDEX_URL_DEFAULT}"
-            echo "core_version=${FVDB_VIZ_CORE_VERSION_DEFAULT}"
-            echo "core_index_url=${FVDB_VIZ_CORE_INDEX_URL_DEFAULT}"
-            echo "test_image_revision=${FVDB_VIZ_TEST_IMAGE_REVISION_DEFAULT}"
-            echo "script_timeout=${FVDB_VIZ_SCRIPT_TIMEOUT_DEFAULT}"
-            echo "test_image=${FVDB_VIZ_TEST_IMAGE_BASE_DEFAULT}"
-          } >> "$GITHUB_OUTPUT"
-
-  lookup-test-image:
-    name: Check Image Exists
-    needs: resolve-fvdb-versions
-    runs-on: ubuntu-latest
-    outputs:
-      exists: ${{ steps.lookup.outputs.exists }}
-      image_ref: ${{ steps.lookup.outputs.image_ref }}
-    env:
-      IMAGE_NAME: ${{ needs.resolve-fvdb-versions.outputs.test_image }}
-      CORE_VERSION: ${{ needs.resolve-fvdb-versions.outputs.core_version }}
-      IMAGE_REVISION: ${{ needs.resolve-fvdb-versions.outputs.test_image_revision }}
-    steps:
-      - name: Look up cached image
-        id: lookup
-        env:
-          GHCR_USER: ${{ secrets.GHCR_PUSH_USERNAME }}
-          GHCR_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN }}
-        run: |
-          set -euo pipefail
-          core_tag="${CORE_VERSION//[^0-9a-zA-Z.-]/-}"
-          image_ref="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${core_tag}-r${IMAGE_REVISION}"
-          echo "image_ref=${image_ref}" >> "$GITHUB_OUTPUT"
-
-          # Login only when credentials are present (not available in fork PRs)
-          if [[ -n "${GHCR_TOKEN:-}" && -n "${GHCR_USER:-}" ]]; then
-            echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin >/dev/null 2>&1
-          else
-            echo "GHCR credentials not available (e.g. fork PR); checking image without login (works for public packages)"
-          fi
-
-          if docker manifest inspect "${image_ref}" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Found cached image: ${image_ref}"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "Image not found, build required: ${image_ref}"
-          fi
-
-  build-test-image:
-    name: Build Image
-    needs: [resolve-fvdb-versions, lookup-test-image]
-    # Skip on fork PRs: no GHCR credentials to push
-    if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.lookup-test-image.outputs.exists != 'true' }}
-    uses: ./.github/workflows/build-fvdb-viz-test-image.yml
-    with:
-      image_name: ${{ needs.resolve-fvdb-versions.outputs.test_image }}
-      image_revision: ${{ needs.resolve-fvdb-versions.outputs.test_image_revision }}
-      torch_version: ${{ needs.resolve-fvdb-versions.outputs.torch_version }}
-      torch_index_url: ${{ needs.resolve-fvdb-versions.outputs.torch_index_url }}
-      fvdb_core_version: ${{ needs.resolve-fvdb-versions.outputs.core_version }}
-      fvdb_core_index_url: ${{ needs.resolve-fvdb-versions.outputs.core_index_url }}
-    secrets: inherit
-
   run-integration-tests:
     name: Run Tests
-    needs: [resolve-fvdb-versions, lookup-test-image, build-test-image]
-    # Skip on fork PRs: no GHCR credentials to pull image; run when build skipped (image exists) or after build
-    if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && !cancelled() && !failure() }}
     runs-on: ubuntu-latest
     env:
-      FVDB_VIZ_TORCH_VERSION: ${{ needs.resolve-fvdb-versions.outputs.torch_version }}
-      FVDB_VIZ_TORCH_INDEX_URL: ${{ needs.resolve-fvdb-versions.outputs.torch_index_url }}
-      FVDB_VIZ_CORE_VERSION: ${{ needs.resolve-fvdb-versions.outputs.core_version }}
-      FVDB_VIZ_CORE_INDEX_URL: ${{ needs.resolve-fvdb-versions.outputs.core_index_url }}
-      FVDB_VIZ_SCRIPT_TIMEOUT: ${{ needs.resolve-fvdb-versions.outputs.script_timeout }}
+      FVDB_VIZ_CORE_BUILD_JOBS: 1
       FVDB_VIZ_SKIP_BASE_INSTALL: 1
-      FVDB_VIZ_TEST_IMAGE: ${{ needs.lookup-test-image.outputs.image_ref }}
+      FVDB_VIZ_IMAGE_CACHE_ENABLED: 0
     steps:
       - name: Resolve package selection
         id: config
@@ -154,12 +106,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ secrets.GHCR_PUSH_USERNAME }}
-          password: ${{ secrets.GHCR_PUSH_TOKEN }}
+      - name: Export fvdb defaults
+        run: |
+          set -euo pipefail
+          source scripts/fvdb_viz_versions.sh
+          {
+            echo "FVDB_VIZ_TORCH_VERSION=${FVDB_VIZ_TORCH_VERSION_DEFAULT}"
+            echo "FVDB_VIZ_TORCH_INDEX_URL=${FVDB_VIZ_TORCH_INDEX_URL_DEFAULT}"
+            echo "FVDB_VIZ_CUDA_ARCH_LIST=${FVDB_VIZ_CUDA_ARCH_LIST_DEFAULT}"
+            echo "FVDB_VIZ_CORE_VERSION=${FVDB_VIZ_CORE_VERSION_DEFAULT}"
+            echo "FVDB_VIZ_CORE_INDEX_URL=${FVDB_VIZ_CORE_INDEX_URL_DEFAULT}"
+            echo "FVDB_VIZ_TEST_IMAGE_BASE=${FVDB_VIZ_TEST_IMAGE_BASE_DEFAULT}"
+            echo "FVDB_VIZ_TEST_IMAGE_REVISION=${FVDB_VIZ_TEST_IMAGE_REVISION_DEFAULT}"
+            echo "FVDB_VIZ_SCRIPT_TIMEOUT=${FVDB_VIZ_SCRIPT_TIMEOUT_DEFAULT}"
+          } >> "$GITHUB_ENV"
 
       - name: Prepare wheel directory
         run: |
@@ -188,30 +148,28 @@ jobs:
 
       - name: Free disk space
         run: |
-          set -euo pipefail
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/lib/jvm
-          sudo rm -rf "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}"
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/lib/jvm /opt/hostedtoolcache
           sudo apt-get clean
           sudo docker system prune --all --force --volumes || true
 
-      - name: Pull fvdb.viz test image
-        run: |
-          set -euo pipefail
-          docker pull "${{ needs.lookup-test-image.outputs.image_ref }}"
-
       - name: Run fvdb.viz tests
-        env:
-          FVDB_VIZ_TEST_IMAGE: ${{ needs.lookup-test-image.outputs.image_ref }}
         run: |
           set -euo pipefail
 
-          SCRIPT_ARGS=("--stream" "${{ steps.config.outputs.package_stream }}" "--skip-image-build")
+          SCRIPT_ARGS=("--stream" "${{ steps.config.outputs.package_stream }}")
 
           if [[ "${{ steps.config.outputs.use_local }}" == "true" ]]; then
             SCRIPT_ARGS+=("--local-wheel" "${{ steps.local_wheel.outputs.host_path }}")
+          fi
+
+          if [[ -n "${{ inputs.fvdb_source_ref }}" ]]; then
+            SCRIPT_ARGS+=("--fvdb-source-ref" "${{ inputs.fvdb_source_ref }}")
+          elif [[ "${{ inputs.fvdb_nightly }}" == "true" ]]; then
+            SCRIPT_ARGS+=("--fvdb-nightly")
+          fi
+
+          if [[ -n "${{ inputs.upstream_test_ref }}" ]]; then
+            SCRIPT_ARGS+=("--upstream-test-ref" "${{ inputs.upstream_test_ref }}")
           fi
 
           ./scripts/run_fvdb_viz_integration.sh "${SCRIPT_ARGS[@]}"

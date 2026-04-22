@@ -748,11 +748,3 @@ jobs:
           export PYTHONFAULTHANDLER=1
           export PYTHONUNBUFFERED=1
           python3 -X faulthandler -m pytest pytests -vvv -s -ra --tb=long --timeout=300 --timeout-method=thread
-
-  fvdb-viz-integration:
-    name: fVDB Integration
-    needs: nanovdb-editor-build-python-linux
-    uses: ./.github/workflows/fvdb-viz-integration.yml
-    with:
-      wheel_artifact: nanovdb-editor-wheel
-    secrets: inherit
