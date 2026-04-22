@@ -466,7 +466,7 @@ finally:
         # The fvdb C++ viewer server's background threads can crash during
         # interpreter shutdown, producing a non-zero exit code even when all
         # tests pass.  Trust the pytest summary line over the exit code.
-        if re.search(r"\d+ passed", result.stdout) and "failed" not in result.stdout.lower().split("passed")[-1]:
+        if re.search(r"\d+ passed", result.stdout) and not re.search(r"\d+ failed", result.stdout):
             return
         raise subprocess.CalledProcessError(result.returncode, cmd)
 
