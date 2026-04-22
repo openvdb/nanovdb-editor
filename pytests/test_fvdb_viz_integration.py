@@ -309,7 +309,13 @@ def _apply_fvdb_point_cloud_compat():
     if getattr(point_cloud_view_cls, "__nanovdb_editor_point_cloud_compat__", False):
         return
 
-    gaussian_splat_cls = point_cloud_view_module.GaussianSplat3d
+    gaussian_splat_cls = getattr(point_cloud_view_module, "GaussianSplat3d", None)
+    if gaussian_splat_cls is None:
+        # Newer fvdb-core: PointCloudView.__init__ already calls
+        # add_gaussian_splat_3d_view() with keyword tensor arguments
+        # directly; no compatibility patching needed.
+        return
+
     get_viewer_server_cpp = point_cloud_view_module._get_viewer_server_cpp
 
     def _add_gaussian_splat_view_compat(
