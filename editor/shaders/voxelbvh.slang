@@ -462,7 +462,6 @@ groupshared uint64_t s_range[12u];
 
 groupshared float2 s_cull_range[128u];
 
-groupshared uint s_prim_ids[1024u];
 groupshared uint s_prim_keys[1024u];
 
 groupshared uint smem[256u];
@@ -561,16 +560,6 @@ void radix_sort(uint thread_idx)
         s_prim_keys[4u * thread_idx + 1u + 512u],
         s_prim_keys[4u * thread_idx + 2u + 512u],
         s_prim_keys[4u * thread_idx + 3u + 512u]);
-    uint4 val_low = uint4(
-        s_prim_ids[4u * thread_idx + 0u],
-        s_prim_ids[4u * thread_idx + 1u],
-        s_prim_ids[4u * thread_idx + 2u],
-        s_prim_ids[4u * thread_idx + 3u]);
-    uint4 val_high = uint4(
-        s_prim_ids[4u * thread_idx + 0u + 512u],
-        s_prim_ids[4u * thread_idx + 1u + 512u],
-        s_prim_ids[4u * thread_idx + 2u + 512u],
-        s_prim_ids[4u * thread_idx + 3u + 512u]);
 
     GroupMemoryBarrierWithGroupSync();
 
@@ -600,14 +589,6 @@ void radix_sort(uint thread_idx)
         s_prim_keys[rank_high.y] = key_high.y;
         s_prim_keys[rank_high.z] = key_high.z;
         s_prim_keys[rank_high.w] = key_high.w;
-        s_prim_ids[rank_low.x] = val_low.x;
-        s_prim_ids[rank_low.y] = val_low.y;
-        s_prim_ids[rank_low.z] = val_low.z;
-        s_prim_ids[rank_low.w] = val_low.w;
-        s_prim_ids[rank_high.x] = val_high.x;
-        s_prim_ids[rank_high.y] = val_high.y;
-        s_prim_ids[rank_high.z] = val_high.z;
-        s_prim_ids[rank_high.w] = val_high.w;
 
         GroupMemoryBarrierWithGroupSync();
 
@@ -621,16 +602,6 @@ void radix_sort(uint thread_idx)
             s_prim_keys[4u * thread_idx + 1u + 512u],
             s_prim_keys[4u * thread_idx + 2u + 512u],
             s_prim_keys[4u * thread_idx + 3u + 512u]);
-        val_low = uint4(
-            s_prim_ids[4u * thread_idx + 0u],
-            s_prim_ids[4u * thread_idx + 1u],
-            s_prim_ids[4u * thread_idx + 2u],
-            s_prim_ids[4u * thread_idx + 3u]);
-        val_high = uint4(
-            s_prim_ids[4u * thread_idx + 0u + 512u],
-            s_prim_ids[4u * thread_idx + 1u + 512u],
-            s_prim_ids[4u * thread_idx + 2u + 512u],
-            s_prim_ids[4u * thread_idx + 3u + 512u]);
     }
 }
 
@@ -847,8 +818,6 @@ void ray_march_nanovdb(uint thread_idx,
                     uint write_idx = scan_val - 1u + workgroup_scan_accum;
                     if (write_idx < 1024u)
                     {
-                        s_prim_ids[write_idx] = prim_id;
-
                         // generate 16 bit sort key
                         float key_norm = (cull_t - s_cull_range[s_min_hdda_idx].x) /
                             (s_cull_range[s_min_hdda_idx].y - s_cull_range[s_min_hdda_idx].x);
@@ -856,8 +825,7 @@ void ray_march_nanovdb(uint thread_idx,
                         key_norm = key_norm > 1.f ? 1.f : key_norm;
                         uint key_val = uint(15.f * key_norm);
 
-                        s_prim_keys[write_idx] = key_val;
-                        //s_prim_keys[write_idx] = sort_asuint(cull_t);
+                        s_prim_keys[write_idx] = (prim_id << 4u) | key_val;
                     }
                 }
                 workgroup_scan_accum += scan_total;
@@ -888,7 +856,7 @@ void ray_march_nanovdb(uint thread_idx,
                 if (list_idx < workgroup_scan_accum)
                 {
                     // load gaussians into shared memory and performance projection
-                    uint prim_id = s_prim_ids[list_idx];
+                    uint prim_id = (s_prim_keys[list_idx] >> 4u);
 
                     s_prims[thread_idx].id = prim_id;
 
