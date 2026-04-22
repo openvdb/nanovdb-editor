@@ -741,80 +741,67 @@ void ray_march_nanovdb(uint thread_idx,
                 uint pass_count = (total_count + 127u) / 128u;
                 for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
                 {
-                    uint lprim_idx = 128u * pass_idx + thread_idx;
+                    uint flat_list_idx = 128u * pass_idx + thread_idx;
 
-                    uint active_level_idx = 0u;
-                    uint range_accum = 0u;
-                    uint range_begin = 0u;
-                    uint range_end = 0u;
-                    uint range_idx = 0u;
-                    while (active_level_idx < active_level_count)
+                    uint list_accum = 0u;
+                    uint list_idx = ~0u;
+                    for (uint active_level_idx = 0u; active_level_idx < active_level_count; active_level_idx++)
                     {
-                        range_begin = uint(s_range[active_level_idx]);
-                        range_end = uint(s_range[active_level_idx] >> 32u);
-                        range_idx = lprim_idx - range_accum;
-                        if (range_begin + range_idx < range_end)
+                        uint range_begin = uint(s_range[active_level_idx]);
+                        uint range_end = uint(s_range[active_level_idx] >> 32u);
+                        uint list_idx_cmp = range_begin + flat_list_idx - list_accum;
+                        if (list_idx_cmp < range_end)
                         {
+                            list_idx = list_idx_cmp;
                             break;
                         }
-                        range_accum += (range_end - range_begin);
-                        active_level_idx++;
+                        list_accum += (range_end - range_begin);
                     }
 
-                    uint prim_id = ~0u;
-                    float cull_t = 1.f / 0.f;
-                    if (range_begin + range_idx < range_end)
+                    uint prim_key = ~0u;
+                    if (list_idx != ~0u)
                     {
                         // culling stage
                         pnanovdb_address_t prim_id_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
-                        prim_id = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, range_begin + range_idx));
+                        uint prim_id = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, list_idx));
 
                         pnanovdb_address_t mean_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
                         float3 meanf = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(mean_addr, 12u, prim_id));
 
                         // see if mean falls within cull range
-                        cull_t = dot(meanf, worldRayDirCenter);
-                        bool should_cull = !(cull_t >= s_cull_range[s_min_hdda_idx].x && cull_t <= s_cull_range[s_min_hdda_idx].y);
-                        if (should_cull)
-                        {
-                            prim_id = ~0u;
-                        }
+                        float cull_t = dot(meanf, worldRayDirCenter);
 
-                        if (layer > 0u)
-                        {
-                            // generate 4 bit sort key
-                            float key_norm = (cull_t - s_cull_range[s_min_hdda_idx].x) /
-                                (s_cull_range[s_min_hdda_idx].y - s_cull_range[s_min_hdda_idx].x);
-                            key_norm = key_norm < 0.f ? 0.f : key_norm;
-                            key_norm = key_norm > 1.f ? 1.f : key_norm;
-                            uint key_val = uint(15.f * key_norm);
+                        // generate 4 bit sort key
+                        float key_norm = (cull_t - s_cull_range[s_min_hdda_idx].x) /
+                            (s_cull_range[s_min_hdda_idx].y - s_cull_range[s_min_hdda_idx].x);
+                        key_norm = key_norm < 0.f ? 0.f : key_norm;
+                        key_norm = key_norm > 1.f ? 1.f : key_norm;
+                        prim_key = (prim_id << 4u) | uint(15.f * key_norm);
 
-                            if (layer - 1u != key_val)
-                            {
-                                prim_id = ~0u;
-                            }
+                        bool should_cull_t = !(cull_t >= s_cull_range[s_min_hdda_idx].x && cull_t <= s_cull_range[s_min_hdda_idx].y);
+                        bool should_cull_layer = layer > 0u && layer - 1u != (prim_key & 15);
+                        if (should_cull_t || should_cull_layer)
+                        {
+                            prim_key = ~0u;
                         }
                     }
 
                     uint scan_val = 0u;
                     uint scan_total = 0u;
-                    workgroup_scan(thread_idx, prim_id != ~0u ? 1u : 0u, scan_val, scan_total);
-                    if (prim_id != ~0u)
+                    workgroup_scan(thread_idx, prim_key != ~0u ? 1u : 0u, scan_val, scan_total);
+                    if (prim_key != ~0u)
                     {
                         uint write_idx = scan_val - 1u + workgroup_scan_accum;
                         if (write_idx < 512u)
                         {
-                            // generate 4 bit sort key
-                            float key_norm = (cull_t - s_cull_range[s_min_hdda_idx].x) /
-                                (s_cull_range[s_min_hdda_idx].y - s_cull_range[s_min_hdda_idx].x);
-                            key_norm = key_norm < 0.f ? 0.f : key_norm;
-                            key_norm = key_norm > 1.f ? 1.f : key_norm;
-                            uint key_val = uint(15.f * key_norm);
-
-                            s_prim_keys[write_idx] = (prim_id << 4u) | key_val;
+                            s_prim_keys[write_idx] = prim_key;
                         }
                     }
                     workgroup_scan_accum += scan_total;
+                    if (workgroup_scan_accum > 512u)
+                    {
+                        break;
+                    }
                 }
 
                 if (workgroup_scan_accum >= 512u && layer == 0u)
