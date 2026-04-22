@@ -531,20 +531,20 @@ void workgroup_scan_uint4(uint thread_idx, uint4 val, inout uint4 result, inout 
     result.y = result.z - val.z;
     result.x = result.y - val.y;
 }
-void split4(uint thread_idx, uint4 pred, out uint4 rank)
+void split4_dual(uint thread_idx, uint4 pred_low, out uint4 rank_low)
 {
     uint count;
-    uint4 scan;
-    workgroup_scan_uint4(thread_idx, pred, scan, count);
+    uint4 scan_low;
+    workgroup_scan_uint4(thread_idx, pred_low, scan_low, count);
 
-    rank.x = pred.x != 0u ? scan.x - 1u : 4u * thread_idx + 0u - scan.x + count;
-    rank.y = pred.y != 0u ? scan.y - 1u : 4u * thread_idx + 1u - scan.y + count;
-    rank.z = pred.z != 0u ? scan.z - 1u : 4u * thread_idx + 2u - scan.z + count;
-    rank.w = pred.w != 0u ? scan.w - 1u : 4u * thread_idx + 3u - scan.w + count;
+    rank_low.x = pred_low.x != 0u ? scan_low.x - 1u : 4u * thread_idx + 0u - scan_low.x + count;
+    rank_low.y = pred_low.y != 0u ? scan_low.y - 1u : 4u * thread_idx + 1u - scan_low.y + count;
+    rank_low.z = pred_low.z != 0u ? scan_low.z - 1u : 4u * thread_idx + 2u - scan_low.z + count;
+    rank_low.w = pred_low.w != 0u ? scan_low.w - 1u : 4u * thread_idx + 3u - scan_low.w + count;
 }
 void radix_sort(uint thread_idx)
 {
-    uint4 key = uint4(
+    uint4 key_low = uint4(
         s_prim_keys[4u * thread_idx + 0u],
         s_prim_keys[4u * thread_idx + 1u],
         s_prim_keys[4u * thread_idx + 2u],
@@ -554,24 +554,24 @@ void radix_sort(uint thread_idx)
 
     for (uint pass_idx = 0u; pass_idx < 4u; pass_idx++)
     {
-        uint4 pred = uint4(
-            ((key.x >> pass_idx) & 1u) ^ 1u,
-            ((key.y >> pass_idx) & 1u) ^ 1u,
-            ((key.z >> pass_idx) & 1u) ^ 1u,
-            ((key.w >> pass_idx) & 1u) ^ 1u
+        uint4 pred_low = uint4(
+            ((key_low.x >> pass_idx) & 1u) ^ 1u,
+            ((key_low.y >> pass_idx) & 1u) ^ 1u,
+            ((key_low.z >> pass_idx) & 1u) ^ 1u,
+            ((key_low.w >> pass_idx) & 1u) ^ 1u
         );
 
-        uint4 rank;
-        split4(thread_idx, pred, rank);
+        uint4 rank_low;
+        split4_dual(thread_idx, pred_low, rank_low);
 
-        s_prim_keys[rank.x] = key.x;
-        s_prim_keys[rank.y] = key.y;
-        s_prim_keys[rank.z] = key.z;
-        s_prim_keys[rank.w] = key.w;
+        s_prim_keys[rank_low.x] = key_low.x;
+        s_prim_keys[rank_low.y] = key_low.y;
+        s_prim_keys[rank_low.z] = key_low.z;
+        s_prim_keys[rank_low.w] = key_low.w;
 
         GroupMemoryBarrierWithGroupSync();
 
-        key = uint4(
+        key_low = uint4(
             s_prim_keys[4u * thread_idx + 0u],
             s_prim_keys[4u * thread_idx + 1u],
             s_prim_keys[4u * thread_idx + 2u],
