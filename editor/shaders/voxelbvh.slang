@@ -818,7 +818,7 @@ void ray_march_nanovdb(uint thread_idx,
                     uint write_idx = scan_val - 1u + workgroup_scan_accum;
                     if (write_idx < 1024u)
                     {
-                        // generate 16 bit sort key
+                        // generate 4 bit sort key
                         float key_norm = (cull_t - s_cull_range[s_min_hdda_idx].x) /
                             (s_cull_range[s_min_hdda_idx].y - s_cull_range[s_min_hdda_idx].x);
                         key_norm = key_norm < 0.f ? 0.f : key_norm;
