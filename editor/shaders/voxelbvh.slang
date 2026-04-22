@@ -49,6 +49,8 @@ RWTexture2D<float4> texture_out;
 ConstantBuffer<EditorParams> editor_params;
 ConstantBuffer<shader_params_t> shader_params;
 
+#include "spherical_harmonics.slang"
+
 float3 cross_product(float3 a, float3 b)
 {
     return float3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
@@ -878,8 +880,11 @@ void ray_march_nanovdb(uint thread_idx,
                         s_prims[thread_idx].conic = conic;
 
                         pnanovdb_address_t sh0_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 6u);
-                        float3 sh0 = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(sh0_addr, 12u, prim_id));
-                        s_prims[thread_idx].color = float3(0.2820947917738781f * sh0 + 0.5f);
+                        pnanovdb_address_t shn_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 7u);
+
+                        // Note: this is assuming the typical PLY case for now
+                        float3 color = eval_sh_function(3u, sh0_addr, 3u * prim_id, shn_addr, 3u * 15u * prim_id, worldRayDirCenter);
+                        s_prims[thread_idx].color = color;
 
                         pnanovdb_address_t opacity_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 3u);
                         s_prims[thread_idx].opacity = pnanovdb_read_float(buf, pnanovdb_address_offset_product(opacity_addr, 4u, prim_id));

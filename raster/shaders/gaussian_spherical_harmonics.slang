@@ -156,19 +156,19 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     }
 
     uint sh_degree = shader_params.sh_degree;
-    if (constants.sh_stride < 4)
+    if (constants.sh_stride < 3)
     {
         sh_degree = 0u;
     }
-    else if (constants.sh_stride < 9)
+    else if (constants.sh_stride < 8)
     {
         sh_degree = sh_degree > 1u ? 1u : sh_degree;
     }
-    else if (constants.sh_stride < 16)
+    else if (constants.sh_stride < 15)
     {
         sh_degree = sh_degree > 2u ? 2u : sh_degree;
     }
-    else if (constants.sh_stride < 25)
+    else if (constants.sh_stride < 24)
     {
         sh_degree = sh_degree > 3u ? 3u : sh_degree;
     }
