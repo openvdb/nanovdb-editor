@@ -8,10 +8,9 @@ on:
   # Direct workflow_dispatch validates the PUBLISHED nanovdb-editor wheel
   # (release/dev) against either the pinned fvdb-core release or the nightly
   # main branch. To test the nanovdb-editor wheel built from the CURRENT
-  # BRANCH, dispatch `build-wheels.yml` instead with
-  # `run_fvdb_viz_integration=true` (plus `fvdb_nightly` / `upstream_test_ref`
-  # as desired); that workflow builds the manylinux wheel and forwards it
-  # here via `wheel_artifact`.
+  # BRANCH, dispatch `build-wheels.yml` with `run_fvdb_viz_integration=true`;
+  # that workflow builds the manylinux wheel and forwards it here via
+  # `wheel_artifact` (both release and nightly jobs run in parallel).
   workflow_dispatch:
     inputs:
       package:
@@ -26,7 +25,7 @@ on:
         description: "Install the latest fvdb-core[viewer] nightly wheel (tracks fvdb-core main; no runner compile)"
         required: false
         type: boolean
-        default: true
+        default: false
       fvdb_source_ref:
         description: "Advanced: install fvdb-core[viewer] from openvdb/fvdb-core@REF (git source build; heavy, not recommended on hosted runners)"
         required: false
@@ -51,7 +50,7 @@ on:
         description: "Install the latest fvdb-core[viewer] nightly wheel (tracks fvdb-core main)"
         required: false
         type: boolean
-        default: true
+        default: false
       fvdb_source_ref:
         description: "Advanced: install fvdb-core[viewer] from openvdb/fvdb-core@REF (git source build; heavy)"
         required: false
