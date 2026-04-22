@@ -1121,7 +1121,7 @@ jobs:
   fvdb-viz-integration:
     name: fVDB Integration (release)
     needs: [build_linux_x86_wheel]
-    if: ${{ success() && inputs.run_fvdb_viz_integration }}
+    if: ${{ needs.build_linux_x86_wheel.result == 'success' && inputs.run_fvdb_viz_integration }}
     uses: ./.github/workflows/fvdb-viz-integration.yml
     with:
       package: ${{ inputs.is_dev && 'dev' || 'release' }}
@@ -1133,7 +1133,7 @@ jobs:
   fvdb-viz-integration-nightly:
     name: fVDB Integration (nightly)
     needs: [build_linux_x86_wheel]
-    if: ${{ success() && inputs.run_fvdb_viz_integration }}
+    if: ${{ needs.build_linux_x86_wheel.result == 'success' && inputs.run_fvdb_viz_integration }}
     uses: ./.github/workflows/fvdb-viz-integration.yml
     with:
       package: ${{ inputs.is_dev && 'dev' || 'release' }}
