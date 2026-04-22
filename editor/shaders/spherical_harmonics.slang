@@ -1,0 +1,126 @@
+// spherical_harmonics.slang
+
+float3 read_sh_0(pnanovdb_address_t sh0_addr, uint sh_0_idx_begin)
+{
+    float3 rgb;
+    rgb = float3(pnanovdb_read_float(buf, pnanovdb_address_offset(sh0_addr, 4u * (sh_0_idx_begin + 0u))),
+                 pnanovdb_read_float(buf, pnanovdb_address_offset(sh0_addr, 4u * (sh_0_idx_begin + 1u))),
+                 pnanovdb_read_float(buf, pnanovdb_address_offset(sh0_addr, 4u * (sh_0_idx_begin + 2u))));
+    return rgb;
+}
+
+float3 read_sh_n(pnanovdb_address_t shn_addr, uint sh_n_idx_begin, uint n)
+{
+    uint idx = n - 1u;
+    float3 rgb;
+    rgb = float3(pnanovdb_read_float(buf, pnanovdb_address_offset(shn_addr, 4u * (sh_n_idx_begin + idx + 0u))),
+                 pnanovdb_read_float(buf, pnanovdb_address_offset(shn_addr, 4u * (sh_n_idx_begin + idx + 15u))),
+                 pnanovdb_read_float(buf, pnanovdb_address_offset(shn_addr, 4u * (sh_n_idx_begin + idx + 30u))));
+    return rgb;
+}
+
+// Evaluate spherical harmonics bases at unit direction for high orders using
+// approach described by Efficient Spherical Harmonic Evaluation, Peter-Pike
+// Sloan, JCGT 2013 See https://jcgt.org/published/0002/02/06/ for reference
+// implementation
+float3 eval_sh_function(uint degree, pnanovdb_address_t sh0_addr, uint sh_0_idx_begin, pnanovdb_address_t shn_addr, uint sh_n_idx_begin, float3 viewDir)
+{
+    float3 cSH0 = read_sh_0(sh0_addr, sh_0_idx_begin);
+
+    float3 result = 0.2820947917738781f * cSH0;
+
+    if (degree >= 1)
+    {
+        float inorm = rsqrt(viewDir.x * viewDir.x + viewDir.y * viewDir.y + viewDir.z * viewDir.z);
+        float x = viewDir.x * inorm;
+        float y = viewDir.y * inorm;
+        float z = viewDir.z * inorm;
+
+        float3 cSH1 = read_sh_n(shn_addr, sh_n_idx_begin, 1u);
+        float3 cSH2 = read_sh_n(shn_addr, sh_n_idx_begin, 2u);
+        float3 cSH3 = read_sh_n(shn_addr, sh_n_idx_begin, 3u);
+
+        result += 0.48860251190292f * (-y * cSH1 + z * cSH2 - x * cSH3);
+
+        if (degree >= 2)
+        {
+            float z2 = z * z;
+
+            float fTmp0B = -1.092548430592079f * z;
+            float fC1 = x * x - y * y;
+            float fS1 = 2.f * x * y;
+            float pSH6 = (0.9461746957575601f * z2 - 0.3153915652525201f);
+            float pSH7 = fTmp0B * x;
+            float pSH5 = fTmp0B * y;
+            float pSH8 = 0.5462742152960395f * fC1;
+            float pSH4 = 0.5462742152960395f * fS1;
+
+            float3 cSH4 = read_sh_n(shn_addr, sh_n_idx_begin, 4u);
+            float3 cSH5 = read_sh_n(shn_addr, sh_n_idx_begin, 5u);
+            float3 cSH6 = read_sh_n(shn_addr, sh_n_idx_begin, 6u);
+            float3 cSH7 = read_sh_n(shn_addr, sh_n_idx_begin, 7u);
+            float3 cSH8 = read_sh_n(shn_addr, sh_n_idx_begin, 8u);
+
+            result += (pSH4 * cSH4) + (pSH5 * cSH5) + (pSH6 * cSH6) + (pSH7 * cSH7) + (pSH8 * cSH8);
+
+            if (degree >= 3)
+            {
+                float fTmp0C = -2.285228997322329f * z2 + 0.4570457994644658f;
+                float fTmp1B = 1.445305721320277f * z;
+                float fC2 = x * fC1 - y * fS1;
+                float fS2 = x * fS1 + y * fC1;
+                float pSH12 = z * (1.865881662950577f * z2 - 1.119528997770346f);
+                float pSH13 = fTmp0C * x;
+                float pSH11 = fTmp0C * y;
+                float pSH14 = fTmp1B * fC1;
+                float pSH10 = fTmp1B * fS1;
+                float pSH15 = -0.5900435899266435f * fC2;
+                float pSH9 = -0.5900435899266435f * fS2;
+
+                float3 cSH9 = read_sh_n(shn_addr, sh_n_idx_begin, 9u);
+                float3 cSH10 = read_sh_n(shn_addr, sh_n_idx_begin, 10u);
+                float3 cSH11 = read_sh_n(shn_addr, sh_n_idx_begin, 11u);
+                float3 cSH12 = read_sh_n(shn_addr, sh_n_idx_begin, 12u);
+                float3 cSH13 = read_sh_n(shn_addr, sh_n_idx_begin, 13u);
+                float3 cSH14 = read_sh_n(shn_addr, sh_n_idx_begin, 14u);
+                float3 cSH15 = read_sh_n(shn_addr, sh_n_idx_begin, 15u);
+
+                result += (pSH9 * cSH9) + (pSH10 * cSH10) + (pSH11 * cSH11) + (pSH12 * cSH12) + (pSH13 * cSH13) +
+                          (pSH14 * cSH14) + (pSH15 * cSH15);
+
+                if (degree >= 4)
+                {
+                    float fTmp0D = z * (-4.683325804901025f * z2 + 2.007139630671868f);
+                    float fTmp1C = 3.31161143515146f * z2 - 0.47308734787878f;
+                    float fTmp2B = -1.770130769779931f * z;
+                    float fC3 = x * fC2 - y * fS2;
+                    float fS3 = x * fS2 + y * fC2;
+                    float pSH20 = (1.984313483298443f * z * pSH12 - 1.006230589874905f * pSH6);
+                    float pSH21 = fTmp0D * x;
+                    float pSH19 = fTmp0D * y;
+                    float pSH22 = fTmp1C * fC1;
+                    float pSH18 = fTmp1C * fS1;
+                    float pSH23 = fTmp2B * fC2;
+                    float pSH17 = fTmp2B * fS2;
+                    float pSH24 = 0.6258357354491763f * fC3;
+                    float pSH16 = 0.6258357354491763f * fS3;
+
+                    float3 cSH16 = read_sh_n(shn_addr, sh_n_idx_begin, 16u);
+                    float3 cSH17 = read_sh_n(shn_addr, sh_n_idx_begin, 17u);
+                    float3 cSH18 = read_sh_n(shn_addr, sh_n_idx_begin, 18u);
+                    float3 cSH19 = read_sh_n(shn_addr, sh_n_idx_begin, 19u);
+                    float3 cSH20 = read_sh_n(shn_addr, sh_n_idx_begin, 20u);
+                    float3 cSH21 = read_sh_n(shn_addr, sh_n_idx_begin, 21u);
+                    float3 cSH22 = read_sh_n(shn_addr, sh_n_idx_begin, 22u);
+                    float3 cSH23 = read_sh_n(shn_addr, sh_n_idx_begin, 23u);
+                    float3 cSH24 = read_sh_n(shn_addr, sh_n_idx_begin, 24u);
+
+                    result += (pSH16 * cSH16) + (pSH17 * cSH17) + (pSH18 * cSH18) + (pSH19 * cSH19) + (pSH20 * cSH20) +
+                              (pSH21 * cSH21) + (pSH22 * cSH22) + (pSH23 * cSH23) + (pSH24 * cSH24);
+                }
+            }
+        }
+    }
+
+    return result + 0.5f;
+}
