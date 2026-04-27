@@ -26,11 +26,6 @@ on:
         required: false
         type: boolean
         default: false
-      fvdb_source_ref:
-        description: "Advanced: install fvdb-core[viewer] from openvdb/fvdb-core@REF (git source build; heavy, not recommended on hosted runners)"
-        required: false
-        type: string
-        default: ""
       upstream_test_ref:
         description: "Which upstream fvdb viz test source to use"
         required: false
@@ -56,11 +51,6 @@ on:
         required: false
         type: boolean
         default: false
-      fvdb_source_ref:
-        description: "Advanced: install fvdb-core[viewer] from openvdb/fvdb-core@REF (git source build; heavy)"
-        required: false
-        type: string
-        default: ""
       upstream_test_ref:
         description: "Which upstream fvdb viz test source to use (main/release)"
         required: false
@@ -77,7 +67,6 @@ jobs:
     name: Run Tests
     runs-on: ubuntu-latest
     env:
-      FVDB_VIZ_CORE_BUILD_JOBS: 1
       FVDB_VIZ_SKIP_BASE_INSTALL: 1
       FVDB_VIZ_IMAGE_CACHE_ENABLED: 0
     steps:
@@ -113,11 +102,9 @@ jobs:
           {
             echo "FVDB_VIZ_TORCH_VERSION=${FVDB_VIZ_TORCH_VERSION_DEFAULT}"
             echo "FVDB_VIZ_TORCH_INDEX_URL=${FVDB_VIZ_TORCH_INDEX_URL_DEFAULT}"
-            echo "FVDB_VIZ_CUDA_ARCH_LIST=${FVDB_VIZ_CUDA_ARCH_LIST_DEFAULT}"
             echo "FVDB_VIZ_CORE_VERSION=${FVDB_VIZ_CORE_VERSION_DEFAULT}"
             echo "FVDB_VIZ_CORE_INDEX_URL=${FVDB_VIZ_CORE_INDEX_URL_DEFAULT}"
             echo "FVDB_VIZ_TEST_IMAGE_BASE=${FVDB_VIZ_TEST_IMAGE_BASE_DEFAULT}"
-            echo "FVDB_VIZ_TEST_IMAGE_REVISION=${FVDB_VIZ_TEST_IMAGE_REVISION_DEFAULT}"
             echo "FVDB_VIZ_SCRIPT_TIMEOUT=${FVDB_VIZ_SCRIPT_TIMEOUT_DEFAULT}"
           } >> "$GITHUB_ENV"
 
@@ -162,9 +149,7 @@ jobs:
             SCRIPT_ARGS+=("--local-wheel" "${{ steps.local_wheel.outputs.host_path }}")
           fi
 
-          if [[ -n "${{ inputs.fvdb_source_ref }}" ]]; then
-            SCRIPT_ARGS+=("--fvdb-source-ref" "${{ inputs.fvdb_source_ref }}")
-          elif [[ "${{ inputs.fvdb_nightly }}" == "true" ]]; then
+          if [[ "${{ inputs.fvdb_nightly }}" == "true" ]]; then
             SCRIPT_ARGS+=("--fvdb-nightly")
           fi
 
