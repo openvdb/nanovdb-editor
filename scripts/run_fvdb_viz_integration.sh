@@ -144,7 +144,6 @@ fi
 : "${FVDB_VIZ_CORE_INDEX_URL:=${FVDB_VIZ_CORE_INDEX_URL_DEFAULT}}"
 : "${FVDB_VIZ_CORE_NIGHTLY_INDEX_URL:=${FVDB_VIZ_CORE_NIGHTLY_INDEX_URL_DEFAULT}}"
 : "${FVDB_VIZ_TEST_IMAGE_BASE:=${FVDB_VIZ_TEST_IMAGE_BASE_DEFAULT}}"
-: "${FVDB_VIZ_SCRIPT_TIMEOUT:=${FVDB_VIZ_SCRIPT_TIMEOUT_DEFAULT}}"
 : "${FVDB_VIZ_SKIP_BASE_INSTALL:=1}"
 
 CORE_VERSION_TAG="${FVDB_VIZ_CORE_VERSION%%+*}"
@@ -211,7 +210,6 @@ DOCKER_RUN_COMMON=(
   -e "FVDB_VIZ_TORCH_INDEX_URL=${FVDB_VIZ_TORCH_INDEX_URL}"
   -e "FVDB_VIZ_CORE_VERSION=${FVDB_VIZ_CORE_VERSION}"
   -e "FVDB_VIZ_CORE_INDEX_URL=${FVDB_VIZ_CORE_INDEX_URL}"
-  -e "FVDB_VIZ_SCRIPT_TIMEOUT=${FVDB_VIZ_SCRIPT_TIMEOUT}"
   -e "FVDB_VIZ_SKIP_BASE_INSTALL=${FVDB_VIZ_SKIP_BASE_INSTALL}"
   -e "PYTHONPATH=/workspace"
   -e "PYTHONUNBUFFERED=1"
@@ -219,41 +217,14 @@ DOCKER_RUN_COMMON=(
   -w /workspace
 )
 
-PYTEST_CMD=$'LVP_ICD=""; '\
-$'for candidate in /usr/share/vulkan/icd.d/lvp_icd*.json; do '\
-$'  if [ -f "$candidate" ]; then LVP_ICD="$candidate"; break; fi; '\
-$'done; '\
-$'if [ -z "$LVP_ICD" ]; then '\
-$'  echo "ERROR: No lavapipe ICD found under /usr/share/vulkan/icd.d" >&2; '\
-$'  ls -la /usr/share/vulkan/icd.d || true; '\
-$'  exit 1; '\
-$'fi; '\
-$'export VK_ICD_FILENAMES="$LVP_ICD"; '\
-$'export VK_DRIVER_FILES="$LVP_ICD"; '\
-$'export LP_NUM_THREADS=1; '\
-$'export LIBGL_ALWAYS_SOFTWARE=1; '\
-$'export GALLIUM_DRIVER=llvmpipe; '\
-$'echo "Using lavapipe ICD: $LVP_ICD"; '\
-$'ls -la /usr/share/vulkan/icd.d; '\
-$'if command -v vulkaninfo >/dev/null 2>&1; then '\
-$'  vulkaninfo --summary || true; '\
-$'else '\
-$'  echo "WARNING: vulkaninfo is not installed in the fvdb test image"; '\
-$'fi; '\
-$'python3 -m pip install --break-system-packages pytest >/tmp/pip.log 2>&1; '\
-$'python3 -c "import importlib; mod = importlib.import_module(\'nanovdb_editor\'); '\
-$'version = getattr(mod, \'__version__\', \'unknown\'); '\
-$'print(f\'nanovdb_editor version: {version}\')"; '\
-$'pytest pytests/test_fvdb_viz_integration.py -k "'"${PYTEST_EXPR}"'" -vv -s --maxfail=1 --full-trace -rA; '\
-$'PYTEST_EXIT=$?; echo "Pytest exit code: $PYTEST_EXIT"; exit $PYTEST_EXIT'
-
 echo "Running pytest selector: ${PYTEST_EXPR}"
 set +e
 "${DOCKER_RUN_COMMON[@]}" \
   -e "FVDB_VIZ_UPSTREAM_TEST_REF=${UPSTREAM_TEST_REF}" \
+  -e "FVDB_VIZ_PYTEST_EXPR=${PYTEST_EXPR}" \
   "${LOCAL_DIST_ARGS[@]}" \
   "${FVDB_VIZ_TEST_IMAGE}" \
-  sh -c "${PYTEST_CMD}"
+  /workspace/scripts/fvdb_viz_entrypoint.sh
 DOCKER_EXIT_CODE=$?
 set -e
 

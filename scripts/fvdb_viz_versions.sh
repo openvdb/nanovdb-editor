@@ -13,5 +13,4 @@ FVDB_VIZ_CORE_VERSION_DEFAULT="0.4.2+pt210.cu128"
 FVDB_VIZ_CORE_INDEX_URL_DEFAULT="https://d36m13axqqhiit.cloudfront.net/simple"
 FVDB_VIZ_CORE_NIGHTLY_INDEX_URL_DEFAULT="https://d36m13axqqhiit.cloudfront.net/simple-nightly"
 FVDB_VIZ_TEST_IMAGE_BASE_DEFAULT="nanovdb-editor_fvdb"
-FVDB_VIZ_SCRIPT_TIMEOUT_DEFAULT="480"
 

@@ -66,6 +66,7 @@ jobs:
   run-integration-tests:
     name: Run Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       FVDB_VIZ_SKIP_BASE_INSTALL: 1
       FVDB_VIZ_IMAGE_CACHE_ENABLED: 0
@@ -105,7 +106,6 @@ jobs:
             echo "FVDB_VIZ_CORE_VERSION=${FVDB_VIZ_CORE_VERSION_DEFAULT}"
             echo "FVDB_VIZ_CORE_INDEX_URL=${FVDB_VIZ_CORE_INDEX_URL_DEFAULT}"
             echo "FVDB_VIZ_TEST_IMAGE_BASE=${FVDB_VIZ_TEST_IMAGE_BASE_DEFAULT}"
-            echo "FVDB_VIZ_SCRIPT_TIMEOUT=${FVDB_VIZ_SCRIPT_TIMEOUT_DEFAULT}"
           } >> "$GITHUB_ENV"
 
       - name: Prepare wheel directory
