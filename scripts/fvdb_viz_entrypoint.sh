@@ -34,7 +34,11 @@ else
   echo "WARNING: vulkaninfo is not installed in the fvdb test image"
 fi
 
-python3 -m pip install --break-system-packages pytest >/tmp/pip.log 2>&1
+if ! command -v pytest >/dev/null 2>&1; then
+  echo "ERROR: pytest is not installed in the image" >&2
+  exit 1
+fi
+
 python3 -c "
 import importlib
 mod = importlib.import_module('nanovdb_editor')
@@ -43,7 +47,9 @@ print(f'nanovdb_editor version: {version}')
 "
 
 EXPR="${FVDB_VIZ_PYTEST_EXPR:?FVDB_VIZ_PYTEST_EXPR is required}"
+set +e
 pytest pytests/test_fvdb_viz_integration.py -k "$EXPR" -vv -s --maxfail=1 --full-trace -rA
 PYTEST_EXIT=$?
+set -e
 echo "Pytest exit code: $PYTEST_EXIT"
 exit $PYTEST_EXIT
