@@ -126,13 +126,6 @@ def _run(cmd: list[str], env: dict[str, str], **kwargs):
         raise RuntimeError(f"Command {cmd} failed with code {exc.returncode}") from exc
 
 
-def _resolved_local_path(path_str: str) -> Path:
-    path = Path(path_str).expanduser()
-    if not path.is_absolute():
-        path = (Path.cwd() / path).resolve()
-    return path
-
-
 def _venv_bin_path(venv_path: Path, binary: str) -> Path:
     scripts_dir = "Scripts" if os.name == "nt" else "bin"
     return venv_path / scripts_dir / binary
@@ -430,12 +423,18 @@ import traceback
 
 import pytest
 
-from pytests.test_fvdb_viz_integration import _apply_fvdb_camera_fov_compat, _apply_fvdb_point_cloud_compat
-
 exit_code = 1
 try:
-    _apply_fvdb_camera_fov_compat()
-    _apply_fvdb_point_cloud_compat()
+    from packaging.version import Version
+    import fvdb
+    _fvdb_ver = Version(fvdb.__version__.split("+")[0])
+    if not _fvdb_ver.is_devrelease:
+        from pytests.test_fvdb_viz_integration import (
+            _apply_fvdb_camera_fov_compat,
+            _apply_fvdb_point_cloud_compat,
+        )
+        _apply_fvdb_camera_fov_compat()
+        _apply_fvdb_point_cloud_compat()
     exit_code = int(pytest.main(sys.argv[1:]))
 except BaseException:
     traceback.print_exc()
@@ -503,7 +502,7 @@ def test_fvdb_viz_with_local_package(fvdb_viz_env):
     file (dist/*.whl) or a source directory (for example the repo root for
     `pip install .`).
     """
-    local_spec = _resolved_local_path(LOCAL_DIST_SPEC)
+    local_spec = Path(LOCAL_DIST_SPEC).expanduser().resolve()
     if not local_spec.exists():
         raise AssertionError(f"FVDB_VIZ_LOCAL_DIST target does not exist: {local_spec}")
 

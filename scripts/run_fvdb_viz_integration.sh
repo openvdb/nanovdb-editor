@@ -17,14 +17,12 @@ Options:
                              If PATH is omitted, defaults to pymodule/dist/nanovdb_editor*.whl.
                              Mirrors the GitHub Actions behavior when a local
                              wheel artifact is provided.
-  --fvdb-source-ref REF      Install fvdb-core[viewer] from openvdb/fvdb-core@REF
-                             (git source build; heavy, local/advanced use only).
   --fvdb-nightly             Install the latest fvdb-core[viewer] nightly wheel
-                             (prebuilt, tracks fvdb-core main; no CUDA compile).
+                             (prebuilt, tracks fvdb-core main).
   --upstream-test-ref REF    Upstream fvdb viz test source to use:
                              main (default) or release
   -i, --image-name NAME      Override the Docker image tag (default derived
-                             from fvdb-core source, e.g. nanovdb-editor_fvdb-0.4.2-r1)
+                             from fvdb-core version, e.g. nanovdb-editor_fvdb-0.4.2)
   -f, --force-rebuild        Force a rebuild of the fvdb-viz test image cache
   --skip-image-build         Skip building/checking the test image (assume it
                              already exists, useful in CI)
@@ -38,7 +36,6 @@ source "${SCRIPT_DIR}/fvdb_viz_versions.sh"
 
 PACKAGE_STREAM="release"
 LOCAL_WHEEL=""
-FVDB_SOURCE_REF=""
 FVDB_NIGHTLY="0"
 UPSTREAM_TEST_REF="main"
 IMAGE_NAME=""
@@ -63,10 +60,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --upstream-test-ref)
       UPSTREAM_TEST_REF="${2:-}"
-      shift 2
-      ;;
-    --fvdb-source-ref)
-      FVDB_SOURCE_REF="${2:-}"
       shift 2
       ;;
     --fvdb-nightly)
@@ -113,11 +106,6 @@ case "$UPSTREAM_TEST_REF" in
     ;;
 esac
 
-if [[ -n "$FVDB_SOURCE_REF" && "$FVDB_NIGHTLY" == "1" ]]; then
-  echo "--fvdb-source-ref and --fvdb-nightly are mutually exclusive." >&2
-  exit 1
-fi
-
 USE_LOCAL="false"
 LOCAL_WHEEL_ABS=""
 if [[ -n "$LOCAL_WHEEL" ]]; then
@@ -152,29 +140,24 @@ fi
 
 : "${FVDB_VIZ_TORCH_VERSION:=${FVDB_VIZ_TORCH_VERSION_DEFAULT}}"
 : "${FVDB_VIZ_TORCH_INDEX_URL:=${FVDB_VIZ_TORCH_INDEX_URL_DEFAULT}}"
-: "${FVDB_VIZ_CUDA_ARCH_LIST:=${FVDB_VIZ_CUDA_ARCH_LIST_DEFAULT}}"
 : "${FVDB_VIZ_CORE_VERSION:=${FVDB_VIZ_CORE_VERSION_DEFAULT}}"
 : "${FVDB_VIZ_CORE_INDEX_URL:=${FVDB_VIZ_CORE_INDEX_URL_DEFAULT}}"
 : "${FVDB_VIZ_CORE_NIGHTLY_INDEX_URL:=${FVDB_VIZ_CORE_NIGHTLY_INDEX_URL_DEFAULT}}"
 : "${FVDB_VIZ_TEST_IMAGE_BASE:=${FVDB_VIZ_TEST_IMAGE_BASE_DEFAULT}}"
-: "${FVDB_VIZ_TEST_IMAGE_REVISION:=${FVDB_VIZ_TEST_IMAGE_REVISION_DEFAULT}}"
-: "${FVDB_VIZ_SCRIPT_TIMEOUT:=${FVDB_VIZ_SCRIPT_TIMEOUT_DEFAULT}}"
 : "${FVDB_VIZ_SKIP_BASE_INSTALL:=1}"
 
 CORE_VERSION_TAG="${FVDB_VIZ_CORE_VERSION%%+*}"
 if [[ -z "${CORE_VERSION_TAG}" ]]; then
   CORE_VERSION_TAG="${FVDB_VIZ_CORE_VERSION}"
 fi
-if [[ -n "${FVDB_SOURCE_REF}" ]]; then
-  CORE_SOURCE_TAG="git-${FVDB_SOURCE_REF//[^0-9A-Za-z._-]/-}"
-elif [[ "${FVDB_NIGHTLY}" == "1" ]]; then
+if [[ "${FVDB_NIGHTLY}" == "1" ]]; then
   CORE_SOURCE_TAG="nightly"
 else
   CORE_SOURCE_TAG="${CORE_VERSION_TAG}"
 fi
 
 if [[ -z "${FVDB_VIZ_TEST_IMAGE:-}" ]]; then
-  FVDB_VIZ_TEST_IMAGE="${FVDB_VIZ_TEST_IMAGE_BASE}-${CORE_SOURCE_TAG}-r${FVDB_VIZ_TEST_IMAGE_REVISION}"
+  FVDB_VIZ_TEST_IMAGE="${FVDB_VIZ_TEST_IMAGE_BASE}-${CORE_SOURCE_TAG}"
 fi
 
 if [[ -n "$IMAGE_NAME" ]]; then
@@ -188,12 +171,10 @@ if [[ "$SKIP_IMAGE_BUILD" != "1" ]]; then
     FVDB_VIZ_TEST_IMAGE="${FVDB_VIZ_TEST_IMAGE}" \
     FVDB_VIZ_TORCH_VERSION="${FVDB_VIZ_TORCH_VERSION}" \
     FVDB_VIZ_TORCH_INDEX_URL="${FVDB_VIZ_TORCH_INDEX_URL}" \
-    FVDB_VIZ_CUDA_ARCH_LIST="${FVDB_VIZ_CUDA_ARCH_LIST}" \
     FVDB_VIZ_CORE_VERSION="${FVDB_VIZ_CORE_VERSION}" \
     FVDB_VIZ_CORE_INDEX_URL="${FVDB_VIZ_CORE_INDEX_URL}" \
     FVDB_VIZ_CORE_NIGHTLY_INDEX_URL="${FVDB_VIZ_CORE_NIGHTLY_INDEX_URL}" \
     FVDB_VIZ_CORE_NIGHTLY="${FVDB_NIGHTLY}" \
-    FVDB_VIZ_CORE_GIT_REF="${FVDB_SOURCE_REF}" \
     FVDB_VIZ_FORCE_IMAGE_REBUILD="${FORCE_REBUILD}" \
       ./scripts/build_fvdb_viz_test_image.sh
   )
@@ -229,7 +210,6 @@ DOCKER_RUN_COMMON=(
   -e "FVDB_VIZ_TORCH_INDEX_URL=${FVDB_VIZ_TORCH_INDEX_URL}"
   -e "FVDB_VIZ_CORE_VERSION=${FVDB_VIZ_CORE_VERSION}"
   -e "FVDB_VIZ_CORE_INDEX_URL=${FVDB_VIZ_CORE_INDEX_URL}"
-  -e "FVDB_VIZ_SCRIPT_TIMEOUT=${FVDB_VIZ_SCRIPT_TIMEOUT}"
   -e "FVDB_VIZ_SKIP_BASE_INSTALL=${FVDB_VIZ_SKIP_BASE_INSTALL}"
   -e "PYTHONPATH=/workspace"
   -e "PYTHONUNBUFFERED=1"
@@ -237,41 +217,14 @@ DOCKER_RUN_COMMON=(
   -w /workspace
 )
 
-PYTEST_CMD=$'LVP_ICD=""; '\
-$'for candidate in /usr/share/vulkan/icd.d/lvp_icd*.json; do '\
-$'  if [ -f "$candidate" ]; then LVP_ICD="$candidate"; break; fi; '\
-$'done; '\
-$'if [ -z "$LVP_ICD" ]; then '\
-$'  echo "ERROR: No lavapipe ICD found under /usr/share/vulkan/icd.d" >&2; '\
-$'  ls -la /usr/share/vulkan/icd.d || true; '\
-$'  exit 1; '\
-$'fi; '\
-$'export VK_ICD_FILENAMES="$LVP_ICD"; '\
-$'export VK_DRIVER_FILES="$LVP_ICD"; '\
-$'export LP_NUM_THREADS=1; '\
-$'export LIBGL_ALWAYS_SOFTWARE=1; '\
-$'export GALLIUM_DRIVER=llvmpipe; '\
-$'echo "Using lavapipe ICD: $LVP_ICD"; '\
-$'ls -la /usr/share/vulkan/icd.d; '\
-$'if command -v vulkaninfo >/dev/null 2>&1; then '\
-$'  vulkaninfo --summary || true; '\
-$'else '\
-$'  echo "WARNING: vulkaninfo is not installed in the fvdb test image"; '\
-$'fi; '\
-$'python3 -m pip install --break-system-packages pytest >/tmp/pip.log 2>&1; '\
-$'python3 -c "import importlib; mod = importlib.import_module(\'nanovdb_editor\'); '\
-$'version = getattr(mod, \'__version__\', \'unknown\'); '\
-$'print(f\'nanovdb_editor version: {version}\')"; '\
-$'pytest pytests/test_fvdb_viz_integration.py -k "'"${PYTEST_EXPR}"'" -vv -s --maxfail=1 --full-trace -rA; '\
-$'PYTEST_EXIT=$?; echo "Pytest exit code: $PYTEST_EXIT"; exit $PYTEST_EXIT'
-
 echo "Running pytest selector: ${PYTEST_EXPR}"
 set +e
 "${DOCKER_RUN_COMMON[@]}" \
   -e "FVDB_VIZ_UPSTREAM_TEST_REF=${UPSTREAM_TEST_REF}" \
+  -e "FVDB_VIZ_PYTEST_EXPR=${PYTEST_EXPR}" \
   "${LOCAL_DIST_ARGS[@]}" \
   "${FVDB_VIZ_TEST_IMAGE}" \
-  sh -c "${PYTEST_CMD}"
+  /workspace/scripts/fvdb_viz_entrypoint.sh
 DOCKER_EXIT_CODE=$?
 set -e
 

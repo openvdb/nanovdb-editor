@@ -248,10 +248,13 @@ We keep the Vulkan headless FVDB viewer validated in both CI and local developme
 
 # Smoke-test a locally built wheel
 ./scripts/run_fvdb_viz_integration.sh --local-wheel pymodule/dist/nanovdb_editor-*.whl
+
+# Test against the latest fvdb-core nightly (pip install --pre)
+./scripts/run_fvdb_viz_integration.sh --fvdb-nightly
 ```
 
 Highlights:
-- Ensures (and caches) the `nanovdb-editor_fvdb-<fvdb-core-version>-r<revision>` Docker image with matching Torch/fvdb-core versions.
+- Ensures (and caches) the `nanovdb-editor_fvdb-<fvdb-core-version>` Docker image with matching Torch/fvdb-core versions.
 - Prints the installed `nanovdb_editor` version inside the container before running `pytests/test_fvdb_viz_integration.py -vv -s --full-trace`.
 - Prints the available Vulkan ICDs plus `vulkaninfo --summary`, then fails fast if `fvdb.viz` cannot initialize instead of reporting a skipped upstream suite.
 - Accepts `--force-rebuild` to bypass the local `.cache` tarball when you need a fresh base image.
@@ -260,9 +263,10 @@ Highlights:
 
 `.github/workflows/fvdb-viz-integration.yml` runs on `workflow_dispatch` or `workflow_call` and:
 - Resolves the package stream (release/dev) plus optional wheel artifact.
-- Builds the fvdb viewer Docker image locally on the runner, then runs the same pytest selector in Docker.
+- Builds a lightweight `ubuntu:24.04`-based Docker image with prebuilt fvdb-core wheels (pinned release or nightly via `pip install --pre`).
+- Runs the same pytest selector in Docker.
 
-Use the workflow dispatch inputs in GitHub Actions to pick the stream or supply a wheel artifact.
+`build-wheels.yml` triggers two parallel integration jobs when `run_fvdb_viz_integration` is enabled: one against the pinned fvdb-core release and one against the latest nightly.
 
 ## NanoVDB Editor GUI
 
