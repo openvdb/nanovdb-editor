@@ -39,8 +39,14 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     // line
     uint2 index = indices_in[idx];
 
-    float3 pos_a = positions_in[index.x];
-    float3 pos_b = positions_in[index.y];
+    float3 pos_a = float3(
+        positions_in[3u * index.x + 0u],
+        positions_in[3u * index.x + 1u],
+        positions_in[3u * index.x + 2u]);
+    float3 pos_b = float3(
+        positions_in[3u * index.y + 0u],
+        positions_in[3u * index.y + 1u],
+        positions_in[3u * index.y + 2u]);
 
     float3 aabb_min = float3(1.f / 0.f, 1.f / 0.f, 1.f / 0.f);
     float3 aabb_max = float3(-1.f / 0.f, -1.f / 0.f, -1.f / 0.f);

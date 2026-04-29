@@ -16,6 +16,7 @@
 #include <nanovdb_editor/putil/VoxelBVH.h>
 
 #include <cstdarg>
+#include <math.h>
 
 static void log_print(pnanovdb_compute_log_level_t level, const char* format, ...)
 {
@@ -158,7 +159,9 @@ void voxelbvh_test()
     const pnanovdb_uint32_t integer_space_max = 2047u;
     const char* out_file = "./data/lines.nvdb";
 
-    static const pnanovdb_uint32_t line_count = 65536u;
+    static const pnanovdb_uint32_t width = 256u;
+    static const pnanovdb_uint32_t height = 256u;
+    static const pnanovdb_uint32_t line_count = 2u * width * height;
 
     pnanovdb_compute_array_t* indices_array = compute.create_array(8u, line_count, nullptr);
     pnanovdb_compute_array_t* positions_array = compute.create_array(4u, 6u * line_count, nullptr);
@@ -167,6 +170,49 @@ void voxelbvh_test()
     uint64_t* mapped_indices = (uint64_t*)compute.map_array(indices_array);
     float* mapped_positions = (float*)compute.map_array(positions_array);
     float* mapped_colors = (float*)compute.map_array(colors_array);
+
+    for (int j = 0; j < height; j++)
+    {
+        for (int i = 0; i < width; i++)
+        {
+            float x0 = 100.f * float(i) / float(width);
+            float x1 = 100.f * float(i + 1) / float(width);
+            float y0 = 100.f * float(j) / float(height);
+            float y1 = 100.f * float(j + 1) / float(height);
+            float z00 = 0.f; //25.f * sinf(x0 * x0 + y0 * y0);
+            float z10 = 0.f; //25.f * sinf(x1 * x1 + y0 * y0);
+            float z01 = 0.f; //25.f * sinf(x0 * x0 + y1 * y1);
+
+            int idx = j * width + i;
+            mapped_indices[2u * idx + 0] = (uint64_t(4u * idx + 1) << 32u) | uint64_t(4u * idx + 0);
+            mapped_indices[2u * idx + 1] = (uint64_t(4u * idx + 3) << 32u) | uint64_t(4u * idx + 2);
+            mapped_positions[12u * idx + 0] = x0;
+            mapped_positions[12u * idx + 1] = y0;
+            mapped_positions[12u * idx + 2] = z00;
+            mapped_positions[12u * idx + 3] = x1;
+            mapped_positions[12u * idx + 4] = y0;
+            mapped_positions[12u * idx + 5] = z10;
+            mapped_positions[12u * idx + 6] = x0;
+            mapped_positions[12u * idx + 7] = y0;
+            mapped_positions[12u * idx + 8] = z00;
+            mapped_positions[12u * idx + 9] = x0;
+            mapped_positions[12u * idx + 10] = y1;
+            mapped_positions[12u * idx + 11] = z01;
+
+            mapped_colors[12u * idx + 0] = 0.f;
+            mapped_colors[12u * idx + 1] = 1.f;
+            mapped_colors[12u * idx + 2] = 0.f;
+            mapped_colors[12u * idx + 3] = 0.f;
+            mapped_colors[12u * idx + 4] = 1.f;
+            mapped_colors[12u * idx + 5] = 0.f;
+            mapped_colors[12u * idx + 6] = 1.f;
+            mapped_colors[12u * idx + 7] = 0.f;
+            mapped_colors[12u * idx + 8] = 0.f;
+            mapped_colors[12u * idx + 9] = 1.f;
+            mapped_colors[12u * idx + 10] = 0.f;
+            mapped_colors[12u * idx + 11] = 0.f;
+        }
+    }
 
     prim_meta_arrays[0] = indices_array;
     prim_meta_arrays[1] = positions_array;
@@ -470,7 +516,7 @@ void voxelbvh_test()
            built_flat_range_array->element_count, flat_range_count);
 
     pnanovdb_compute_array_t* metadata_arrays[2u + prim_meta_count] = { built_flat_range_array, prim_id_array};
-    for (pnanovdb_uint32_t idx; idx < prim_meta_count; idx++)
+    for (pnanovdb_uint32_t idx = 0u; idx < prim_meta_count; idx++)
     {
         metadata_arrays[2u + idx] = prim_meta_arrays[idx];
     }
@@ -497,12 +543,13 @@ void voxelbvh_test()
                 pnanovdb_address_t prim_id_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
                 pnanovdb_uint32_t prim_id =
                     pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, range_begin));
-
+#if 0
                 pnanovdb_address_t sh0_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 6u);
                 pnanovdb_vec3_t sh0 = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(sh0_addr, 12u, prim_id));
 
                 printf("prim_id_addr(%zu) prim_id(%u) sh0_addr(%zu) sh0(%f,%f,%f)", prim_id_addr.byte_offset, prim_id,
                        sh0_addr.byte_offset, sh0.x, sh0.y, sh0.z);
+#endif
             }
             printf("\n");
         }
