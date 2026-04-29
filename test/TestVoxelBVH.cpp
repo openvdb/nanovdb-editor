@@ -132,8 +132,9 @@ void voxelbvh_test()
         }
         mapped_range[idx] = uint64_t(idx) | (uint64_t(idx + 1u) << 32u);
     }
-#else
-    pnanovdb_compute_array_t* gaussian_arrays[6u] = {};
+#elif 0
+    static const pnanovdb_uint32_t prim_meta_count = 6u;
+    pnanovdb_compute_array_t* prim_meta_arrays[prim_meta_count] = {};
 
     const pnanovdb_uint32_t integer_space_max = 2047u;
     const char* in_file = "./data/garden_eps2d03.ply";
@@ -144,7 +145,39 @@ void voxelbvh_test()
     pnanovdb_compute_array_t* range_array = nullptr;
     pnanovdb_compute_array_t* world_bbox_array = nullptr;
     voxel_bvh.ijkl_from_gaussians_file(&compute, queue, voxelbvh_ctx, in_file, &ijkl_array, &prim_id_array,
-                                       &range_array, &world_bbox_array, integer_space_max, gaussian_arrays, 6u);
+                                       &range_array, &world_bbox_array, integer_space_max, prim_meta_arrays, 6u);
+
+    uint64_t range_count = range_array->element_count;
+    uint64_t ijkl_count = ijkl_array->element_count;
+    uint64_t* mapped_ijkl = (uint64_t*)compute.map_array(ijkl_array);
+    uint64_t* mapped_range = (uint64_t*)compute.map_array(range_array);
+#elif 1
+    static const pnanovdb_uint32_t prim_meta_count = 3u;
+    pnanovdb_compute_array_t* prim_meta_arrays[prim_meta_count] = {};
+
+    const pnanovdb_uint32_t integer_space_max = 2047u;
+    const char* out_file = "./data/lines.nvdb";
+
+    static const pnanovdb_uint32_t line_count = 65536u;
+
+    pnanovdb_compute_array_t* indices_array = compute.create_array(8u, line_count, nullptr);
+    pnanovdb_compute_array_t* positions_array = compute.create_array(4u, 6u * line_count, nullptr);
+    pnanovdb_compute_array_t* colors_array = compute.create_array(4u, 6u * line_count, nullptr);
+
+    uint64_t* mapped_indices = (uint64_t*)compute.map_array(indices_array);
+    float* mapped_positions = (float*)compute.map_array(positions_array);
+    float* mapped_colors = (float*)compute.map_array(colors_array);
+
+    prim_meta_arrays[0] = indices_array;
+    prim_meta_arrays[1] = positions_array;
+    prim_meta_arrays[2] = colors_array;
+
+    pnanovdb_compute_array_t* ijkl_array = nullptr;
+    pnanovdb_compute_array_t* prim_id_array = nullptr;
+    pnanovdb_compute_array_t* range_array = nullptr;
+    pnanovdb_compute_array_t* world_bbox_array = nullptr;
+    voxel_bvh.ijkl_from_lines_array(&compute, queue, voxelbvh_ctx, indices_array, positions_array, &ijkl_array, &prim_id_array,
+                                       &range_array, &world_bbox_array, integer_space_max);
 
     uint64_t range_count = range_array->element_count;
     uint64_t ijkl_count = ijkl_array->element_count;
@@ -436,12 +469,14 @@ void voxelbvh_test()
     printf("Shrinking arrays prim_id(%zu vs %zu) range(%zu vs %zu)\n", prim_id_array->element_count, ijkl_count,
            built_flat_range_array->element_count, flat_range_count);
 
-    pnanovdb_compute_array_t* metadata_arrays[8u] = { built_flat_range_array, prim_id_array,      gaussian_arrays[0],
-                                                      gaussian_arrays[1],     gaussian_arrays[2], gaussian_arrays[3],
-                                                      gaussian_arrays[4],     gaussian_arrays[5] };
+    pnanovdb_compute_array_t* metadata_arrays[2u + prim_meta_count] = { built_flat_range_array, prim_id_array};
+    for (pnanovdb_uint32_t idx; idx < prim_meta_count; idx++)
+    {
+        metadata_arrays[2u + idx] = prim_meta_arrays[idx];
+    }
 
     pnanovdb_compute_array_t* nanovdb_meta = nullptr;
-    voxel_bvh.nanovdb_append_metadata(&compute, built_nanovdb_array, &nanovdb_meta, metadata_arrays, 8u);
+    voxel_bvh.nanovdb_append_metadata(&compute, built_nanovdb_array, &nanovdb_meta, metadata_arrays, 2u + prim_meta_count);
 
     // check metadata
     {
@@ -477,9 +512,9 @@ void voxelbvh_test()
     compute.save_nanovdb(nanovdb_meta, out_file);
 
     compute.destroy_array(nanovdb_meta);
-    for (uint32_t idx = 0u; idx < 6u; idx++)
+    for (uint32_t idx = 0u; idx < prim_meta_count; idx++)
     {
-        compute.destroy_array(gaussian_arrays[idx]);
+        compute.destroy_array(prim_meta_arrays[idx]);
     }
 
     compute.destroy_array(ijkl_array);
