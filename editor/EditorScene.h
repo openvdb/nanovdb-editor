@@ -132,13 +132,6 @@ public:
                                       pnanovdb_editor_token_t* name_token,
                                       void* shader_params_data);
 
-    friend void snapshot_object_shader_params_readonly(EditorSceneManager& scene_manager,
-                                                       pnanovdb_editor_token_t* scene_token,
-                                                       pnanovdb_editor_token_t* name_token,
-                                                       size_t raster2d_params_size,
-                                                       size_t nanovdb_params_size,
-                                                       void* shader_params_data);
-
     // Scene management
     EditorSceneManager* get_scene_manager() const;
     void set_current_scene(pnanovdb_editor_token_t* scene_token);

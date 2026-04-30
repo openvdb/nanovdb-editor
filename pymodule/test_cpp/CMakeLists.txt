@@ -13,7 +13,7 @@ set(NANOVDB_EDITOR_INCLUDE_DIR "${NANOVDB_EDITOR_ROOT}/nanovdb_editor")
 
 if(WIN32)
     set(_nve_local_build_default ON)
-elseif(EXISTS "${NANOVDB_EDITOR_BUILD_DIR}/lib" OR EXISTS "${NANOVDB_EDITOR_BUILD_DIR}/lib/$<CONFIG>")
+elseif(EXISTS "${NANOVDB_EDITOR_BUILD_DIR}/lib")
     set(_nve_local_build_default ON)
 else()
     set(_nve_local_build_default OFF)
@@ -43,21 +43,27 @@ if(NANOVDB_EDITOR_TEST_USE_LOCAL_BUILD)
 
     set(_nve_lib_names pnanovdbcompiler pnanovdbcompute pnanovdbfileformat pnanovdbeditor)
 
+    if(WIN32)
+        set(_nve_link_prefix "${CMAKE_IMPORT_LIBRARY_PREFIX}")
+        set(_nve_link_suffix "${CMAKE_IMPORT_LIBRARY_SUFFIX}")
+    else()
+        set(_nve_link_prefix "${CMAKE_SHARED_LIBRARY_PREFIX}")
+        set(_nve_link_suffix "${CMAKE_SHARED_LIBRARY_SUFFIX}")
+    endif()
+
     if(CMAKE_CONFIGURATION_TYPES)
         # Multi-config generators (Visual Studio, Xcode): libs are under lib/<Config>/
-        foreach(_lib ${_nve_lib_names})
-            target_link_libraries(nanovdb_editor_test PRIVATE
-                "${NANOVDB_EDITOR_BUILD_DIR}/lib/$<CONFIG>/${CMAKE_IMPORT_LIBRARY_PREFIX}${_lib}${CMAKE_IMPORT_LIBRARY_SUFFIX}"
-            )
-        endforeach()
+        set(_nve_lib_subdir "$<CONFIG>/")
     else()
         # Single-config generators (Unix Makefiles, Ninja): libs are directly under lib/
-        foreach(_lib ${_nve_lib_names})
-            target_link_libraries(nanovdb_editor_test PRIVATE
-                "${NANOVDB_EDITOR_BUILD_DIR}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}${_lib}${CMAKE_SHARED_LIBRARY_SUFFIX}"
-            )
-        endforeach()
+        set(_nve_lib_subdir "")
     endif()
+
+    foreach(_lib ${_nve_lib_names})
+        target_link_libraries(nanovdb_editor_test PRIVATE
+            "${NANOVDB_EDITOR_BUILD_DIR}/lib/${_nve_lib_subdir}${_nve_link_prefix}${_lib}${_nve_link_suffix}"
+        )
+    endforeach()
 else()
     target_include_directories(nanovdb_editor_test PRIVATE
         ${nanovdb_SOURCE_DIR}/nanovdb

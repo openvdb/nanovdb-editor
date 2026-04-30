@@ -17,8 +17,6 @@
 #include <nanovdb/io/IO.h>
 
 #include <cstdarg>
-#include <filesystem>
-#include <fstream>
 
 #include <slang.h>
 

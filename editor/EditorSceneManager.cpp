@@ -188,7 +188,10 @@ void EditorSceneManager::add_nanovdb_impl(pnanovdb_editor_token_t* scene,
     obj.params.shader_params_array = params_array;
     obj.shader_params() = params_array ? params_array->data : nullptr;
     obj.shader_params_data_type() = nullptr;
-    obj.params.shader_name_storage = std::make_shared<ShaderNameStorage>();
+    if (!obj.params.shader_name_storage)
+    {
+        obj.params.shader_name_storage = std::make_shared<ShaderNameStorage>();
+    }
     obj.params.shader_name_storage->object_key = key;
     obj.shader_name() = shader_name;
 
@@ -397,7 +400,10 @@ void EditorSceneManager::add_gaussian_data_impl(pnanovdb_editor_token_t* scene,
     obj.params.shader_params_array = params_array;
     obj.shader_params() = params_array ? params_array->data : nullptr;
     obj.shader_params_data_type() = shader_params_data_type;
-    obj.params.shader_name_storage = std::make_shared<ShaderNameStorage>();
+    if (!obj.params.shader_name_storage)
+    {
+        obj.params.shader_name_storage = std::make_shared<ShaderNameStorage>();
+    }
     obj.params.shader_name_storage->object_key = key;
     obj.shader_name() = EditorToken::getInstance().getToken(shader_name);
 
