@@ -55,6 +55,9 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     aabb_min = min(aabb_min, pos_b);
     aabb_max = max(aabb_max, pos_b);
 
+    aabb_min -= 2.f;
+    aabb_max += 2.f;
+
     // transform world space to voxel space
     int3 ijk_min = int3(floor(scale * aabb_min + offset));
     int3 ijk_max = int3(floor(scale * aabb_max + offset));

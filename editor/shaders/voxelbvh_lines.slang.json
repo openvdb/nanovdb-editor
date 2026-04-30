@@ -1,0 +1,10 @@
+{
+    "ShaderParams": {
+        "line_width": {
+            "value": 1.0,
+            "min": 0,
+            "max": 10.0,
+            "step": 0.1
+        }
+    }
+}

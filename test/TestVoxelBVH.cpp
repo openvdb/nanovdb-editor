@@ -156,12 +156,16 @@ void voxelbvh_test()
     static const pnanovdb_uint32_t prim_meta_count = 3u;
     pnanovdb_compute_array_t* prim_meta_arrays[prim_meta_count] = {};
 
-    const pnanovdb_uint32_t integer_space_max = 2047u;
+    const pnanovdb_uint32_t integer_space_max = 127u;
     const char* out_file = "./data/lines.nvdb";
 
-    static const pnanovdb_uint32_t width = 256u;
-    static const pnanovdb_uint32_t height = 256u;
+#if 0
+    static const pnanovdb_uint32_t line_count = 3u;
+#else
+    static const pnanovdb_uint32_t width = 64u;
+    static const pnanovdb_uint32_t height = 64u;
     static const pnanovdb_uint32_t line_count = 2u * width * height;
+#endif
 
     pnanovdb_compute_array_t* indices_array = compute.create_array(8u, line_count, nullptr);
     pnanovdb_compute_array_t* positions_array = compute.create_array(4u, 6u * line_count, nullptr);
@@ -171,17 +175,61 @@ void voxelbvh_test()
     float* mapped_positions = (float*)compute.map_array(positions_array);
     float* mapped_colors = (float*)compute.map_array(colors_array);
 
+#if 0
+    mapped_indices[0] = (uint64_t(1) << 32u) | uint64_t(0);
+    mapped_indices[1] = (uint64_t(3) << 32u) | uint64_t(2);
+    mapped_indices[2] = (uint64_t(5) << 32u) | uint64_t(4);
+
+    mapped_positions[0] = -100.f;
+    mapped_positions[1] = 0.f;
+    mapped_positions[2] = 0.f;
+    mapped_colors[0] = 1.f;
+    mapped_colors[1] = 0.f;
+    mapped_colors[2] = 0.f;
+    mapped_positions[3] = 100.f;
+    mapped_positions[4] = 0.f;
+    mapped_positions[5] = 0.f;
+    mapped_colors[3] = 1.f;
+    mapped_colors[4] = 0.f;
+    mapped_colors[5] = 0.f;
+
+    mapped_positions[6] = 0.f;
+    mapped_positions[7] = -100.f;
+    mapped_positions[8] = 0.f;
+    mapped_colors[6] = 0.f;
+    mapped_colors[7] = 1.f;
+    mapped_colors[8] = 0.f;
+    mapped_positions[9] = 0.f;
+    mapped_positions[10] = 100.f;
+    mapped_positions[11] = 0.f;
+    mapped_colors[9] = 0.f;
+    mapped_colors[10] = 1.f;
+    mapped_colors[11] = 0.f;
+
+    mapped_positions[12] = 0.f;
+    mapped_positions[13] = 0.f;
+    mapped_positions[14] = -100.f;
+    mapped_colors[12] = 0.f;
+    mapped_colors[13] = 0.f;
+    mapped_colors[14] = 1.f;
+    mapped_positions[15] = 0.f;
+    mapped_positions[16] = 0.f;
+    mapped_positions[17] = 100.f;
+    mapped_colors[15] = 0.f;
+    mapped_colors[16] = 0.f;
+    mapped_colors[17] = 1.f;
+#else
     for (int j = 0; j < height; j++)
     {
         for (int i = 0; i < width; i++)
         {
-            float x0 = 100.f * float(i) / float(width);
-            float x1 = 100.f * float(i + 1) / float(width);
-            float y0 = 100.f * float(j) / float(height);
-            float y1 = 100.f * float(j + 1) / float(height);
-            float z00 = 0.f; //25.f * sinf(x0 * x0 + y0 * y0);
-            float z10 = 0.f; //25.f * sinf(x1 * x1 + y0 * y0);
-            float z01 = 0.f; //25.f * sinf(x0 * x0 + y1 * y1);
+            float x0 = 1000.f * float(i) / float(width);
+            float x1 = 1000.f * float(i + 1) / float(width);
+            float y0 = 1000.f * float(j) / float(height);
+            float y1 = 1000.f * float(j + 1) / float(height);
+            float z00 = 20.f * sinf(0.0001f * (x0 * x0 + y0 * y0));
+            float z10 = 20.f * sinf(0.0001f * (x1 * x1 + y0 * y0));
+            float z01 = 20.f * sinf(0.0001f * (x0 * x0 + y1 * y1));
 
             int idx = j * width + i;
             mapped_indices[2u * idx + 0] = (uint64_t(4u * idx + 1) << 32u) | uint64_t(4u * idx + 0);
@@ -213,6 +261,7 @@ void voxelbvh_test()
             mapped_colors[12u * idx + 11] = 0.f;
         }
     }
+#endif
 
     prim_meta_arrays[0] = indices_array;
     prim_meta_arrays[1] = positions_array;
@@ -549,6 +598,23 @@ void voxelbvh_test()
 
                 printf("prim_id_addr(%zu) prim_id(%u) sh0_addr(%zu) sh0(%f,%f,%f)", prim_id_addr.byte_offset, prim_id,
                        sh0_addr.byte_offset, sh0.x, sh0.y, sh0.z);
+#else
+                pnanovdb_address_t index_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
+                pnanovdb_uint64_t index = pnanovdb_read_uint64(buf, pnanovdb_address_offset_product(index_addr, 8u, prim_id));
+
+                pnanovdb_uint32_t idx_a = pnanovdb_uint32_t(index);
+                pnanovdb_uint32_t idx_b = pnanovdb_uint32_t(index >> 32u);
+
+                pnanovdb_address_t pos_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 3u);
+                pnanovdb_vec3_t pos_a = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(pos_addr, 12u, idx_a));
+                pnanovdb_vec3_t pos_b = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(pos_addr, 12u, idx_b));
+                pnanovdb_address_t color_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 4u);
+                pnanovdb_vec3_t color_a = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(color_addr, 12u, idx_a));
+                pnanovdb_vec3_t color_b = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(color_addr, 12u, idx_b));
+
+                printf("prim_id_addr(%zu) prim_id(%u) pos(%f,%f,%f:%f,%f,%f) color(%f,%f,%f:%f,%f,%f)", prim_id_addr.byte_offset, prim_id,
+                       pos_a.x, pos_a.y, pos_a.z, pos_b.x, pos_b.y, pos_b.z,
+                       color_a.x, color_a.y, color_a.z, color_b.x, color_b.y, color_b.z);
 #endif
             }
             printf("\n");
