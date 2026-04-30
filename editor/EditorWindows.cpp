@@ -32,6 +32,7 @@
 #include <ImGuiFileDialog.h>
 
 #include <cmath>
+#include <memory>
 #include <string>
 #include <filesystem>
 #include <type_traits>
@@ -144,6 +145,7 @@ void createMenu(imgui_instance_user::Instance* ptr)
                 ImGui::MenuItem(COMPILER_SETTINGS, "", &ptr->window.show_compiler_settings);
             }
             ImGui::MenuItem(SCENE, "", &ptr->window.show_scene);
+            ImGui::MenuItem(SCENE_PARAMS, "", &ptr->window.show_scene_params);
             ImGui::MenuItem(PROPERTIES, "", &ptr->window.show_scene_properties);
             ImGui::MenuItem(PROFILER, "", &ptr->window.show_profiler);
             ImGui::MenuItem(CODE_EDITOR, "", &ptr->window.show_code_editor);
@@ -298,6 +300,47 @@ void showSceneWindow(imgui_instance_user::Instance* ptr)
     }
 
     SceneTree::getInstance().render(ptr);
+}
+
+void showSceneParamsWindow(imgui_instance_user::Instance* ptr)
+{
+    if (!ptr->window.show_scene_params)
+    {
+        return;
+    }
+
+    if (!ImGui::Begin(SCENE_PARAMS, &ptr->window.show_scene_params))
+    {
+        ImGui::End();
+        return;
+    }
+
+    if (!ptr->editor_scene)
+    {
+        ImGui::TextDisabled("Scene params are unavailable.");
+        ImGui::End();
+        return;
+    }
+
+    auto* scene_token = ptr->editor_scene->get_current_scene_token();
+    auto* scene_manager = ptr->editor_scene->get_scene_manager();
+    if (!scene_token || !scene_manager)
+    {
+        ImGui::TextDisabled("Select or create a scene to edit scene params.");
+        ImGui::End();
+        return;
+    }
+
+    std::shared_ptr<CustomSceneParams> custom_params = scene_manager->get_custom_scene_params(scene_token);
+    if (!custom_params || custom_params->empty())
+    {
+        ImGui::TextDisabled("No custom scene params loaded for this scene.");
+        ImGui::End();
+        return;
+    }
+
+    custom_params->render();
+    ImGui::End();
 }
 
 void showPropertiesWindow(imgui_instance_user::Instance* ptr)

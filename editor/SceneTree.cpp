@@ -880,7 +880,7 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                                 if (obj)
                                 {
                                     isVisible = obj->visible;
-                                    auto rm = pnanovdb_editor::pipeline_get_render_method(obj->pipeline.render().type);
+                                    auto rm = pnanovdb_editor::pipeline_get_render_method(obj->render_pipeline());
                                     if (rm == pnanovdb_pipeline_render_method_nanovdb)
                                     {
                                         itemViewType = ViewType::NanoVDBs;

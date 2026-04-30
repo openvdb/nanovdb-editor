@@ -14,6 +14,7 @@
 
 #include "EditorToken.h"
 #include "ShaderParams.h"
+#include "CustomSceneParams.h"
 #include "Renderer.h"
 #include "nanovdb_editor/putil/Editor.h"
 #include "PipelineTypes.h"
@@ -66,6 +67,20 @@ struct SceneObjectResources
     std::shared_ptr<pnanovdb_compute_array_t> converted_nanovdb_owner;
 };
 
+struct ShaderNameStorage
+{
+    uint64_t object_key = 0;
+    pnanovdb_editor_shader_name_t value = {};
+};
+
+struct ShaderParamsDescCache
+{
+    const pnanovdb_reflect_data_type_t* source_data_type = nullptr;
+    std::vector<const char*> element_names;
+    std::vector<const char*> element_type_names;
+    std::vector<pnanovdb_uint64_t> element_offsets;
+};
+
 /*!
     \brief Compile-time known parameters for a scene object
 */
@@ -79,8 +94,11 @@ struct SceneObjectParams
     void* shader_params = nullptr;
     const pnanovdb_reflect_data_type_t* shader_params_data_type = nullptr;
 
+    // Cached descriptor views for pnanovdb_scene_object_map_shader_params
+    ShaderParamsDescCache shader_params_desc_cache;
+
     // Associated shader name
-    pnanovdb_editor_shader_name_t shader_name = {};
+    std::shared_ptr<ShaderNameStorage> shader_name_storage = std::make_shared<ShaderNameStorage>();
 };
 
 /*!
@@ -279,13 +297,33 @@ struct SceneObject
     {
         return params.shader_params;
     }
+    void* shader_params() const
+    {
+        return params.shader_params;
+    }
     const pnanovdb_reflect_data_type_t*& shader_params_data_type()
     {
         return params.shader_params_data_type;
     }
-    pnanovdb_editor_shader_name_t& shader_name()
+    const pnanovdb_reflect_data_type_t* shader_params_data_type() const
     {
-        return params.shader_name;
+        return params.shader_params_data_type;
+    }
+    pnanovdb_editor_token_t*& shader_name()
+    {
+        return params.shader_name_storage->value.shader_name;
+    }
+    pnanovdb_editor_token_t* shader_name() const
+    {
+        return params.shader_name_storage->value.shader_name;
+    }
+    ShaderNameStorage& shader_name_storage()
+    {
+        return *params.shader_name_storage;
+    }
+    const ShaderNameStorage& shader_name_storage() const
+    {
+        return *params.shader_name_storage;
     }
 
     // Pipeline shortcuts
@@ -381,7 +419,13 @@ public:
         \param name Object name token
         \return Combined 64-bit key, or 0 if either token is NULL
     */
-    static uint64_t make_key(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
+    static inline uint64_t make_key(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
+    {
+        if (!scene || !name)
+            return 0;
+        // Combine the two IDs into a single key (simple hash)
+        return ((uint64_t)scene->id << 32) | (uint64_t)name->id;
+    }
 
     /*!
         \brief Add or update a NanoVDB object
@@ -622,6 +666,11 @@ public:
                           pnanovdb_compute_array_t* params_array,
                           const pnanovdb_compute_t* compute);
 
+    bool set_custom_scene_params(pnanovdb_editor_token_t* scene,
+                                 pnanovdb_editor_token_t* json,
+                                 std::string* error_message = nullptr);
+    std::shared_ptr<CustomSceneParams> get_custom_scene_params(pnanovdb_editor_token_t* scene);
+
 private:
     // Private implementation helpers (called with mutex already held)
     void add_nanovdb_impl(pnanovdb_editor_token_t* scene,
@@ -648,6 +697,7 @@ private:
 
     mutable std::mutex m_mutex; ///< Protects all operations
     std::map<uint64_t, SceneObject> m_objects; ///< Map of objects by combined token key
+    std::map<uint64_t, std::shared_ptr<CustomSceneParams>> m_scene_custom_params; ///< Map of scene params by scene key
 };
 
 } // namespace pnanovdb_editor

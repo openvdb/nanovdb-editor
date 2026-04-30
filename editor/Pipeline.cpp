@@ -145,7 +145,7 @@ bool start_conversion(pnanovdb_editor::SceneObject* scene_obj,
     {
         free(s_pending_conversion_params.data);
         s_pending_conversion_params = {};
-        auto& src = scene_obj->pipeline.process().params;
+        auto& src = scene_obj->process_params();
         if (src.data && src.size > 0)
         {
             s_pending_conversion_params.data = malloc(src.size);
@@ -222,30 +222,29 @@ bool handle_conversion_completion()
                                                                     if (arr && compute)
                                                                         compute->destroy_array(arr);
                                                                 });
-                scene_obj->resources.nanovdb_array = s_pending_nanovdb_array;
+                scene_obj->nanovdb_array() = s_pending_nanovdb_array;
                 scene_obj->resources.converted_nanovdb = s_pending_nanovdb_array;
                 scene_obj->resources.nanovdb_array_owner = owner;
                 scene_obj->resources.converted_nanovdb_owner = owner;
 
                 // Switch to NanoVDB rendering and initialize render params for the new pipeline
-                scene_obj->pipeline.render().type = pnanovdb_pipeline_type_nanovdb_render;
-                pnanovdb_pipeline_get_default_params(
-                    pnanovdb_pipeline_type_nanovdb_render, &scene_obj->pipeline.render().params);
+                scene_obj->render_pipeline() = pnanovdb_pipeline_type_nanovdb_render;
+                pnanovdb_pipeline_get_default_params(pnanovdb_pipeline_type_nanovdb_render, &scene_obj->render_params());
 
                 // Only clear dirty if params haven't changed since conversion started
                 float used_vpu = pnanovdb_pipeline_params_get_voxels_per_unit(&s_pending_conversion_params);
-                float current_vpu = pnanovdb_pipeline_params_get_voxels_per_unit(&scene_obj->pipeline.process().params);
+                float current_vpu = pnanovdb_pipeline_params_get_voxels_per_unit(&scene_obj->process_params());
                 bool params_changed = (current_vpu != used_vpu);
                 if (!params_changed)
-                    scene_obj->pipeline.process().dirty = false;
+                    scene_obj->process_dirty() = false;
                 pnanovdb_editor::Console::getInstance().addLog(
                     pnanovdb_editor::Console::LogLevel::Debug,
                     "Conversion complete: used_vpu=%.1f, current_vpu=%.1f, dirty=%s", used_vpu, current_vpu,
                     params_changed ? "true (re-convert)" : "false");
 
-                scene_obj->params.shader_name.shader_name = nullptr;
-                scene_obj->params.shader_params = nullptr;
-                scene_obj->params.shader_params_data_type = nullptr;
+                scene_obj->shader_name() = nullptr;
+                scene_obj->shader_params() = nullptr;
+                scene_obj->shader_params_data_type() = nullptr;
             });
 
         if (object_found)
@@ -280,7 +279,7 @@ bool handle_conversion_completion()
                                                  [](pnanovdb_editor::SceneObject* scene_obj)
                                                  {
                                                      if (scene_obj)
-                                                         scene_obj->pipeline.process().dirty = false;
+                                                         scene_obj->process_dirty() = false;
                                                  });
         }
     }
@@ -408,25 +407,25 @@ static pnanovdb_pipeline_result_t execute_noop(pnanovdb_scene_object_t* obj, pna
 {
     auto* scene_obj = cast(obj);
     if (scene_obj)
-        scene_obj->pipeline.process().dirty = false;
+        scene_obj->process_dirty() = false;
     return pnanovdb_pipeline_result_skipped;
 }
 
 static pnanovdb_pipeline_result_t execute_nanovdb_render(pnanovdb_scene_object_t* obj, pnanovdb_pipeline_context_t*)
 {
     auto* scene_obj = cast(obj);
-    if (!scene_obj || !scene_obj->resources.nanovdb_array)
+    if (!scene_obj || !scene_obj->nanovdb_array())
         return pnanovdb_pipeline_result_no_data;
-    scene_obj->pipeline.process().dirty = false;
+    scene_obj->process_dirty() = false;
     return pnanovdb_pipeline_result_success;
 }
 
 static pnanovdb_pipeline_result_t execute_raster2d(pnanovdb_scene_object_t* obj, pnanovdb_pipeline_context_t*)
 {
     auto* scene_obj = cast(obj);
-    if (!scene_obj || !scene_obj->resources.gaussian_data)
+    if (!scene_obj || !scene_obj->gaussian_data())
         return pnanovdb_pipeline_result_no_data;
-    scene_obj->pipeline.process().dirty = false;
+    scene_obj->process_dirty() = false;
     return pnanovdb_pipeline_result_success;
 }
 
@@ -450,7 +449,7 @@ static pnanovdb_pipeline_result_t execute_raster3d(pnanovdb_scene_object_t* obj,
     }
 
     // Ensure process params are allocated (may be missing if pipeline type was changed after creation)
-    auto& process_params = scene_obj->pipeline.process().params;
+    auto& process_params = scene_obj->process_params();
     if (!process_params.data || process_params.size < sizeof(Raster3DParams))
     {
         Console::getInstance().addLog(Console::LogLevel::Debug, "execute_raster3d: initializing missing Raster3DParams");
@@ -546,13 +545,13 @@ static pnanovdb_pipeline_render_method_t get_render_method_raster2d(void)
 static void* map_nanovdb_render_params(pnanovdb_scene_object_t* obj)
 {
     auto* scene_obj = cast(obj);
-    return scene_obj ? scene_obj->pipeline.render().params.data : nullptr;
+    return scene_obj ? scene_obj->render_params().data : nullptr;
 }
 
 static void* map_raster3d_params(pnanovdb_scene_object_t* obj)
 {
     auto* scene_obj = cast(obj);
-    return scene_obj ? scene_obj->pipeline.process().params.data : nullptr;
+    return scene_obj ? scene_obj->process_params().data : nullptr;
 }
 
 // ============================================================================
@@ -718,7 +717,7 @@ void pnanovdb_scene_object_mark_dirty(pnanovdb_scene_object_t* obj)
 {
     auto* scene_obj = cast(obj);
     if (scene_obj)
-        scene_obj->pipeline.process().dirty = true;
+        scene_obj->process_dirty() = true;
 }
 
 void* pnanovdb_scene_object_map_params(pnanovdb_scene_object_t* obj, const char* param_type_name)
@@ -810,16 +809,50 @@ pnanovdb_bool_t pnanovdb_scene_object_map_shader_params(pnanovdb_scene_object_t*
     if (!scene_obj || !out_desc)
         return PNANOVDB_FALSE;
 
-    const auto* dt = scene_obj->params.shader_params_data_type;
-    if (!dt || !scene_obj->params.shader_params)
+    (void)shader_idx;
+
+    const char* shader_name = nullptr;
+    if (scene_obj->shader_name())
+    {
+        shader_name = scene_obj->shader_name()->str;
+    }
+
+    const auto* dt = scene_obj->shader_params_data_type();
+    if (!dt || !scene_obj->shader_params())
         return PNANOVDB_FALSE;
 
-    out_desc->data = scene_obj->params.shader_params;
+    ShaderParamsDescCache& cache = scene_obj->params.shader_params_desc_cache;
+    if (cache.source_data_type != dt)
+    {
+        cache.source_data_type = dt;
+        cache.element_names.clear();
+        cache.element_type_names.clear();
+        cache.element_offsets.clear();
+        cache.element_names.reserve(dt->child_reflect_data_count);
+        cache.element_type_names.reserve(dt->child_reflect_data_count);
+        cache.element_offsets.reserve(dt->child_reflect_data_count);
+        for (pnanovdb_uint64_t i = 0; i < dt->child_reflect_data_count; ++i)
+        {
+            const pnanovdb_reflect_data_t& child = dt->child_reflect_datas[i];
+            cache.element_names.push_back(child.name);
+            const char* type_name = "unknown";
+            if (child.data_type)
+            {
+                type_name = child.data_type->struct_typename ?
+                                child.data_type->struct_typename :
+                                pnanovdb_reflect_type_to_string(child.data_type->data_type);
+            }
+            cache.element_type_names.push_back(type_name);
+            cache.element_offsets.push_back(child.data_offset);
+        }
+    }
+
+    out_desc->data = scene_obj->shader_params();
     out_desc->data_size = dt->element_size;
-    out_desc->shader_name = dt->struct_typename;
-    out_desc->element_names = nullptr; // TODO: populate from reflection
-    out_desc->element_typenames = nullptr; // TODO: populate from reflection
-    out_desc->element_offsets = nullptr; // TODO: populate from reflection
+    out_desc->shader_name = shader_name ? shader_name : dt->struct_typename;
+    out_desc->element_names = cache.element_names.empty() ? nullptr : cache.element_names.data();
+    out_desc->element_typenames = cache.element_type_names.empty() ? nullptr : cache.element_type_names.data();
+    out_desc->element_offsets = cache.element_offsets.empty() ? nullptr : cache.element_offsets.data();
     out_desc->element_count = dt->child_reflect_data_count;
 
     return PNANOVDB_TRUE;
@@ -838,7 +871,7 @@ const pnanovdb_reflect_data_type_t* pnanovdb_scene_object_get_shader_params_type
     auto* scene_obj = cast(obj);
     if (!scene_obj)
         return nullptr;
-    return scene_obj->params.shader_params_data_type;
+    return scene_obj->shader_params_data_type();
 }
 
 // ============================================================================
@@ -1009,26 +1042,26 @@ pnanovdb_pipeline_result_t pipeline_execute_process(SceneObject* obj, const Pipe
 {
     if (!obj)
         return pnanovdb_pipeline_result_error;
-    if (!obj->pipeline.process().dirty)
+    if (!obj->process_dirty())
         return pnanovdb_pipeline_result_skipped;
 
     pnanovdb_pipeline_context_t pipeline_ctx = { ctx.compute,        ctx.device,
                                                  ctx.queue,          ctx.compute_queue,
                                                  ctx.raster,         ctx.raster_ctx,
                                                  cast(ctx.renderer), cast(ctx.scene_manager) };
-    return pnanovdb_pipeline_execute(obj->pipeline.process().type, cast(obj), &pipeline_ctx);
+    return pnanovdb_pipeline_execute(obj->process_pipeline(), cast(obj), &pipeline_ctx);
 }
 
 bool pipeline_needs_process(SceneObject* obj)
 {
-    return obj && obj->pipeline.process().dirty && obj->pipeline.process().type != pnanovdb_pipeline_type_noop;
+    return obj && obj->process_dirty() && obj->process_pipeline() != pnanovdb_pipeline_type_noop;
 }
 
 void pipeline_mark_dirty(SceneObject* obj)
 {
     if (obj)
     {
-        obj->pipeline.process().dirty = true;
+        obj->process_dirty() = true;
     }
 }
 
@@ -1046,7 +1079,7 @@ void pipeline_execute_pending(EditorSceneManager* manager, const PipelineContext
             {
                 auto result = pipeline_execute_process(obj, ctx);
                 if (result == pnanovdb_pipeline_result_success || result == pnanovdb_pipeline_result_skipped)
-                    obj->pipeline.process().dirty = false;
+                    obj->process_dirty() = false;
             }
             return true;
         });
@@ -1060,10 +1093,9 @@ const char* pipeline_get_shader(const SceneObject* obj)
     }
 
     // Priority 1: Check obj->params.shader_name (user-set via Properties panel)
-    if (obj->params.shader_name.shader_name && obj->params.shader_name.shader_name->str &&
-        obj->params.shader_name.shader_name->str[0] != '\0')
+    if (obj->shader_name() && obj->shader_name()->str && obj->shader_name()->str[0] != '\0')
     {
-        return obj->params.shader_name.shader_name->str;
+        return obj->shader_name()->str;
     }
 
     // Priority 2: Check render stage shader overrides
@@ -1258,20 +1290,19 @@ bool pipeline_handle_rasterization_completion(EditorScene* editor_scene,
                                 return;
 
                             obj->resources.source_filepath = s_pending_raster_filepath;
-                            obj->pipeline.process().type = s_pending_process_pipeline;
-                            obj->pipeline.process().dirty = false; // Already converted
-                            pnanovdb_pipeline_get_default_params(
-                                s_pending_process_pipeline, &obj->pipeline.process().params);
+                            obj->process_pipeline() = s_pending_process_pipeline;
+                            obj->process_dirty() = false; // Already converted
+                            pnanovdb_pipeline_get_default_params(s_pending_process_pipeline, &obj->process_params());
                             if (s_pending_process_params.data && s_pending_process_params.size > 0)
                             {
                                 void* params_copy = malloc(s_pending_process_params.size);
                                 if (params_copy)
                                 {
                                     memcpy(params_copy, s_pending_process_params.data, s_pending_process_params.size);
-                                    free(obj->pipeline.process().params.data);
-                                    obj->pipeline.process().params.data = params_copy;
-                                    obj->pipeline.process().params.size = s_pending_process_params.size;
-                                    obj->pipeline.process().params.type = s_pending_process_params.type;
+                                    free(obj->process_params().data);
+                                    obj->process_params().data = params_copy;
+                                    obj->process_params().size = s_pending_process_params.size;
+                                    obj->process_params().type = s_pending_process_params.type;
                                 }
                             }
 
@@ -1395,8 +1426,8 @@ bool pipeline_create_variant(EditorSceneManager* scene_manager,
                                        return;
                                    source_found = true;
                                    source_filepath = src->resources.source_filepath;
-                                   source_process_type = src->pipeline.process().type;
-                                   auto& sp = src->pipeline.process().params;
+                                   source_process_type = src->process_pipeline();
+                                   auto& sp = src->process_params();
                                    if (sp.data && sp.size > 0)
                                    {
                                        params_copy = malloc(sp.size);
@@ -1435,12 +1466,12 @@ bool pipeline_create_variant(EditorSceneManager* scene_manager,
                                    if (!obj)
                                        return;
                                    obj->resources.source_filepath = source_filepath;
-                                   free(obj->pipeline.process().params.data);
-                                   obj->pipeline.process().params.data = params_copy;
-                                   obj->pipeline.process().params.size = params_copy_size;
-                                   obj->pipeline.process().params.type = params_copy_type;
+                                   free(obj->process_params().data);
+                                   obj->process_params().data = params_copy;
+                                   obj->process_params().size = params_copy_size;
+                                   obj->process_params().type = params_copy_type;
                                    params_copy = nullptr; // ownership transferred
-                                   obj->pipeline.process().dirty = true;
+                                   obj->process_dirty() = true;
                                    configured = true;
                                });
 

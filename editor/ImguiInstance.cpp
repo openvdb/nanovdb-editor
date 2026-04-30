@@ -226,7 +226,10 @@ static void initializeDocking(Instance* ptr)
         ImGui::DockBuilderSetNodeSize(dock_id_right, ImVec2(right_dock_width, window_height));
 
         ImGuiID dock_id_right_top = dock_id_right;
-        ImGui::DockBuilderDockWindow(SCENE, dock_id_right_top);
+        ImGuiID dock_id_right_scene =
+            ImGui::DockBuilderSplitNode(dock_id_right_top, ImGuiDir_Down, 0.75f, nullptr, &dock_id_right_top);
+        ImGui::DockBuilderDockWindow(SCENE_PARAMS, dock_id_right_top);
+        ImGui::DockBuilderDockWindow(SCENE, dock_id_right_scene);
 
         ImGuiID dock_id_right_bottom =
             ImGui::DockBuilderSplitNode(dock_id_right_top, ImGuiDir_Down, 0.6f, nullptr, &dock_id_right_top);
@@ -260,6 +263,7 @@ static void showWindows(Instance* ptr, float delta_time)
     using namespace pnanovdb_editor;
 
     createMenu(ptr);
+    showSceneParamsWindow(ptr);
     showSceneWindow(ptr);
     showRenderSettingsWindow(ptr);
     showCompilerSettingsWindow(ptr);
@@ -300,6 +304,7 @@ static void markIniDirtyIfNewWindowsAppeared(Instance* ptr)
     ensure_entry(CONSOLE);
     ensure_entry(SHADER_PARAMS);
     ensure_entry(SCENE);
+    ensure_entry(SCENE_PARAMS);
     ensure_entry(PROPERTIES);
     ensure_entry(BENCHMARK);
     ensure_entry(RENDER_SETTINGS);

@@ -50,7 +50,7 @@ static void renderPipelineProcessParams(EditorSceneManager* scene_manager,
                                {
                                    if (!scene_obj)
                                        return;
-                                   auto& pp = scene_obj->pipeline.process().params;
+                                   auto& pp = scene_obj->process_params();
                                    if ((!pp.data || pp.size < desc->params_size) && desc->init_params)
                                    {
                                        free(pp.data);
@@ -110,8 +110,8 @@ static void renderPipelineProcessParams(EditorSceneManager* scene_manager,
             scene_manager->with_object(scene_token, name_token,
                                        [val, off](pnanovdb_editor::SceneObject* scene_obj)
                                        {
-                                           if (scene_obj && scene_obj->pipeline.process().params.data)
-                                               *(float*)((char*)scene_obj->pipeline.process().params.data + off) = val;
+                                           if (scene_obj && scene_obj->process_params().data)
+                                               *(float*)((char*)scene_obj->process_params().data + off) = val;
                                        });
         }
 
@@ -184,14 +184,14 @@ static void renderPipelineProcessParams(EditorSceneManager* scene_manager,
                                        if (!scene_obj)
                                            return;
 
-                                       auto& pp = scene_obj->pipeline.process().params;
+                                       auto& pp = scene_obj->process_params();
                                        if (pp.data && pp.size >= original_params.size() && !original_params.empty())
                                        {
                                            std::memcpy(pp.data, original_params.data(), original_params.size());
                                        }
 
                                        // New should not trigger source object re-processing.
-                                       scene_obj->pipeline.process().dirty = false;
+                                       scene_obj->process_dirty() = false;
                                    });
 
         if (created)
@@ -211,7 +211,7 @@ static void renderPipelineProcessParams(EditorSceneManager* scene_manager,
                                    {
                                        if (scene_obj)
                                        {
-                                           scene_obj->pipeline.process().dirty = true;
+                                           scene_obj->process_dirty() = true;
                                            pnanovdb_editor::Console::getInstance().addLog("Re-running %s...", desc->name);
                                        }
                                    });
@@ -310,14 +310,14 @@ static void showVisibilityAndPipelineUI(EditorSceneManager* scene_manager,
                                        {
                                            // Reinitialize process params when type changes so
                                            // they match the new pipeline
-                                           if (scene_obj->pipeline.process().type != process_pipeline)
+                                           if (scene_obj->process_pipeline() != process_pipeline)
                                            {
                                                pnanovdb_pipeline_get_default_params(
-                                                   process_pipeline, &scene_obj->pipeline.process().params);
+                                                   process_pipeline, &scene_obj->process_params());
                                            }
-                                           scene_obj->pipeline.process().type = process_pipeline;
-                                           scene_obj->pipeline.render().type = render_pipeline;
-                                           scene_obj->pipeline.process().dirty = true;
+                                           scene_obj->process_pipeline() = process_pipeline;
+                                           scene_obj->render_pipeline() = render_pipeline;
+                                           scene_obj->process_dirty() = true;
                                        }
                                    });
     }
@@ -677,8 +677,8 @@ void Properties::render(imgui_instance_user::Instance* ptr)
                                            {
                                                if (scene_obj)
                                                {
-                                                   process_pipeline = scene_obj->pipeline.process().type;
-                                                   render_pipeline = scene_obj->pipeline.render().type;
+                                                   process_pipeline = scene_obj->process_pipeline();
+                                                   render_pipeline = scene_obj->render_pipeline();
                                                    is_visible = scene_obj->visible;
                                                    const char* shader = pipeline_get_shader(scene_obj);
                                                    if (shader)
@@ -720,8 +720,8 @@ void Properties::render(imgui_instance_user::Instance* ptr)
                                            {
                                                if (scene_obj)
                                                {
-                                                   process_pipeline = scene_obj->pipeline.process().type;
-                                                   render_pipeline = scene_obj->pipeline.render().type;
+                                                   process_pipeline = scene_obj->process_pipeline();
+                                                   render_pipeline = scene_obj->render_pipeline();
                                                    is_visible = scene_obj->visible;
                                                    const char* shader = pipeline_get_shader(scene_obj);
                                                    if (shader)

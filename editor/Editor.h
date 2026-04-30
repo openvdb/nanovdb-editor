@@ -28,6 +28,7 @@ class EditorSceneManager;
 class SceneView;
 class Renderer;
 class EditorScene;
+class ParamMapRegistry;
 
 // Shader constants
 constexpr const char* s_default_editor_shader = "editor/editor.slang";
@@ -51,6 +52,7 @@ struct pnanovdb_editor_impl_t
     pnanovdb_editor::SceneView* scene_view;
     pnanovdb_editor::Renderer* renderer;
     pnanovdb_editor::EditorScene* editor_scene;
+    pnanovdb_editor::ParamMapRegistry* param_map_registry;
 
     // Currently used by the render thread in show()
     const pnanovdb_compiler_t* compiler;

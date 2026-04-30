@@ -12,6 +12,7 @@
 #include "Editor.h"
 #include "EditorToken.h"
 #include "EditorSceneManager.h"
+#include "EditorParamMapRegistry.h"
 #include "Renderer.h"
 #include "Pipeline.h"
 
@@ -31,7 +32,11 @@
 
 #include "nanovdb_editor/putil/WorkerThread.hpp"
 
+#include <algorithm>
+#include <cstring>
 #include <filesystem>
+#include <map>
+#include <mutex>
 
 // signal handling
 #include <atomic>
@@ -136,6 +141,7 @@ static pnanovdb_bool_t init_impl(pnanovdb_editor_t* editor,
     editor->impl->compute_queue = NULL;
     editor->impl->renderer = NULL;
     editor->impl->editor_scene = NULL;
+    editor->impl->param_map_registry = NULL;
 
     return PNANOVDB_TRUE;
 }
@@ -146,6 +152,7 @@ void init(pnanovdb_editor_t* editor)
 
     editor->impl->scene_manager = new EditorSceneManager();
     editor->impl->scene_view = new SceneView();
+    editor->impl->param_map_registry = create_param_map_registry();
 
     editor->impl->raster = new pnanovdb_raster_t();
     pnanovdb_raster_load(editor->impl->raster, editor->impl->compute);
@@ -179,6 +186,11 @@ void shutdown(pnanovdb_editor_t* editor)
     {
         delete editor->impl->scene_manager;
         editor->impl->scene_manager = nullptr;
+    }
+    if (editor->impl->param_map_registry)
+    {
+        destroy_param_map_registry(editor->impl->param_map_registry);
+        editor->impl->param_map_registry = nullptr;
     }
     if (editor->impl->raster)
     {
@@ -722,12 +734,11 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                         {
                             return;
                         }
-                        auto render_method = pnanovdb_editor::pipeline_get_render_method(obj->pipeline.render().type);
+                        auto render_method = pnanovdb_editor::pipeline_get_render_method(obj->render_pipeline());
                         if (render_method == pnanovdb_pipeline_render_method_nanovdb)
                         {
-                            pnanovdb_compute_array_t* array = obj->resources.nanovdb_array ?
-                                                                  obj->resources.nanovdb_array :
-                                                                  obj->resources.converted_nanovdb;
+                            pnanovdb_compute_array_t* array =
+                                obj->nanovdb_array() ? obj->nanovdb_array() : obj->resources.converted_nanovdb;
                             if (!array)
                             {
                                 return;
@@ -736,11 +747,11 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                             renderables.push_back({ render_method, array, nullptr, obj->scene_token, obj->name_token,
                                                     (shader && shader[0] != '\0') ? shader : "" });
                         }
-                        else if (render_method == pnanovdb_pipeline_render_method_raster2d &&
-                                 obj->resources.gaussian_data && editor->impl->raster_ctx)
+                        else if (render_method == pnanovdb_pipeline_render_method_raster2d && obj->gaussian_data() &&
+                                 editor->impl->raster_ctx)
                         {
-                            renderables.push_back({ render_method, nullptr, obj->resources.gaussian_data,
-                                                    obj->scene_token, obj->name_token, "" });
+                            renderables.push_back({ render_method, nullptr, obj->gaussian_data(), obj->scene_token,
+                                                    obj->name_token, "" });
                         }
                     });
             }
@@ -1068,8 +1079,8 @@ void add_nanovdb_2(pnanovdb_editor_t* editor,
                                                      {
                                                          if (obj)
                                                          {
-                                                             shader_params_ptr = obj->params.shader_params;
-                                                             editor->impl->shader_params = obj->params.shader_params;
+                                                             shader_params_ptr = obj->shader_params();
+                                                             editor->impl->shader_params = obj->shader_params();
                                                              editor->impl->shader_params_data_type = nullptr;
                                                          }
                                                      });
@@ -1179,17 +1190,17 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
             editor->impl->gaussian_data = gaussian_data;
 
             pnanovdb_raster_shader_params_t* shader_params_ptr = nullptr;
-            editor->impl->scene_manager->with_object(
-                scene, name,
-                [&](SceneObject* obj)
-                {
-                    if (obj)
-                    {
-                        shader_params_ptr = (pnanovdb_raster_shader_params_t*)obj->params.shader_params;
-                        editor->impl->shader_params = obj->params.shader_params;
-                        editor->impl->shader_params_data_type = raster_params_dt;
-                    }
-                });
+            editor->impl->scene_manager->with_object(scene, name,
+                                                     [&](SceneObject* obj)
+                                                     {
+                                                         if (obj)
+                                                         {
+                                                             shader_params_ptr =
+                                                                 (pnanovdb_raster_shader_params_t*)obj->shader_params();
+                                                             editor->impl->shader_params = obj->shader_params();
+                                                             editor->impl->shader_params_data_type = raster_params_dt;
+                                                         }
+                                                     });
 
             if (SceneView* views = editor->impl->scene_view)
             {
@@ -1342,17 +1353,17 @@ void add_gaussian_data_3(pnanovdb_editor_t* editor,
         {
             editor->impl->gaussian_data = gaussian_data;
             pnanovdb_raster_shader_params_t* shader_params_ptr = nullptr;
-            editor->impl->scene_manager->with_object(
-                scene, name,
-                [&](SceneObject* obj)
-                {
-                    if (obj)
-                    {
-                        shader_params_ptr = (pnanovdb_raster_shader_params_t*)obj->params.shader_params;
-                        editor->impl->shader_params = obj->params.shader_params;
-                        editor->impl->shader_params_data_type = raster_params_dt;
-                    }
-                });
+            editor->impl->scene_manager->with_object(scene, name,
+                                                     [&](SceneObject* obj)
+                                                     {
+                                                         if (obj)
+                                                         {
+                                                             shader_params_ptr =
+                                                                 (pnanovdb_raster_shader_params_t*)obj->shader_params();
+                                                             editor->impl->shader_params = obj->shader_params();
+                                                             editor->impl->shader_params_data_type = raster_params_dt;
+                                                         }
+                                                     });
             if (SceneView* views = editor->impl->scene_view)
             {
                 views->add_gaussian_to_scene(scene, name, gaussian_data, shader_params_ptr);
@@ -1488,9 +1499,9 @@ void execute_removal(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, 
                                                      obj_found = true;
                                                      obj_type = obj->type;
                                                      obj_name_token = obj->name_token;
-                                                     obj_nanovdb_array = obj->resources.nanovdb_array;
-                                                     obj_gaussian_data = obj->resources.gaussian_data;
-                                                     obj_shader_params = obj->params.shader_params;
+                                                     obj_nanovdb_array = obj->nanovdb_array();
+                                                     obj_gaussian_data = obj->gaussian_data();
+                                                     obj_shader_params = obj->shader_params();
                                                  }
                                              });
 
@@ -1770,75 +1781,64 @@ void* map_params(pnanovdb_editor_t* editor,
                  pnanovdb_editor_token_t* name,
                  const pnanovdb_reflect_data_type_t* data_type)
 {
-    if (!editor || !editor->impl || !data_type || !scene || !name)
+    if (!editor || !editor->impl || !data_type || !scene)
     {
         return nullptr;
     }
 
-    if (!editor->impl->editor_worker)
+    const bool has_worker = editor->impl->editor_worker != nullptr;
+    if (has_worker)
     {
-        // Non-worker mode: just return params without locking
-        // WARNING: Caller must ensure object lifetime - removing the object while using
-        // this pointer results in use-after-free (similar to STL iterator invalidation)
-        void* result = nullptr;
-        editor->impl->scene_manager->with_object(
-            scene, name,
-            [&](SceneObject* obj)
-            {
-                if (obj && obj->params.shader_params && obj->params.shader_params_data_type &&
-                    pnanovdb_reflect_layout_compare(obj->params.shader_params_data_type, data_type))
-                {
-                    result = obj->params.shader_params;
-                }
-                else if (obj && pnanovdb_reflect_layout_compare(
-                                    PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t), data_type))
-                {
-                    result = &obj->params.shader_name;
-                }
-            });
-        return result;
+        // Worker mode: lock for the whole map/unmap window so concurrent writers do not
+        // clobber each other. The lock is released by the paired unmap_params().
+        editor->impl->editor_worker->shader_params_mutex.lock();
+
+        const char* type_name = data_type->struct_typename ? data_type->struct_typename : "<unknown>";
+        Console::getInstance().addLog(
+            Console::LogLevel::Debug, "map_params: scene='%s' (id=%llu), name='%s' (id=%llu), type='%s'",
+            token_to_string_log(scene), (unsigned long long)scene->id, token_to_string_log(name),
+            (unsigned long long)(name ? name->id : 0ull), type_name);
     }
 
-    // Worker mode: Lock mutex to protect concurrent access during map/unmap window
-    // Note: The lock is held until unmap_params() is called
-    // WARNING: This mutex protects against concurrent parameter updates, but does NOT
-    // protect against object removal. Caller must ensure the object is not removed
-    // between map_params() and unmap_params() calls.
-    editor->impl->editor_worker->shader_params_mutex.lock();
-
-    const char* type_name = data_type->struct_typename ? data_type->struct_typename : "<unknown>";
-    Console::getInstance().addLog(Console::LogLevel::Debug,
-                                  "map_params: scene='%s' (id=%llu), name='%s' (id=%llu), type='%s'",
-                                  token_to_string_log(scene), (unsigned long long)scene->id, token_to_string_log(name),
-                                  (unsigned long long)name->id, type_name);
-
-    // Find params in scene manager
     void* result = nullptr;
-    editor->impl->scene_manager->with_object(
-        scene, name,
-        [&](SceneObject* obj)
+    ParamMapKey key{};
+    if (!name)
+    {
+        result = begin_custom_scene_params_map(editor, scene, data_type, &key);
+        if (result && has_worker)
         {
-            if (obj && obj->params.shader_params && obj->params.shader_params_data_type &&
-                pnanovdb_reflect_layout_compare(obj->params.shader_params_data_type, data_type))
-            {
-                Console::getInstance().addLog(Console::LogLevel::Debug, "map_params: Found params in scene manager");
-                result = obj->params.shader_params;
-            }
-            else if (obj && pnanovdb_reflect_layout_compare(
-                                PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t), data_type))
-            {
-                Console::getInstance().addLog(Console::LogLevel::Debug, "map_params: Found params in scene manager");
-                result = &obj->params.shader_name;
-            }
-        });
+            Console::getInstance().addLog(Console::LogLevel::Debug, "map_params: Found scene custom params");
+        }
+    }
+    else if (pnanovdb_reflect_layout_compare(PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t), data_type))
+    {
+        result = begin_shader_name_map(editor, scene, name, &key);
+        if (result && has_worker)
+        {
+            Console::getInstance().addLog(Console::LogLevel::Debug, "map_params: Found shader-name mapping");
+        }
+    }
+    else
+    {
+        result = begin_shader_params_map(editor, scene, name, data_type, &key);
+        if (result && has_worker)
+        {
+            Console::getInstance().addLog(Console::LogLevel::Debug, "map_params: Found params in scene manager");
+        }
+    }
 
-    // If not found, unlock and return nullptr
     if (!result)
     {
-        Console::getInstance().addLog(Console::LogLevel::Debug, "map_params: No matching params found");
-        editor->impl->editor_worker->shader_params_mutex.unlock();
+        if (has_worker)
+        {
+            Console::getInstance().addLog(Console::LogLevel::Debug, "map_params: No matching params found");
+            editor->impl->editor_worker->shader_params_mutex.unlock();
+        }
+        return nullptr;
     }
 
+    // Record the entry's key so the paired unmap releases exactly what this map acquired.
+    param_map_stack_push(editor, { key, has_worker });
     return result;
 }
 
@@ -1863,7 +1863,6 @@ void unmap_params(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pna
         return;
     }
 
-    // Log token information for debugging
     if (scene && name)
     {
         Console::getInstance().addLog(Console::LogLevel::Debug, "unmap_params: scene='%s' (id=%llu), name='%s' (id=%llu)",
@@ -1871,13 +1870,17 @@ void unmap_params(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pna
                                       token_to_string_log(name), (unsigned long long)name->id);
     }
 
-    // Unlock mutex (was locked in map_params)
-    if (editor->impl->editor_worker)
+    ParamMapFrame frame{};
+    if (!param_map_stack_try_pop(editor, frame))
+    {
+        return;
+    }
+
+    release_param_map(editor, frame.key);
+
+    if (frame.locked_worker_mutex && editor->impl->editor_worker)
     {
         editor->impl->editor_worker->shader_params_mutex.unlock();
-
-        // Signal editor thread that params were modified
-        // Editor will sync to UI on next frame when it checks params_dirty flag
         editor->impl->editor_worker->params_dirty.store(true);
     }
 }
@@ -2067,15 +2070,15 @@ void set_pipeline(pnanovdb_editor_t* editor,
                                                  }
                                                  if (stage == pnanovdb_pipeline_stage_load)
                                                  {
-                                                     obj->pipeline.load().type = type;
+                                                     obj->load_pipeline() = type;
                                                  }
                                                  else if (stage == pnanovdb_pipeline_stage_process)
                                                  {
-                                                     obj->pipeline.process().type = type;
+                                                     obj->process_pipeline() = type;
                                                  }
                                                  else if (stage == pnanovdb_pipeline_stage_render)
                                                  {
-                                                     obj->pipeline.render().type = type;
+                                                     obj->render_pipeline() = type;
                                                  }
                                              });
 }
@@ -2100,15 +2103,15 @@ pnanovdb_pipeline_type_t get_pipeline(pnanovdb_editor_t* editor,
                                                  }
                                                  if (stage == pnanovdb_pipeline_stage_load)
                                                  {
-                                                     result = obj->pipeline.load().type;
+                                                     result = obj->load_pipeline();
                                                  }
                                                  else if (stage == pnanovdb_pipeline_stage_process)
                                                  {
-                                                     result = obj->pipeline.process().type;
+                                                     result = obj->process_pipeline();
                                                  }
                                                  else if (stage == pnanovdb_pipeline_stage_render)
                                                  {
-                                                     result = obj->pipeline.render().type;
+                                                     result = obj->render_pipeline();
                                                  }
                                              });
     return result;
@@ -2123,8 +2126,64 @@ void mark_pipeline_dirty(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* sce
                                              [](SceneObject* obj)
                                              {
                                                  if (obj)
-                                                     obj->pipeline.process().dirty = true;
+                                                     obj->process_dirty() = true;
                                              });
+}
+
+static void copy_error_to_buffer(const std::string& error_message, char* error_buf, pnanovdb_uint64_t error_buf_size)
+{
+    if (!error_buf || error_buf_size == 0)
+    {
+        return;
+    }
+    const size_t max_bytes = static_cast<size_t>(error_buf_size - 1);
+    const size_t copy_bytes = std::min(error_message.size(), max_bytes);
+    std::memcpy(error_buf, error_message.data(), copy_bytes);
+    error_buf[copy_bytes] = '\0';
+}
+
+pnanovdb_bool_t set_custom_scene_params(pnanovdb_editor_t* editor,
+                                        pnanovdb_editor_token_t* scene,
+                                        pnanovdb_editor_token_t* json,
+                                        char* error_buf,
+                                        pnanovdb_uint64_t error_buf_size)
+{
+    if (!editor || !editor->impl || !editor->impl->scene_manager || !scene || !json || !json->str)
+    {
+        copy_error_to_buffer("editor, scene, and a non-null json token are required", error_buf, error_buf_size);
+        return PNANOVDB_FALSE;
+    }
+
+    std::string error_message;
+    if (!editor->impl->scene_manager->set_custom_scene_params(scene, json, &error_message))
+    {
+        Console::getInstance().addLog(Console::LogLevel::Error, "set_custom_scene_params failed for scene '%s': %s",
+                                      token_to_string_log(scene),
+                                      error_message.empty() ? "unknown error" : error_message.c_str());
+        copy_error_to_buffer(
+            error_message.empty() ? std::string("unknown error") : error_message, error_buf, error_buf_size);
+        return PNANOVDB_FALSE;
+    }
+
+    Console::getInstance().addLog(Console::LogLevel::Debug, "Loaded custom scene params from token '%s' for scene '%s'",
+                                  token_to_string_log(json), token_to_string_log(scene));
+    if (error_buf && error_buf_size > 0)
+    {
+        error_buf[0] = '\0';
+    }
+    return PNANOVDB_TRUE;
+}
+
+const pnanovdb_reflect_data_type_t* get_custom_scene_params_data_type(pnanovdb_editor_t* editor,
+                                                                      pnanovdb_editor_token_t* scene)
+{
+    if (!editor || !editor->impl || !editor->impl->scene_manager || !scene)
+    {
+        return nullptr;
+    }
+
+    std::shared_ptr<CustomSceneParams> custom_params = editor->impl->scene_manager->get_custom_scene_params(scene);
+    return custom_params ? custom_params->dataType() : nullptr;
 }
 
 void select_render_view(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
@@ -2188,7 +2247,7 @@ void add_named_array(pnanovdb_editor_t* editor,
                                              [array_name, array](SceneObject* obj)
                                              {
                                                  if (obj)
-                                                     obj->resources.named_arrays[array_name] = array;
+                                                     obj->named_arrays()[array_name] = array;
                                              });
 }
 
@@ -2208,8 +2267,8 @@ pnanovdb_compute_array_t* get_named_array(pnanovdb_editor_t* editor,
                                              {
                                                  if (obj)
                                                  {
-                                                     auto it = obj->resources.named_arrays.find(array_name);
-                                                     if (it != obj->resources.named_arrays.end())
+                                                     auto it = obj->named_arrays().find(array_name);
+                                                     if (it != obj->named_arrays().end())
                                                          result = it->second;
                                                  }
                                              });
@@ -2258,6 +2317,8 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
     editor.get_named_array = get_named_array;
     editor.map_pipeline_params = map_pipeline_params;
     editor.unmap_pipeline_params = unmap_pipeline_params;
+    editor.set_custom_scene_params = set_custom_scene_params;
+    editor.get_custom_scene_params_data_type = get_custom_scene_params_data_type;
 
     return &editor;
 }

@@ -23,6 +23,7 @@ using namespace imgui_instance_user;
 void saveIniSettings(Instance* ptr);
 void createMenu(Instance* ptr);
 void showSceneWindow(Instance* ptr);
+void showSceneParamsWindow(Instance* ptr);
 void showCameraViews(Instance* ptr);
 void showPropertiesWindow(Instance* ptr);
 void showRenderSettingsWindow(Instance* ptr);
