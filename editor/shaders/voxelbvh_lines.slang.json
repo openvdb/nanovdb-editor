@@ -1,6 +1,6 @@
 {
     "ShaderParams": {
-        "line_width": {
+        "line_radius": {
             "value": 1.0,
             "min": 0,
             "max": 10.0,

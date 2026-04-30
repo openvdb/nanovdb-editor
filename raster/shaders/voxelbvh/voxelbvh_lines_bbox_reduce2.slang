@@ -7,6 +7,7 @@ struct constants_t
     uint voxel_count;
     uint voxel_workgroup_count;
     uint integer_space_max;
+    float line_radius;
 };
 
 ConstantBuffer<constants_t> constants;

@@ -33,7 +33,7 @@ struct EditorParams
 
 struct shader_params_t
 {
-    float line_width;
+    float line_radius;
 };
 
 StructuredBuffer<uint2> buf;
@@ -137,7 +137,7 @@ void intersect_line(
     inout float4 sum,
     inout float nominalT)
 {
-    float4 t_isect = intersect_rounded_cone(rayOrigin, rayDir, pos_a, pos_b, 2.f, 2.f);
+    float4 t_isect = intersect_rounded_cone(rayOrigin, rayDir, pos_a, pos_b, shader_params.line_radius, shader_params.line_radius);
 
     float alpha = 0.f;
     float3 color = {};

@@ -1290,6 +1290,7 @@ void ijkl_from_lines(const pnanovdb_compute_t* compute,
                      pnanovdb_compute_buffer_t* indices_buffer,
                      pnanovdb_compute_buffer_t* positions_buffer,
                      pnanovdb_uint64_t line_count,
+                     float line_radius,
                      pnanovdb_compute_buffer_t* ijkl_out,
                      pnanovdb_compute_buffer_t* prim_id_out,
                      pnanovdb_compute_buffer_t* range_out,
@@ -1313,6 +1314,7 @@ void ijkl_from_lines(const pnanovdb_compute_t* compute,
         pnanovdb_uint32_t voxel_count;
         pnanovdb_uint32_t voxel_workgroup_count;
         pnanovdb_uint32_t integer_space_max;
+        float line_radius;
     };
     constants_t constants = {};
     constants.line_count = (pnanovdb_uint32_t)line_count;
@@ -1320,6 +1322,7 @@ void ijkl_from_lines(const pnanovdb_compute_t* compute,
     constants.voxel_count = 8u * constants.line_count;
     constants.voxel_workgroup_count = (constants.voxel_count + 255u) / 256u;
     constants.integer_space_max = integer_space_max;
+    constants.line_radius = line_radius;
 
     // constants
     pnanovdb_compute_buffer_desc_t buf_desc = {};
@@ -1465,6 +1468,7 @@ void ijkl_from_lines_array(const pnanovdb_compute_t* compute,
                            pnanovdb_voxelbvh_context_t* voxelbvh_context,
                            pnanovdb_compute_array_t* indices_array,
                            pnanovdb_compute_array_t* positions_array,
+                           float line_radius,
                            pnanovdb_compute_array_t** ijkl_out,
                            pnanovdb_compute_array_t** prim_id_out,
                            pnanovdb_compute_array_t** range_out,
@@ -1497,7 +1501,7 @@ void ijkl_from_lines_array(const pnanovdb_compute_t* compute,
     gpu_array_upload(compute, queue, positions_gpu_array, positions_array);
 
     ijkl_from_lines(compute, queue, voxelbvh_context, indices_gpu_array->device_buffer,
-                    positions_gpu_array->device_buffer, line_count, ijkl_gpu_array->device_buffer,
+                    positions_gpu_array->device_buffer, line_count, line_radius, ijkl_gpu_array->device_buffer,
                     prim_id_gpu_array->device_buffer, range_gpu_array->device_buffer,
                     world_bbox_gpu_array->device_buffer, integer_space_max);
 

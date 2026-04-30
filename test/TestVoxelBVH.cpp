@@ -156,6 +156,7 @@ void voxelbvh_test()
     static const pnanovdb_uint32_t prim_meta_count = 3u;
     pnanovdb_compute_array_t* prim_meta_arrays[prim_meta_count] = {};
 
+    const float line_radius = 2.f;
     const pnanovdb_uint32_t integer_space_max = 127u;
     const char* out_file = "./data/lines.nvdb";
 
@@ -271,8 +272,8 @@ void voxelbvh_test()
     pnanovdb_compute_array_t* prim_id_array = nullptr;
     pnanovdb_compute_array_t* range_array = nullptr;
     pnanovdb_compute_array_t* world_bbox_array = nullptr;
-    voxel_bvh.ijkl_from_lines_array(&compute, queue, voxelbvh_ctx, indices_array, positions_array, &ijkl_array,
-                                    &prim_id_array, &range_array, &world_bbox_array, integer_space_max);
+    voxel_bvh.ijkl_from_lines_array(&compute, queue, voxelbvh_ctx, indices_array, positions_array, line_radius,
+                                    &ijkl_array, &prim_id_array, &range_array, &world_bbox_array, integer_space_max);
 
     uint64_t range_count = range_array->element_count;
     uint64_t ijkl_count = ijkl_array->element_count;
