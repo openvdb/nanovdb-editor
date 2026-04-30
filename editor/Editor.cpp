@@ -1398,16 +1398,15 @@ void add_camera_view_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene
         {
             if (SceneView* views = editor->impl->scene_view)
             {
-                // Get the shared_ptr from scene_manager for shared ownership
-                editor->impl->scene_manager->with_object(scene, camera->name,
-                                                         [&](SceneObject* obj)
-                                                         {
-                                                             if (obj && obj->resources.camera_view_owner)
-                                                             {
-                                                                 CameraViewContext ctx{ obj->resources.camera_view_owner };
-                                                                 views->add_camera(scene, camera->name, ctx);
-                                                             }
-                                                         });
+                editor->impl->scene_manager->with_object(
+                    scene, camera->name,
+                    [&](SceneObject* obj)
+                    {
+                        if (obj && obj->resources.camera_view_owner)
+                        {
+                            views->sync_camera_owner(scene, camera->name, obj->resources.camera_view_owner);
+                        }
+                    });
             }
         });
 }

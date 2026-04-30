@@ -629,8 +629,7 @@ void EditorScene::sync_views_from_scene_manager()
             {
                 if (obj->camera_view() && obj->resources.camera_view_owner)
                 {
-                    CameraViewContext ctx{ obj->resources.camera_view_owner };
-                    m_scene_view.add_camera(obj->scene_token, obj->name_token, ctx);
+                    m_scene_view.sync_camera_owner(obj->scene_token, obj->name_token, obj->resources.camera_view_owner);
                 }
             }
             else

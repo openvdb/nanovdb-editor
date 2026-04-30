@@ -48,7 +48,7 @@ struct NanoVDBContext
 struct GaussianDataContext
 {
     std::shared_ptr<pnanovdb_raster_gaussian_data_t> gaussian_data;
-    pnanovdb_raster_shader_params_t* shader_params = nullptr; // Points into gaussian_data
+    pnanovdb_raster_shader_params_t* shader_params = nullptr; // Non-owning pointer, typically into params array data
 };
 
 // Scene view data for a specific scene ID - holds all views in that scene
@@ -117,6 +117,9 @@ public:
     void add_camera(pnanovdb_editor_token_t* scene_token,
                     pnanovdb_editor_token_t* name_token,
                     const CameraViewContext& camera);
+    void sync_camera_owner(pnanovdb_editor_token_t* scene_token,
+                           pnanovdb_editor_token_t* name_token,
+                           const std::shared_ptr<pnanovdb_camera_view_t>& camera_view_owner);
     pnanovdb_camera_view_t* get_camera(pnanovdb_editor_token_t* name_token) const;
     pnanovdb_camera_view_t* get_camera(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token) const;
     const std::map<uint64_t, CameraViewContext>& get_cameras() const;
