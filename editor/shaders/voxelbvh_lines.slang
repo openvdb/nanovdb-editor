@@ -112,12 +112,12 @@ float4 intersect_rounded_cone(float3 ro, float3 rd, float3 pa, float3 pb, float 
     float4 r = float4(1e20);
     if( h1>0.0 )
     {
-    	t = -m3 - sqrt( h1 );
+        t = -m3 - sqrt( h1 );
         r = float4( t, (oa+t*rd)/ra );
     }
     if( h2>0.0 )
     {
-    	t = -m6 - sqrt( h2 );
+        t = -m6 - sqrt( h2 );
         if( t<r.x )
         r = float4( t, (ob+t*rd)/rb );
     }
