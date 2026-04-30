@@ -1285,16 +1285,16 @@ static void nanovdb_append_metadata(const pnanovdb_compute_t* compute,
 }
 
 void ijkl_from_lines(const pnanovdb_compute_t* compute,
-                                        pnanovdb_compute_queue_t* queue,
-                                        pnanovdb_voxelbvh_context_t* voxelbvh_context,
-                                        pnanovdb_compute_buffer_t* indices_buffer,
-                                        pnanovdb_compute_buffer_t* positions_buffer,
-                                        pnanovdb_uint64_t line_count,
-                                        pnanovdb_compute_buffer_t* ijkl_out,
-                                        pnanovdb_compute_buffer_t* prim_id_out,
-                                        pnanovdb_compute_buffer_t* range_out,
-                                        pnanovdb_compute_buffer_t* world_bbox_out,
-                                        pnanovdb_uint32_t integer_space_max)
+                     pnanovdb_compute_queue_t* queue,
+                     pnanovdb_voxelbvh_context_t* voxelbvh_context,
+                     pnanovdb_compute_buffer_t* indices_buffer,
+                     pnanovdb_compute_buffer_t* positions_buffer,
+                     pnanovdb_uint64_t line_count,
+                     pnanovdb_compute_buffer_t* ijkl_out,
+                     pnanovdb_compute_buffer_t* prim_id_out,
+                     pnanovdb_compute_buffer_t* range_out,
+                     pnanovdb_compute_buffer_t* world_bbox_out,
+                     pnanovdb_uint32_t integer_space_max)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -1393,8 +1393,8 @@ void ijkl_from_lines(const pnanovdb_compute_t* compute,
         resources[4u].buffer_transient = ijkl_transient;
         resources[5u].buffer_transient = prim_id_transient;
 
-        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_lines_to_ijkl_slang],
-                                 resources, constants.workgroup_count, 1u, 1u, "voxelbvh_lines_to_ijkl");
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_lines_to_ijkl_slang], resources,
+                                 constants.workgroup_count, 1u, 1u, "voxelbvh_lines_to_ijkl");
     }
 
     // sort ijk-level requests to bring requests together
@@ -1496,10 +1496,10 @@ void ijkl_from_lines_array(const pnanovdb_compute_t* compute,
     gpu_array_upload(compute, queue, indices_gpu_array, indices_array);
     gpu_array_upload(compute, queue, positions_gpu_array, positions_array);
 
-    ijkl_from_lines(compute, queue, voxelbvh_context, indices_gpu_array->device_buffer, positions_gpu_array->device_buffer,
-                        line_count,
-                        ijkl_gpu_array->device_buffer, prim_id_gpu_array->device_buffer,
-                        range_gpu_array->device_buffer, world_bbox_gpu_array->device_buffer, integer_space_max);
+    ijkl_from_lines(compute, queue, voxelbvh_context, indices_gpu_array->device_buffer,
+                    positions_gpu_array->device_buffer, line_count, ijkl_gpu_array->device_buffer,
+                    prim_id_gpu_array->device_buffer, range_gpu_array->device_buffer,
+                    world_bbox_gpu_array->device_buffer, integer_space_max);
 
     gpu_array_destroy(compute, queue, indices_gpu_array);
     gpu_array_destroy(compute, queue, positions_gpu_array);

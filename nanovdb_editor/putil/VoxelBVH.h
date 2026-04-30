@@ -116,27 +116,27 @@ typedef struct pnanovdb_voxelbvh_t
                                                 pnanovdb_uint32_t metadata_count);
 
     void(PNANOVDB_ABI* ijkl_from_lines)(const pnanovdb_compute_t* compute,
-                                            pnanovdb_compute_queue_t* queue,
-                                            pnanovdb_voxelbvh_context_t* context,
-                                            pnanovdb_compute_buffer_t* indices_buffer,
-                                            pnanovdb_compute_buffer_t* positions_buffer,
-                                            pnanovdb_uint64_t line_count,
-                                            pnanovdb_compute_buffer_t* ijkl_out,
-                                            pnanovdb_compute_buffer_t* prim_id_out,
-                                            pnanovdb_compute_buffer_t* range_out,
-                                            pnanovdb_compute_buffer_t* world_bbox_out,
-                                            pnanovdb_uint32_t integer_space_max);
+                                        pnanovdb_compute_queue_t* queue,
+                                        pnanovdb_voxelbvh_context_t* context,
+                                        pnanovdb_compute_buffer_t* indices_buffer,
+                                        pnanovdb_compute_buffer_t* positions_buffer,
+                                        pnanovdb_uint64_t line_count,
+                                        pnanovdb_compute_buffer_t* ijkl_out,
+                                        pnanovdb_compute_buffer_t* prim_id_out,
+                                        pnanovdb_compute_buffer_t* range_out,
+                                        pnanovdb_compute_buffer_t* world_bbox_out,
+                                        pnanovdb_uint32_t integer_space_max);
 
     void(PNANOVDB_ABI* ijkl_from_lines_array)(const pnanovdb_compute_t* compute,
-                                                 pnanovdb_compute_queue_t* queue,
-                                                 pnanovdb_voxelbvh_context_t* context,
-                                                 pnanovdb_compute_array_t* indices_array,
-                                                 pnanovdb_compute_array_t* positions_array,
-                                                 pnanovdb_compute_array_t** ijkl_out,
-                                                 pnanovdb_compute_array_t** prim_id_out,
-                                                 pnanovdb_compute_array_t** range_out,
-                                                 pnanovdb_compute_array_t** world_bbox_out,
-                                                 pnanovdb_uint32_t integer_space_max);
+                                              pnanovdb_compute_queue_t* queue,
+                                              pnanovdb_voxelbvh_context_t* context,
+                                              pnanovdb_compute_array_t* indices_array,
+                                              pnanovdb_compute_array_t* positions_array,
+                                              pnanovdb_compute_array_t** ijkl_out,
+                                              pnanovdb_compute_array_t** prim_id_out,
+                                              pnanovdb_compute_array_t** range_out,
+                                              pnanovdb_compute_array_t** world_bbox_out,
+                                              pnanovdb_uint32_t integer_space_max);
 
 } pnanovdb_voxelbvh_t;
 

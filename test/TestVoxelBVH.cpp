@@ -159,13 +159,13 @@ void voxelbvh_test()
     const pnanovdb_uint32_t integer_space_max = 127u;
     const char* out_file = "./data/lines.nvdb";
 
-#if 0
+#    if 0
     static const pnanovdb_uint32_t line_count = 3u;
-#else
+#    else
     static const pnanovdb_uint32_t width = 64u;
     static const pnanovdb_uint32_t height = 64u;
     static const pnanovdb_uint32_t line_count = 2u * width * height;
-#endif
+#    endif
 
     pnanovdb_compute_array_t* indices_array = compute.create_array(8u, line_count, nullptr);
     pnanovdb_compute_array_t* positions_array = compute.create_array(4u, 6u * line_count, nullptr);
@@ -175,7 +175,7 @@ void voxelbvh_test()
     float* mapped_positions = (float*)compute.map_array(positions_array);
     float* mapped_colors = (float*)compute.map_array(colors_array);
 
-#if 0
+#    if 0
     mapped_indices[0] = (uint64_t(1) << 32u) | uint64_t(0);
     mapped_indices[1] = (uint64_t(3) << 32u) | uint64_t(2);
     mapped_indices[2] = (uint64_t(5) << 32u) | uint64_t(4);
@@ -218,7 +218,7 @@ void voxelbvh_test()
     mapped_colors[15] = 0.f;
     mapped_colors[16] = 0.f;
     mapped_colors[17] = 1.f;
-#else
+#    else
     for (int j = 0; j < height; j++)
     {
         for (int i = 0; i < width; i++)
@@ -261,7 +261,7 @@ void voxelbvh_test()
             mapped_colors[12u * idx + 11] = 0.f;
         }
     }
-#endif
+#    endif
 
     prim_meta_arrays[0] = indices_array;
     prim_meta_arrays[1] = positions_array;
@@ -271,8 +271,8 @@ void voxelbvh_test()
     pnanovdb_compute_array_t* prim_id_array = nullptr;
     pnanovdb_compute_array_t* range_array = nullptr;
     pnanovdb_compute_array_t* world_bbox_array = nullptr;
-    voxel_bvh.ijkl_from_lines_array(&compute, queue, voxelbvh_ctx, indices_array, positions_array, &ijkl_array, &prim_id_array,
-                                       &range_array, &world_bbox_array, integer_space_max);
+    voxel_bvh.ijkl_from_lines_array(&compute, queue, voxelbvh_ctx, indices_array, positions_array, &ijkl_array,
+                                    &prim_id_array, &range_array, &world_bbox_array, integer_space_max);
 
     uint64_t range_count = range_array->element_count;
     uint64_t ijkl_count = ijkl_array->element_count;
@@ -564,14 +564,15 @@ void voxelbvh_test()
     printf("Shrinking arrays prim_id(%zu vs %zu) range(%zu vs %zu)\n", prim_id_array->element_count, ijkl_count,
            built_flat_range_array->element_count, flat_range_count);
 
-    pnanovdb_compute_array_t* metadata_arrays[2u + prim_meta_count] = { built_flat_range_array, prim_id_array};
+    pnanovdb_compute_array_t* metadata_arrays[2u + prim_meta_count] = { built_flat_range_array, prim_id_array };
     for (pnanovdb_uint32_t idx = 0u; idx < prim_meta_count; idx++)
     {
         metadata_arrays[2u + idx] = prim_meta_arrays[idx];
     }
 
     pnanovdb_compute_array_t* nanovdb_meta = nullptr;
-    voxel_bvh.nanovdb_append_metadata(&compute, built_nanovdb_array, &nanovdb_meta, metadata_arrays, 2u + prim_meta_count);
+    voxel_bvh.nanovdb_append_metadata(
+        &compute, built_nanovdb_array, &nanovdb_meta, metadata_arrays, 2u + prim_meta_count);
 
     // check metadata
     {
@@ -600,7 +601,8 @@ void voxelbvh_test()
                        sh0_addr.byte_offset, sh0.x, sh0.y, sh0.z);
 #else
                 pnanovdb_address_t index_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
-                pnanovdb_uint64_t index = pnanovdb_read_uint64(buf, pnanovdb_address_offset_product(index_addr, 8u, prim_id));
+                pnanovdb_uint64_t index =
+                    pnanovdb_read_uint64(buf, pnanovdb_address_offset_product(index_addr, 8u, prim_id));
 
                 pnanovdb_uint32_t idx_a = pnanovdb_uint32_t(index);
                 pnanovdb_uint32_t idx_b = pnanovdb_uint32_t(index >> 32u);
@@ -609,11 +611,13 @@ void voxelbvh_test()
                 pnanovdb_vec3_t pos_a = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(pos_addr, 12u, idx_a));
                 pnanovdb_vec3_t pos_b = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(pos_addr, 12u, idx_b));
                 pnanovdb_address_t color_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 4u);
-                pnanovdb_vec3_t color_a = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(color_addr, 12u, idx_a));
-                pnanovdb_vec3_t color_b = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(color_addr, 12u, idx_b));
+                pnanovdb_vec3_t color_a =
+                    pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(color_addr, 12u, idx_a));
+                pnanovdb_vec3_t color_b =
+                    pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(color_addr, 12u, idx_b));
 
-                printf("prim_id_addr(%zu) prim_id(%u) pos(%f,%f,%f:%f,%f,%f) color(%f,%f,%f:%f,%f,%f)", prim_id_addr.byte_offset, prim_id,
-                       pos_a.x, pos_a.y, pos_a.z, pos_b.x, pos_b.y, pos_b.z,
+                printf("prim_id_addr(%zu) prim_id(%u) pos(%f,%f,%f:%f,%f,%f) color(%f,%f,%f:%f,%f,%f)",
+                       prim_id_addr.byte_offset, prim_id, pos_a.x, pos_a.y, pos_a.z, pos_b.x, pos_b.y, pos_b.z,
                        color_a.x, color_a.y, color_a.z, color_b.x, color_b.y, color_b.z);
 #endif
             }
