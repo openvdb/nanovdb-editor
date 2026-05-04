@@ -222,7 +222,7 @@ void test_custom_scene_params_mapping_api(pnanovdb_editor_t* editor, pnanovdb_ed
     editor->unmap_params(editor, scene_token, nullptr);
 
     // UI is now free to render the initial state.
-    pause_for_ui("Showing initial values in Scene Params...", 5);
+    pause_for_ui("Showing initial values in Params...", 5);
 
     // --- Window 2: publish the new values and unmap so the UI can pick them up.
     mapped = editor->map_params(editor, scene_token, nullptr, data_type);
@@ -245,7 +245,7 @@ void test_custom_scene_params_mapping_api(pnanovdb_editor_t* editor, pnanovdb_ed
     editor->unmap_params(editor, scene_token, nullptr);
 
     // UI is now free to detect the external write and refresh its widgets.
-    pause_for_ui("Showing updated values in Scene Params...", 5);
+    pause_for_ui("Showing updated values in Params...", 5);
 
     // --- Window 3: verify the published values survived the UI round-trip. ---
     mapped = editor->map_params(editor, scene_token, nullptr, data_type);
@@ -263,7 +263,7 @@ void test_custom_scene_params_mapping_api(pnanovdb_editor_t* editor, pnanovdb_ed
            slider_verified, toggle_verified, query_verified);
     editor->unmap_params(editor, scene_token, nullptr);
 
-    pause_for_ui("Edit Scene Params widgets now; readback follows...", 10);
+    pause_for_ui("Edit Params widgets now; readback follows...", 10);
 
     // --- Window 4: read whatever the user just edited and print it. ----------
     mapped = editor->map_params(editor, scene_token, nullptr, data_type);

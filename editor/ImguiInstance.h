@@ -55,7 +55,7 @@ inline constexpr const char* SHADER_PARAMS = "Shader Params";
 inline constexpr const char* BENCHMARK = "Benchmark";
 inline constexpr const char* FILE_HEADER = "File Header";
 inline constexpr const char* SCENE = "Scenes";
-inline constexpr const char* SCENE_PARAMS = "Scene Params";
+inline constexpr const char* SCENE_PARAMS = "Params";
 inline constexpr const char* PROPERTIES = "Properties";
 
 enum class ShaderSelectionMode : int
