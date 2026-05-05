@@ -287,6 +287,35 @@ bool CustomSceneParams::loadFromJsonString(const std::string& json_string,
                 return false;
             }
 
+            bool commit_on_enter = false;
+            if (field_json.contains("commitOnEnter"))
+            {
+                const auto& flag_json = field_json["commitOnEnter"];
+                if (!flag_json.is_boolean())
+                {
+                    if (error_message)
+                    {
+                        *error_message = "field '" + field_name + "' has invalid 'commitOnEnter'; expected bool";
+                    }
+                    return false;
+                }
+                commit_on_enter = flag_json.get<bool>();
+            }
+            std::string submit_counter_field;
+            if (field_json.contains("submitCounterField"))
+            {
+                const auto& counter_json = field_json["submitCounterField"];
+                if (!counter_json.is_string())
+                {
+                    if (error_message)
+                    {
+                        *error_message = "field '" + field_name + "' has invalid 'submitCounterField'; expected string";
+                    }
+                    return false;
+                }
+                submit_counter_field = counter_json.get<std::string>();
+            }
+
             size_t length = kDefaultStringLength;
             if (field_json.contains("length"))
             {
@@ -330,6 +359,8 @@ bool CustomSceneParams::loadFromJsonString(const std::string& json_string,
             field.step = 0.0f;
             field.is_slider = false;
             field.is_bool = false;
+            field.commit_on_enter = commit_on_enter;
+            field.submit_counter_field = std::move(submit_counter_field);
             field.offset = next_offset;
             next_offset = field.offset + length;
 

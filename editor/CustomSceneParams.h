@@ -45,6 +45,8 @@ public:
         bool is_hidden = false;
         bool is_native_bool = false;
         bool is_string = false;
+        bool commit_on_enter = false;
+        std::string submit_counter_field; // detect submit events
     };
 
     bool loadFromJsonString(const std::string& json_string,

@@ -36,7 +36,28 @@ void CustomSceneParams::render()
         {
             const std::string label = field.name + "##custom";
             char* committed = reinterpret_cast<char*>(m_data.data() + field.offset);
-            ImGui::InputText(label.c_str(), committed, field.element_count);
+            const ImGuiInputTextFlags flags =
+                field.commit_on_enter ? ImGuiInputTextFlags_EnterReturnsTrue : ImGuiInputTextFlags_None;
+            const bool entered = ImGui::InputText(label.c_str(), committed, field.element_count, flags);
+            if (entered && field.commit_on_enter && !field.submit_counter_field.empty())
+            {
+                // bump the sibling uint32 counter field so clients that poll it observe a change
+                for (auto& counter_field : m_fields)
+                {
+                    if (counter_field.name != field.submit_counter_field)
+                    {
+                        continue;
+                    }
+                    if (counter_field.reflect_type != PNANOVDB_REFLECT_TYPE_UINT32 || counter_field.element_count != 1 ||
+                        counter_field.offset + sizeof(pnanovdb_uint32_t) > m_data.size())
+                    {
+                        break;
+                    }
+                    auto* counter = reinterpret_cast<pnanovdb_uint32_t*>(m_data.data() + counter_field.offset);
+                    *counter = *counter + 1u;
+                    break;
+                }
+            }
             continue;
         }
 
