@@ -33,7 +33,7 @@ struct EditorParams
 
 struct shader_params_t
 {
-    float line_radius;
+    uint mode;
 };
 
 StructuredBuffer<uint2> buf;
@@ -105,7 +105,19 @@ void intersect_triangle(
     {
         alpha = 1.f;
         t = t_isect.x;
-        color = (1.f - t_isect.y - t_isect.z) * color_a + t_isect.y * color_b + t_isect.z * color_c;
+        if (shader_params.mode == 1)
+        {
+            float3 n = normalize(cross_product( pos_b - pos_a, pos_c - pos_a));
+            color.rgb = 0.8f * abs(dot(n, rayDir)).xxx + 0.1f;
+        }
+        else if (shader_params.mode == 2)
+        {
+            color = float3(1.f - t_isect.y - t_isect.z, t_isect.y, t_isect.z);
+        }
+        else
+        {
+            color = (1.f - t_isect.y - t_isect.z) * color_a + t_isect.y * color_b + t_isect.z * color_c;
+        }
     }
     if (t > 0.f && t >= tmin && t < tmax)
     {
