@@ -16,6 +16,7 @@
 #include <nanovdb_editor/putil/VoxelBVH.h>
 
 #include <cstdarg>
+#include <cstdint>
 #include <math.h>
 
 static void log_print(pnanovdb_compute_log_level_t level, const char* format, ...)
@@ -159,9 +160,49 @@ void voxelbvh_test()
     static const bool is_triangle = true;
 
     const float inflation_radius = is_triangle ? 0.f : 2.f;
-    const pnanovdb_uint32_t integer_space_max = 127u;
     const char* out_file = is_triangle ? "./data/triangles.nvdb" : "./data/lines.nvdb";
 
+#    if 1
+    const pnanovdb_uint32_t integer_space_max = 511u;
+
+    pnanovdb_fileformat_t fileformat = {};
+    pnanovdb_fileformat_load(&fileformat, &compute);
+
+    static const char* array_names[] = { "positions", "indices" };
+    static const uint32_t array_count = 2;
+    pnanovdb_compute_array_t* arrays[array_count] = {};
+    pnanovdb_bool_t loaded = fileformat.load_file("./data/xyzrgb_dragon.ply", array_count, array_names, arrays);
+
+    printf("Dragon vertices(%zu) triangles(%zu)\n", arrays[0]->element_count / 3u, arrays[1]->element_count / 3u);
+
+    pnanovdb_fileformat_free(&fileformat);
+
+    pnanovdb_compute_array_t* indices_array = arrays[1];
+    pnanovdb_compute_array_t* positions_array = arrays[0];
+    pnanovdb_compute_array_t* colors_array = compute.create_array(4u, arrays[0]->element_count, nullptr);
+
+    uint32_t* mapped_indices = (uint32_t*)compute.map_array(indices_array);
+    float* mapped_positions = (float*)compute.map_array(positions_array);
+    float* mapped_colors = (float*)compute.map_array(colors_array);
+    for (uint64_t idx = 0u; idx < positions_array->element_count; idx++)
+    {
+        mapped_colors[idx] = (idx & 3) == 0u ? 1.f : 0.f;
+    }
+
+    printf("indices:\n");
+    for (uint64_t idx = 0u; idx < indices_array->element_count && idx < 32u; idx++)
+    {
+        printf("%d,", mapped_indices[idx]);
+    }
+    printf("\npositions:\n");
+    for (uint64_t idx = 0u; idx < positions_array->element_count && idx < 32u; idx++)
+    {
+        printf("%f,", mapped_positions[idx]);
+    }
+    printf("\n");
+
+#    else
+    const pnanovdb_uint32_t integer_space_max = 127u;
     static const pnanovdb_uint32_t width = 64u;
     static const pnanovdb_uint32_t height = 64u;
     static const pnanovdb_uint32_t prim_count = 2u * width * height;
@@ -232,6 +273,7 @@ void voxelbvh_test()
             mapped_colors[12u * idx + 11] = 1.f;
         }
     }
+#    endif
 
     prim_meta_arrays[0] = indices_array;
     prim_meta_arrays[1] = positions_array;
@@ -408,6 +450,7 @@ void voxelbvh_test()
     uint32_t range_flat_count_max = 0u;
     uint32_t range_flat_mask_max = 0u;
     pnanovdb_address_t addr_old = {};
+    uint32_t leaf_print_count = 0u;
     for (uint64_t range_idx = 0u; range_idx < range_count; range_idx++)
     {
         uint64_t range = mapped_range[range_idx];
@@ -487,8 +530,9 @@ void voxelbvh_test()
             }
             if (level == 0u)
             {
-                if (range_idx < 64u)
+                if (leaf_print_count < 64u)
                 {
+                    leaf_print_count++;
                     pnanovdb_coord_t leaf_ijk = pnanovdb_leaf_get_bbox_min(buf, acc.leaf);
                     printf("leaf ijk(%d,%d,%d) vs point ijk(%d,%d,%d) val(%d, 0x%x)\n", leaf_ijk.x, leaf_ijk.y,
                            leaf_ijk.z, ijk.x, ijk.y, ijk.z, uint32_t(val >> 32u), uint32_t(val));
