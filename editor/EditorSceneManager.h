@@ -291,6 +291,10 @@ struct SceneObject
     {
         return resources.named_arrays;
     }
+    pnanovdb_compute_array_t*& converted_nanovdb()
+    {
+        return resources.converted_nanovdb;
+    }
 
     // Params
     void*& shader_params()

@@ -223,7 +223,7 @@ bool handle_conversion_completion()
                                                                         compute->destroy_array(arr);
                                                                 });
                 scene_obj->nanovdb_array() = s_pending_nanovdb_array;
-                scene_obj->resources.converted_nanovdb = s_pending_nanovdb_array;
+                scene_obj->converted_nanovdb() = s_pending_nanovdb_array;
                 scene_obj->resources.nanovdb_array_owner = owner;
                 scene_obj->resources.converted_nanovdb_owner = owner;
 

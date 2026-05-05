@@ -738,7 +738,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                         if (render_method == pnanovdb_pipeline_render_method_nanovdb)
                         {
                             pnanovdb_compute_array_t* array =
-                                obj->nanovdb_array() ? obj->nanovdb_array() : obj->resources.converted_nanovdb;
+                                obj->nanovdb_array() ? obj->nanovdb_array() : obj->converted_nanovdb();
                             if (!array)
                             {
                                 return;

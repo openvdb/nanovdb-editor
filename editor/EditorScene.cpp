@@ -311,7 +311,7 @@ void EditorScene::load_view_into_editor_and_ui(SceneObject* scene_obj)
     {
         // NanoVDB rendering - use nanovdb_array or converted_nanovdb (Raster3D stores in both; fallback for robustness)
         pnanovdb_compute_array_t* array =
-            scene_obj->nanovdb_array() ? scene_obj->nanovdb_array() : scene_obj->resources.converted_nanovdb;
+            scene_obj->nanovdb_array() ? scene_obj->nanovdb_array() : scene_obj->converted_nanovdb();
         m_editor->impl->nanovdb_array = array;
         m_editor->impl->shader_params = obj_shader_params;
         m_editor->impl->shader_params_data_type = nullptr;
@@ -636,7 +636,7 @@ void EditorScene::sync_views_from_scene_manager()
             {
                 auto render_method = pipeline_get_render_method(obj->render_pipeline());
                 bool has_nanovdb = (obj->nanovdb_array() && obj->resources.nanovdb_array_owner) ||
-                                   (obj->resources.converted_nanovdb && obj->resources.converted_nanovdb_owner);
+                                   (obj->converted_nanovdb() && obj->resources.converted_nanovdb_owner);
                 if (render_method == pnanovdb_pipeline_render_method_nanovdb && has_nanovdb)
                 {
                     const auto& owner = obj->resources.nanovdb_array_owner ? obj->resources.nanovdb_array_owner :
@@ -953,7 +953,7 @@ void EditorScene::update_scene_tree_after_conversion(pnanovdb_editor_token_t* sc
                     Console::LogLevel::Warning,
                     "update_scene_tree: no nanovdb owner for '%s' (nanovdb_array=%p, converted=%p)",
                     name_token->str ? name_token->str : "?", (void*)obj->nanovdb_array(),
-                    (void*)obj->resources.converted_nanovdb);
+                    (void*)obj->converted_nanovdb());
                 return;
             }
 
@@ -1338,7 +1338,7 @@ bool EditorScene::is_selection_valid(const SceneSelection& selection) const
                     is_valid = true;
                 }
                 else if (obj->type == SceneObjectType::GaussianData &&
-                         (obj->nanovdb_array() != nullptr || obj->resources.converted_nanovdb != nullptr))
+                         (obj->nanovdb_array() != nullptr || obj->converted_nanovdb() != nullptr))
                 {
                     // Pipeline-converted Gaussian->NanoVDB stores result in converted_nanovdb
                     is_valid = true;
@@ -1888,8 +1888,7 @@ bool EditorScene::save_nanovdb_file(pnanovdb_editor_token_t* scene, pnanovdb_edi
                                     if (obj)
                                     {
                                         // Accept both native NanoVDB objects and GaussianData converted via Raster3D
-                                        array = obj->nanovdb_array() ? obj->nanovdb_array() :
-                                                                       obj->resources.converted_nanovdb;
+                                        array = obj->nanovdb_array() ? obj->nanovdb_array() : obj->converted_nanovdb();
                                     }
                                 });
 
