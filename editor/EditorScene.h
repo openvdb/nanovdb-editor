@@ -354,4 +354,17 @@ private:
     SceneShaderParams m_raster2d_params;
 };
 
+#if defined(_WIN32)
+#    define PNANOVDB_EDITOR_EXPORT_CXX __declspec(dllexport)
+#else
+#    define PNANOVDB_EDITOR_EXPORT_CXX __attribute__((visibility("default")))
+#endif
+
+PNANOVDB_EDITOR_EXPORT_CXX void snapshot_object_shader_params_readonly(EditorSceneManager& scene_manager,
+                                                                       pnanovdb_editor_token_t* scene_token,
+                                                                       pnanovdb_editor_token_t* name_token,
+                                                                       size_t raster2d_params_size,
+                                                                       size_t nanovdb_params_size,
+                                                                       void* shader_params_data);
+
 } // namespace pnanovdb_editor

@@ -10,6 +10,7 @@
 */
 
 #include "ShaderParams.h"
+#include "ParamWidget.h"
 
 #include "Console.h"
 
@@ -21,6 +22,19 @@
 
 namespace pnanovdb_editor
 {
+static nlohmann::ordered_json* getCompiledShaderParamsObject(nlohmann::ordered_json& json)
+{
+    if (json.contains(pnanovdb_shader::SHADER_PARAM_JSON))
+    {
+        return &json[pnanovdb_shader::SHADER_PARAM_JSON];
+    }
+    if (json.contains(pnanovdb_shader::GENERATED_SHADER_PARAM_JSON))
+    {
+        return &json[pnanovdb_shader::GENERATED_SHADER_PARAM_JSON];
+    }
+    return nullptr;
+}
+
 static std::optional<nlohmann::ordered_json> loadAndParseJsonFile(const std::string& relFilePath,
                                                                   bool is_group_file = false)
 {
@@ -108,10 +122,9 @@ void ShaderParams::create(const std::string& shader_name)
     {
         nlohmann::ordered_json shader_json;
         shader_json_file >> shader_json;
-        if (shader_json.contains("shaderParams"))
+        if (nlohmann::ordered_json* shader_params = getCompiledShaderParamsObject(shader_json))
         {
-            auto& shader_params = shader_json["shaderParams"];
-            for (auto& [key, value] : shader_params.items())
+            for (auto& [key, value] : shader_params->items())
             {
                 if (key.find("_pad") != std::string::npos)
                 {
@@ -193,7 +206,8 @@ bool ShaderParams::load(const std::string& shader_name, bool reload, bool load_g
         return false;
     }
     shader_json_file.close();
-    if (!shader_json.contains("shaderParams"))
+    nlohmann::ordered_json* shader_params = getCompiledShaderParamsObject(shader_json);
+    if (!shader_params)
     {
         // compiled shader has no parameters defined
         return false;
@@ -202,8 +216,7 @@ bool ShaderParams::load(const std::string& shader_name, bool reload, bool load_g
     // inserts and/or clears the existing map
     params_map_[shader_name].clear();
 
-    auto& shader_params = shader_json["shaderParams"];
-    for (auto& [key, value] : shader_params.items())
+    for (auto& [key, value] : shader_params->items())
     {
         if (key.find("_pad") != std::string::npos)
         {
@@ -582,7 +595,7 @@ bool ShaderParams::getAllocatedPoolArray(ShaderParam& shader_param)
         {
             if (value.is_boolean())
             {
-                ((bool*)getValue(shader_param))[0] = value.get<bool>();
+                ((pnanovdb_bool_t*)getValue(shader_param))[0] = value.get<bool>() ? PNANOVDB_TRUE : PNANOVDB_FALSE;
             }
         }
         else
@@ -603,50 +616,6 @@ bool ShaderParams::getAllocatedPoolArray(ShaderParam& shader_param)
     shader_param.pending_value = nlohmann::json();
 
     return true;
-}
-
-// Helpers to interpret non-bool typed memory as boolean and write back
-static bool getElementAsBool(ImGuiDataType type, const void* base_ptr, size_t elem_size, int index)
-{
-    const char* ptr = static_cast<const char*>(base_ptr) + static_cast<size_t>(index) * elem_size;
-    switch (type)
-    {
-    case ImGuiDataType_S32:
-        return *reinterpret_cast<const int32_t*>(ptr) != 0;
-    case ImGuiDataType_U32:
-        return *reinterpret_cast<const uint32_t*>(ptr) != 0u;
-    case ImGuiDataType_S64:
-        return *reinterpret_cast<const int64_t*>(ptr) != 0LL;
-    case ImGuiDataType_U64:
-        return *reinterpret_cast<const uint64_t*>(ptr) != 0ULL;
-    case ImGuiDataType_Float:
-    default:
-        return *reinterpret_cast<const float*>(ptr) != 0.0f;
-    }
-}
-
-static void setElementFromBool(ImGuiDataType type, void* base_ptr, size_t elem_size, int index, bool value)
-{
-    char* ptr = static_cast<char*>(base_ptr) + static_cast<size_t>(index) * elem_size;
-    switch (type)
-    {
-    case ImGuiDataType_S32:
-        *reinterpret_cast<int32_t*>(ptr) = value ? 1 : 0;
-        break;
-    case ImGuiDataType_U32:
-        *reinterpret_cast<uint32_t*>(ptr) = value ? 1u : 0u;
-        break;
-    case ImGuiDataType_S64:
-        *reinterpret_cast<int64_t*>(ptr) = value ? 1LL : 0LL;
-        break;
-    case ImGuiDataType_U64:
-        *reinterpret_cast<uint64_t*>(ptr) = value ? 1ULL : 0ULL;
-        break;
-    case ImGuiDataType_Float:
-    default:
-        *reinterpret_cast<float*>(ptr) = value ? 1.0f : 0.0f;
-        break;
-    }
 }
 
 static std::pair<ImGuiDataType, size_t> getScalarTypeAndSize(const std::string& type)
@@ -782,6 +751,7 @@ void ShaderParams::createBoolParam(const std::string& name, const nlohmann::json
     shader_param.num_elements = 1;
     shader_param.type = ImGuiDataType_Bool;
     shader_param.size = slang_sizeof_bool;
+    shader_param.is_native_bool = true;
 
     shader_param.resizeData(slang_sizeof_bool, 1);
 
@@ -875,69 +845,21 @@ void ShaderParams::renderParams(const std::string& shader_name, ShaderParam& sha
         return;
     }
 
-    const std::string label = shader_param.name + "##" + shader_name;
-
-    if ((ImGuiDataType)shader_param.type == ImGuiDataType_Bool)
-    {
-        ImGui::Checkbox(label.c_str(), (bool*)getValue(shader_param));
-    }
-    else
-    {
-        if (shader_param.num_elements == 16)
-        {
-            ImGui::Text("%s", label.c_str());
-            size_t num_rows = 4;
-            size_t num_cols = 4;
-            const char* names[] = { "x", "y", "z", "w" };
-            for (int i = 0; i < num_rows; i++)
-            {
-                void* row_ptr = (char*)getValue(shader_param) + i * num_cols * shader_param.size;
-                ImGui::DragScalarN(names[i], (ImGuiDataType)shader_param.type, row_ptr, num_cols, shader_param.step,
-                                   shader_param.getMin(), shader_param.getMax());
-            }
-        }
-        else
-        {
-            if (shader_param.is_bool)
-            {
-                if (shader_param.num_elements == 1)
-                {
-                    bool b =
-                        getElementAsBool((ImGuiDataType)shader_param.type, getValue(shader_param), shader_param.size, 0);
-                    if (ImGui::Checkbox(label.c_str(), &b))
-                    {
-                        setElementFromBool(
-                            (ImGuiDataType)shader_param.type, getValue(shader_param), shader_param.size, 0, b);
-                    }
-                }
-                else
-                {
-                    printf("Not implemented for num_elements > 1\n");
-                }
-            }
-            else if (shader_param.is_slider)
-            {
-                const ImGuiDataType dtype = (ImGuiDataType)shader_param.type;
-                const char* fmt = nullptr; // let ImGui pick correct integer format
-                if (dtype == ImGuiDataType_Float)
-                {
-                    ImGui::SliderFloat(label.c_str(), (float*)getValue(shader_param), *(float*)shader_param.getMin(),
-                                       *(float*)shader_param.getMax(), "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                }
-                else
-                {
-                    ImGui::SliderScalarN(label.c_str(), dtype, getValue(shader_param), shader_param.num_elements,
-                                         shader_param.getMin(), shader_param.getMax(), fmt, ImGuiSliderFlags_AlwaysClamp);
-                }
-            }
-            else
-            {
-                ImGui::DragScalarN(label.c_str(), (ImGuiDataType)shader_param.type, getValue(shader_param),
-                                   shader_param.num_elements, shader_param.step, shader_param.getMin(),
-                                   shader_param.getMax());
-            }
-        }
-    }
+    ParamWidgetSpec ui_spec;
+    ui_spec.display_name = shader_param.name;
+    ui_spec.label = shader_param.name + "##" + shader_name;
+    ui_spec.type = (ImGuiDataType)shader_param.type;
+    ui_spec.value = getValue(shader_param);
+    ui_spec.element_size = shader_param.size;
+    ui_spec.element_count = shader_param.num_elements;
+    ui_spec.min_value = shader_param.getMin();
+    ui_spec.max_value = shader_param.getMax();
+    ui_spec.step = shader_param.step;
+    ui_spec.is_slider = shader_param.is_slider;
+    ui_spec.is_bool = shader_param.is_bool;
+    ui_spec.is_hidden = shader_param.is_hidden;
+    ui_spec.is_native_bool = shader_param.is_native_bool;
+    renderParamWidget(ui_spec);
     // if (ImGui::IsItemHovered())
     // {
     //     ImGui::SetTooltip("%s", shader_name.c_str());

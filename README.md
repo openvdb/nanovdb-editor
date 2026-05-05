@@ -263,7 +263,9 @@ struct shader_params_t
 };
 ```
 
-Shader parameters can have defined default values in the JSON file:
+The editor uses one JSON schema for both shader-backed parameters and editor-only custom scene parameters. Shader-backed parameters live under the top-level key `ShaderParams`; custom scene parameters live under `SceneParams`. The two payloads have an identical field schema and are routed by their top-level key.
+
+Shader-backed parameters can define UI defaults and bounds in a JSON file:
 ```json
 {
     "ShaderParams": {
@@ -276,11 +278,52 @@ Shader parameters can have defined default values in the JSON file:
     }
 }
 ```
-Supported types: `bool`, `int`, `uint`, `int64`, `uint64`, `float` and its vectors and 4x4 matrix.
-Variables with `_pad` in the name are not shown in the UI.
-These parameters can be interactively changed with the generated UI in the editor's Params tab.
 
-To display a group of shader parameters from different shaders, define a JSON file with various shader paths:
+Editor-only custom scene parameters use the same field schema under the top-level `SceneParams` key, but each field must also declare `type` because there is no shader reflection to infer it:
+```json
+{
+    "SceneParams": {
+        "exposure_bias": {
+            "type": "float",
+            "value": 0.0,
+            "min": -4.0,
+            "max": 4.0,
+            "step": 0.1,
+            "useSlider": true
+        },
+        "debug_slice": {
+            "type": "bool",
+            "value": false
+        },
+        "language_query": {
+            "type": "string",
+            "length": 128,
+            "value": "a red chair"
+        }
+    }
+}
+```
+
+Formal schema (applies under either `ShaderParams` or `SceneParams`):
+- `ShaderParams` / `SceneParams`: object whose keys are field names mapped to field-definition objects. Under `ShaderParams` only, the value may instead be an array of shader paths to define a group file.
+- `value`: scalar or array initial value shown in the UI. For `type: "string"` it must be a JSON string.
+- `type`: required for custom scene params; ignored for shader-backed params because the type comes from shader reflection.
+- `elementCount`: optional explicit array length for custom scene params when `value` is omitted or when zero-initialized storage is desired. Not valid for `type: "string"` (use `length` instead).
+- `length`: required only for `type: "string"`; positive integer capacity of the `char[length]` buffer including the trailing `\0`. Capped at an editor-internal maximum.
+- `min`: optional scalar or array lower bound for numeric widgets. Not valid for `type: "string"`.
+- `max`: optional scalar or array upper bound for numeric widgets. Not valid for `type: "string"`.
+- `step`: optional numeric increment for drag widgets. Defaults to `0.01`. Ignored for `type: "string"`.
+- `useSlider`: optional boolean; renders a slider instead of a drag widget. Not valid for `type: "string"`.
+- `isBool`: optional boolean; renders numeric `0`/`1` storage as a checkbox. Not valid for `type: "string"`.
+- `hidden`: optional boolean; keeps the field mapped but hides it from the UI.
+
+Supported scalar types: `bool`, `int`, `int32`, `uint`, `uint32`, `int64`, `uint64`, `float`, `double`, `string`.
+Arrays are represented by using an array `value` or explicit `elementCount`; common reflected shader types such as float vectors and `float4x4` are exposed this way.
+`type: "string"` maps to a fixed-capacity `char[length]` in the reflected data type. The widget writes directly into the buffer on every keystroke, and `map_params` clients always observe the current widget contents. Clients that need to throttle per-string-change work (e.g. a text encoder) should debounce on their side.
+Variables with `_pad` in the name are not shown in the UI.
+Shader-backed parameters are shown in the object properties/shader parameter UI. Custom scene params are editor-only, loaded per scene through `set_custom_scene_params(editor, scene, json_token, error_buf, error_buf_size)` where `json_token->str` contains the JSON payload; on failure the function returns `PNANOVDB_FALSE` and writes a human-readable message into `error_buf`. Custom scene params are rendered in the dedicated `Params` window. They do not currently change object `map_shader_params` output.
+
+To display a group of shader parameters from different shaders, define a group JSON file with shader paths:
 ```json
 {
     "ShaderParams": [

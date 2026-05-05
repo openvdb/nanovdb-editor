@@ -25,14 +25,6 @@
 namespace pnanovdb_editor
 {
 
-uint64_t EditorSceneManager::make_key(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
-{
-    if (!scene || !name)
-        return 0;
-    // Combine the two IDs into a single key (simple hash)
-    return ((uint64_t)scene->id << 32) | (uint64_t)name->id;
-}
-
 pnanovdb_compute_array_t* EditorSceneManager::create_params_array(const pnanovdb_compute_t* compute,
                                                                   const pnanovdb_reflect_data_type_t* data_type,
                                                                   size_t fallback_size)
@@ -97,7 +89,7 @@ void EditorSceneManager::refresh_params_for_shader(const pnanovdb_compute_t* com
     std::lock_guard<std::mutex> lock(m_mutex);
     for (auto& [key, obj] : m_objects)
     {
-        if (obj.type == SceneObjectType::NanoVDB && tokens_equal(obj.params.shader_name.shader_name, shader_name_token))
+        if (obj.type == SceneObjectType::NanoVDB && tokens_equal(obj.shader_name(), shader_name_token))
         {
             // Destroy old params array owner first (if different)
             if (obj.params.shader_params_array_owner)
@@ -113,7 +105,7 @@ void EditorSceneManager::refresh_params_for_shader(const pnanovdb_compute_t* com
             }
 
             obj.params.shader_params_array = params_array;
-            obj.params.shader_params = params_array ? params_array->data : nullptr;
+            obj.shader_params() = params_array ? params_array->data : nullptr;
 
             if (params_array)
             {
@@ -192,18 +184,23 @@ void EditorSceneManager::add_nanovdb_impl(pnanovdb_editor_token_t* scene,
     obj.type = SceneObjectType::NanoVDB;
     obj.scene_token = scene;
     obj.name_token = name;
-    obj.resources.nanovdb_array = array;
+    obj.nanovdb_array() = array;
     obj.params.shader_params_array = params_array;
-    obj.params.shader_params = params_array ? params_array->data : nullptr;
-    obj.params.shader_params_data_type = nullptr;
-    obj.params.shader_name.shader_name = shader_name;
+    obj.shader_params() = params_array ? params_array->data : nullptr;
+    obj.shader_params_data_type() = nullptr;
+    if (!obj.params.shader_name_storage)
+    {
+        obj.params.shader_name_storage = std::make_shared<ShaderNameStorage>();
+    }
+    obj.params.shader_name_storage->object_key = key;
+    obj.shader_name() = shader_name;
 
     // Set pipelines (using provided values, not hardcoded defaults)
-    obj.pipeline.process().type = process_pipeline;
-    obj.pipeline.render().type = render_pipeline;
-    obj.pipeline.process().dirty = true;
-    pnanovdb_pipeline_get_default_params(obj.pipeline.process().type, &obj.pipeline.process().params);
-    pnanovdb_pipeline_get_default_params(obj.pipeline.render().type, &obj.pipeline.render().params);
+    obj.process_pipeline() = process_pipeline;
+    obj.render_pipeline() = render_pipeline;
+    obj.process_dirty() = true;
+    pnanovdb_pipeline_get_default_params(obj.process_pipeline(), &obj.process_params());
+    pnanovdb_pipeline_get_default_params(obj.render_pipeline(), &obj.render_params());
 
     if (object_exists)
     {
@@ -399,11 +396,16 @@ void EditorSceneManager::add_gaussian_data_impl(pnanovdb_editor_token_t* scene,
     obj.type = SceneObjectType::GaussianData;
     obj.scene_token = scene;
     obj.name_token = name;
-    obj.resources.gaussian_data = gaussian_data;
+    obj.gaussian_data() = gaussian_data;
     obj.params.shader_params_array = params_array;
-    obj.params.shader_params = params_array ? params_array->data : nullptr;
-    obj.params.shader_params_data_type = shader_params_data_type;
-    obj.params.shader_name.shader_name = EditorToken::getInstance().getToken(shader_name);
+    obj.shader_params() = params_array ? params_array->data : nullptr;
+    obj.shader_params_data_type() = shader_params_data_type;
+    if (!obj.params.shader_name_storage)
+    {
+        obj.params.shader_name_storage = std::make_shared<ShaderNameStorage>();
+    }
+    obj.params.shader_name_storage->object_key = key;
+    obj.shader_name() = EditorToken::getInstance().getToken(shader_name);
 
     // Register gaussian internal arrays as named arrays
     if (gaussian_data)
@@ -411,30 +413,30 @@ void EditorSceneManager::add_gaussian_data_impl(pnanovdb_editor_token_t* scene,
         auto* gd = pnanovdb_raster::cast(gaussian_data);
         if (gd)
         {
-            obj.resources.named_arrays.clear();
+            obj.named_arrays().clear();
             if (gd->means_cpu_array)
-                obj.resources.named_arrays["means"] = gd->means_cpu_array;
+                obj.named_arrays()["means"] = gd->means_cpu_array;
             if (gd->opacities_cpu_array)
-                obj.resources.named_arrays["opacities"] = gd->opacities_cpu_array;
+                obj.named_arrays()["opacities"] = gd->opacities_cpu_array;
             if (gd->quaternions_cpu_array)
-                obj.resources.named_arrays["quaternions"] = gd->quaternions_cpu_array;
+                obj.named_arrays()["quaternions"] = gd->quaternions_cpu_array;
             if (gd->scales_cpu_array)
-                obj.resources.named_arrays["scales"] = gd->scales_cpu_array;
+                obj.named_arrays()["scales"] = gd->scales_cpu_array;
             if (gd->sh_0_cpu_array)
-                obj.resources.named_arrays["sh_0"] = gd->sh_0_cpu_array;
+                obj.named_arrays()["sh_0"] = gd->sh_0_cpu_array;
             if (gd->sh_n_cpu_array)
-                obj.resources.named_arrays["sh_n"] = gd->sh_n_cpu_array;
+                obj.named_arrays()["sh_n"] = gd->sh_n_cpu_array;
             if (gd->colors_cpu_array)
-                obj.resources.named_arrays["colors"] = gd->colors_cpu_array;
+                obj.named_arrays()["colors"] = gd->colors_cpu_array;
         }
     }
 
     // Set pipelines (using provided values, not hardcoded defaults)
-    obj.pipeline.process().type = process_pipeline;
-    obj.pipeline.render().type = render_pipeline;
-    obj.pipeline.process().dirty = true;
-    pnanovdb_pipeline_get_default_params(obj.pipeline.process().type, &obj.pipeline.process().params);
-    pnanovdb_pipeline_get_default_params(obj.pipeline.render().type, &obj.pipeline.render().params);
+    obj.process_pipeline() = process_pipeline;
+    obj.render_pipeline() = render_pipeline;
+    obj.process_dirty() = true;
+    pnanovdb_pipeline_get_default_params(obj.process_pipeline(), &obj.process_params());
+    pnanovdb_pipeline_get_default_params(obj.render_pipeline(), &obj.render_params());
 
     if (object_exists)
         obj.visible = old_visible;
@@ -584,7 +586,7 @@ void EditorSceneManager::add_camera(pnanovdb_editor_token_t* scene,
         camera_copy->configs = nullptr;
     }
 
-    obj.resources.camera_view = camera_copy;
+    obj.camera_view() = camera_copy;
     obj.resources.camera_view_owner = std::shared_ptr<pnanovdb_camera_view_t>(camera_copy,
                                                                               [](pnanovdb_camera_view_t* ptr)
                                                                               {
@@ -613,7 +615,7 @@ void EditorSceneManager::register_camera(pnanovdb_editor_token_t* scene,
     obj.type = SceneObjectType::Camera;
     obj.scene_token = scene;
     obj.name_token = name;
-    obj.resources.camera_view = camera_view_owner.get();
+    obj.camera_view() = camera_view_owner.get();
     obj.resources.camera_view_owner = camera_view_owner; // Share ownership, no copy
 }
 
@@ -688,8 +690,16 @@ bool EditorSceneManager::rename_scene(pnanovdb_editor_token_t* old_scene, pnanov
         {
             node.key() = new_key;
             node.mapped().scene_token = new_scene;
+            node.mapped().shader_name_storage().object_key = new_key;
             m_objects.insert(std::move(node));
         }
+    }
+
+    auto scene_params = m_scene_custom_params.find(old_scene->id);
+    if (scene_params != m_scene_custom_params.end())
+    {
+        m_scene_custom_params[new_scene->id] = std::move(scene_params->second);
+        m_scene_custom_params.erase(scene_params);
     }
 
     return true;
@@ -725,6 +735,7 @@ void EditorSceneManager::clear()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_objects.clear();
+    m_scene_custom_params.clear();
 }
 
 void EditorSceneManager::set_params_array(pnanovdb_editor_token_t* scene,
@@ -754,7 +765,7 @@ void EditorSceneManager::set_params_array(pnanovdb_editor_token_t* scene,
     obj.params.shader_params_array_owner.reset();
 
     obj.params.shader_params_array = params_array;
-    obj.params.shader_params = params_array ? params_array->data : nullptr;
+    obj.shader_params() = params_array ? params_array->data : nullptr;
 
     if (compute && params_array)
     {
@@ -768,6 +779,45 @@ void EditorSceneManager::set_params_array(pnanovdb_editor_token_t* scene,
                 }
             });
     }
+}
+
+bool EditorSceneManager::set_custom_scene_params(pnanovdb_editor_token_t* scene,
+                                                 pnanovdb_editor_token_t* json,
+                                                 std::string* error_message)
+{
+    if (!scene || !json || !json->str || json->str[0] == '\0')
+    {
+        if (error_message)
+        {
+            *error_message = "scene and json token string are required";
+        }
+        return false;
+    }
+
+    auto custom_params = std::make_shared<CustomSceneParams>();
+    if (!custom_params->loadFromJsonString(json->str, "<custom scene params>", error_message))
+    {
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_scene_custom_params[scene->id] = std::move(custom_params);
+    return true;
+}
+
+std::shared_ptr<CustomSceneParams> EditorSceneManager::get_custom_scene_params(pnanovdb_editor_token_t* scene)
+{
+    if (!scene)
+    {
+        return nullptr;
+    }
+    std::lock_guard<std::mutex> lock(m_mutex);
+    auto it = m_scene_custom_params.find(scene->id);
+    if (it == m_scene_custom_params.end())
+    {
+        return nullptr;
+    }
+    return it->second;
 }
 
 } // namespace pnanovdb_editor

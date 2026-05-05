@@ -42,6 +42,7 @@ struct ShaderParam
     bool is_slider = false; // use slider in UI, for integers only
     bool is_bool = false; // use checkbox in UI, for integers only
     bool is_hidden = false; // do not show in UI
+    bool is_native_bool = false; // stored as pnanovdb_bool_t / uint32_t bool
     nlohmann::json pending_value; // store value to apply when pool array is allocated
 
     ShaderParam() : pool_index(SIZE_MAX), size(0), num_elements(0), step(0.0f)

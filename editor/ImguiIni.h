@@ -50,6 +50,12 @@ Size=1078,144
 Collapsed=0
 DockId=0x00000009,0
 
+[Window][Params]
+Pos=0,298
+Size=288,276
+Collapsed=0
+DockId=0x0000000D,2
+
 [Window][Scenes]
 Pos=0,21
 Size=288,275
@@ -62,7 +68,7 @@ Size=288,276
 Collapsed=0
 DockId=0x0000000D,1
 
-[Window][Params]
+[Window][Shader Params]
 Pos=0,298
 Size=288,276
 Collapsed=0
@@ -129,6 +135,7 @@ ShowShaderParams=0
 ShowBenchmark=0
 ShowFileHeader=0
 ShowScene=1
+ShowSceneParams=1
 ShowSceneProperties=1
 ShowAbout=0
 

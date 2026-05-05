@@ -26,6 +26,8 @@ set(NANOVDB_EDITOR_SLANG_PROFILE "spirv_1_3" CACHE STRING "Slang shader profile 
 
 project(NanoVDBEditor LANGUAGES CXX)
 
+enable_testing()
+
 ### Directory Setup
 
 set(SHADERS_DIR_NAME shaders)

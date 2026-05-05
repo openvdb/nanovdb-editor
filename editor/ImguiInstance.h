@@ -55,6 +55,7 @@ inline constexpr const char* SHADER_PARAMS = "Shader Params";
 inline constexpr const char* BENCHMARK = "Benchmark";
 inline constexpr const char* FILE_HEADER = "File Header";
 inline constexpr const char* SCENE = "Scenes";
+inline constexpr const char* SCENE_PARAMS = "Params";
 inline constexpr const char* PROPERTIES = "Properties";
 
 enum class ShaderSelectionMode : int
@@ -121,6 +122,7 @@ struct WindowState
     bool show_benchmark = false;
     bool show_file_header = false;
     bool show_scene = true;
+    bool show_scene_params = false;
     bool show_scene_properties = true;
     bool show_about = false;
 };

@@ -6,13 +6,14 @@
 #include <nanovdb_editor/putil/Reflect.h>
 
 #include <cstdarg>
-#include <thread>
 #include <chrono>
+#include <cstring>
+#include <thread>
 
 #define TEST_EDITOR
 // #define TEST_RASTER
-#define TEST_RASTER_2D
-#define TEST_CAMERA
+// #define TEST_RASTER_2D
+// #define TEST_CAMERA
 // #define TEST_NVDB
 #define TEST_IMAGE2D
 // #define TEST_FILE_FORMAT
@@ -44,6 +45,15 @@ void pnanovdb_compute_log_print(pnanovdb_compute_log_level_t level, const char* 
 
     va_end(args);
 }
+
+auto runEditorLoop = [](int iterations = 5)
+{
+    for (int i = 0; i < iterations; ++i)
+    {
+        printf("Editor running... (%d/%d)\n", i + 1, iterations);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+};
 
 void test_image_2d(pnanovdb_editor_t* editor,
                    pnanovdb_compute_t* compute,
@@ -85,6 +95,191 @@ void test_image_2d(pnanovdb_editor_t* editor,
     }
 
     printf("Image2d '%s' added to scene\n", image_name);
+}
+
+static const pnanovdb_reflect_data_t* find_field(const pnanovdb_reflect_data_type_t* data_type, const char* field_name)
+{
+    if (!data_type || !field_name)
+    {
+        return nullptr;
+    }
+
+    for (pnanovdb_uint64_t i = 0; i < data_type->child_reflect_data_count; ++i)
+    {
+        const pnanovdb_reflect_data_t* field = data_type->child_reflect_datas + i;
+        if (field->name && std::strcmp(field->name, field_name) == 0)
+        {
+            return field;
+        }
+    }
+    return nullptr;
+}
+
+template <typename T>
+static T read_field_value(const void* data, const pnanovdb_reflect_data_t* field)
+{
+    T value = {};
+    std::memcpy(&value, (const char*)data + field->data_offset, sizeof(T));
+    return value;
+}
+
+template <typename T>
+static void write_field_value(void* data, const pnanovdb_reflect_data_t* field, const T& value)
+{
+    std::memcpy((char*)data + field->data_offset, &value, sizeof(T));
+}
+
+void test_custom_scene_params_mapping_api(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene_token)
+{
+    if (!editor || !scene_token)
+    {
+        printf("Skipping custom scene params map/unmap test due to missing editor state\n");
+        return;
+    }
+
+    const char* json_string = R"json(
+{
+  "SceneParams": {
+    "test_number": {
+      "type": "float",
+      "value": 2.5,
+      "min": 0.0,
+      "max": 5.0,
+      "step": 0.25
+    },
+    "test_slider": {
+      "type": "float",
+      "value": 0.5,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "useSlider": true
+    },
+    "test_toggle": {
+      "type": "bool",
+      "value": true
+    },
+    "test_string": {
+      "type": "string",
+      "length": 128,
+      "value": "a red chair"
+    }
+  }
+}
+)json";
+
+    pnanovdb_editor_token_t* json_token = editor->get_token(json_string);
+    char error_buf[256] = {};
+    if (!editor->set_custom_scene_params(editor, scene_token, json_token, error_buf, sizeof(error_buf)))
+    {
+        printf("set_custom_scene_params failed for scene '%s': %s\n", scene_token->str, error_buf);
+        return;
+    }
+
+    const pnanovdb_reflect_data_type_t* data_type = editor->get_custom_scene_params_data_type(editor, scene_token);
+    if (!data_type)
+    {
+        printf("Failed to query scene custom params data type for scene '%s'\n", scene_token->str);
+        return;
+    }
+
+    const pnanovdb_reflect_data_t* number_field = find_field(data_type, "test_number");
+    const pnanovdb_reflect_data_t* slider_field = find_field(data_type, "test_slider");
+    const pnanovdb_reflect_data_t* toggle_field = find_field(data_type, "test_toggle");
+    const pnanovdb_reflect_data_t* query_field = find_field(data_type, "test_string");
+    if (!number_field || !slider_field || !toggle_field || !query_field)
+    {
+        printf("Failed to resolve expected custom scene params fields\n");
+        return;
+    }
+
+    // Buffer capacity matches the `"length": 128` declared in the JSON above.
+    constexpr size_t kQueryCapacity = 128;
+
+    auto pause_for_ui = [](const char* label, int seconds)
+    {
+        for (int i = 0; i < seconds; ++i)
+        {
+            printf("%s (%d/%d)\n", label, i + 1, seconds);
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+    };
+
+    // --- Window 1: read initial values, then unmap so the UI can render. -----
+    void* mapped = editor->map_params(editor, scene_token, nullptr, data_type);
+    if (!mapped)
+    {
+        printf("Failed to map scene custom params for scene '%s'\n", scene_token->str);
+        return;
+    }
+
+    float number_before = read_field_value<float>(mapped, number_field);
+    float slider_before = read_field_value<float>(mapped, slider_field);
+    pnanovdb_bool_t toggle_before = read_field_value<pnanovdb_bool_t>(mapped, toggle_field);
+    const char* query_before = reinterpret_cast<const char*>(mapped) + query_field->data_offset;
+    printf("Mapped scene params before update: number=%.2f slider=%.2f toggle=%d test_string=\"%s\"\n", number_before,
+           slider_before, toggle_before, query_before);
+    editor->unmap_params(editor, scene_token, nullptr);
+
+    // UI is now free to render the initial state.
+    pause_for_ui("Showing initial values in Params...", 5);
+
+    // --- Window 2: publish the new values and unmap so the UI can pick them up.
+    mapped = editor->map_params(editor, scene_token, nullptr, data_type);
+    if (!mapped)
+    {
+        printf("Failed to remap scene custom params for write\n");
+        return;
+    }
+
+    const float number_after = 3.25f;
+    const float slider_after = 0.75f;
+    const pnanovdb_bool_t toggle_after = PNANOVDB_FALSE;
+    const char* query_after = "a blue chair";
+    write_field_value(mapped, number_field, number_after);
+    write_field_value(mapped, slider_field, slider_after);
+    write_field_value(mapped, toggle_field, toggle_after);
+    char* query_buf = reinterpret_cast<char*>(mapped) + query_field->data_offset;
+    std::memset(query_buf, 0, kQueryCapacity);
+    std::strncpy(query_buf, query_after, kQueryCapacity - 1);
+    editor->unmap_params(editor, scene_token, nullptr);
+
+    // UI is now free to detect the external write and refresh its widgets.
+    pause_for_ui("Showing updated values in Params...", 5);
+
+    // --- Window 3: verify the published values survived the UI round-trip. ---
+    mapped = editor->map_params(editor, scene_token, nullptr, data_type);
+    if (!mapped)
+    {
+        printf("Failed to remap scene custom params for verification\n");
+        return;
+    }
+
+    float number_verified = read_field_value<float>(mapped, number_field);
+    float slider_verified = read_field_value<float>(mapped, slider_field);
+    pnanovdb_bool_t toggle_verified = read_field_value<pnanovdb_bool_t>(mapped, toggle_field);
+    const char* query_verified = reinterpret_cast<const char*>(mapped) + query_field->data_offset;
+    printf("Mapped scene params after update:  number=%.2f slider=%.2f toggle=%d test_string=\"%s\"\n", number_verified,
+           slider_verified, toggle_verified, query_verified);
+    editor->unmap_params(editor, scene_token, nullptr);
+
+    pause_for_ui("Edit Params widgets now; readback follows...", 10);
+
+    // --- Window 4: read whatever the user just edited and print it. ----------
+    mapped = editor->map_params(editor, scene_token, nullptr, data_type);
+    if (!mapped)
+    {
+        printf("Failed to remap scene custom params for UI readback\n");
+        return;
+    }
+
+    float number_user = read_field_value<float>(mapped, number_field);
+    float slider_user = read_field_value<float>(mapped, slider_field);
+    pnanovdb_bool_t toggle_user = read_field_value<pnanovdb_bool_t>(mapped, toggle_field);
+    const char* query_user = reinterpret_cast<const char*>(mapped) + query_field->data_offset;
+    printf("Mapped scene params after UI edit: number=%.2f slider=%.2f toggle=%d test_string=\"%s\"\n", number_user,
+           slider_user, toggle_user, query_user);
+    editor->unmap_params(editor, scene_token, nullptr);
 }
 
 int main(int argc, char* argv[])
@@ -187,15 +382,6 @@ int main(int argc, char* argv[])
     pnanovdb_int32_t port = editor.get_resolved_port(&editor, PNANOVDB_TRUE);
     printf("Editor starting on port: %d\n", port);
 
-    auto runEditorLoop = [](int iterations = 5)
-    {
-        for (int i = 0; i < iterations; ++i)
-        {
-            printf("Editor running... (%d/%d)\n", i + 1, iterations);
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-        }
-    };
-
     runEditorLoop(2);
 
 #    ifdef TEST_CAMERA
@@ -284,6 +470,8 @@ int main(int argc, char* argv[])
 #    ifdef TEST_IMAGE2D
     test_image_2d(&editor, &compute, scene_main, "image2d");
 #    endif
+
+    test_custom_scene_params_mapping_api(&editor, scene_main);
 
 #    ifdef TEST_RASTER_2D
     printf("\n=== Adding Gaussian Data to Multiple Scenes ===\n");

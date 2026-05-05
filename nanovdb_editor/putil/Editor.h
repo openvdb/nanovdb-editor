@@ -244,6 +244,7 @@ typedef struct pnanovdb_editor_t
     void(PNANOVDB_ABI* remove)(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
 
     // For any scene object, client can attempt to map parameters of a given type for read/write
+    // Pass name=nullptr to map scene-level custom params using get_custom_scene_params_data_type()
     // It is the server's job to deal with binary layout compatbility, converting to client layout as needed
     void*(PNANOVDB_ABI* map_params)(pnanovdb_editor_t* editor,
                                     pnanovdb_editor_token_t* scene,
@@ -314,6 +315,17 @@ typedef struct pnanovdb_editor_t
                                               pnanovdb_editor_token_t* scene,
                                               pnanovdb_editor_token_t* name,
                                               pnanovdb_pipeline_stage_t stage);
+
+    // Load scene-level UI params from a JSON payload carried in `json->str`.
+    // Returns PNANOVDB_TRUE on success; on failure writes a null-terminated error
+    // into error_buf (pass NULL / 0 to ignore).
+    pnanovdb_bool_t(PNANOVDB_ABI* set_custom_scene_params)(pnanovdb_editor_t* editor,
+                                                           pnanovdb_editor_token_t* scene,
+                                                           pnanovdb_editor_token_t* json,
+                                                           char* error_buf,
+                                                           pnanovdb_uint64_t error_buf_size);
+    const pnanovdb_reflect_data_type_t*(PNANOVDB_ABI* get_custom_scene_params_data_type)(pnanovdb_editor_t* editor,
+                                                                                         pnanovdb_editor_token_t* scene);
 } pnanovdb_editor_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_editor_t
@@ -356,6 +368,8 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(add_named_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_named_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(map_pipeline_params, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(unmap_pipeline_params, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(set_custom_scene_params, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(get_custom_scene_params_data_type, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE

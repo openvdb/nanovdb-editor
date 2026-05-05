@@ -150,6 +150,54 @@ void test_raster_2d(pnanovdb_editor_t* editor,
     }
 }
 
+void test_custom_scene_params_api(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene_token)
+{
+    if (!editor || !scene_token)
+    {
+        printf("Skipping custom scene params API test due to missing editor state\n");
+        return;
+    }
+
+    const char* json_string = R"json({
+  "SceneParams": {
+    "test_number": {
+      "type": "float",
+      "value": 2.5,
+      "min": 0.0,
+      "max": 5.0,
+      "step": 0.25
+    },
+    "test_slider": {
+      "type": "float",
+      "value": 0.5,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "useSlider": true
+    },
+    "test_toggle": {
+      "type": "bool",
+      "value": true
+    },
+    "test_string": {
+      "type": "string",
+      "length": 128,
+      "value": "a red chair"
+    }
+  }
+})json";
+
+    pnanovdb_editor_token_t* json_token = editor->get_token(json_string);
+    char error_buf[256] = {};
+    if (!editor->set_custom_scene_params(editor, scene_token, json_token, error_buf, sizeof(error_buf)))
+    {
+        printf("set_custom_scene_params failed for scene '%s': %s\n", scene_token->str, error_buf);
+        return;
+    }
+
+    printf("Applied custom scene params JSON token to scene '%s' via set_custom_scene_params()\n", scene_token->str);
+}
+
 void test_image_2d(pnanovdb_editor_t* editor,
                    pnanovdb_compute_t* compute,
                    pnanovdb_editor_token_t* scene_token,
@@ -189,6 +237,8 @@ void test_image_2d(pnanovdb_editor_t* editor,
     }
 
     printf("Image2d '%s' added to scene\n", image_name);
+
+    test_custom_scene_params_api(editor, scene_token);
 }
 
 int main(int argc, char* argv[])
