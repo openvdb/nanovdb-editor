@@ -423,7 +423,6 @@ public:
     {
         if (!scene || !name)
             return 0;
-        // Combine the two IDs into a single key (simple hash)
         return ((uint64_t)scene->id << 32) | (uint64_t)name->id;
     }
 

@@ -42,22 +42,18 @@ struct ParamMapKey
     }
 };
 
-// Per-thread record for a successful map_params(): the key identifies which
-// registry entry to release on the matching unmap_params(), and
-// locked_worker_mutex says whether this call also took
-// editor_worker->shader_params_mutex (so unmap knows whether to unlock).
+// Per-thread record of a successful map_params(), consumed by unmap_params().
+// locked_worker_mutex tells unmap whether it must also release the worker mutex.
 struct ParamMapFrame
 {
     ParamMapKey key;
     bool locked_worker_mutex;
 };
 
-// Lifecycle: created/destroyed by editor init() / shutdown(); stored on
-// pnanovdb_editor_impl_t::param_map_registry.
+// Owned by pnanovdb_editor_impl_t::param_map_registry; created/destroyed by editor init()/shutdown().
 ParamMapRegistry* create_param_map_registry();
 void destroy_param_map_registry(ParamMapRegistry* registry);
 
-// through editor->impl->param_map_registry.
 void* begin_custom_scene_params_map(pnanovdb_editor_t* editor,
                                     pnanovdb_editor_token_t* scene,
                                     const pnanovdb_reflect_data_type_t* data_type,

@@ -316,9 +316,9 @@ typedef struct pnanovdb_editor_t
                                               pnanovdb_editor_token_t* name,
                                               pnanovdb_pipeline_stage_t stage);
 
-    // Load editor-only UI parameters for an existing scene from a token whose string is the JSON payload.
-    // Returns PNANOVDB_TRUE on success. On failure, writes a human-readable, null-terminated error
-    // string into a client-owned buffer (if provided). Pass error_buf=NULL, error_buf_size=0 to ignore.
+    // Load scene-level UI params from a JSON payload carried in `json->str`.
+    // Returns PNANOVDB_TRUE on success; on failure writes a null-terminated error
+    // into error_buf (pass NULL / 0 to ignore).
     pnanovdb_bool_t(PNANOVDB_ABI* set_custom_scene_params)(pnanovdb_editor_t* editor,
                                                            pnanovdb_editor_token_t* scene,
                                                            pnanovdb_editor_token_t* json,

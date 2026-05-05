@@ -31,9 +31,7 @@ protected:
     pnanovdb_compute_array_t* array_a = nullptr;
     pnanovdb_compute_array_t* array_b = nullptr;
 
-    // Buffers owned by the test that stand in for real shader_params storage. The
-    // debug_set_object_shader_params hook points each object at its own buffer, so
-    // A and B have distinct bytes that a correct snapshot must preserve.
+    // Per-object shader_params backing buffers with distinct bytes.
     static constexpr size_t kParamsSize = 32;
     std::array<uint8_t, kParamsSize> params_a{};
     std::array<uint8_t, kParamsSize> params_b{};
@@ -64,7 +62,6 @@ protected:
         editor.add_nanovdb_2(&editor, scene_token, name_a, array_a);
         editor.add_nanovdb_2(&editor, scene_token, name_b, array_b);
 
-        // Populate distinct, easily-distinguishable bytes into each buffer.
         for (size_t i = 0; i < kParamsSize; ++i)
         {
             params_a[i] = static_cast<uint8_t>(0xA0 | (i & 0x0F));
@@ -104,9 +101,7 @@ protected:
 
 } // namespace
 
-// The snapshot must return each object's own bytes, not a shared cache value.
-// Pre-fix (SyncDirection::UiToView), both snapshots would have returned bytes
-// tied to whichever object the UI had most recently selected/synced.
+// Snapshot must return each object's own bytes, not a shared UI cache.
 TEST_F(ShaderParamsReadOnlyTest, SnapshotReturnsPerObjectBytes)
 {
     std::array<uint8_t, kParamsSize> out{};
@@ -123,10 +118,7 @@ TEST_F(ShaderParamsReadOnlyTest, SnapshotReturnsPerObjectBytes)
         << "Object B snapshot did not match B's own shader_params";
 }
 
-// Snapshots must not mutate the source buffer. Pre-fix, the UI-to-view sync
-// would have written shared-cache bytes into obj->params.shader_params, so
-// repeated snapshots of A interleaved with a snapshot of B would have
-// progressively corrupted A's buffer.
+// Snapshot must not mutate the object's shader_params buffer.
 TEST_F(ShaderParamsReadOnlyTest, SnapshotDoesNotMutateSource)
 {
     const std::array<uint8_t, kParamsSize> baseline_a = params_a;
@@ -145,9 +137,7 @@ TEST_F(ShaderParamsReadOnlyTest, SnapshotDoesNotMutateSource)
     EXPECT_EQ(std::memcmp(params_b.data(), baseline_b.data(), kParamsSize), 0) << "Snapshot mutated B's source buffer";
 }
 
-// The shader_params pointer itself must not be swapped out by a snapshot call.
-// This guards against a future regression where the read path "helpfully"
-// reassigns obj->params.shader_params (e.g. to a shared UI buffer).
+// Snapshot must not reassign obj->params.shader_params (e.g. to a shared UI buffer).
 TEST_F(ShaderParamsReadOnlyTest, SnapshotPreservesObjectBufferPointer)
 {
     void* ptr_before_a = pnanovdb_editor_test::get_object_shader_params_ptr(&editor, scene_token, name_a);
@@ -166,16 +156,12 @@ TEST_F(ShaderParamsReadOnlyTest, SnapshotPreservesObjectBufferPointer)
     EXPECT_EQ(pnanovdb_editor_test::get_object_shader_params_ptr(&editor, scene_token, name_b), ptr_before_b);
 }
 
-// End-to-end behaviour through the public map_params() API: writing per-object
-// bytes via map_params(A) must stay in A's buffer and must not leak into B's.
-// This composes the fix for Bug 3 with the map/unmap path and would have
-// failed pre-fix because a subsequent render-loop snapshot of B would have
-// written UI-cached values back into B.
+// Writes via map_params(A) stay in A's buffer and do not leak into B's.
 TEST_F(ShaderParamsReadOnlyTest, MapParamsWritesAreIsolatedPerObject)
 {
     const pnanovdb_reflect_data_type_t* stub_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_token_t);
 
-    // Write distinctive patterns through map_params.
+    // Write a distinct pattern into each object.
     void* ptr_a = editor.map_params(&editor, scene_token, name_a, stub_type);
     ASSERT_EQ(ptr_a, static_cast<void*>(params_a.data()));
     std::memset(ptr_a, 0x11, kParamsSize);
@@ -186,7 +172,7 @@ TEST_F(ShaderParamsReadOnlyTest, MapParamsWritesAreIsolatedPerObject)
     std::memset(ptr_b, 0x22, kParamsSize);
     editor.unmap_params(&editor, scene_token, name_b);
 
-    // Snapshot each object; each must read back its own pattern.
+    // Each snapshot must read back its own pattern.
     std::array<uint8_t, kParamsSize> out{};
     std::array<uint8_t, kParamsSize> expected_a{};
     std::array<uint8_t, kParamsSize> expected_b{};
@@ -200,7 +186,7 @@ TEST_F(ShaderParamsReadOnlyTest, MapParamsWritesAreIsolatedPerObject)
     pnanovdb_editor_test::snapshot_object_shader_params(&editor, scene_token, name_b, out.data(), out.size());
     EXPECT_EQ(std::memcmp(out.data(), expected_b.data(), out.size()), 0);
 
-    // Snapshot A again; it must still carry A's pattern, not B's.
+    // Re-reading A must still return A's pattern, not B's.
     pnanovdb_editor_test::snapshot_object_shader_params(&editor, scene_token, name_a, out.data(), out.size());
     EXPECT_EQ(std::memcmp(out.data(), expected_a.data(), out.size()), 0)
         << "Regression: A's shader_params overwritten by shared UI-cached state";

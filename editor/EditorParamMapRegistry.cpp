@@ -22,50 +22,35 @@ namespace pnanovdb_editor
 namespace
 {
 
-// Per-kind state carries whatever the registry must keep alive AND any existing
-// synchronization on the held object that must remain held for the map window.
-//
-//  ShaderParamsState:
-//      Captures shader_params_array_owner so the buffer survives a SceneObject
-//      remove/replace. The pointer the caller writes through is obj->shader_params(),
-//      which lives inside the array's data buffer. For objects whose buffer was
-//      installed without a shared_ptr owner (test stubs, externally-owned buffers)
-//      array_owner is null and the entry is a frame marker only.
-//
-//  ShaderNameState:
-//      Tiny POD storage; no internal mutex (no concurrent UI reader exists for
-//      shader-name dispatch — render reads it under the worker mutex).
-//
-//  CustomSceneParamsState:
-//      Holds the params shared_ptr AND a unique_lock over the params' own
-//      data_mutex, because CustomSceneParams::render() reads m_data from the UI
-//      thread, which is not gated by the worker mutex.
+// Keeps the shader params buffer alive while the map is open.
+// Null owner means the buffer is externally owned (e.g. test stubs).
 struct ShaderParamsState
 {
     std::shared_ptr<pnanovdb_compute_array_t> array_owner;
 };
 
+// Keeps the shader name storage alive while the map is open.
 struct ShaderNameState
 {
     std::shared_ptr<ShaderNameStorage> storage;
 };
 
+// Keeps the params alive and holds its data_mutex for the whole map window,
+// since CustomSceneParams::render() reads the data from the UI thread.
 struct CustomSceneParamsState
 {
     std::shared_ptr<CustomSceneParams> params;
     std::unique_lock<std::mutex> data_lock;
 };
 
-// monostate is the default-constructed state on first acquire, before
-// init_if_first replaces it with the appropriate alternative.
+// monostate is the default on first acquire, before init_if_first replaces it
 using ParamMapState = std::variant<std::monostate, ShaderParamsState, ShaderNameState, CustomSceneParamsState>;
 
 } // namespace
 
-// Per-editor instance. Owns the refcounted entry table and provides per-thread
-// LIFO of in-flight frames. The thread storage is stored in a function-local
-// thread_local map keyed by `this`, so each registry sees only its own frames
-// even when several editors run on the same thread.
+// Per-editor: refcounted entry table + per-thread LIFO of in-flight frames.
+// Frame storage is thread_local and keyed by `this` so registries on the same
+// thread do not see each other's frames.
 class ParamMapRegistry
 {
 public:
@@ -138,9 +123,7 @@ private:
     mutable std::mutex m_mutex;
     std::map<ParamMapKey, Entry> m_entries;
 
-    // Per-thread, per-instance LIFO. The map itself is thread_local (lives in
-    // each thread's storage) and indexed by `this`, so different registry
-    // instances never see each other's frames on the same thread.
+    // thread_local map keyed by `this`: per-thread, per-instance frame stack
     static std::unordered_map<const ParamMapRegistry*, std::vector<ParamMapFrame>>& thread_stack_map()
     {
         thread_local std::unordered_map<const ParamMapRegistry*, std::vector<ParamMapFrame>> stacks;
@@ -156,8 +139,6 @@ private:
 namespace
 {
 
-// Resolves the registry handle from the editor; returns nullptr if the editor
-// is not initialised. Callers must defend against the nullptr.
 ParamMapRegistry* registry_for(pnanovdb_editor_t* editor)
 {
     return (editor && editor->impl) ? editor->impl->param_map_registry : nullptr;

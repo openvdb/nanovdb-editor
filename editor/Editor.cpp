@@ -1788,8 +1788,7 @@ void* map_params(pnanovdb_editor_t* editor,
     const bool has_worker = editor->impl->editor_worker != nullptr;
     if (has_worker)
     {
-        // Worker mode: lock for the whole map/unmap window so concurrent writers do not
-        // clobber each other. The lock is released by the paired unmap_params().
+        // Held across the map/unmap window; released by the paired unmap_params()
         editor->impl->editor_worker->shader_params_mutex.lock();
 
         const char* type_name = data_type->struct_typename ? data_type->struct_typename : "<unknown>";
@@ -1836,7 +1835,7 @@ void* map_params(pnanovdb_editor_t* editor,
         return nullptr;
     }
 
-    // Record the entry's key so the paired unmap releases exactly what this map acquired.
+    // Remember what to release on the matching unmap_params()
     param_map_stack_push(editor, { key, has_worker });
     return result;
 }

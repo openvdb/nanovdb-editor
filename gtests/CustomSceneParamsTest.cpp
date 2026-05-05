@@ -145,7 +145,7 @@ TEST(NanoVDBEditor, CustomSceneParamsLoadsStringField)
     EXPECT_STREQ(desc.element_typenames[1], "char[32]");
     EXPECT_STREQ(desc.element_typenames[2], "char[256]");
 
-    // scale is float at offset 0, prompt (char[32]) starts right after at offset 4
+    // Layout: float scale @ 0, char[32] prompt @ 4, char[256] default_prompt @ 36.
     ASSERT_EQ(desc.element_offsets[0], 0u);
     ASSERT_EQ(desc.element_offsets[1], 4u);
     ASSERT_EQ(desc.element_offsets[2], 4u + 32u);
@@ -155,12 +155,11 @@ TEST(NanoVDBEditor, CustomSceneParamsLoadsStringField)
     EXPECT_STREQ(prompt, "a red chair");
     EXPECT_EQ(std::strlen(prompt), std::strlen("a red chair"));
 
-    // default_prompt has no initial value so the buffer is zero-initialised; first byte is
-    // the null terminator and reading it as a C string yields an empty string.
+    // default_prompt has no initial value -> zero-initialised -> empty C string.
     const char* default_prompt = raw + desc.element_offsets[2];
     EXPECT_EQ(default_prompt[0], '\0');
 
-    // Verify the reflected data type exposes char[32] via the cached child reflect datas.
+    // Reflected data type should expose char[32] for `prompt`.
     const pnanovdb_reflect_data_type_t* dt = params.dataType();
     ASSERT_NE(dt, nullptr);
     ASSERT_EQ(dt->child_reflect_data_count, 3u);
