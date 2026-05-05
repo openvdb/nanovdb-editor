@@ -65,70 +65,29 @@ bool intersect_box(float3 rayDir, float3 rayDirInv, float3 boxMin, float3 boxMax
     return tfar > tnear;
 }
 
-float2 intersect_sphere(float3 rayOrigin, float3 rayDir)
-{
-    float b = dot(rayOrigin, rayDir);
-    float c = dot(rayOrigin, rayOrigin) - 1.f;
-    float h = b * b - c;
-    if (h < 0.f)
-    {
-        return float2(-1.f, -1.f);
-    }
-    h = sqrt(h);
-    return float2(-b - h, -b + h);
-}
-
 // based on: https://iquilezles.org/articles/intersectors/
-float4 intersect_rounded_cone(float3 ro, float3 rd, float3 pa, float3 pb, float ra, float rb)
+float3 intersect_triangle( in float3 ro, in float3 rd, in float3 v0, in float3 v1, in float3 v2 )
 {
-    float3  ba = pb - pa;
-    float3  oa = ro - pa;
-    float3  ob = ro - pb;
-    float rr = ra - rb;
-    float m0 = dot(ba,ba);
-    float m1 = dot(ba,oa);
-    float m2 = dot(ba,rd);
-    float m3 = dot(rd,oa);
-    float m5 = dot(oa,oa);
-    float m6 = dot(ob,rd);
-    float m7 = dot(ob,ob);
-
-    // body
-    float d2 = m0-rr*rr;
-    float k2 = d2    - m2*m2;
-    float k1 = d2*m3 - m1*m2 + m2*rr*ra;
-    float k0 = d2*m5 - m1*m1 + m1*rr*ra*2.0 - m0*ra*ra;
-    float h = k1*k1 - k0*k2;
-    if( h<0.0) return float4(-1.0);
-    float t = (-sqrt(h)-k1)/k2;
-    //if( t<0.0 ) return float4(-1.0);
-    float y = m1 - ra*rr + t*m2;
-    if( y>0.0 && y<d2 ) return float4(t, normalize(d2*(oa+t*rd)-ba*y));
-
-    // caps
-    float h1 = m3*m3 - m5 + ra*ra;
-    float h2 = m6*m6 - m7 + rb*rb;
-    if( max(h1,h2)<0.0 ) return float4(-1.0);
-    float4 r = float4(1e20);
-    if( h1>0.0 )
-    {
-        t = -m3 - sqrt( h1 );
-        r = float4( t, (oa+t*rd)/ra );
-    }
-    if( h2>0.0 )
-    {
-        t = -m6 - sqrt( h2 );
-        if( t<r.x )
-        r = float4( t, (ob+t*rd)/rb );
-    }
-    return r;
+    float3 v1v0 = v1 - v0;
+    float3 v2v0 = v2 - v0;
+    float3 rov0 = ro - v0;
+    float3  n = cross_product( v1v0, v2v0 );
+    float3  q = cross_product( rov0, rd );
+    float d = 1.0f/dot( rd, n );
+    float u = d*dot( -q, v2v0 );
+    float v = d*dot(  q, v1v0 );
+    float t = d*dot( -n, rov0 );
+    if( u<0.0f || v<0.0f || (u+v)>1.0f ) t = -1.0f;
+    return float3( t, u, v );
 }
 
-void intersect_line(
+void intersect_triangle(
     float3 pos_a,
     float3 pos_b,
+    float3 pos_c,
     float3 color_a,
     float3 color_b,
+    float3 color_c,
     float3 rayOrigin,
     float tmin,
     float3 rayDir,
@@ -137,7 +96,7 @@ void intersect_line(
     inout float4 sum,
     inout float nominalT)
 {
-    float4 t_isect = intersect_rounded_cone(rayOrigin, rayDir, pos_a, pos_b, shader_params.line_radius, shader_params.line_radius);
+    float3 t_isect = intersect_triangle(rayOrigin, rayDir, pos_a, pos_b, pos_c);
 
     float alpha = 0.f;
     float3 color = {};
@@ -146,7 +105,7 @@ void intersect_line(
     {
         alpha = 1.f;
         t = t_isect.x;
-        color = color_a;
+        color = (1.f - t_isect.y - t_isect.z) * color_a + t_isect.y * color_b + t_isect.z * color_c;
     }
     if (t > 0.f && t >= tmin && t < tmax)
     {
@@ -348,8 +307,10 @@ struct prim_t
     float3 pos_a;
     uint id;
     float3 pos_b;
+    float3 pos_c;
     float3 color_a;
     float3 color_b;
+    float3 color_c;
 };
 groupshared prim_t s_prims[128u];
 
@@ -532,24 +493,25 @@ void ray_march_nanovdb(uint thread_idx,
                     uint prim_id = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, list_idx));
 
                     pnanovdb_address_t index_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
-                    pnanovdb_uint64_t id_raw = pnanovdb_read_uint64(buf, pnanovdb_address_offset_product(index_addr, 8u, prim_id));
+                    pnanovdb_uint32_t id_a = pnanovdb_read_uint32(buf, pnanovdb_address_offset(index_addr, 12u * prim_id + 0u));
+                    pnanovdb_uint32_t id_b = pnanovdb_read_uint32(buf, pnanovdb_address_offset(index_addr, 12u * prim_id + 4u));
+                    pnanovdb_uint32_t id_c = pnanovdb_read_uint32(buf, pnanovdb_address_offset(index_addr, 12u * prim_id + 8u));
 
                     pnanovdb_address_t pos_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 3u);
-                    pnanovdb_uint32_t id_a = pnanovdb_uint32_t(id_raw);
-                    pnanovdb_uint32_t id_b = pnanovdb_uint32_t(id_raw >> 32u);
-
                     float3 pos_a = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(pos_addr, 12u, id_a));
                     float3 pos_b = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(pos_addr, 12u, id_b));
+                    float3 pos_c = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(pos_addr, 12u, id_c));
 
                     // see if mean falls within cull range
                     float cull_t_a = dot(pos_a, worldRayDirCenter);
                     float cull_t_b = dot(pos_b, worldRayDirCenter);
+                    float cull_t_c = dot(pos_c, worldRayDirCenter);
 
                     prim_key = prim_id;
 
                     bool should_cull_t =
-                        (cull_t_a < s_cull_range[s_min_hdda_idx].x && cull_t_b < s_cull_range[s_min_hdda_idx].x) ||
-                        (cull_t_a > s_cull_range[s_min_hdda_idx].y && cull_t_b > s_cull_range[s_min_hdda_idx].y);
+                        (cull_t_a < s_cull_range[s_min_hdda_idx].x && cull_t_b < s_cull_range[s_min_hdda_idx].x && cull_t_c < s_cull_range[s_min_hdda_idx].x) ||
+                        (cull_t_a > s_cull_range[s_min_hdda_idx].y && cull_t_b > s_cull_range[s_min_hdda_idx].y && cull_t_c > s_cull_range[s_min_hdda_idx].y);
                     if (should_cull_t)
                     {
                         //prim_key = ~0u;
@@ -602,22 +564,26 @@ void ray_march_nanovdb(uint thread_idx,
                     s_prims[thread_idx].id = prim_id;
 
                     pnanovdb_address_t index_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
-                    pnanovdb_uint64_t id_raw = pnanovdb_read_uint64(buf, pnanovdb_address_offset_product(index_addr, 8u, prim_id));
+                    pnanovdb_uint32_t id_a = pnanovdb_read_uint32(buf, pnanovdb_address_offset(index_addr, 12u * prim_id + 0u));
+                    pnanovdb_uint32_t id_b = pnanovdb_read_uint32(buf, pnanovdb_address_offset(index_addr, 12u * prim_id + 4u));
+                    pnanovdb_uint32_t id_c = pnanovdb_read_uint32(buf, pnanovdb_address_offset(index_addr, 12u * prim_id + 8u));
 
                     pnanovdb_address_t pos_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 3u);
-                    pnanovdb_address_t color_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 4u);
-                    pnanovdb_uint32_t id_a = pnanovdb_uint32_t(id_raw);
-                    pnanovdb_uint32_t id_b = pnanovdb_uint32_t(id_raw >> 32u);
-
                     float3 pos_a = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(pos_addr, 12u, id_a));
                     float3 pos_b = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(pos_addr, 12u, id_b));
+                    float3 pos_c = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(pos_addr, 12u, id_c));
+
+                    pnanovdb_address_t color_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 4u);
                     float3 color_a = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(color_addr, 12u, id_a));
                     float3 color_b = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(color_addr, 12u, id_b));
+                    float3 color_c = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(color_addr, 12u, id_c));
 
                     s_prims[thread_idx].pos_a = pos_a;
                     s_prims[thread_idx].pos_b = pos_b;
+                    s_prims[thread_idx].pos_c = pos_c;
                     s_prims[thread_idx].color_a = color_a;
                     s_prims[thread_idx].color_b = color_b;
+                    s_prims[thread_idx].color_c = color_c;
                 }
 
                 GroupMemoryBarrierWithGroupSync();
@@ -635,11 +601,13 @@ void ray_march_nanovdb(uint thread_idx,
                     {
                         if (s_prims[s_idx].id != ~0u)
                         {
-                            intersect_line(
+                            intersect_triangle(
                                 s_prims[s_idx].pos_a,
                                 s_prims[s_idx].pos_b,
+                                s_prims[s_idx].pos_c,
                                 s_prims[s_idx].color_a,
                                 s_prims[s_idx].color_b,
+                                s_prims[s_idx].color_c,
                                 worldRayOrigin,
                                 hdda.tmin * rayDirMagnInv,
                                 worldRayDir,

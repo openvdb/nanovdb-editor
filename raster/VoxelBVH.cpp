@@ -57,6 +57,9 @@ enum shader
     voxelbvh_nanovdb_set_mask_ijkl_slang,
     voxelbvh_nanovdb_set_value_ijkl_slang,
     voxelbvh_scatter_range_headers_slang,
+    voxelbvh_triangles_bbox_reduce1_slang,
+    voxelbvh_triangles_bbox_reduce2_slang,
+    voxelbvh_triangles_to_ijkl_slang,
 
     shader_count
 };
@@ -93,6 +96,10 @@ static const char* s_shader_names[shader_count] = {
     "raster/voxelbvh/voxelbvh_nanovdb_set_mask_ijkl.slang",
     "raster/voxelbvh/voxelbvh_nanovdb_set_value_ijkl.slang",
     "raster/voxelbvh/voxelbvh_scatter_range_headers.slang",
+
+    "raster/voxelbvh/voxelbvh_triangles_bbox_reduce1.slang",
+    "raster/voxelbvh/voxelbvh_triangles_bbox_reduce2.slang",
+    "raster/voxelbvh/voxelbvh_triangles_to_ijkl.slang",
 };
 
 struct voxelbvh_context_t
@@ -1290,7 +1297,7 @@ void ijkl_from_lines(const pnanovdb_compute_t* compute,
                      pnanovdb_compute_buffer_t* indices_buffer,
                      pnanovdb_compute_buffer_t* positions_buffer,
                      pnanovdb_uint64_t line_count,
-                     float line_radius,
+                     float inflation_radius,
                      pnanovdb_compute_buffer_t* ijkl_out,
                      pnanovdb_compute_buffer_t* prim_id_out,
                      pnanovdb_compute_buffer_t* range_out,
@@ -1314,7 +1321,7 @@ void ijkl_from_lines(const pnanovdb_compute_t* compute,
         pnanovdb_uint32_t voxel_count;
         pnanovdb_uint32_t voxel_workgroup_count;
         pnanovdb_uint32_t integer_space_max;
-        float line_radius;
+        float inflation_radius;
     };
     constants_t constants = {};
     constants.line_count = (pnanovdb_uint32_t)line_count;
@@ -1322,7 +1329,7 @@ void ijkl_from_lines(const pnanovdb_compute_t* compute,
     constants.voxel_count = 8u * constants.line_count;
     constants.voxel_workgroup_count = (constants.voxel_count + 255u) / 256u;
     constants.integer_space_max = integer_space_max;
-    constants.line_radius = line_radius;
+    constants.inflation_radius = inflation_radius;
 
     // constants
     pnanovdb_compute_buffer_desc_t buf_desc = {};
@@ -1364,10 +1371,7 @@ void ijkl_from_lines(const pnanovdb_compute_t* compute,
     pnanovdb_compute_buffer_transient_t* world_bbox_transient =
         compute_interface->register_buffer_as_transient(context, world_bbox_out);
 
-    // gaussian to ijk-level request
-    // voxelbvh_gaussians_bbox_reduce1.slang
-    // voxelbvh_gaussians_bbox_reduce2.slang
-    // voxelbvh_gaussians_to_ijkl.slang
+    // prim to ijk-level request
     {
         pnanovdb_compute_resource_t resources[4u] = {};
         resources[0u].buffer_transient = constant_transient;
@@ -1468,7 +1472,7 @@ void ijkl_from_lines_array(const pnanovdb_compute_t* compute,
                            pnanovdb_voxelbvh_context_t* voxelbvh_context,
                            pnanovdb_compute_array_t* indices_array,
                            pnanovdb_compute_array_t* positions_array,
-                           float line_radius,
+                           float inflation_radius,
                            pnanovdb_compute_array_t** ijkl_out,
                            pnanovdb_compute_array_t** prim_id_out,
                            pnanovdb_compute_array_t** range_out,
@@ -1501,9 +1505,257 @@ void ijkl_from_lines_array(const pnanovdb_compute_t* compute,
     gpu_array_upload(compute, queue, positions_gpu_array, positions_array);
 
     ijkl_from_lines(compute, queue, voxelbvh_context, indices_gpu_array->device_buffer,
-                    positions_gpu_array->device_buffer, line_count, line_radius, ijkl_gpu_array->device_buffer,
+                    positions_gpu_array->device_buffer, line_count, inflation_radius, ijkl_gpu_array->device_buffer,
                     prim_id_gpu_array->device_buffer, range_gpu_array->device_buffer,
                     world_bbox_gpu_array->device_buffer, integer_space_max);
+
+    gpu_array_destroy(compute, queue, indices_gpu_array);
+    gpu_array_destroy(compute, queue, positions_gpu_array);
+
+    // readback results
+    gpu_array_readback(compute, queue, ijkl_gpu_array, ijkl_array);
+    gpu_array_readback(compute, queue, prim_id_gpu_array, prim_id_array);
+    gpu_array_readback(compute, queue, range_gpu_array, range_array);
+    gpu_array_readback(compute, queue, world_bbox_gpu_array, world_bbox_array);
+
+    pnanovdb_uint64_t flushed_frame = 0llu;
+    compute->device_interface.flush(queue, &flushed_frame, nullptr, nullptr);
+
+    compute->device_interface.wait_idle(queue);
+
+    gpu_array_map(compute, queue, ijkl_gpu_array, ijkl_array);
+    gpu_array_map(compute, queue, prim_id_gpu_array, prim_id_array);
+    gpu_array_map(compute, queue, range_gpu_array, range_array);
+    gpu_array_map(compute, queue, world_bbox_gpu_array, world_bbox_array);
+
+    *ijkl_out = ijkl_array;
+    *prim_id_out = prim_id_array;
+    *range_out = range_array;
+    *world_bbox_out = world_bbox_array;
+
+    gpu_array_destroy(compute, queue, ijkl_gpu_array);
+    gpu_array_destroy(compute, queue, prim_id_gpu_array);
+    gpu_array_destroy(compute, queue, range_gpu_array);
+    gpu_array_destroy(compute, queue, world_bbox_gpu_array);
+}
+
+void ijkl_from_triangles(const pnanovdb_compute_t* compute,
+                         pnanovdb_compute_queue_t* queue,
+                         pnanovdb_voxelbvh_context_t* voxelbvh_context,
+                         pnanovdb_compute_buffer_t* indices_buffer,
+                         pnanovdb_compute_buffer_t* positions_buffer,
+                         pnanovdb_uint64_t triangle_count,
+                         float inflation_radius,
+                         pnanovdb_compute_buffer_t* ijkl_out,
+                         pnanovdb_compute_buffer_t* prim_id_out,
+                         pnanovdb_compute_buffer_t* range_out,
+                         pnanovdb_compute_buffer_t* world_bbox_out,
+                         pnanovdb_uint32_t integer_space_max)
+{
+    auto ctx = cast(voxelbvh_context);
+
+    pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
+    pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
+
+    pnanovdb_compute_buffer_transient_t* indices_transient =
+        compute_interface->register_buffer_as_transient(context, indices_buffer);
+    pnanovdb_compute_buffer_transient_t* positions_transient =
+        compute_interface->register_buffer_as_transient(context, positions_buffer);
+
+    struct constants_t
+    {
+        pnanovdb_uint32_t triangle_count;
+        pnanovdb_uint32_t workgroup_count;
+        pnanovdb_uint32_t voxel_count;
+        pnanovdb_uint32_t voxel_workgroup_count;
+        pnanovdb_uint32_t integer_space_max;
+        float inflation_radius;
+    };
+    constants_t constants = {};
+    constants.triangle_count = (pnanovdb_uint32_t)triangle_count;
+    constants.workgroup_count = (constants.triangle_count + 255u) / 256u;
+    constants.voxel_count = 8u * constants.triangle_count;
+    constants.voxel_workgroup_count = (constants.voxel_count + 255u) / 256u;
+    constants.integer_space_max = integer_space_max;
+    constants.inflation_radius = inflation_radius;
+
+    // constants
+    pnanovdb_compute_buffer_desc_t buf_desc = {};
+    buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT;
+    buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+    buf_desc.structure_stride = 0u;
+    buf_desc.size_in_bytes = sizeof(constants_t);
+    pnanovdb_compute_buffer_t* constant_buffer =
+        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &buf_desc);
+
+    // copy constants
+    void* mapped_constants = compute_interface->map_buffer(context, constant_buffer);
+    memcpy(mapped_constants, &constants, sizeof(constants_t));
+    compute_interface->unmap_buffer(context, constant_buffer);
+
+    pnanovdb_compute_buffer_transient_t* constant_transient =
+        compute_interface->register_buffer_as_transient(context, constant_buffer);
+
+    buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED |
+                     PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_SRC | PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_DST;
+    buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+    buf_desc.structure_stride = 4u;
+    buf_desc.size_in_bytes = 6u * 4u * constants.workgroup_count;
+    pnanovdb_compute_buffer_t* bbox_reduce1_buffer =
+        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+    // buf_desc.size_in_bytes = 8u * constants.voxel_count;
+    // pnanovdb_compute_buffer_t* keys_buffer =
+    //     compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+    // buf_desc.size_in_bytes = 4u * constants.voxel_count;
+    // pnanovdb_compute_buffer_t* bbox_ids_buffer =
+    //     compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+
+    pnanovdb_compute_buffer_transient_t* bbox_reduce1_transient =
+        compute_interface->register_buffer_as_transient(context, bbox_reduce1_buffer);
+    pnanovdb_compute_buffer_transient_t* ijkl_transient =
+        compute_interface->register_buffer_as_transient(context, ijkl_out);
+    pnanovdb_compute_buffer_transient_t* prim_id_transient =
+        compute_interface->register_buffer_as_transient(context, prim_id_out);
+    pnanovdb_compute_buffer_transient_t* world_bbox_transient =
+        compute_interface->register_buffer_as_transient(context, world_bbox_out);
+
+    // prim to ijk-level request
+    {
+        pnanovdb_compute_resource_t resources[4u] = {};
+        resources[0u].buffer_transient = constant_transient;
+        resources[1u].buffer_transient = indices_transient;
+        resources[2u].buffer_transient = positions_transient;
+        resources[3u].buffer_transient = bbox_reduce1_transient;
+
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_triangles_bbox_reduce1_slang],
+                                 resources, constants.workgroup_count, 1u, 1u, "voxelbvh_triangles_bbox_reduce1");
+    }
+    {
+        pnanovdb_compute_resource_t resources[3u] = {};
+        resources[0u].buffer_transient = constant_transient;
+        resources[1u].buffer_transient = bbox_reduce1_transient;
+        resources[2u].buffer_transient = world_bbox_transient;
+
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_triangles_bbox_reduce2_slang],
+                                 resources, 1u, 1u, 1u, "voxelbvh_triangles_bbox_reduce2");
+    }
+    {
+        pnanovdb_compute_resource_t resources[6u] = {};
+        resources[0u].buffer_transient = constant_transient;
+        resources[1u].buffer_transient = indices_transient;
+        resources[2u].buffer_transient = positions_transient;
+        resources[3u].buffer_transient = world_bbox_transient;
+        resources[4u].buffer_transient = ijkl_transient;
+        resources[5u].buffer_transient = prim_id_transient;
+
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_triangles_to_ijkl_slang],
+                                 resources, constants.workgroup_count, 1u, 1u, "voxelbvh_triangles_to_ijkl");
+    }
+
+    // sort ijk-level requests to bring requests together
+    // radix sort
+    {
+        ctx->parallel_primitives.radix_sort_key64(compute, queue, ctx->parallel_primitives_ctx, ijkl_out, prim_id_out,
+                                                  constants.voxel_count, constants.voxel_count, 64u);
+    }
+
+    buf_desc.size_in_bytes = 4u * constants.voxel_count;
+    pnanovdb_compute_buffer_t* range_starts_buffer =
+        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+    pnanovdb_compute_buffer_t* range_scan_buffer =
+        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+    // buf_desc.size_in_bytes = 2u * 4u * constants.voxel_count;
+    // pnanovdb_compute_buffer_t* range_headers_buffer =
+    //     compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+
+    pnanovdb_compute_buffer_transient_t* range_starts_transient =
+        compute_interface->register_buffer_as_transient(context, range_starts_buffer);
+    pnanovdb_compute_buffer_transient_t* range_scan_transient =
+        compute_interface->register_buffer_as_transient(context, range_scan_buffer);
+    pnanovdb_compute_buffer_transient_t* range_transient =
+        compute_interface->register_buffer_as_transient(context, range_out);
+
+    // identify range starts
+    // voxelbvh_find_range_starts.slang
+    {
+        pnanovdb_compute_resource_t resources[4u] = {};
+        resources[0u].buffer_transient = constant_transient;
+        resources[1u].buffer_transient = ijkl_transient;
+        resources[2u].buffer_transient = range_starts_transient;
+        resources[3u].buffer_transient = range_transient;
+
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_find_range_starts_slang],
+                                 resources, constants.voxel_workgroup_count, 1u, 1u, "voxelbvh_find_range_starts");
+    }
+
+    // global scan to allocate range headers
+    {
+        ctx->parallel_primitives.global_scan(compute, queue, ctx->parallel_primitives_ctx, range_starts_buffer,
+                                             range_scan_buffer, constants.voxel_count, 1u);
+    }
+
+    // scatter range headers
+    // voxelbvh_scatter_range_headers.slang
+    {
+        pnanovdb_compute_resource_t resources[5u] = {};
+        resources[0u].buffer_transient = constant_transient;
+        resources[1u].buffer_transient = ijkl_transient;
+        resources[2u].buffer_transient = range_starts_transient;
+        resources[3u].buffer_transient = range_scan_transient;
+        resources[4u].buffer_transient = range_transient;
+
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_scatter_range_headers_slang],
+                                 resources, constants.voxel_workgroup_count, 1u, 1u, "voxelbvh_scatter_range_headers");
+    }
+
+    compute_interface->destroy_buffer(context, constant_buffer);
+    compute_interface->destroy_buffer(context, bbox_reduce1_buffer);
+
+    compute_interface->destroy_buffer(context, range_starts_buffer);
+    compute_interface->destroy_buffer(context, range_scan_buffer);
+}
+
+void ijkl_from_triangles_array(const pnanovdb_compute_t* compute,
+                               pnanovdb_compute_queue_t* queue,
+                               pnanovdb_voxelbvh_context_t* voxelbvh_context,
+                               pnanovdb_compute_array_t* indices_array,
+                               pnanovdb_compute_array_t* positions_array,
+                               float inflation_radius,
+                               pnanovdb_compute_array_t** ijkl_out,
+                               pnanovdb_compute_array_t** prim_id_out,
+                               pnanovdb_compute_array_t** range_out,
+                               pnanovdb_compute_array_t** world_bbox_out,
+                               pnanovdb_uint32_t integer_space_max)
+{
+    pnanovdb_uint64_t line_count = indices_array->element_count;
+
+    pnanovdb_uint64_t voxel_count = 8u * line_count;
+
+    pnanovdb_compute_array_t* ijkl_array = compute->create_array(8u, voxel_count, nullptr);
+    pnanovdb_compute_array_t* prim_id_array = compute->create_array(4u, voxel_count, nullptr);
+    pnanovdb_compute_array_t* range_array = compute->create_array(8u, voxel_count, nullptr);
+    pnanovdb_compute_array_t* world_bbox_array = compute->create_array(4u, 6u, nullptr);
+
+    compute_gpu_array_t* ijkl_gpu_array = gpu_array_create();
+    compute_gpu_array_t* prim_id_gpu_array = gpu_array_create();
+    compute_gpu_array_t* range_gpu_array = gpu_array_create();
+    compute_gpu_array_t* world_bbox_gpu_array = gpu_array_create();
+
+    gpu_array_alloc_device(compute, queue, ijkl_gpu_array, ijkl_array);
+    gpu_array_alloc_device(compute, queue, prim_id_gpu_array, prim_id_array);
+    gpu_array_alloc_device(compute, queue, range_gpu_array, range_array);
+    gpu_array_alloc_device(compute, queue, world_bbox_gpu_array, world_bbox_array);
+
+    compute_gpu_array_t* indices_gpu_array = gpu_array_create();
+    compute_gpu_array_t* positions_gpu_array = gpu_array_create();
+
+    gpu_array_upload(compute, queue, indices_gpu_array, indices_array);
+    gpu_array_upload(compute, queue, positions_gpu_array, positions_array);
+
+    ijkl_from_triangles(compute, queue, voxelbvh_context, indices_gpu_array->device_buffer,
+                        positions_gpu_array->device_buffer, line_count, inflation_radius, ijkl_gpu_array->device_buffer,
+                        prim_id_gpu_array->device_buffer, range_gpu_array->device_buffer,
+                        world_bbox_gpu_array->device_buffer, integer_space_max);
 
     gpu_array_destroy(compute, queue, indices_gpu_array);
     gpu_array_destroy(compute, queue, positions_gpu_array);
@@ -1554,6 +1806,8 @@ pnanovdb_voxelbvh_t* pnanovdb_get_voxelbvh()
     iface.nanovdb_append_metadata = nanovdb_append_metadata;
     iface.ijkl_from_lines = ijkl_from_lines;
     iface.ijkl_from_lines_array = ijkl_from_lines_array;
+    iface.ijkl_from_triangles = ijkl_from_triangles;
+    iface.ijkl_from_triangles_array = ijkl_from_triangles_array;
 
     return &iface;
 }

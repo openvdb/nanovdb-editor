@@ -1,8 +1,8 @@
-// voxelbvh_lines_bbox_reduce1.slang
+// voxelbvh_triangles_bbox_reduce2.slang
 
 struct constants_t
 {
-    uint line_count;
+    uint triangle_count;
     uint workgroup_count;
     uint voxel_count;
     uint voxel_workgroup_count;
@@ -12,8 +12,7 @@ struct constants_t
 
 ConstantBuffer<constants_t> constants;
 
-StructuredBuffer<uint2> indices_in;
-StructuredBuffer<float> positions_in;
+StructuredBuffer<float> bbox_in;
 
 RWStructuredBuffer<float> bbox_out;
 
@@ -23,30 +22,33 @@ groupshared float3 s_aabb_max[256u];
 [shader("compute")][numthreads(256, 1, 1)]
 void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
-    uint idx = group_idx.x * 256u + thread_idx.x;
+    if (group_idx.x != 0u)
+    {
+        return;
+    }
+
+    uint group_count = (constants.triangle_count + 255u) / 256u;
+    uint pass_count = (group_count + 255u) / 256u;
 
     float3 aabb_min = float3(1.f / 0.f, 1.f / 0.f, 1.f / 0.f);
     float3 aabb_max = float3(-1.f / 0.f, -1.f / 0.f, -1.f / 0.f);
-    if (idx < constants.line_count)
+    for (uint pass_id = 0u; pass_id < pass_count; pass_id++)
     {
-        uint2 index = indices_in[idx];
+        uint bbox_idx = 256u * pass_id + thread_idx.x;
+        if (bbox_idx < constants.workgroup_count)
+        {
+            float3 local_aabb_min = float3(
+                bbox_in[6u * bbox_idx + 0u],
+                bbox_in[6u * bbox_idx + 1u],
+                bbox_in[6u * bbox_idx + 2u]);
+            float3 local_aabb_max = float3(
+                bbox_in[6u * bbox_idx + 3u],
+                bbox_in[6u * bbox_idx + 4u],
+                bbox_in[6u * bbox_idx + 5u]);
 
-        float3 pos_a = float3(
-            positions_in[3u * index.x + 0u],
-            positions_in[3u * index.x + 1u],
-            positions_in[3u * index.x + 2u]);
-        float3 pos_b = float3(
-            positions_in[3u * index.y + 0u],
-            positions_in[3u * index.y + 1u],
-            positions_in[3u * index.y + 2u]);
-
-        aabb_min = min(aabb_min, pos_a);
-        aabb_max = max(aabb_max, pos_a);
-        aabb_min = min(aabb_min, pos_b);
-        aabb_max = max(aabb_max, pos_b);
-
-        aabb_min -= constants.inflation_radius;
-        aabb_max += constants.inflation_radius;
+            aabb_min = min(aabb_min, local_aabb_min);
+            aabb_max = max(aabb_max, local_aabb_max);
+        }
     }
 
     // reduce within workgroup

@@ -1,8 +1,8 @@
-// voxelbvh_lines_bbox_reduce1.slang
+// voxelbvh_triangles_bbox_reduce1.slang
 
 struct constants_t
 {
-    uint line_count;
+    uint triangle_count;
     uint workgroup_count;
     uint voxel_count;
     uint voxel_workgroup_count;
@@ -12,7 +12,7 @@ struct constants_t
 
 ConstantBuffer<constants_t> constants;
 
-StructuredBuffer<uint2> indices_in;
+StructuredBuffer<uint> indices_in;
 StructuredBuffer<float> positions_in;
 
 RWStructuredBuffer<float> bbox_out;
@@ -27,9 +27,12 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 
     float3 aabb_min = float3(1.f / 0.f, 1.f / 0.f, 1.f / 0.f);
     float3 aabb_max = float3(-1.f / 0.f, -1.f / 0.f, -1.f / 0.f);
-    if (idx < constants.line_count)
+    if (idx < constants.triangle_count)
     {
-        uint2 index = indices_in[idx];
+        uint3 index = uint3(
+            indices_in[3u * idx + 0u],
+            indices_in[3u * idx + 1u],
+            indices_in[3u * idx + 2u]);
 
         float3 pos_a = float3(
             positions_in[3u * index.x + 0u],
@@ -39,11 +42,17 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
             positions_in[3u * index.y + 0u],
             positions_in[3u * index.y + 1u],
             positions_in[3u * index.y + 2u]);
+        float3 pos_c = float3(
+            positions_in[3u * index.z + 0u],
+            positions_in[3u * index.z + 1u],
+            positions_in[3u * index.z + 2u]);
 
         aabb_min = min(aabb_min, pos_a);
         aabb_max = max(aabb_max, pos_a);
         aabb_min = min(aabb_min, pos_b);
         aabb_max = max(aabb_max, pos_b);
+        aabb_min = min(aabb_min, pos_c);
+        aabb_max = max(aabb_max, pos_c);
 
         aabb_min -= constants.inflation_radius;
         aabb_max += constants.inflation_radius;

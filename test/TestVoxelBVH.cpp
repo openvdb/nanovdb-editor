@@ -156,70 +156,25 @@ void voxelbvh_test()
     static const pnanovdb_uint32_t prim_meta_count = 3u;
     pnanovdb_compute_array_t* prim_meta_arrays[prim_meta_count] = {};
 
-    const float line_radius = 2.f;
-    const pnanovdb_uint32_t integer_space_max = 127u;
-    const char* out_file = "./data/lines.nvdb";
+    static const bool is_triangle = true;
 
-#    if 0
-    static const pnanovdb_uint32_t line_count = 3u;
-#    else
+    const float inflation_radius = is_triangle ? 0.f : 2.f;
+    const pnanovdb_uint32_t integer_space_max = 127u;
+    const char* out_file = is_triangle ? "./data/triangles.nvdb" : "./data/lines.nvdb";
+
     static const pnanovdb_uint32_t width = 64u;
     static const pnanovdb_uint32_t height = 64u;
-    static const pnanovdb_uint32_t line_count = 2u * width * height;
-#    endif
+    static const pnanovdb_uint32_t prim_count = 2u * width * height;
 
-    pnanovdb_compute_array_t* indices_array = compute.create_array(8u, line_count, nullptr);
-    pnanovdb_compute_array_t* positions_array = compute.create_array(4u, 6u * line_count, nullptr);
-    pnanovdb_compute_array_t* colors_array = compute.create_array(4u, 6u * line_count, nullptr);
+    pnanovdb_compute_array_t* indices_array = is_triangle ? compute.create_array(4u, 3u * prim_count, nullptr) :
+                                                            compute.create_array(8u, prim_count, nullptr);
+    pnanovdb_compute_array_t* positions_array = compute.create_array(4u, 6u * prim_count, nullptr);
+    pnanovdb_compute_array_t* colors_array = compute.create_array(4u, 6u * prim_count, nullptr);
 
-    uint64_t* mapped_indices = (uint64_t*)compute.map_array(indices_array);
+    uint32_t* mapped_indices = (uint32_t*)compute.map_array(indices_array);
     float* mapped_positions = (float*)compute.map_array(positions_array);
     float* mapped_colors = (float*)compute.map_array(colors_array);
 
-#    if 0
-    mapped_indices[0] = (uint64_t(1) << 32u) | uint64_t(0);
-    mapped_indices[1] = (uint64_t(3) << 32u) | uint64_t(2);
-    mapped_indices[2] = (uint64_t(5) << 32u) | uint64_t(4);
-
-    mapped_positions[0] = -100.f;
-    mapped_positions[1] = 0.f;
-    mapped_positions[2] = 0.f;
-    mapped_colors[0] = 1.f;
-    mapped_colors[1] = 0.f;
-    mapped_colors[2] = 0.f;
-    mapped_positions[3] = 100.f;
-    mapped_positions[4] = 0.f;
-    mapped_positions[5] = 0.f;
-    mapped_colors[3] = 1.f;
-    mapped_colors[4] = 0.f;
-    mapped_colors[5] = 0.f;
-
-    mapped_positions[6] = 0.f;
-    mapped_positions[7] = -100.f;
-    mapped_positions[8] = 0.f;
-    mapped_colors[6] = 0.f;
-    mapped_colors[7] = 1.f;
-    mapped_colors[8] = 0.f;
-    mapped_positions[9] = 0.f;
-    mapped_positions[10] = 100.f;
-    mapped_positions[11] = 0.f;
-    mapped_colors[9] = 0.f;
-    mapped_colors[10] = 1.f;
-    mapped_colors[11] = 0.f;
-
-    mapped_positions[12] = 0.f;
-    mapped_positions[13] = 0.f;
-    mapped_positions[14] = -100.f;
-    mapped_colors[12] = 0.f;
-    mapped_colors[13] = 0.f;
-    mapped_colors[14] = 1.f;
-    mapped_positions[15] = 0.f;
-    mapped_positions[16] = 0.f;
-    mapped_positions[17] = 100.f;
-    mapped_colors[15] = 0.f;
-    mapped_colors[16] = 0.f;
-    mapped_colors[17] = 1.f;
-#    else
     for (int j = 0; j < height; j++)
     {
         for (int i = 0; i < width; i++)
@@ -231,10 +186,25 @@ void voxelbvh_test()
             float z00 = 20.f * sinf(0.0001f * (x0 * x0 + y0 * y0));
             float z10 = 20.f * sinf(0.0001f * (x1 * x1 + y0 * y0));
             float z01 = 20.f * sinf(0.0001f * (x0 * x0 + y1 * y1));
+            float z11 = 20.f * sinf(0.0001f * (x1 * x1 + y1 * y1));
 
             int idx = j * width + i;
-            mapped_indices[2u * idx + 0] = (uint64_t(4u * idx + 1) << 32u) | uint64_t(4u * idx + 0);
-            mapped_indices[2u * idx + 1] = (uint64_t(4u * idx + 3) << 32u) | uint64_t(4u * idx + 2);
+            if (is_triangle)
+            {
+                mapped_indices[6u * idx + 0] = 4u * idx + 0;
+                mapped_indices[6u * idx + 1] = 4u * idx + 1;
+                mapped_indices[6u * idx + 2] = 4u * idx + 3;
+                mapped_indices[6u * idx + 3] = 4u * idx + 3;
+                mapped_indices[6u * idx + 4] = 4u * idx + 2;
+                mapped_indices[6u * idx + 5] = 4u * idx + 0;
+            }
+            else
+            {
+                mapped_indices[4u * idx + 0] = 4u * idx + 0;
+                mapped_indices[4u * idx + 1] = 4u * idx + 1;
+                mapped_indices[4u * idx + 2] = 4u * idx + 2;
+                mapped_indices[4u * idx + 3] = 4u * idx + 0;
+            }
             mapped_positions[12u * idx + 0] = x0;
             mapped_positions[12u * idx + 1] = y0;
             mapped_positions[12u * idx + 2] = z00;
@@ -242,27 +212,26 @@ void voxelbvh_test()
             mapped_positions[12u * idx + 4] = y0;
             mapped_positions[12u * idx + 5] = z10;
             mapped_positions[12u * idx + 6] = x0;
-            mapped_positions[12u * idx + 7] = y0;
-            mapped_positions[12u * idx + 8] = z00;
-            mapped_positions[12u * idx + 9] = x0;
+            mapped_positions[12u * idx + 7] = y1;
+            mapped_positions[12u * idx + 8] = z01;
+            mapped_positions[12u * idx + 9] = x1;
             mapped_positions[12u * idx + 10] = y1;
-            mapped_positions[12u * idx + 11] = z01;
+            mapped_positions[12u * idx + 11] = z11;
 
             mapped_colors[12u * idx + 0] = 0.f;
             mapped_colors[12u * idx + 1] = 1.f;
             mapped_colors[12u * idx + 2] = 0.f;
-            mapped_colors[12u * idx + 3] = 0.f;
+            mapped_colors[12u * idx + 3] = 1.f;
             mapped_colors[12u * idx + 4] = 1.f;
             mapped_colors[12u * idx + 5] = 0.f;
             mapped_colors[12u * idx + 6] = 1.f;
             mapped_colors[12u * idx + 7] = 0.f;
             mapped_colors[12u * idx + 8] = 0.f;
-            mapped_colors[12u * idx + 9] = 1.f;
+            mapped_colors[12u * idx + 9] = 0.f;
             mapped_colors[12u * idx + 10] = 0.f;
-            mapped_colors[12u * idx + 11] = 0.f;
+            mapped_colors[12u * idx + 11] = 1.f;
         }
     }
-#    endif
 
     prim_meta_arrays[0] = indices_array;
     prim_meta_arrays[1] = positions_array;
@@ -272,8 +241,17 @@ void voxelbvh_test()
     pnanovdb_compute_array_t* prim_id_array = nullptr;
     pnanovdb_compute_array_t* range_array = nullptr;
     pnanovdb_compute_array_t* world_bbox_array = nullptr;
-    voxel_bvh.ijkl_from_lines_array(&compute, queue, voxelbvh_ctx, indices_array, positions_array, line_radius,
-                                    &ijkl_array, &prim_id_array, &range_array, &world_bbox_array, integer_space_max);
+    if (is_triangle)
+    {
+        voxel_bvh.ijkl_from_triangles_array(&compute, queue, voxelbvh_ctx, indices_array, positions_array,
+                                            inflation_radius, &ijkl_array, &prim_id_array, &range_array,
+                                            &world_bbox_array, integer_space_max);
+    }
+    else
+    {
+        voxel_bvh.ijkl_from_lines_array(&compute, queue, voxelbvh_ctx, indices_array, positions_array, inflation_radius,
+                                        &ijkl_array, &prim_id_array, &range_array, &world_bbox_array, integer_space_max);
+    }
 
     uint64_t range_count = range_array->element_count;
     uint64_t ijkl_count = ijkl_array->element_count;
