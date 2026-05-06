@@ -2233,39 +2233,41 @@ pnanovdb_bool_t get_visible(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* 
 void add_named_array(pnanovdb_editor_t* editor,
                      pnanovdb_editor_token_t* scene,
                      pnanovdb_editor_token_t* object_name,
-                     const char* array_name,
+                     pnanovdb_editor_token_t* array_name,
                      pnanovdb_compute_array_t* array)
 {
-    if (!editor || !editor->impl || !scene || !object_name || !array_name || !array)
+    if (!editor || !editor->impl || !scene || !object_name || !array_name || !array_name->str || !array)
     {
         return;
     }
 
+    const char* array_name_str = array_name->str;
     editor->impl->scene_manager->with_object(scene, object_name,
-                                             [array_name, array](SceneObject* obj)
+                                             [array_name_str, array](SceneObject* obj)
                                              {
                                                  if (obj)
-                                                     obj->named_arrays()[array_name] = array;
+                                                     obj->named_arrays()[array_name_str] = array;
                                              });
 }
 
 pnanovdb_compute_array_t* get_named_array(pnanovdb_editor_t* editor,
                                           pnanovdb_editor_token_t* scene,
                                           pnanovdb_editor_token_t* object_name,
-                                          const char* array_name)
+                                          pnanovdb_editor_token_t* array_name)
 {
-    if (!editor || !editor->impl || !scene || !object_name || !array_name)
+    if (!editor || !editor->impl || !scene || !object_name || !array_name || !array_name->str)
     {
         return nullptr;
     }
 
+    const char* array_name_str = array_name->str;
     pnanovdb_compute_array_t* result = nullptr;
     editor->impl->scene_manager->with_object(scene, object_name,
-                                             [array_name, &result](SceneObject* obj)
+                                             [array_name_str, &result](SceneObject* obj)
                                              {
                                                  if (obj)
                                                  {
-                                                     auto it = obj->named_arrays().find(array_name);
+                                                     auto it = obj->named_arrays().find(array_name_str);
                                                      if (it != obj->named_arrays().end())
                                                          result = it->second;
                                                  }

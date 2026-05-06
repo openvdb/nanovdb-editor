@@ -101,7 +101,6 @@ private:
     std::vector<const char*> m_element_names;
     std::vector<const char*> m_element_type_names;
     std::vector<pnanovdb_uint64_t> m_element_offsets;
-    std::vector<std::string> m_reflect_field_type_names;
     std::vector<pnanovdb_reflect_data_type_t> m_reflect_field_types;
     std::vector<pnanovdb_reflect_data_t> m_reflect_fields;
     pnanovdb_reflect_data_type_t m_data_type = {

@@ -296,12 +296,12 @@ typedef struct pnanovdb_editor_t
     void(PNANOVDB_ABI* add_named_array)(pnanovdb_editor_t* editor,
                                         pnanovdb_editor_token_t* scene,
                                         pnanovdb_editor_token_t* object_name,
-                                        const char* array_name,
+                                        pnanovdb_editor_token_t* array_name,
                                         pnanovdb_compute_array_t* array);
     pnanovdb_compute_array_t*(PNANOVDB_ABI* get_named_array)(pnanovdb_editor_t* editor,
                                                              pnanovdb_editor_token_t* scene,
                                                              pnanovdb_editor_token_t* object_name,
-                                                             const char* array_name);
+                                                             pnanovdb_editor_token_t* array_name);
 
     // Per-stage pipeline parameters. Call unmap_pipeline_params after every map_pipeline_params (even if map returned
     // null).

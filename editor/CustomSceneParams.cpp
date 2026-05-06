@@ -11,6 +11,7 @@
 
 #include "CustomSceneParams.h"
 
+#include "EditorToken.h"
 #include "nanovdb_editor/putil/Shader.hpp"
 
 #include <cstring>
@@ -509,39 +510,40 @@ void CustomSceneParams::rebuildDescriptorViews()
     m_element_names.clear();
     m_element_type_names.clear();
     m_element_offsets.clear();
-    m_reflect_field_type_names.clear();
     m_reflect_field_types.clear();
     m_reflect_fields.clear();
 
     m_element_names.reserve(m_fields.size());
     m_element_type_names.reserve(m_fields.size());
     m_element_offsets.reserve(m_fields.size());
-    m_reflect_field_type_names.reserve(m_fields.size());
     m_reflect_field_types.reserve(m_fields.size());
     m_reflect_fields.reserve(m_fields.size());
+
+    EditorToken& tokens = EditorToken::getInstance();
+
     for (const auto& field : m_fields)
     {
-        m_element_names.push_back(field.name.c_str());
-        m_element_type_names.push_back(field.type_name.c_str());
+        const char* name = tokens.getToken(field.name.c_str())->str;
+        const char* type_name = tokens.getToken(field.type_name.c_str())->str;
+
+        m_element_names.push_back(name);
+        m_element_type_names.push_back(type_name);
         m_element_offsets.push_back(field.offset);
 
         const pnanovdb_reflect_data_type_t* child_type = get_builtin_reflect_data_type(field);
         if (!child_type)
         {
-            std::string type_name = field.type_name;
-            m_reflect_field_type_names.push_back(std::move(type_name));
-            m_reflect_field_types.push_back({ field.reflect_type, field.element_size * field.element_count,
-                                              m_reflect_field_type_names.back().c_str(), nullptr, 0u, nullptr });
+            m_reflect_field_types.push_back(
+                { field.reflect_type, field.element_size * field.element_count, type_name, nullptr, 0u, nullptr });
             child_type = &m_reflect_field_types.back();
         }
 
-        m_reflect_fields.push_back(
-            { 0u, PNANOVDB_REFLECT_MODE_VALUE, child_type, field.name.c_str(), field.offset, 0u, 0u, nullptr });
+        m_reflect_fields.push_back({ 0u, PNANOVDB_REFLECT_MODE_VALUE, child_type, name, field.offset, 0u, 0u, nullptr });
     }
 
     m_data_type.data_type = PNANOVDB_REFLECT_TYPE_STRUCT;
     m_data_type.element_size = m_data.size();
-    m_data_type.struct_typename = "CustomSceneParams";
+    m_data_type.struct_typename = tokens.getToken("CustomSceneParams")->str;
     m_data_type.child_reflect_datas = m_reflect_fields.empty() ? nullptr : m_reflect_fields.data();
     m_data_type.child_reflect_data_count = m_reflect_fields.size();
     m_data_type.default_value = nullptr;
