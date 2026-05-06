@@ -33,7 +33,7 @@ struct EditorParams
 
 struct shader_params_t
 {
-    uint sh_degree;
+    uint mode;
 };
 
 StructuredBuffer<uint2> buf;
@@ -41,8 +41,6 @@ RWStructuredBuffer<uint> image_out;
 RWTexture2D<float4> texture_out;
 ConstantBuffer<EditorParams> editor_params;
 ConstantBuffer<shader_params_t> shader_params;
-
-#include "spherical_harmonics.slang"
 
 float3 cross_product(float3 a, float3 b)
 {
@@ -67,212 +65,29 @@ bool intersect_box(float3 rayDir, float3 rayDirInv, float3 boxMin, float3 boxMax
     return tfar > tnear;
 }
 
-float2 intersect_sphere(float3 rayOrigin, float3 rayDir)
+// based on: https://iquilezles.org/articles/intersectors/
+float3 intersect_triangle( in float3 ro, in float3 rd, in float3 v0, in float3 v1, in float3 v2 )
 {
-    float b = dot(rayOrigin, rayDir);
-    float c = dot(rayOrigin, rayOrigin) - 1.f;
-    float h = b * b - c;
-    if (h < 0.f)
-    {
-        return float2(-1.f, -1.f);
-    }
-    h = sqrt(h);
-    return float2(-b - h, -b + h);
+    float3 v1v0 = v1 - v0;
+    float3 v2v0 = v2 - v0;
+    float3 rov0 = ro - v0;
+    float3  n = cross_product( v1v0, v2v0 );
+    float3  q = cross_product( rov0, rd );
+    float d = 1.0f/dot( rd, n );
+    float u = d*dot( -q, v2v0 );
+    float v = d*dot(  q, v1v0 );
+    float t = d*dot( -n, rov0 );
+    if( u<0.0f || v<0.0f || (u+v)>1.0f ) t = -1.0f;
+    return float3( t, u, v );
 }
 
-float3x3 quat_to_mat(float4 quatf)
-{
-    float3 rot0 = float3(
-        1.f - 2.f * (quatf.y * quatf.y + quatf.z * quatf.z),
-        2.f * (quatf.x * quatf.y - quatf.z * quatf.w),
-        2.f * (quatf.x * quatf.z + quatf.y * quatf.w));
-    float3 rot1 = float3(
-        2.f * (quatf.x * quatf.y + quatf.z * quatf.w),
-        1.f - 2.f * (quatf.x * quatf.x + quatf.z * quatf.z),
-        2.f * (quatf.y * quatf.z - quatf.x * quatf.w));
-    float3 rot2 = float3(
-        2.f * (quatf.x * quatf.z - quatf.y * quatf.w),
-        2.f * (quatf.y * quatf.z + quatf.x * quatf.w),
-        1.f - 2.f * (quatf.x * quatf.x + quatf.y * quatf.y));
-    return float3x3(rot0, rot1, rot2);
-}
-
-float3x3 quat_and_scale_to_mat(float4 quatf, float3 scalef)
-{
-    float3x3 R = quat_to_mat(quatf);
-    float3x3 S = float3x3(scalef.x, 0.f, 0.f, 0.f, scalef.y, 0.f, 0.f, 0.f, scalef.z);
-    float3x3 M = mul(R, S);
-    return mul(M, transpose(M));
-}
-
-float3x3 covar_world_to_cam(float3x3 R, float3x3 covar)
-{
-    return mul(mul(R, covar), transpose(R));
-}
-
-void persp_proj(
-    float3 mean3d,
-    float3x3 cov3d,
-    float fx, float fy,
-    float cx, float cy,
-    uint width, uint height,
-    inout float2x2 cov2d,
-    inout float2 mean2d)
-{
-    float x = mean3d.x;
-    float y = mean3d.y;
-    float z = mean3d.z;
-
-    // for right handed projection, flip z sign
-    float J_off_sign = -1.f;
-    // if (constants.near_plane < 0.f)
-    if (editor_params.projection_w.z < 0.f)
-    {
-        z = -z;
-        J_off_sign = 1.f;
-    }
-
-    float tan_fovx = 0.5f * float(width) / fx;
-    float tan_fovy = 0.5f * float(height) / fy;
-    float lim_x_pos = (width - cx) / fx + 0.3f * tan_fovx;
-    float lim_x_neg = cx / fx + 0.3f * tan_fovx;
-    float lim_y_pos = (height - cy) / fy + 0.3f * tan_fovy;
-    float lim_y_neg = cy / fy + 0.3f * tan_fovy;
-
-    float rz = 1.f / z;
-    float rz2 = rz * rz;
-    float tx = z * min(lim_x_pos, max(-lim_x_neg, x * rz));
-    float ty = z * min(lim_y_pos, max(-lim_y_neg, y * rz));
-
-    float2x3 J = float2x3(
-        fx * rz, 0.f, J_off_sign * fx * tx * rz2,
-        0.f, fy * rz, J_off_sign * fy * ty * rz2
-    );
-
-    cov2d = mul(mul(J, cov3d), transpose(J));
-    mean2d = float2(fx * x * rz + cx, fy * y * rz + cy);
-}
-
-void ortho_proj(
-    float3 mean3d,
-    float3x3 cov3d,
-    float fx, float fy,
-    float cx, float cy,
-    uint width, uint height,
-    inout float2x2 cov2d,
-    inout float2 mean2d)
-{
-    float x = mean3d.x;
-    float y = mean3d.y;
-
-    float2x3 J = float2x3(
-        fx, 0.f, 0.f,
-        0.f, fy, 0.f
-    );
-
-    cov2d = mul(mul(J, cov3d), transpose(J));
-    mean2d = float2(fx * x + cx, fy * y + cy);
-}
-
-float add_blur(float eps2d, inout float2x2 covar, inout float compensation)
-{
-    float det_orig = covar[0][0] * covar[1][1] - covar[0][1] * covar[1][0];
-    covar[0][0] += eps2d;
-    covar[1][1] += eps2d;
-    float det_blur = covar[0][0] * covar[1][1] - covar[0][1] * covar[1][0];
-    compensation = sqrt(max(0.f, det_orig / det_blur));
-    return det_blur;
-}
-
-float inverse(float2x2 M, inout float2x2 Minv)
-{
-    float det = M[0][0] * M[1][1] - M[0][1] * M[1][0];
-    if (det <= 0.f) {
-        return det;
-    }
-    float invDet = 1.f / det;
-    Minv = float2x2(
-        M[1][1] * invDet, -M[0][1] * invDet,
-        -M[1][0] * invDet, M[0][0] * invDet);
-    return det;
-}
-
-void project_conic(
-    float3 meanf,
-    float4 quatf,
-    float3 scalef,
-    inout float3 conic)
-{
-    float4 mean_c = mat_mul(float4(meanf, 1.f),
-                            editor_params.view_x, editor_params.view_y,
-                            editor_params.view_z, editor_params.view_w);
-
-    float3x3 covar = quat_and_scale_to_mat(quatf, scalef);
-
-    float3x3 view_rot = float3x3(
-        editor_params.view_x.x, editor_params.view_x.y, editor_params.view_x.z,
-        editor_params.view_y.x, editor_params.view_y.y, editor_params.view_y.z,
-        editor_params.view_z.x, editor_params.view_z.y, editor_params.view_z.z);
-    float3x3 covar_c = covar_world_to_cam(view_rot, covar);
-
-    float fx = float(editor_params.width) * 0.5f * editor_params.projection_x.x;
-    float fy = float(editor_params.height) * 0.5f * editor_params.projection_y.y;
-    // TODO: should extract from proj matrix to cover non-centered cases
-    float cx = float(editor_params.width) * 0.5f;
-    float cy = float(editor_params.height) * 0.5f;
-
-    float2x2 covar2d;
-    float2 mean2d;
-    if (editor_params.projection_w.z == 0.f)
-    {
-        ortho_proj(
-            mean_c.xyz, covar_c,
-            fx, fy,
-            cx, cy,
-            editor_params.width, editor_params.height,
-            covar2d,
-            mean2d
-        );
-    }
-    else
-    {
-        persp_proj(
-            mean_c.xyz, covar_c,
-            fx, fy,
-            cx, cy,
-            editor_params.width, editor_params.height,
-            covar2d,
-            mean2d
-        );
-    }
-
-    const float eps2d = 0.3f;
-    float compensation;
-    float det = add_blur(eps2d, covar2d, compensation);
-
-    float2x2 covar2d_inv;
-    inverse(covar2d, covar2d_inv);
-
-    conic = float3(covar2d_inv[0][0], covar2d_inv[0][1], covar2d_inv[1][1]);
-
-    // move conic to camera space
-    float conic_cam_scale = 1.f;
-    if (editor_params.projection_w.z == 0.f)
-    {
-        conic_cam_scale = 0.5f * float(editor_params.width) * editor_params.projection_x.x;
-    }
-    else
-    {
-        conic_cam_scale = 0.5f * float(editor_params.width) * editor_params.projection_x.x / abs(mean_c.z);
-    }
-    conic *= (conic_cam_scale * conic_cam_scale);
-}
-
-void intersect_gaussian(
-    float3 meanf,
-    float3 conic,
-    float3 color,
-    float opacity,
+void intersect_triangle(
+    float3 pos_a,
+    float3 pos_b,
+    float3 pos_c,
+    float3 color_a,
+    float3 color_b,
+    float3 color_c,
     float3 rayOrigin,
     float tmin,
     float3 rayDir,
@@ -281,56 +96,38 @@ void intersect_gaussian(
     inout float4 sum,
     inout float nominalT)
 {
-    float4x4 view = float4x4(
-        editor_params.view_x.x, editor_params.view_y.x, editor_params.view_z.x, editor_params.view_w.x,
-        editor_params.view_x.y, editor_params.view_y.y, editor_params.view_z.y, editor_params.view_w.y,
-        editor_params.view_x.z, editor_params.view_y.z, editor_params.view_z.z, editor_params.view_w.z,
-        editor_params.view_x.w, editor_params.view_y.w, editor_params.view_z.w, editor_params.view_w.w
-    );
+    float3 t_isect = intersect_triangle(rayOrigin, rayDir, pos_a, pos_b, pos_c);
 
-    // put mean and ray into view space
-    float4 mean_c = mul(float4(meanf, 1.f), view);
-    float4 rayOrigin_c = mul(float4(rayOrigin, 1.f), view);
-    float4 rayDir_c = mul(float4(rayDir, 0.f), view);
-
-    rayDir_c.xyz = normalize(rayDir_c.xyz);
-
-    // find t to intersect on z plane
-    float t = abs(rayDir_c.z != 0.f ? (mean_c.z - rayOrigin_c.z) / rayDir_c.z : 0.f);
-
-    // apply t to move xy
-    float2 hit_2d = rayDir_c.xy * t + rayOrigin_c.xy;
-
-    float2 delta = (hit_2d.xy - mean_c.xy);
-
-    float sigma = 0.5f * (conic.x * delta.x * delta.x + conic.z * delta.y * delta.y) +
-                    conic.y * delta.x * delta.y;
-    float alpha = min(0.999f, opacity * exp(-sigma));
-#if 1
-    if (t > 0.f && t >= tmin && t < tmax)
-    {
-        if (!(sigma < 0.f || alpha < 0.01f))
-        {
-            nominalT = sum.a * (alpha * t) + nominalT;
-            sum.rgb = sum.a * (alpha * color) + sum.rgb;
-            sum.a = (1.f - alpha) * sum.a;
-        }
-    }
-#else
-    if (!(sigma < 0.f || alpha < 0.01f))
+    float alpha = 0.f;
+    float3 color = {};
+    float t = 0.f;
+    if (t_isect.x > 0.f)
     {
         alpha = 1.f;
-        if (t > 0.f && t >= tmin && t < tmax)
+        t = t_isect.x;
+        if (shader_params.mode == 1)
         {
-            if (t < nominalT || nominalT == 0.f)
-            {
-                nominalT = t;
-                sum.rgb = alpha * color;
-                sum.a = 0.f;
-            }
+            float3 n = normalize(cross_product( pos_b - pos_a, pos_c - pos_a));
+            color.rgb = 0.8f * abs(dot(n, rayDir)).xxx + 0.1f;
+        }
+        else if (shader_params.mode == 2)
+        {
+            color = float3(1.f - t_isect.y - t_isect.z, t_isect.y, t_isect.z);
+        }
+        else
+        {
+            color = (1.f - t_isect.y - t_isect.z) * color_a + t_isect.y * color_b + t_isect.z * color_c;
         }
     }
-#endif
+    if (t > 0.f && t >= tmin && t < tmax)
+    {
+        if (t < nominalT || nominalT == 0.f)
+        {
+            nominalT = t;
+            sum.rgb = alpha * color;
+            sum.a = 0.f;
+        }
+    }
 }
 
 uint sort_asuint(float f)
@@ -516,72 +313,16 @@ void workgroup_scan(uint thread_idx, uint val, inout uint result, inout uint tot
     // compute total_count
     total_count = read_smem_idx(sdata1_addr, 63) + read_smem_idx(sdata1_addr, 127);
 }
-void workgroup_scan_uint4(uint thread_idx, uint4 val, inout uint4 result, inout uint total_count)
-{
-    uint val1 = val.x + val.y + val.z + val.w;
-    uint result1 = 0u;
-    workgroup_scan(thread_idx, val1, result1, total_count);
-    result.w = result1;
-    result.z = result.w - val.w;
-    result.y = result.z - val.z;
-    result.x = result.y - val.y;
-}
-void split4(uint thread_idx, uint4 pred, out uint4 rank)
-{
-    uint count;
-    uint4 scan;
-    workgroup_scan_uint4(thread_idx, pred, scan, count);
-
-    rank.x = pred.x != 0u ? scan.x - 1u : 4u * thread_idx + 0u - scan.x + count;
-    rank.y = pred.y != 0u ? scan.y - 1u : 4u * thread_idx + 1u - scan.y + count;
-    rank.z = pred.z != 0u ? scan.z - 1u : 4u * thread_idx + 2u - scan.z + count;
-    rank.w = pred.w != 0u ? scan.w - 1u : 4u * thread_idx + 3u - scan.w + count;
-}
-void radix_sort(uint thread_idx)
-{
-    uint4 key = uint4(
-        s_prim_keys[4u * thread_idx + 0u],
-        s_prim_keys[4u * thread_idx + 1u],
-        s_prim_keys[4u * thread_idx + 2u],
-        s_prim_keys[4u * thread_idx + 3u]);
-
-    GroupMemoryBarrierWithGroupSync();
-
-    for (uint pass_idx = 0u; pass_idx < 4u; pass_idx++)
-    {
-        uint4 pred = uint4(
-            ((key.x >> pass_idx) & 1u) ^ 1u,
-            ((key.y >> pass_idx) & 1u) ^ 1u,
-            ((key.z >> pass_idx) & 1u) ^ 1u,
-            ((key.w >> pass_idx) & 1u) ^ 1u
-        );
-
-        uint4 rank;
-        split4(thread_idx, pred, rank);
-
-        s_prim_keys[rank.x] = key.x;
-        s_prim_keys[rank.y] = key.y;
-        s_prim_keys[rank.z] = key.z;
-        s_prim_keys[rank.w] = key.w;
-
-        GroupMemoryBarrierWithGroupSync();
-
-        key = uint4(
-            s_prim_keys[4u * thread_idx + 0u],
-            s_prim_keys[4u * thread_idx + 1u],
-            s_prim_keys[4u * thread_idx + 2u],
-            s_prim_keys[4u * thread_idx + 3u]);
-    }
-}
 
 struct prim_t
 {
-    float3 mean;
+    float3 pos_a;
     uint id;
-    float3 conic;
-    float pad;
-    float3 color;
-    float opacity;
+    float3 pos_b;
+    float3 pos_c;
+    float3 color_a;
+    float3 color_b;
+    float3 color_c;
 };
 groupshared prim_t s_prims[128u];
 
@@ -735,180 +476,163 @@ void ray_march_nanovdb(uint thread_idx,
                 total_count += uint(range >> 32u) - uint(range);
             }
 
-            for (uint layer = 0u; layer <= 16u; layer++)
+            uint workgroup_scan_accum = 0u;
+            uint pass_count = (total_count + 127u) / 128u;
+            for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
             {
-                uint workgroup_scan_accum = 0u;
-                uint pass_count = (total_count + 127u) / 128u;
-                for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
+                uint flat_list_idx = 128u * pass_idx + thread_idx;
+
+                uint list_accum = 0u;
+                uint list_idx = ~0u;
+                for (uint active_level_idx = 0u; active_level_idx < active_level_count; active_level_idx++)
                 {
-                    uint flat_list_idx = 128u * pass_idx + thread_idx;
-
-                    uint list_accum = 0u;
-                    uint list_idx = ~0u;
-                    for (uint active_level_idx = 0u; active_level_idx < active_level_count; active_level_idx++)
+                    uint range_begin = uint(s_range[active_level_idx]);
+                    uint range_end = uint(s_range[active_level_idx] >> 32u);
+                    uint list_idx_cmp = range_begin + flat_list_idx - list_accum;
+                    if (list_idx_cmp < range_end)
                     {
-                        uint range_begin = uint(s_range[active_level_idx]);
-                        uint range_end = uint(s_range[active_level_idx] >> 32u);
-                        uint list_idx_cmp = range_begin + flat_list_idx - list_accum;
-                        if (list_idx_cmp < range_end)
-                        {
-                            list_idx = list_idx_cmp;
-                            break;
-                        }
-                        list_accum += (range_end - range_begin);
-                    }
-
-                    uint prim_key = ~0u;
-                    if (list_idx != ~0u)
-                    {
-                        // culling stage
-                        pnanovdb_address_t prim_id_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
-                        uint prim_id = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, list_idx));
-
-                        pnanovdb_address_t mean_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
-                        float3 meanf = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(mean_addr, 12u, prim_id));
-
-                        // see if mean falls within cull range
-                        float cull_t = dot(meanf, worldRayDirCenter);
-
-                        // generate 4 bit sort key
-                        float key_norm = (cull_t - s_cull_range[s_min_hdda_idx].x) /
-                            (s_cull_range[s_min_hdda_idx].y - s_cull_range[s_min_hdda_idx].x);
-                        key_norm = key_norm < 0.f ? 0.f : key_norm;
-                        key_norm = key_norm > 1.f ? 1.f : key_norm;
-                        prim_key = (prim_id << 4u) | uint(15.f * key_norm);
-
-                        bool should_cull_t = !(cull_t >= s_cull_range[s_min_hdda_idx].x && cull_t <= s_cull_range[s_min_hdda_idx].y);
-                        bool should_cull_layer = layer > 0u && layer - 1u != (prim_key & 15);
-                        if (should_cull_t || should_cull_layer)
-                        {
-                            prim_key = ~0u;
-                        }
-                    }
-
-                    uint scan_val = 0u;
-                    uint scan_total = 0u;
-                    workgroup_scan(thread_idx, prim_key != ~0u ? 1u : 0u, scan_val, scan_total);
-                    if (prim_key != ~0u)
-                    {
-                        uint write_idx = scan_val - 1u + workgroup_scan_accum;
-                        if (write_idx < 512u)
-                        {
-                            s_prim_keys[write_idx] = prim_key;
-                        }
-                    }
-                    workgroup_scan_accum += scan_total;
-                    if (workgroup_scan_accum > 512u)
-                    {
+                        list_idx = list_idx_cmp;
                         break;
                     }
+                    list_accum += (range_end - range_begin);
                 }
 
-                if (workgroup_scan_accum >= 512u && layer == 0u)
+                uint prim_key = ~0u;
+                if (list_idx != ~0u)
                 {
-                    // single pass didn't work, need to go slice by slice
-                    continue;
+                    // culling stage
+                    pnanovdb_address_t prim_id_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
+                    uint prim_id = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, list_idx));
+
+                    pnanovdb_address_t index_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
+                    pnanovdb_uint32_t id_a = pnanovdb_read_uint32(buf, pnanovdb_address_offset(index_addr, 12u * prim_id + 0u));
+                    pnanovdb_uint32_t id_b = pnanovdb_read_uint32(buf, pnanovdb_address_offset(index_addr, 12u * prim_id + 4u));
+                    pnanovdb_uint32_t id_c = pnanovdb_read_uint32(buf, pnanovdb_address_offset(index_addr, 12u * prim_id + 8u));
+
+                    pnanovdb_address_t pos_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 3u);
+                    float3 pos_a = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(pos_addr, 12u, id_a));
+                    float3 pos_b = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(pos_addr, 12u, id_b));
+                    float3 pos_c = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(pos_addr, 12u, id_c));
+
+                    // see if mean falls within cull range
+                    float cull_t_a = dot(pos_a, worldRayDirCenter);
+                    float cull_t_b = dot(pos_b, worldRayDirCenter);
+                    float cull_t_c = dot(pos_c, worldRayDirCenter);
+
+                    prim_key = prim_id;
+
+                    bool should_cull_t =
+                        (cull_t_a < s_cull_range[s_min_hdda_idx].x && cull_t_b < s_cull_range[s_min_hdda_idx].x && cull_t_c < s_cull_range[s_min_hdda_idx].x) ||
+                        (cull_t_a > s_cull_range[s_min_hdda_idx].y && cull_t_b > s_cull_range[s_min_hdda_idx].y && cull_t_c > s_cull_range[s_min_hdda_idx].y);
+                    if (should_cull_t)
+                    {
+                        //prim_key = ~0u;
+                    }
                 }
+
+                uint scan_val = 0u;
+                uint scan_total = 0u;
+                workgroup_scan(thread_idx, prim_key != ~0u ? 1u : 0u, scan_val, scan_total);
+                if (prim_key != ~0u)
+                {
+                    uint write_idx = scan_val - 1u + workgroup_scan_accum;
+                    if (write_idx < 512u)
+                    {
+                        s_prim_keys[write_idx] = prim_key;
+                    }
+                }
+                workgroup_scan_accum += scan_total;
                 if (workgroup_scan_accum > 512u)
                 {
-                    workgroup_scan_accum = 512u;
+                    break;
                 }
+            }
 
-                for (uint write_idx = thread_idx; write_idx < 512u; write_idx += 128u)
+            if (workgroup_scan_accum > 512u)
+            {
+                workgroup_scan_accum = 512u;
+            }
+
+            for (uint write_idx = thread_idx; write_idx < 512u; write_idx += 128u)
+            {
+                if (write_idx >= workgroup_scan_accum)
                 {
-                    if (write_idx >= workgroup_scan_accum)
-                    {
-                        s_prim_keys[write_idx] = ~0u;
-                    }
+                    s_prim_keys[write_idx] = ~0u;
+                }
+            }
+
+            GroupMemoryBarrierWithGroupSync();
+
+            pass_count = (workgroup_scan_accum + 127u) / 128u;
+            for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
+            {
+                uint list_idx = 128u * pass_idx + thread_idx;
+
+                if (list_idx < workgroup_scan_accum)
+                {
+                    // load lines into shared memory
+                    uint prim_id = s_prim_keys[list_idx];
+
+                    s_prims[thread_idx].id = prim_id;
+
+                    pnanovdb_address_t index_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
+                    pnanovdb_uint32_t id_a = pnanovdb_read_uint32(buf, pnanovdb_address_offset(index_addr, 12u * prim_id + 0u));
+                    pnanovdb_uint32_t id_b = pnanovdb_read_uint32(buf, pnanovdb_address_offset(index_addr, 12u * prim_id + 4u));
+                    pnanovdb_uint32_t id_c = pnanovdb_read_uint32(buf, pnanovdb_address_offset(index_addr, 12u * prim_id + 8u));
+
+                    pnanovdb_address_t pos_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 3u);
+                    float3 pos_a = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(pos_addr, 12u, id_a));
+                    float3 pos_b = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(pos_addr, 12u, id_b));
+                    float3 pos_c = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(pos_addr, 12u, id_c));
+
+                    pnanovdb_address_t color_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 4u);
+                    float3 color_a = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(color_addr, 12u, id_a));
+                    float3 color_b = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(color_addr, 12u, id_b));
+                    float3 color_c = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(color_addr, 12u, id_c));
+
+                    s_prims[thread_idx].pos_a = pos_a;
+                    s_prims[thread_idx].pos_b = pos_b;
+                    s_prims[thread_idx].pos_c = pos_c;
+                    s_prims[thread_idx].color_a = color_a;
+                    s_prims[thread_idx].color_b = color_b;
+                    s_prims[thread_idx].color_c = color_c;
                 }
 
                 GroupMemoryBarrierWithGroupSync();
 
-                if (layer == 0u)
+                uint prim_count = workgroup_scan_accum - 128u * pass_idx;
+                if (prim_count > 128u)
                 {
-                    radix_sort(thread_idx);
+                    prim_count = 128u;
                 }
 
-                pass_count = (workgroup_scan_accum + 127u) / 128u;
-                for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
+                // only participate if this pixel actually wanted this data
+                if (s_ijkl[s_min_hdda_idx] == s_ijkl[thread_idx])
                 {
-                    uint list_idx = 128u * pass_idx + thread_idx;
-
-                    if (list_idx < workgroup_scan_accum)
+                    for (uint s_idx = 0u; s_idx < prim_count; s_idx++)
                     {
-                        // load gaussians into shared memory and performance projection
-                        uint prim_id = (s_prim_keys[list_idx] >> 4u);
-
-                        s_prims[thread_idx].id = prim_id;
-
-                        pnanovdb_address_t mean_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
-                        float3 meanf = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(mean_addr, 12u, prim_id));
-                        s_prims[thread_idx].mean = meanf;
-
-                        pnanovdb_address_t quat_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 4u);
-                        float4 quatf = float4(
-                            pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 1u)),
-                            pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 2u)),
-                            pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 3u)),
-                            pnanovdb_read_float(buf, pnanovdb_address_offset_product(quat_addr, 4u, 4u * prim_id + 0u))
-                        );
-                        pnanovdb_address_t scale_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 5u);
-                        float3 scalef = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(scale_addr, 12u, prim_id));
-
-                        float3 conic = {};
-                        project_conic(s_prims[thread_idx].mean, quatf, scalef, conic);
-                        s_prims[thread_idx].conic = conic;
-
-                        pnanovdb_address_t sh0_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 6u);
-                        pnanovdb_address_t shn_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 7u);
-
-                        // Note: this is assuming the typical PLY case for now
-                        float3 color = eval_sh_function(shader_params.sh_degree, sh0_addr, 3u * prim_id, shn_addr, 3u * 15u * prim_id, worldRayDirCenter);
-                        s_prims[thread_idx].color = color;
-
-                        pnanovdb_address_t opacity_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 3u);
-                        s_prims[thread_idx].opacity = pnanovdb_read_float(buf, pnanovdb_address_offset_product(opacity_addr, 4u, prim_id));
-                    }
-
-                    GroupMemoryBarrierWithGroupSync();
-
-                    uint prim_count = workgroup_scan_accum - 128u * pass_idx;
-                    if (prim_count > 128u)
-                    {
-                        prim_count = 128u;
-                    }
-
-                    // only participate if this pixel actually wanted this data
-                    if (s_ijkl[s_min_hdda_idx] == s_ijkl[thread_idx])
-                    {
-                        for (uint s_idx = 0u; s_idx < prim_count; s_idx++)
+                        if (s_prims[s_idx].id != ~0u)
                         {
-                            if (s_prims[s_idx].id != ~0u)
-                            {
-                                intersect_gaussian(
-                                    s_prims[s_idx].mean,
-                                    s_prims[s_idx].conic,
-                                    s_prims[s_idx].color,
-                                    s_prims[s_idx].opacity,
-                                    worldRayOrigin,
-                                    hdda.tmin * rayDirMagnInv,
-                                    worldRayDir,
-                                    hdda.tmax * rayDirMagnInv,
-                                    worldRayDirInv,
-                                    sum,
-                                    nominalT
-                                );
-                            }
+                            intersect_triangle(
+                                s_prims[s_idx].pos_a,
+                                s_prims[s_idx].pos_b,
+                                s_prims[s_idx].pos_c,
+                                s_prims[s_idx].color_a,
+                                s_prims[s_idx].color_b,
+                                s_prims[s_idx].color_c,
+                                worldRayOrigin,
+                                hdda.tmin * rayDirMagnInv,
+                                worldRayDir,
+                                hdda.tmax * rayDirMagnInv,
+                                worldRayDirInv,
+                                sum,
+                                nominalT
+                            );
                         }
                     }
-
-                    GroupMemoryBarrierWithGroupSync();
                 }
 
-                if (workgroup_scan_accum < 512u && layer == 0u)
-                {
-                    break;
-                }
+                GroupMemoryBarrierWithGroupSync();
             }
         }
 

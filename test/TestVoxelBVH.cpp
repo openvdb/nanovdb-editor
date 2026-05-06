@@ -16,6 +16,8 @@
 #include <nanovdb_editor/putil/VoxelBVH.h>
 
 #include <cstdarg>
+#include <cstdint>
+#include <math.h>
 
 static void log_print(pnanovdb_compute_log_level_t level, const char* format, ...)
 {
@@ -132,8 +134,9 @@ void voxelbvh_test()
         }
         mapped_range[idx] = uint64_t(idx) | (uint64_t(idx + 1u) << 32u);
     }
-#else
-    pnanovdb_compute_array_t* gaussian_arrays[6u] = {};
+#elif 0
+    static const pnanovdb_uint32_t prim_meta_count = 6u;
+    pnanovdb_compute_array_t* prim_meta_arrays[prim_meta_count] = {};
 
     const pnanovdb_uint32_t integer_space_max = 2047u;
     const char* in_file = "./data/garden_eps2d03.ply";
@@ -144,7 +147,153 @@ void voxelbvh_test()
     pnanovdb_compute_array_t* range_array = nullptr;
     pnanovdb_compute_array_t* world_bbox_array = nullptr;
     voxel_bvh.ijkl_from_gaussians_file(&compute, queue, voxelbvh_ctx, in_file, &ijkl_array, &prim_id_array,
-                                       &range_array, &world_bbox_array, integer_space_max, gaussian_arrays, 6u);
+                                       &range_array, &world_bbox_array, integer_space_max, prim_meta_arrays, 6u);
+
+    uint64_t range_count = range_array->element_count;
+    uint64_t ijkl_count = ijkl_array->element_count;
+    uint64_t* mapped_ijkl = (uint64_t*)compute.map_array(ijkl_array);
+    uint64_t* mapped_range = (uint64_t*)compute.map_array(range_array);
+#elif 1
+    static const pnanovdb_uint32_t prim_meta_count = 3u;
+    pnanovdb_compute_array_t* prim_meta_arrays[prim_meta_count] = {};
+
+    static const bool is_triangle = true;
+
+    const float inflation_radius = is_triangle ? 0.f : 2.f;
+    const char* out_file = is_triangle ? "./data/triangles.nvdb" : "./data/lines.nvdb";
+
+#    if 1
+    const pnanovdb_uint32_t integer_space_max = 511u;
+
+    pnanovdb_fileformat_t fileformat = {};
+    pnanovdb_fileformat_load(&fileformat, &compute);
+
+    static const char* array_names[] = { "positions", "indices" };
+    static const uint32_t array_count = 2;
+    pnanovdb_compute_array_t* arrays[array_count] = {};
+    pnanovdb_bool_t loaded = fileformat.load_file("./data/xyzrgb_dragon.ply", array_count, array_names, arrays);
+
+    printf("Dragon vertices(%zu) triangles(%zu)\n", arrays[0]->element_count / 3u, arrays[1]->element_count / 3u);
+
+    pnanovdb_fileformat_free(&fileformat);
+
+    pnanovdb_compute_array_t* indices_array = arrays[1];
+    pnanovdb_compute_array_t* positions_array = arrays[0];
+    pnanovdb_compute_array_t* colors_array = compute.create_array(4u, arrays[0]->element_count, nullptr);
+
+    uint32_t* mapped_indices = (uint32_t*)compute.map_array(indices_array);
+    float* mapped_positions = (float*)compute.map_array(positions_array);
+    float* mapped_colors = (float*)compute.map_array(colors_array);
+    for (uint64_t idx = 0u; idx < positions_array->element_count; idx++)
+    {
+        mapped_colors[idx] = (idx & 3) == 0u ? 1.f : 0.f;
+    }
+
+    printf("indices:\n");
+    for (uint64_t idx = 0u; idx < indices_array->element_count && idx < 32u; idx++)
+    {
+        printf("%d,", mapped_indices[idx]);
+    }
+    printf("\npositions:\n");
+    for (uint64_t idx = 0u; idx < positions_array->element_count && idx < 32u; idx++)
+    {
+        printf("%f,", mapped_positions[idx]);
+    }
+    printf("\n");
+
+#    else
+    const pnanovdb_uint32_t integer_space_max = 127u;
+    static const pnanovdb_uint32_t width = 64u;
+    static const pnanovdb_uint32_t height = 64u;
+    static const pnanovdb_uint32_t prim_count = 2u * width * height;
+
+    pnanovdb_compute_array_t* indices_array = is_triangle ? compute.create_array(4u, 3u * prim_count, nullptr) :
+                                                            compute.create_array(8u, prim_count, nullptr);
+    pnanovdb_compute_array_t* positions_array = compute.create_array(4u, 6u * prim_count, nullptr);
+    pnanovdb_compute_array_t* colors_array = compute.create_array(4u, 6u * prim_count, nullptr);
+
+    uint32_t* mapped_indices = (uint32_t*)compute.map_array(indices_array);
+    float* mapped_positions = (float*)compute.map_array(positions_array);
+    float* mapped_colors = (float*)compute.map_array(colors_array);
+
+    for (int j = 0; j < height; j++)
+    {
+        for (int i = 0; i < width; i++)
+        {
+            float x0 = 1000.f * float(i) / float(width);
+            float x1 = 1000.f * float(i + 1) / float(width);
+            float y0 = 1000.f * float(j) / float(height);
+            float y1 = 1000.f * float(j + 1) / float(height);
+            float z00 = 20.f * sinf(0.0001f * (x0 * x0 + y0 * y0));
+            float z10 = 20.f * sinf(0.0001f * (x1 * x1 + y0 * y0));
+            float z01 = 20.f * sinf(0.0001f * (x0 * x0 + y1 * y1));
+            float z11 = 20.f * sinf(0.0001f * (x1 * x1 + y1 * y1));
+
+            int idx = j * width + i;
+            if (is_triangle)
+            {
+                mapped_indices[6u * idx + 0] = 4u * idx + 0;
+                mapped_indices[6u * idx + 1] = 4u * idx + 1;
+                mapped_indices[6u * idx + 2] = 4u * idx + 3;
+                mapped_indices[6u * idx + 3] = 4u * idx + 3;
+                mapped_indices[6u * idx + 4] = 4u * idx + 2;
+                mapped_indices[6u * idx + 5] = 4u * idx + 0;
+            }
+            else
+            {
+                mapped_indices[4u * idx + 0] = 4u * idx + 0;
+                mapped_indices[4u * idx + 1] = 4u * idx + 1;
+                mapped_indices[4u * idx + 2] = 4u * idx + 2;
+                mapped_indices[4u * idx + 3] = 4u * idx + 0;
+            }
+            mapped_positions[12u * idx + 0] = x0;
+            mapped_positions[12u * idx + 1] = y0;
+            mapped_positions[12u * idx + 2] = z00;
+            mapped_positions[12u * idx + 3] = x1;
+            mapped_positions[12u * idx + 4] = y0;
+            mapped_positions[12u * idx + 5] = z10;
+            mapped_positions[12u * idx + 6] = x0;
+            mapped_positions[12u * idx + 7] = y1;
+            mapped_positions[12u * idx + 8] = z01;
+            mapped_positions[12u * idx + 9] = x1;
+            mapped_positions[12u * idx + 10] = y1;
+            mapped_positions[12u * idx + 11] = z11;
+
+            mapped_colors[12u * idx + 0] = 0.f;
+            mapped_colors[12u * idx + 1] = 1.f;
+            mapped_colors[12u * idx + 2] = 0.f;
+            mapped_colors[12u * idx + 3] = 1.f;
+            mapped_colors[12u * idx + 4] = 1.f;
+            mapped_colors[12u * idx + 5] = 0.f;
+            mapped_colors[12u * idx + 6] = 1.f;
+            mapped_colors[12u * idx + 7] = 0.f;
+            mapped_colors[12u * idx + 8] = 0.f;
+            mapped_colors[12u * idx + 9] = 0.f;
+            mapped_colors[12u * idx + 10] = 0.f;
+            mapped_colors[12u * idx + 11] = 1.f;
+        }
+    }
+#    endif
+
+    prim_meta_arrays[0] = indices_array;
+    prim_meta_arrays[1] = positions_array;
+    prim_meta_arrays[2] = colors_array;
+
+    pnanovdb_compute_array_t* ijkl_array = nullptr;
+    pnanovdb_compute_array_t* prim_id_array = nullptr;
+    pnanovdb_compute_array_t* range_array = nullptr;
+    pnanovdb_compute_array_t* world_bbox_array = nullptr;
+    if (is_triangle)
+    {
+        voxel_bvh.ijkl_from_triangles_array(&compute, queue, voxelbvh_ctx, indices_array, positions_array,
+                                            inflation_radius, &ijkl_array, &prim_id_array, &range_array,
+                                            &world_bbox_array, integer_space_max);
+    }
+    else
+    {
+        voxel_bvh.ijkl_from_lines_array(&compute, queue, voxelbvh_ctx, indices_array, positions_array, inflation_radius,
+                                        &ijkl_array, &prim_id_array, &range_array, &world_bbox_array, integer_space_max);
+    }
 
     uint64_t range_count = range_array->element_count;
     uint64_t ijkl_count = ijkl_array->element_count;
@@ -301,6 +450,7 @@ void voxelbvh_test()
     uint32_t range_flat_count_max = 0u;
     uint32_t range_flat_mask_max = 0u;
     pnanovdb_address_t addr_old = {};
+    uint32_t leaf_print_count = 0u;
     for (uint64_t range_idx = 0u; range_idx < range_count; range_idx++)
     {
         uint64_t range = mapped_range[range_idx];
@@ -380,8 +530,9 @@ void voxelbvh_test()
             }
             if (level == 0u)
             {
-                if (range_idx < 64u)
+                if (leaf_print_count < 64u)
                 {
+                    leaf_print_count++;
                     pnanovdb_coord_t leaf_ijk = pnanovdb_leaf_get_bbox_min(buf, acc.leaf);
                     printf("leaf ijk(%d,%d,%d) vs point ijk(%d,%d,%d) val(%d, 0x%x)\n", leaf_ijk.x, leaf_ijk.y,
                            leaf_ijk.z, ijk.x, ijk.y, ijk.z, uint32_t(val >> 32u), uint32_t(val));
@@ -436,12 +587,15 @@ void voxelbvh_test()
     printf("Shrinking arrays prim_id(%zu vs %zu) range(%zu vs %zu)\n", prim_id_array->element_count, ijkl_count,
            built_flat_range_array->element_count, flat_range_count);
 
-    pnanovdb_compute_array_t* metadata_arrays[8u] = { built_flat_range_array, prim_id_array,      gaussian_arrays[0],
-                                                      gaussian_arrays[1],     gaussian_arrays[2], gaussian_arrays[3],
-                                                      gaussian_arrays[4],     gaussian_arrays[5] };
+    pnanovdb_compute_array_t* metadata_arrays[2u + prim_meta_count] = { built_flat_range_array, prim_id_array };
+    for (pnanovdb_uint32_t idx = 0u; idx < prim_meta_count; idx++)
+    {
+        metadata_arrays[2u + idx] = prim_meta_arrays[idx];
+    }
 
     pnanovdb_compute_array_t* nanovdb_meta = nullptr;
-    voxel_bvh.nanovdb_append_metadata(&compute, built_nanovdb_array, &nanovdb_meta, metadata_arrays, 8u);
+    voxel_bvh.nanovdb_append_metadata(
+        &compute, built_nanovdb_array, &nanovdb_meta, metadata_arrays, 2u + prim_meta_count);
 
     // check metadata
     {
@@ -462,12 +616,33 @@ void voxelbvh_test()
                 pnanovdb_address_t prim_id_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
                 pnanovdb_uint32_t prim_id =
                     pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, range_begin));
-
+#if 0
                 pnanovdb_address_t sh0_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 6u);
                 pnanovdb_vec3_t sh0 = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(sh0_addr, 12u, prim_id));
 
                 printf("prim_id_addr(%zu) prim_id(%u) sh0_addr(%zu) sh0(%f,%f,%f)", prim_id_addr.byte_offset, prim_id,
                        sh0_addr.byte_offset, sh0.x, sh0.y, sh0.z);
+#else
+                pnanovdb_address_t index_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
+                pnanovdb_uint64_t index =
+                    pnanovdb_read_uint64(buf, pnanovdb_address_offset_product(index_addr, 8u, prim_id));
+
+                pnanovdb_uint32_t idx_a = pnanovdb_uint32_t(index);
+                pnanovdb_uint32_t idx_b = pnanovdb_uint32_t(index >> 32u);
+
+                pnanovdb_address_t pos_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 3u);
+                pnanovdb_vec3_t pos_a = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(pos_addr, 12u, idx_a));
+                pnanovdb_vec3_t pos_b = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(pos_addr, 12u, idx_b));
+                pnanovdb_address_t color_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 4u);
+                pnanovdb_vec3_t color_a =
+                    pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(color_addr, 12u, idx_a));
+                pnanovdb_vec3_t color_b =
+                    pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(color_addr, 12u, idx_b));
+
+                printf("prim_id_addr(%zu) prim_id(%u) pos(%f,%f,%f:%f,%f,%f) color(%f,%f,%f:%f,%f,%f)",
+                       prim_id_addr.byte_offset, prim_id, pos_a.x, pos_a.y, pos_a.z, pos_b.x, pos_b.y, pos_b.z,
+                       color_a.x, color_a.y, color_a.z, color_b.x, color_b.y, color_b.z);
+#endif
             }
             printf("\n");
         }
@@ -477,9 +652,9 @@ void voxelbvh_test()
     compute.save_nanovdb(nanovdb_meta, out_file);
 
     compute.destroy_array(nanovdb_meta);
-    for (uint32_t idx = 0u; idx < 6u; idx++)
+    for (uint32_t idx = 0u; idx < prim_meta_count; idx++)
     {
-        compute.destroy_array(gaussian_arrays[idx]);
+        compute.destroy_array(prim_meta_arrays[idx]);
     }
 
     compute.destroy_array(ijkl_array);
