@@ -390,8 +390,8 @@ void ray_march_nanovdb(uint thread_idx,
     int3 bbox_min = pnanovdb_root_get_bbox_min(buf, root);
     int3 bbox_max = pnanovdb_root_get_bbox_max(buf, root);
 
-    float3 bbox_minf = float3(bbox_min);
-    float3 bbox_maxf = float3(bbox_max + int3(1,1,1));
+    float3 bbox_minf = float3(bbox_min - int3(1,1,1));
+    float3 bbox_maxf = float3(bbox_max + int3(2,2,2));
 
     float boxMinT;
     float boxMaxT;
