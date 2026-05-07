@@ -158,9 +158,11 @@ void voxelbvh_test()
     pnanovdb_compute_array_t* prim_meta_arrays[prim_meta_count] = {};
 
     static const bool is_triangle = true;
+    static const bool is_triangle_lines = false;
 
-    const float inflation_radius = is_triangle ? 0.f : 2.f;
-    const char* out_file = is_triangle ? "./data/triangles.nvdb" : "./data/lines.nvdb";
+    const float inflation_radius = is_triangle_lines ? 0.02f : (is_triangle ? 0.f : 2.f);
+    const char* out_file = is_triangle_lines ? "./data/triangle_lines.nvdb" :
+                                               (is_triangle ? "./data/triangles.nvdb" : "./data/lines.nvdb");
 
 #    if 1
     const pnanovdb_uint32_t integer_space_max = 511u;
@@ -186,7 +188,9 @@ void voxelbvh_test()
     float* mapped_colors = (float*)compute.map_array(colors_array);
     for (uint64_t idx = 0u; idx < positions_array->element_count; idx++)
     {
-        mapped_colors[idx] = (idx & 3) == 0u ? 1.f : 0.f;
+        uint64_t vert_idx = idx / 3u;
+        uint32_t color_mod = uint32_t(vert_idx % 3);
+        mapped_colors[idx] = (idx % 3) == color_mod ? 1.f : 0.f;
     }
 
     printf("indices:\n");

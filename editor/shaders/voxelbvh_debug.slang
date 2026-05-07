@@ -37,6 +37,11 @@ struct shader_params_t
     float x_pos;
     float y_pos;
     float zoom;
+    uint axis;
+    uint show_first_active_level;
+    uint show_list_ids;
+    uint show_nanovdb_level;
+    uint show_inactive;
 };
 
 StructuredBuffer<uint2> buf;
@@ -79,6 +84,15 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
     uvw.x += shader_params.x_pos;
     uvw.y += shader_params.y_pos;
 
+    if (shader_params.axis == 1)
+    {
+        uvw.xyz = uvw.xzy;
+    }
+    else if (shader_params.axis == 2)
+    {
+        uvw.xyz = uvw.zxy;
+    }
+
     uvw.xyz = uvw.xzy;
 
     int3 ijk = int3(
@@ -95,6 +109,31 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
 
     float4 value = float4(0.f, 0.f, 0.f, 0.f);
 
+    if (shader_params.show_first_active_level != 0u)
+    {
+        skip_level = firstbitlow(active_level_mask);
+    }
+    if (shader_params.show_list_ids != 0u)
+    {
+        skip_level = list_begin_idx % 12;
+    }
+    if (shader_params.show_nanovdb_level != 0u)
+    {
+        skip_level = 3u;
+        if (acc.leaf.address.byte_offset != 0u)
+        {
+            skip_level = 0u;
+        }
+        else if (acc.lower.address.byte_offset != 0u)
+        {
+            skip_level = 1u;
+        }
+        else if (acc.upper.address.byte_offset != 0u)
+        {
+            skip_level = 2u;
+        }
+    }
+
     if (skip_level == 0u) { value = float4(1.f, 0.f, 0.f, 0.f);}
     if (skip_level == 1u) { value = float4(1.f, 1.f, 0.f, 0.f);}
     if (skip_level == 2u) { value = float4(0.f, 1.f, 0.f, 0.f);}
@@ -109,9 +148,12 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
     if (skip_level == 11u) { value = float4(0.5f, 0.f, 0.5f, 0.f);}
     if (skip_level == 12u) { value = float4(0.33f, 0.33f, 0.33f, 0.f);}
 
-    if (active_level_mask == 0u)
+    if (shader_params.show_inactive != 0u)
     {
-        value = float4(1.f, 0.5f, 0.f, 0.f);
+        if (active_level_mask == 0u)
+        {
+            value = float4(1.f, 0.5f, 0.f, 0.f);
+        }
     }
 
     if (((ijk.x ^ ijk.y ^ ijk.z) & 1) != 0u)
