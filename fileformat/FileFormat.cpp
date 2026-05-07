@@ -300,7 +300,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
     {
         if (is_big_endian)
         {
-            for (size_t idx = 0u; idx < element_size; idx++)
+            for (size_t idx = 0u; idx < element.size(); idx++)
             {
                 uint32_t val = *((uint32_t*)&element[idx]);
                 uint32_t val_new = (((val) & 0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) |

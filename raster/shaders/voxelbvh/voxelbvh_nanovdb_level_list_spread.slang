@@ -24,7 +24,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     pnanovdb_uint64_t val = pnanovdb_read_uint64(buf, val_addr);
     if (uint(val & 0xFFFF) == 0)
     {
-        for (uint l = 0u; l < 12; l++)
+        for (uint l = 1u; l < 12; l++)
         {
             uint lmask = ~((1u << l) - 1u);
             pnanovdb_coord_t ijkmask = ijk & lmask;
@@ -32,9 +32,19 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
             pnanovdb_address_t read_val_addr = pnanovdb_root_get_value_address(grid_type, buf, root, ijkmask);
             pnanovdb_uint64_t read_val = pnanovdb_read_uint64(buf, read_val_addr);
 
-            if (read_val != uint64_t(0u))
+            uint read_active_level_mask = uint(read_val) & 0xFFFF;
+            if ((read_active_level_mask & lmask) != 0u)
             {
-                val = read_val;
+                uint read_list_begin_idx = uint(read_val >> 32u);
+                uint read_skip_level = (uint(read_val) >> 16u) & 0xFFFF;
+
+                // the lsbs of the active level mask are false positives for this voxel
+                // we should dump the lsbs of the active level mask and offset the list begin accordingly
+                uint active_level_mask = read_active_level_mask & lmask;
+                uint list_begin_idx = read_list_begin_idx + countbits(read_active_level_mask & ~lmask);
+                uint skip_level = read_skip_level;
+
+                val = (uint64_t(list_begin_idx) << 32u) | uint64_t((skip_level << 16u) | active_level_mask);
                 break;
             }
         }
