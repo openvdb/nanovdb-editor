@@ -164,14 +164,22 @@ bool EditorSceneManager::refresh_params_for_object(const pnanovdb_compute_t* com
     {
         return false;
     }
-    SceneObject& obj = it->second;
+    return refresh_params_for_object(compute, it->second);
+}
+
+bool EditorSceneManager::refresh_params_for_object(const pnanovdb_compute_t* compute, SceneObject& obj)
+{
+    if (!compute)
+    {
+        return false;
+    }
+
     if (obj.type != SceneObjectType::NanoVDB)
     {
         return false;
     }
 
-    pnanovdb_editor_token_t* shader_name_token = obj.shader_name();
-    const char* shader_name = token_to_string(shader_name_token);
+    const char* shader_name = token_to_string(obj.shader_name());
     if (!shader_name || !*shader_name)
     {
         return false;

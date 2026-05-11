@@ -434,6 +434,21 @@ public:
                                    pnanovdb_editor_token_t* name);
 
     /*!
+        \brief Same as the token-based overload, but operates on a resolved
+               SceneObject reference.
+
+        Intended for callers that already hold the scene manager's mutex
+        (e.g. from inside with_object() / for_each_object()) and want to
+        mutate shader_name() and refresh the buffer in a single critical
+        section, leaving no window for a concurrent render-thread sync to
+        copy stale bytes into the new shader's parameter pool.
+
+        \pre Caller MUST hold the scene manager's mutex.
+        \return true if the object's params buffer was refreshed.
+    */
+    bool refresh_params_for_object(const pnanovdb_compute_t* compute, SceneObject& obj);
+
+    /*!
         \brief Create a unique key from scene and name tokens
 
         Combines two token IDs into a single 64-bit key for use as a map key.
