@@ -414,6 +414,26 @@ public:
     void refresh_params_for_shader(const pnanovdb_compute_t* compute, const char* shader_name);
 
     /*!
+        \brief Reinitialize a single object's shader params buffer from the
+               JSON defaults of its current shader_name.
+
+        Used after a shader_name change (e.g. via map_params(shader_name_t)) to
+        ensure the per-object parameter buffer matches the layout of the new
+        shader.
+
+        \param compute Compute interface
+        \param scene   Scene token
+        \param name    Object name token
+
+        \return true if the object was found and its params were refreshed.
+
+        \note Thread-safe.
+    */
+    bool refresh_params_for_object(const pnanovdb_compute_t* compute,
+                                   pnanovdb_editor_token_t* scene,
+                                   pnanovdb_editor_token_t* name);
+
+    /*!
         \brief Create a unique key from scene and name tokens
 
         Combines two token IDs into a single 64-bit key for use as a map key.
@@ -702,6 +722,27 @@ private:
     std::map<uint64_t, SceneObject> m_objects; ///< Map of objects by combined token key
     std::map<uint64_t, std::shared_ptr<CustomSceneParams>> m_scene_custom_params; ///< Map of scene params by scene key
 };
+
+#if defined(_WIN32)
+#    define PNANOVDB_SCENE_MANAGER_EXPORT_CXX __declspec(dllexport)
+#else
+#    define PNANOVDB_SCENE_MANAGER_EXPORT_CXX __attribute__((visibility("default")))
+#endif
+
+/*!
+    \brief Capture a shader's JSON-default parameter bytes into a caller-owned
+           buffer.
+
+    Loads the compiled-shader JSON (which must exist on disk), populates the
+    shader_params pool, then materialises the constant-buffer-sized blob and
+    copies up to \p buf_size bytes into \p out_buf. Returns the number of
+    bytes copied (zero if the JSON could not be loaded).
+*/
+PNANOVDB_SCENE_MANAGER_EXPORT_CXX size_t capture_shader_default_params(EditorSceneManager& scene_manager,
+                                                                       const pnanovdb_compute_t* compute,
+                                                                       const char* shader_name,
+                                                                       size_t buf_size,
+                                                                       void* out_buf);
 
 } // namespace pnanovdb_editor
 

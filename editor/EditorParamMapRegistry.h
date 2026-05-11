@@ -70,7 +70,7 @@ void* begin_shader_params_map(pnanovdb_editor_t* editor,
                               const pnanovdb_reflect_data_type_t* data_type,
                               ParamMapKey* out_key);
 
-void release_param_map(pnanovdb_editor_t* editor, const ParamMapKey& key);
+bool release_param_map(pnanovdb_editor_t* editor, const ParamMapKey& key);
 
 void param_map_stack_push(pnanovdb_editor_t* editor, ParamMapFrame frame);
 bool param_map_stack_try_pop(pnanovdb_editor_t* editor, ParamMapFrame& out_frame); // false when empty
