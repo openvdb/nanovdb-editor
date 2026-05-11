@@ -123,6 +123,97 @@ void EditorSceneManager::refresh_params_for_shader(const pnanovdb_compute_t* com
     }
 }
 
+size_t capture_shader_default_params(EditorSceneManager& scene_manager,
+                                     const pnanovdb_compute_t* compute,
+                                     const char* shader_name,
+                                     size_t buf_size,
+                                     void* out_buf)
+{
+    if (!compute || !shader_name || !out_buf || buf_size == 0)
+    {
+        return 0u;
+    }
+    pnanovdb_compute_array_t* arr = scene_manager.create_initialized_shader_params(
+        compute, shader_name, nullptr, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
+    if (!arr)
+    {
+        return 0u;
+    }
+    const size_t arr_bytes = arr->element_size * arr->element_count;
+    const size_t copy_size = (arr_bytes < buf_size) ? arr_bytes : buf_size;
+    if (arr->data && copy_size > 0)
+    {
+        std::memcpy(out_buf, arr->data, copy_size);
+    }
+    compute->destroy_array(arr);
+    return copy_size;
+}
+
+bool EditorSceneManager::refresh_params_for_object(const pnanovdb_compute_t* compute,
+                                                   pnanovdb_editor_token_t* scene,
+                                                   pnanovdb_editor_token_t* name)
+{
+    if (!compute || !scene || !name)
+    {
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    auto it = m_objects.find(make_key(scene, name));
+    if (it == m_objects.end())
+    {
+        return false;
+    }
+    return refresh_params_for_object(compute, it->second);
+}
+
+bool EditorSceneManager::refresh_params_for_object(const pnanovdb_compute_t* compute, SceneObject& obj)
+{
+    if (!compute)
+    {
+        return false;
+    }
+
+    if (obj.type != SceneObjectType::NanoVDB)
+    {
+        return false;
+    }
+
+    const char* shader_name = token_to_string(obj.shader_name());
+    if (!shader_name || !*shader_name)
+    {
+        return false;
+    }
+
+    if (obj.params.shader_params_array_owner)
+    {
+        obj.params.shader_params_array_owner.reset();
+    }
+
+    pnanovdb_compute_array_t* params_array = shader_params.get_compute_array_for_shader(shader_name, compute);
+    if (!params_array)
+    {
+        params_array = create_params_array(compute, nullptr, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
+    }
+
+    obj.params.shader_params_array = params_array;
+    obj.shader_params() = params_array ? params_array->data : nullptr;
+
+    if (params_array)
+    {
+        obj.params.shader_params_array_owner = std::shared_ptr<pnanovdb_compute_array_t>(
+            params_array,
+            [destroy_fn = compute->destroy_array](pnanovdb_compute_array_t* ptr)
+            {
+                if (ptr)
+                {
+                    destroy_fn(ptr);
+                }
+            });
+    }
+    return true;
+}
+
 void EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
                                      pnanovdb_editor_token_t* name,
                                      pnanovdb_compute_array_t* array,

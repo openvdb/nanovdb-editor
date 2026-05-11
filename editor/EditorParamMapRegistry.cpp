@@ -33,6 +33,7 @@ struct ShaderParamsState
 struct ShaderNameState
 {
     std::shared_ptr<ShaderNameStorage> storage;
+    pnanovdb_editor_token_t* prev_shader_name = nullptr;
 };
 
 // Keeps the params alive and holds its data_mutex for the whole map window,
@@ -251,26 +252,44 @@ pnanovdb_editor_shader_name_t* begin_shader_name_map(pnanovdb_editor_t* editor,
     }
 
     const ParamMapKey key{ ParamMapKind::ShaderName, object_key };
-    ParamMapState& state = registry->acquire(key, [&](ParamMapState& s) { s = ShaderNameState{ std::move(storage) }; });
+    ParamMapState& state = registry->acquire(key,
+                                             [&](ParamMapState& s)
+                                             {
+                                                 ShaderNameState payload;
+                                                 payload.prev_shader_name = storage->value.shader_name;
+                                                 payload.storage = std::move(storage);
+                                                 s = std::move(payload);
+                                             });
     *out_key = key;
     return &std::get<ShaderNameState>(state).storage->value;
 }
 
-void release_param_map(pnanovdb_editor_t* editor, const ParamMapKey& key)
+bool release_param_map(pnanovdb_editor_t* editor, const ParamMapKey& key)
 {
     ParamMapRegistry* registry = registry_for(editor);
     if (!registry)
     {
-        return;
+        return false;
     }
+    bool shader_name_changed = false;
     registry->release(key,
-                      [](ParamMapState& s)
+                      [&](ParamMapState& s)
                       {
                           if (auto* p = std::get_if<CustomSceneParamsState>(&s))
                           {
                               p->data_lock.unlock();
                           }
+                          else if (auto* p = std::get_if<ShaderNameState>(&s))
+                          {
+                              // Teardown only runs on refcount 1->0, so this fires once per outermost
+                              // shader-name map window: compare the snapshot against the current value.
+                              if (p->storage && !tokens_equal(p->prev_shader_name, p->storage->value.shader_name))
+                              {
+                                  shader_name_changed = true;
+                              }
+                          }
                       });
+    return shader_name_changed;
 }
 
 void param_map_stack_push(pnanovdb_editor_t* editor, ParamMapFrame frame)

@@ -1970,18 +1970,24 @@ std::string EditorScene::get_selected_object_shader_name() const
 void EditorScene::set_selected_object_shader_name(const std::string& shader_name)
 {
     auto* scene_token = get_current_scene_token();
+    pnanovdb_editor_token_t* new_token = EditorToken::getInstance().getToken(shader_name.c_str());
     m_scene_manager.with_object(scene_token, m_view_selection.name_token,
                                 [&](SceneObject* scene_obj)
                                 {
-                                    if (scene_obj)
+                                    if (!scene_obj)
                                     {
-                                        scene_obj->shader_name() =
-                                            EditorToken::getInstance().getToken(shader_name.c_str());
-                                        // Also update the editor->impl->shader_name to mirror it
-                                        if (m_editor && m_editor->impl)
-                                        {
-                                            m_editor->impl->shader_name = shader_name;
-                                        }
+                                        return;
+                                    }
+                                    pnanovdb_editor_token_t* prev_token = scene_obj->shader_name();
+                                    scene_obj->shader_name() = new_token;
+                                    // Also update the editor->impl->shader_name to mirror it
+                                    if (m_editor && m_editor->impl)
+                                    {
+                                        m_editor->impl->shader_name = shader_name;
+                                    }
+                                    if (m_compute && !tokens_equal(prev_token, new_token))
+                                    {
+                                        m_scene_manager.refresh_params_for_object(m_compute, *scene_obj);
                                     }
                                 });
 }

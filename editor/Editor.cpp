@@ -1874,7 +1874,11 @@ void unmap_params(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pna
         return;
     }
 
-    release_param_map(editor, frame.key);
+    const bool shader_name_changed = release_param_map(editor, frame.key);
+    if (shader_name_changed && editor->impl->scene_manager && editor->impl->compute)
+    {
+        editor->impl->scene_manager->refresh_params_for_object(editor->impl->compute, scene, name);
+    }
 
     if (frame.locked_worker_mutex && editor->impl->editor_worker)
     {
