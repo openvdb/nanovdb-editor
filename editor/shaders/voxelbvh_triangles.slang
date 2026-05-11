@@ -108,7 +108,9 @@ void intersect_triangle(
         if (shader_params.mode == 1)
         {
             float3 n = normalize(cross_product( pos_b - pos_a, pos_c - pos_a));
-            color.rgb = 0.8f * abs(dot(n, rayDir)).xxx + 0.1f;
+            color.rgb = abs(dot(n, rayDir)).xxx;
+            color.rgb *= 1.5f;
+            color.rgb *= (1.f - t_isect.y - t_isect.z) * color_a + t_isect.y * color_b + t_isect.z * color_c;
         }
         else if (shader_params.mode == 2)
         {

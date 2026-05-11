@@ -9,6 +9,7 @@
     \brief
 */
 
+#include "nanovdb_editor/putil/Compute.h"
 #include <nanovdb_editor/putil/Raster.h>
 #include <nanovdb_editor/putil/Editor.h>
 #include <nanovdb_editor/putil/FileFormat.h>
@@ -69,6 +70,27 @@ void voxelbvh_test()
     pnanovdb_voxelbvh_load(&voxel_bvh, &compute);
 
     auto voxelbvh_ctx = voxel_bvh.create_context(&compute, queue);
+
+#if 0
+    // test large buffer support
+    //uint64_t element_count = 2llu * 1024llu * 1024llu * 1024llu;
+    uint64_t element_count = 512llu * 1024llu * 1024llu;
+    pnanovdb_compute_array_t* test_arr = nullptr;
+    voxel_bvh.generate_uint64_array(&compute, queue, voxelbvh_ctx, element_count, &test_arr);
+
+    uint64_t* mapped_test = (uint64_t*)compute.map_array(test_arr);
+    uint64_t test_mismatch_count = 0llu;
+    for (uint64_t idx = 0u; idx < element_count; idx++)
+    {
+        if (mapped_test[idx] != idx)
+        {
+            test_mismatch_count++;
+        }
+    }
+    printf("test_mismatch_count(%zu of %zu)\n", test_mismatch_count, element_count);
+
+    compute.destroy_array(test_arr);
+#endif
 
 #if 0
     pnanovdb_compute_array_t* nanovdb_arr = compute.load_nanovdb("./data/dragon.nvdb");
@@ -170,10 +192,11 @@ void voxelbvh_test()
     pnanovdb_fileformat_t fileformat = {};
     pnanovdb_fileformat_load(&fileformat, &compute);
 
-    static const char* array_names[] = { "positions", "indices" };
-    static const uint32_t array_count = 2;
+    static const char* array_names[] = { "positions", "indices", "colors" };
+    static const uint32_t array_count = 3;
     pnanovdb_compute_array_t* arrays[array_count] = {};
-    pnanovdb_bool_t loaded = fileformat.load_file("./data/xyzrgb_dragon.ply", array_count, array_names, arrays);
+    pnanovdb_bool_t loaded = fileformat.load_file("./data/IsaacWarehouse.ply", array_count, array_names, arrays);
+    //pnanovdb_bool_t loaded = fileformat.load_file("./data/Kitchen_set.ply", array_count, array_names, arrays);
 
     printf("Dragon vertices(%zu) triangles(%zu)\n", arrays[0]->element_count / 3u, arrays[1]->element_count / 3u);
 
@@ -181,17 +204,19 @@ void voxelbvh_test()
 
     pnanovdb_compute_array_t* indices_array = arrays[1];
     pnanovdb_compute_array_t* positions_array = arrays[0];
-    pnanovdb_compute_array_t* colors_array = compute.create_array(4u, arrays[0]->element_count, nullptr);
+    pnanovdb_compute_array_t* colors_array = arrays[2]; //compute.create_array(4u, arrays[0]->element_count, nullptr);
 
     uint32_t* mapped_indices = (uint32_t*)compute.map_array(indices_array);
     float* mapped_positions = (float*)compute.map_array(positions_array);
     float* mapped_colors = (float*)compute.map_array(colors_array);
+#if 0
     for (uint64_t idx = 0u; idx < positions_array->element_count; idx++)
     {
         uint64_t vert_idx = idx / 3u;
         uint32_t color_mod = uint32_t(vert_idx % 3);
         mapped_colors[idx] = (idx % 3) == color_mod ? 1.f : 0.f;
     }
+#endif
 
     printf("indices:\n");
     for (uint64_t idx = 0u; idx < indices_array->element_count && idx < 32u; idx++)
@@ -304,6 +329,15 @@ void voxelbvh_test()
     uint64_t* mapped_ijkl = (uint64_t*)compute.map_array(ijkl_array);
     uint64_t* mapped_range = (uint64_t*)compute.map_array(range_array);
 #endif
+
+    printf("ijkl:\n");
+    for (uint64_t idx = 0u; idx < ijkl_array->element_count && idx < 32u; idx++)
+    {
+        uint64_t val = mapped_ijkl[idx];
+        printf("(%d,%d,%d,%d),", uint32_t(val >> 48u), uint32_t(val >> 32u) & 0xFFFF,
+            uint32_t(val >> 16u) & 0xFFFF, uint32_t(val) & 0xFFFF);
+    }
+    printf("\n");
 
     pnanovdb_compute_array_t* built_nanovdb_array = nullptr;
     pnanovdb_compute_array_t* built_flat_range_array = nullptr;

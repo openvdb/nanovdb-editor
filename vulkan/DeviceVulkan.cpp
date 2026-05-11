@@ -11,6 +11,7 @@
 */
 
 #include "CommonVulkan.h"
+#include "vulkan/vulkan_core.h"
 
 #if defined(_WIN32)
 #    include <windows.h> // Required for GetModuleFileNameA
@@ -132,15 +133,15 @@ pnanovdb_compute_device_manager_t* createDeviceManager(pnanovdb_bool_t enableVal
     // create instance
     uint32_t numLayers = 0u;
     const char** layers = nullptr;
-#ifdef _DEBUG
+//#ifdef _DEBUG
     const uint32_t numLayers_validation = 1u;
     const char* layers_validation[numLayers_validation] = { "VK_LAYER_KHRONOS_validation" };
-    if (enableValidationOnDebugBuild)
+    //if (enableValidationOnDebugBuild)
     {
         numLayers = numLayers_validation;
         layers = layers_validation;
     }
-#endif
+//#endif
 
     VkApplicationInfo appInfo = {};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -481,6 +482,9 @@ pnanovdb_compute_device_t* createDevice(pnanovdb_compute_device_manager_t* devic
         VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures = {};
         bufferDeviceAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
         synchronization2_features.pNext = &bufferDeviceAddressFeatures;
+        VkPhysicalDeviceShader64BitIndexingFeaturesEXT shader64indexing = {};
+        shader64indexing.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_64_BIT_INDEXING_FEATURES_EXT;
+        bufferDeviceAddressFeatures.pNext = &shader64indexing;
 
         instanceLoader->vkGetPhysicalDeviceFeatures2(ptr->physicalDevice, &features);
 
@@ -492,6 +496,9 @@ pnanovdb_compute_device_t* createDevice(pnanovdb_compute_device_manager_t* devic
         VkPhysicalDeviceBufferDeviceAddressFeatures enabled_bufferDeviceAddressFeatures = {};
         enabled_bufferDeviceAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
         enabled_synchronization2_features.pNext = &enabled_bufferDeviceAddressFeatures;
+        VkPhysicalDeviceShader64BitIndexingFeaturesEXT enabled_shader64indexing = {};
+        enabled_shader64indexing.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_64_BIT_INDEXING_FEATURES_EXT;
+        enabled_bufferDeviceAddressFeatures.pNext = &enabled_shader64indexing;
 
         if (features.features.shaderStorageImageWriteWithoutFormat)
         {
@@ -511,6 +518,11 @@ pnanovdb_compute_device_t* createDevice(pnanovdb_compute_device_manager_t* devic
         {
             ptr->enabledFeatures.bufferDeviceAddress = PNANOVDB_TRUE;
             enabled_bufferDeviceAddressFeatures.bufferDeviceAddress = VK_TRUE;
+        }
+        if (shader64indexing.shader64BitIndexing)
+        {
+            ptr->enabledFeatures.shader64BitIndexing = PNANOVDB_TRUE;
+            enabled_shader64indexing.shader64BitIndexing = VK_TRUE;
         }
 
         deviceCreateInfo.pNext = &enabled_features;

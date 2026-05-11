@@ -7,7 +7,7 @@
 
 struct constants_t
 {
-    uint nanovdb_word_count;
+    uint64_t nanovdb_uint64_count;
 };
 
 ConstantBuffer<constants_t> constants;
@@ -17,7 +17,7 @@ RWStructuredBuffer<uint2> buf;
 [shader("compute")][numthreads(256, 1, 1)]
 void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
-    for (uint idx = group_idx.x * 256u + thread_idx.x; idx < (constants.nanovdb_word_count >> 1u); idx += 65536u)
+    for (uint64_t idx = group_idx.x * 256u + thread_idx.x; idx < constants.nanovdb_uint64_count; idx += 65536u)
     {
         buf[idx] = uint2(0u, 0u);
     }

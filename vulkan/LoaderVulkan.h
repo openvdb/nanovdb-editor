@@ -25,6 +25,7 @@ typedef struct pnanovdb_vulkan_enabled_features_t
     pnanovdb_bool_t shaderStorageImageWriteWithoutFormat;
     pnanovdb_bool_t shaderInt64;
     pnanovdb_bool_t bufferDeviceAddress;
+    pnanovdb_bool_t shader64BitIndexing;
 } pnanovdb_vulkan_enabled_features_t;
 
 typedef struct pnanovdb_vulkan_enabled_instance_extensions_t
@@ -53,6 +54,8 @@ typedef struct pnanovdb_vulkan_enabled_device_extensions_t
     pnanovdb_bool_t VK_KHR_EXTERNAL_SEMAPHORE_FD;
     pnanovdb_bool_t VK_KHR_VIDEO_QUEUE;
     pnanovdb_bool_t VK_KHR_VIDEO_ENCODE_QUEUE;
+    pnanovdb_bool_t VK_KHR_MAINTENANCE_5;
+    pnanovdb_bool_t VK_EXT_SHADER_64BIT_INDEXING;
 } pnanovdb_vulkan_enabled_device_extensions_t;
 
 typedef struct pnanovdb_vulkan_instance_loader_t
