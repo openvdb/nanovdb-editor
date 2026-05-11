@@ -302,7 +302,7 @@ jobs:
 
     - name: Build Linux wheels
       if: runner.os == 'Linux'
-      uses: pypa/cibuildwheel@v2.21.3
+      uses: pypa/cibuildwheel@v2.23.3
       env:
         CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_34_x86_64:latest
         CIBW_MANYLINUX_AARCH64_IMAGE: quay.io/pypa/manylinux_2_34_aarch64:latest
@@ -508,7 +508,7 @@ jobs:
 
     - name: Build macOS wheels
       if: runner.os == 'macOS'
-      uses: pypa/cibuildwheel@v2.21.3
+      uses: pypa/cibuildwheel@v2.23.3
       env:
         CIBW_ARCHS_MACOS: auto
       with:
@@ -516,7 +516,7 @@ jobs:
 
     - name: Build Windows wheels
       if: runner.os == 'Windows'
-      uses: pypa/cibuildwheel@v2.21.3
+      uses: pypa/cibuildwheel@v2.23.3
       env:
         CIBW_ARCHS_WINDOWS: ${{ matrix.os == 'windows-11-arm' && 'ARM64' || 'auto' }}
         # Windows dependencies
@@ -872,7 +872,7 @@ jobs:
 
     - name: Build Linux x86_64 wheel
       if: ${{ steps.linux_x86_gate.outputs.should_build == 'true' }}
-      uses: pypa/cibuildwheel@v2.21.3
+      uses: pypa/cibuildwheel@v2.23.3
       env:
         CIBW_BUILD: cp311-manylinux_x86_64
         CIBW_MANYLINUX_X86_64_IMAGE: ${{ matrix.build_image }}
