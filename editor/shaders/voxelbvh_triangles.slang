@@ -390,6 +390,13 @@ void ray_march_nanovdb(uint thread_idx,
             }
 
             uint pass_count = (total_count + 127u) / 128u;
+            // to avoid excessive shader runtime, we limit max per voxel complexity
+            // disable at your own risk
+            if (pass_count >= 32u)
+            {
+                pass_count = 32u;
+                sum.r = 1.f;
+            }
             for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
             {
                 uint flat_list_idx = 128u * pass_idx + thread_idx;
@@ -438,10 +445,6 @@ void ray_march_nanovdb(uint thread_idx,
                     s_prims[thread_idx].color_a = color_a;
                     s_prims[thread_idx].color_b = color_b;
                     s_prims[thread_idx].color_c = color_c;
-                }
-                if (list_idx == ~0u)
-                {
-                    s_prims[thread_idx].id = ~0u;
                 }
 
                 GroupMemoryBarrierWithGroupSync();
