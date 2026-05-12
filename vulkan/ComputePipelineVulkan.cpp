@@ -183,7 +183,10 @@ pnanovdb_compute_pipeline_t* createComputePipeline(pnanovdb_compute_context_t* c
         stage.module = ptr->module;
         createInfo.stage = stage;
         createInfo.layout = ptr->pipelineLayout;
-        createInfo.pNext = &createFlags;
+        if (context->deviceQueue->device->enabledFeatures.shader64BitIndexing)
+        {
+            createInfo.pNext = &createFlags;
+        }
 
         VkResult result =
             loader->vkCreateComputePipelines(vulkanDevice, VK_NULL_HANDLE, 1u, &createInfo, nullptr, &ptr->pipeline);

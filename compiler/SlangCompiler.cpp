@@ -34,9 +34,7 @@
 #    define ASM_DEBUG_OUTPUT // Compiles and saves the assembly code, won't be possible to create a compute pipeline
 #endif
 
-#define PRINT_LOG
-
-#ifdef PRINT_LOG
+#ifdef _DEBUG
 #    define SLANG_COMPILER_LOG(...) printf(__VA_ARGS__)
 #else
 #    define SLANG_COMPILER_LOG(...) (void)0
