@@ -1479,7 +1479,8 @@ void ijkl_from_lines_array(const pnanovdb_compute_t* compute,
                            pnanovdb_compute_array_t** world_bbox_out,
                            pnanovdb_uint32_t integer_space_max)
 {
-    pnanovdb_uint64_t line_count = indices_array->element_count;
+    // ignore array semantics, assume 32-bit uint line indices for now
+    pnanovdb_uint64_t line_count = indices_array->element_count * indices_array->element_size / (8u);
 
     pnanovdb_uint64_t voxel_count = 8u * line_count;
 
@@ -1727,9 +1728,10 @@ void ijkl_from_triangles_array(const pnanovdb_compute_t* compute,
                                pnanovdb_compute_array_t** world_bbox_out,
                                pnanovdb_uint32_t integer_space_max)
 {
-    pnanovdb_uint64_t line_count = indices_array->element_count;
+    // ignore array semantics, assume 32-bit uint triangle for now
+    pnanovdb_uint64_t triangle_count = indices_array->element_count * indices_array->element_size / (12u);
 
-    pnanovdb_uint64_t voxel_count = 8u * line_count;
+    pnanovdb_uint64_t voxel_count = 8u * triangle_count;
 
     pnanovdb_compute_array_t* ijkl_array = compute->create_array(8u, voxel_count, nullptr);
     pnanovdb_compute_array_t* prim_id_array = compute->create_array(4u, voxel_count, nullptr);
@@ -1753,7 +1755,7 @@ void ijkl_from_triangles_array(const pnanovdb_compute_t* compute,
     gpu_array_upload(compute, queue, positions_gpu_array, positions_array);
 
     ijkl_from_triangles(compute, queue, voxelbvh_context, indices_gpu_array->device_buffer,
-                        positions_gpu_array->device_buffer, line_count, inflation_radius, ijkl_gpu_array->device_buffer,
+                        positions_gpu_array->device_buffer, triangle_count, inflation_radius, ijkl_gpu_array->device_buffer,
                         prim_id_gpu_array->device_buffer, range_gpu_array->device_buffer,
                         world_bbox_gpu_array->device_buffer, integer_space_max);
 
