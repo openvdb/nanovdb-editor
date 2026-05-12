@@ -11,7 +11,6 @@
 */
 
 #include "CommonVulkan.h"
-#include "vulkan/vulkan_core.h"
 
 #if defined(_WIN32)
 #    include <windows.h> // Required for GetModuleFileNameA
