@@ -309,15 +309,6 @@ void voxelbvh_test()
     uint64_t* mapped_range = (uint64_t*)compute.map_array(range_array);
 #endif
 
-    printf("ijkl:\n");
-    for (uint64_t idx = 0u; idx < ijkl_array->element_count && idx < 32u; idx++)
-    {
-        uint64_t val = mapped_ijkl[idx];
-        printf("(%d,%d,%d,%d),", uint32_t(val >> 48u), uint32_t(val >> 32u) & 0xFFFF,
-            uint32_t(val >> 16u) & 0xFFFF, uint32_t(val) & 0xFFFF);
-    }
-    printf("\n");
-
     pnanovdb_compute_array_t* built_nanovdb_array = nullptr;
     pnanovdb_compute_array_t* built_flat_range_array = nullptr;
     voxel_bvh.nanovdb_add_nodes_from_ijkl_array(&compute, queue, voxelbvh_ctx, &built_nanovdb_array,

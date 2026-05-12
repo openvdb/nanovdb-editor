@@ -839,8 +839,8 @@ static void nanovdb_add_nodes_from_ijkl_array(const pnanovdb_compute_t* compute,
     pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
     pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
 
-    // default to 1GB return for now
-    uint64_t buf_size = 8u * 1024llu * 1024llu * 1024llu;
+    // default to 2GB return for now
+    uint64_t buf_size = 2u * 1024llu * 1024llu * 1024llu;
     uint64_t nanovdb_uint64_count = (buf_size + 7u) / 8u;
 
     pnanovdb_coord_t root_coords[1u] = {};
@@ -863,7 +863,6 @@ static void nanovdb_add_nodes_from_ijkl_array(const pnanovdb_compute_t* compute,
     gpu_array_alloc_device(compute, queue, nanovdb_gpu_array, nanovdb_array);
     gpu_array_alloc_device(compute, queue, flat_range_gpu_array, flat_range_array);
 
-#if 1
     nanovdb_init(compute, queue, voxelbvh_context, nanovdb_gpu_array->device_buffer, 2u * nanovdb_uint64_count,
                  world_bbox_gpu_array->device_buffer, integer_space_max, root_coords, 1u);
 
@@ -871,22 +870,14 @@ static void nanovdb_add_nodes_from_ijkl_array(const pnanovdb_compute_t* compute,
                                        2u * nanovdb_uint64_count, flat_range_gpu_array->device_buffer,
                                        nanovdb_uint64_count, ijkl_gpu_array->device_buffer,
                                        range_gpu_array->device_buffer, ijkl_count, range_count);
-#endif
 
-    printf("readback 0\n");
     gpu_array_readback(compute, queue, nanovdb_gpu_array, nanovdb_array);
-    printf("readback 1\n");
     gpu_array_readback(compute, queue, flat_range_gpu_array, flat_range_array);
-    printf("readback 2\n");
 
     pnanovdb_uint64_t flushed_frame = 0llu;
     compute->device_interface.flush(queue, &flushed_frame, nullptr, nullptr);
 
-    printf("readback 3\n");
-
     compute->device_interface.wait_idle(queue);
-
-    printf("readback 4\n");
 
     gpu_array_map(compute, queue, nanovdb_gpu_array, nanovdb_array);
     gpu_array_map(compute, queue, flat_range_gpu_array, flat_range_array);
