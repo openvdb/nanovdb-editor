@@ -72,27 +72,6 @@ void voxelbvh_test()
     auto voxelbvh_ctx = voxel_bvh.create_context(&compute, queue);
 
 #if 0
-    // test large buffer support
-    //uint64_t element_count = 2llu * 1024llu * 1024llu * 1024llu;
-    uint64_t element_count = 512llu * 1024llu * 1024llu;
-    pnanovdb_compute_array_t* test_arr = nullptr;
-    voxel_bvh.generate_uint64_array(&compute, queue, voxelbvh_ctx, element_count, &test_arr);
-
-    uint64_t* mapped_test = (uint64_t*)compute.map_array(test_arr);
-    uint64_t test_mismatch_count = 0llu;
-    for (uint64_t idx = 0u; idx < element_count; idx++)
-    {
-        if (mapped_test[idx] != idx)
-        {
-            test_mismatch_count++;
-        }
-    }
-    printf("test_mismatch_count(%zu of %zu)\n", test_mismatch_count, element_count);
-
-    compute.destroy_array(test_arr);
-#endif
-
-#if 0
     pnanovdb_compute_array_t* nanovdb_arr = compute.load_nanovdb("./data/dragon.nvdb");
 
     pnanovdb_compute_array_t* node_mask_arr =

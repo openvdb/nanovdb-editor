@@ -165,12 +165,6 @@ typedef struct pnanovdb_voxelbvh_t
                                                   pnanovdb_compute_array_t** world_bbox_out,
                                                   pnanovdb_uint32_t integer_space_max);
 
-    void(PNANOVDB_ABI* generate_uint64_array)(const pnanovdb_compute_t* compute,
-                                                  pnanovdb_compute_queue_t* queue,
-                                                  pnanovdb_voxelbvh_context_t* context,
-                                                  pnanovdb_uint64_t element_count,
-                                                  pnanovdb_compute_array_t** buf_out);
-
 } pnanovdb_voxelbvh_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_voxelbvh_t
@@ -191,7 +185,6 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(ijkl_from_lines, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(ijkl_from_lines_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(ijkl_from_triangles, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(ijkl_from_triangles_array, 0, 0)
-PNANOVDB_REFLECT_FUNCTION_POINTER(generate_uint64_array, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE

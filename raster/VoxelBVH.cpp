@@ -32,7 +32,6 @@ enum shader
     voxelbvh_gaussians_bbox_reduce1_slang,
     voxelbvh_gaussians_bbox_reduce2_slang,
     voxelbvh_gaussians_to_ijkl_slang,
-    voxelbvh_generate_uint64_slang,
     voxelbvh_lines_bbox_reduce1_slang,
     voxelbvh_lines_bbox_reduce2_slang,
     voxelbvh_lines_to_ijkl_slang,
@@ -70,7 +69,6 @@ static const char* s_shader_names[shader_count] = {
     "raster/voxelbvh/voxelbvh_gaussians_bbox_reduce1.slang",
     "raster/voxelbvh/voxelbvh_gaussians_bbox_reduce2.slang",
     "raster/voxelbvh/voxelbvh_gaussians_to_ijkl.slang",
-    "raster/voxelbvh/voxelbvh_generate_uint64.slang",
     "raster/voxelbvh/voxelbvh_lines_bbox_reduce1.slang",
     "raster/voxelbvh/voxelbvh_lines_bbox_reduce2.slang",
     "raster/voxelbvh/voxelbvh_lines_to_ijkl.slang",
@@ -1800,70 +1798,6 @@ void ijkl_from_triangles_array(const pnanovdb_compute_t* compute,
     gpu_array_destroy(compute, queue, world_bbox_gpu_array);
 }
 
-void generate_uint64_array(const pnanovdb_compute_t* compute,
-                           pnanovdb_compute_queue_t* queue,
-                           pnanovdb_voxelbvh_context_t* voxelbvh_context,
-                           pnanovdb_uint64_t element_count,
-                           pnanovdb_compute_array_t** buf_out)
-{
-    auto ctx = cast(voxelbvh_context);
-
-    pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
-    pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
-
-    pnanovdb_compute_array_t* ijkl_array = compute->create_array(8u, element_count, nullptr);
-    compute_gpu_array_t* ijkl_gpu_array = gpu_array_create();
-
-    gpu_array_alloc_device(compute, queue, ijkl_gpu_array, ijkl_array);
-
-    struct constants_t
-    {
-        pnanovdb_uint64_t element_count;
-    };
-    constants_t constants = {};
-    constants.element_count = element_count;
-
-    // constants
-    pnanovdb_compute_buffer_desc_t buf_desc = {};
-    buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT;
-    buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
-    buf_desc.structure_stride = 0u;
-    buf_desc.size_in_bytes = sizeof(constants_t);
-    pnanovdb_compute_buffer_t* constant_buffer =
-        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &buf_desc);
-
-    // copy constants
-    void* mapped_constants = compute_interface->map_buffer(context, constant_buffer);
-    memcpy(mapped_constants, &constants, sizeof(constants_t));
-    compute_interface->unmap_buffer(context, constant_buffer);
-
-    pnanovdb_compute_buffer_transient_t* constant_transient =
-        compute_interface->register_buffer_as_transient(context, constant_buffer);
-    pnanovdb_compute_buffer_transient_t* ijkl_transient =
-        compute_interface->register_buffer_as_transient(context, ijkl_gpu_array->device_buffer);
-
-    pnanovdb_compute_resource_t resources[2u] = {};
-    resources[0u].buffer_transient = constant_transient;
-    resources[1u].buffer_transient = ijkl_transient;
-
-    compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_generate_uint64_slang],
-                                resources, 256u, 1u, 1u, "voxelbvh_generate_uint64");
-
-    gpu_array_readback(compute, queue, ijkl_gpu_array, ijkl_array);
-
-    pnanovdb_uint64_t flushed_frame = 0llu;
-    compute->device_interface.flush(queue, &flushed_frame, nullptr, nullptr);
-
-    compute->device_interface.wait_idle(queue);
-
-    gpu_array_map(compute, queue, ijkl_gpu_array, ijkl_array);
-
-    *buf_out = ijkl_array;
-
-    gpu_array_destroy(compute, queue, ijkl_gpu_array);
-    compute_interface->destroy_buffer(context, constant_buffer);
-}
-
 }
 
 pnanovdb_voxelbvh_t* pnanovdb_get_voxelbvh()
@@ -1885,7 +1819,6 @@ pnanovdb_voxelbvh_t* pnanovdb_get_voxelbvh()
     iface.ijkl_from_lines_array = ijkl_from_lines_array;
     iface.ijkl_from_triangles = ijkl_from_triangles;
     iface.ijkl_from_triangles_array = ijkl_from_triangles_array;
-    iface.generate_uint64_array = generate_uint64_array;
 
     return &iface;
 }
