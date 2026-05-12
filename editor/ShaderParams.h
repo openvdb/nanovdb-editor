@@ -13,6 +13,12 @@
 
 #include <nlohmann/json.hpp>
 
+#if defined(_WIN32)
+#    define PNANOVDB_SHADER_PARAMS_EXPORT_CXX __declspec(dllexport)
+#else
+#    define PNANOVDB_SHADER_PARAMS_EXPORT_CXX __attribute__((visibility("default")))
+#endif
+
 #ifndef IMGUI_DEFINE_MATH_OPERATORS
 #    define IMGUI_DEFINE_MATH_OPERATORS
 #endif // IMGUI_DEFINE_MATH_OPERATORS
@@ -44,6 +50,7 @@ struct ShaderParam
     bool is_hidden = false; // do not show in UI
     bool is_native_bool = false; // stored as pnanovdb_bool_t / uint32_t bool
     nlohmann::json pending_value; // store value to apply when pool array is allocated
+    nlohmann::json default_value; // JSON-declared default; persisted for resetToDefaults
 
     ShaderParam() : pool_index(SIZE_MAX), size(0), num_elements(0), step(0.0f)
     {
@@ -139,6 +146,18 @@ public:
     bool load(const std::string& shader_name, bool reload, bool load_group = false);
     bool loadGroup(const std::string& group_file, bool reload);
 
+    bool resetToDefaults(const std::string& shader_name);
+    bool resetGroupToDefaults(const std::string& group_file_path);
+
+    template <typename Func>
+    void forEachGroupShader(Func callback) const
+    {
+        for (const auto& [pool_index, shader_param_pair] : group_params_)
+        {
+            callback(shader_param_pair.first);
+        }
+    }
+
     std::vector<ShaderParam>* get(const std::string& shader_name)
     {
         if (params_map_.find(shader_name) == params_map_.end())
@@ -155,7 +174,9 @@ public:
     size_t findEquivalentParamPoolIndex(const ShaderParam& new_param);
 
     const void* getValue(const ShaderParam& shader_param);
-    void set_compute_array_for_shader(const std::string& shader_name, pnanovdb_compute_array_t* array);
+
+    PNANOVDB_SHADER_PARAMS_EXPORT_CXX void set_compute_array_for_shader(const std::string& shader_name,
+                                                                        pnanovdb_compute_array_t* array);
     pnanovdb_compute_array_t* get_compute_array_for_shader(const std::string& shader_name,
                                                            const pnanovdb_compute_t* compute);
     void clear_pending_array_for_shader(const std::string& shader_name);

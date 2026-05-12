@@ -62,3 +62,4 @@ ConfigureTest(CustomSceneParamsTest CustomSceneParamsTest.cpp ../editor/CustomSc
 ConfigureTest(MapPinTest MapPinTest.cpp EditorTestSupport.cpp)
 ConfigureTest(ShaderParamsReadOnlyTest ShaderParamsReadOnlyTest.cpp EditorTestSupport.cpp)
 ConfigureTest(ShaderNameSwapResetsParamsTest ShaderNameSwapResetsParamsTest.cpp EditorTestSupport.cpp)
+ConfigureTest(ShaderParamsResetToDefaultsTest ShaderParamsResetToDefaultsTest.cpp EditorTestSupport.cpp)

@@ -27,6 +27,12 @@
 #include <vector>
 #include <memory>
 
+#if defined(_WIN32)
+#    define PNANOVDB_SCENE_MANAGER_EXPORT_CXX __declspec(dllexport)
+#else
+#    define PNANOVDB_SCENE_MANAGER_EXPORT_CXX __attribute__((visibility("default")))
+#endif
+
 namespace pnanovdb_editor
 {
 
@@ -414,6 +420,23 @@ public:
     void refresh_params_for_shader(const pnanovdb_compute_t* compute, const char* shader_name);
 
     /*!
+        \brief Restore the pool of \p shader_name to its JSON-declared defaults
+               and propagate the result to every object using that shader.
+
+        \return true if the shader had a parameter layout to reset.
+
+        \note Exported so it can be called from gtest binaries that link
+              against the editor's hidden-visibility shared library.
+    */
+    PNANOVDB_SCENE_MANAGER_EXPORT_CXX bool reset_shader_params_to_defaults(const pnanovdb_compute_t* compute,
+                                                                           const char* shader_name);
+
+    //! Same as \ref reset_shader_params_to_defaults, applied to every shader
+    //! referenced by the named group file.
+    PNANOVDB_SCENE_MANAGER_EXPORT_CXX bool reset_group_params_to_defaults(const pnanovdb_compute_t* compute,
+                                                                          const char* group_file_path);
+
+    /*!
         \brief Reinitialize a single object's shader params buffer from the
                JSON defaults of its current shader_name.
 
@@ -737,12 +760,6 @@ private:
     std::map<uint64_t, SceneObject> m_objects; ///< Map of objects by combined token key
     std::map<uint64_t, std::shared_ptr<CustomSceneParams>> m_scene_custom_params; ///< Map of scene params by scene key
 };
-
-#if defined(_WIN32)
-#    define PNANOVDB_SCENE_MANAGER_EXPORT_CXX __declspec(dllexport)
-#else
-#    define PNANOVDB_SCENE_MANAGER_EXPORT_CXX __attribute__((visibility("default")))
-#endif
 
 /*!
     \brief Capture a shader's JSON-default parameter bytes into a caller-owned

@@ -19,6 +19,7 @@
 #include <fstream>
 #include <algorithm>
 #include <filesystem>
+#include <set>
 
 namespace pnanovdb_editor
 {
@@ -618,6 +619,85 @@ bool ShaderParams::getAllocatedPoolArray(ShaderParam& shader_param)
     return true;
 }
 
+bool ShaderParams::resetToDefaults(const std::string& shader_name)
+{
+    if (!load(shader_name, false))
+    {
+        return false;
+    }
+
+    auto* params = get(shader_name);
+    if (!params)
+    {
+        return false;
+    }
+
+    for (auto& shader_param : *params)
+    {
+        if (!getAllocatedPoolArray(shader_param))
+        {
+            continue;
+        }
+        void* pool_data = getValue(shader_param);
+        if (!pool_data)
+        {
+            continue;
+        }
+
+        const size_t total_size = shader_param.size * shader_param.num_elements;
+        std::memset(pool_data, 0, total_size);
+
+        const auto& value = shader_param.default_value;
+        if (value.is_null())
+        {
+            continue;
+        }
+
+        if (shader_param.type == ImGuiDataType_Bool)
+        {
+            if (value.is_boolean())
+            {
+                ((pnanovdb_bool_t*)pool_data)[0] = value.get<bool>() ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+            }
+            else if (value.is_number())
+            {
+                ((pnanovdb_bool_t*)pool_data)[0] = value.get<int>() != 0 ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+            }
+        }
+        else if (value.is_array())
+        {
+            for (int i = 0; i < shader_param.num_elements; i++)
+            {
+                assignTypedValueOnIndex(shader_param.type, pool_data, value, i);
+            }
+        }
+        else
+        {
+            assignTypedValue(shader_param.type, pool_data, value, nlohmann::json(0));
+        }
+    }
+    return true;
+}
+
+bool ShaderParams::resetGroupToDefaults(const std::string& group_file_path)
+{
+    if (!loadGroup(group_file_path, false))
+    {
+        return false;
+    }
+
+    std::set<std::string> seen_shaders;
+    bool any_reset = false;
+    for (const auto& [pool_index, shader_param_pair] : group_params_)
+    {
+        if (seen_shaders.insert(shader_param_pair.first).second)
+        {
+            any_reset |= resetToDefaults(shader_param_pair.first);
+        }
+    }
+    return any_reset;
+}
+
 static std::pair<ImGuiDataType, size_t> getScalarTypeAndSize(const std::string& type)
 {
     static const std::unordered_map<std::string, std::pair<ImGuiDataType, size_t>> typeMap = {
@@ -706,7 +786,8 @@ void ShaderParams::addToScalarNParam(const std::string& name, const nlohmann::js
 
     ShaderParam& shader_param = *it;
 
-    shader_param.pending_value = value.contains("value") ? value["value"] : nlohmann::json(0);
+    shader_param.default_value = value.contains("value") ? value["value"] : nlohmann::json(0);
+    shader_param.pending_value = shader_param.default_value;
 
     assignTypedValue(shader_param.type, shader_param.getMin(), value.contains("min") ? value["min"] : nlohmann::json(0));
     assignTypedValue(shader_param.type, shader_param.getMax(), value.contains("max") ? value["max"] : nlohmann::json(1));
@@ -781,6 +862,7 @@ void ShaderParams::addToBoolParam(const std::string& name, const nlohmann::json&
     // store pending values for when compute array is allocated
     if (value.contains("value") && value["value"].is_boolean())
     {
+        shader_param.default_value = value["value"];
         shader_param.pending_value = value["value"];
     }
 

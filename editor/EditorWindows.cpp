@@ -845,6 +845,24 @@ void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
                         }
                     }
                 }
+                ImGui::SameLine();
+                if (ImGui::Button("Reset"))
+                {
+                    const bool ok =
+                        is_group_mode ?
+                            scene_manager->reset_group_params_to_defaults(ptr->compute, target_name.c_str()) :
+                            scene_manager->reset_shader_params_to_defaults(ptr->compute, target_name.c_str());
+                    if (ok)
+                    {
+                        pnanovdb_editor::Console::getInstance().addLog(
+                            "Shader params for '%s' reset to defaults", target_name.c_str());
+                    }
+                    else
+                    {
+                        pnanovdb_editor::Console::getInstance().addLog(
+                            "Failed to reset shader params for '%s'", target_name.c_str());
+                    }
+                }
             }
             else
             {

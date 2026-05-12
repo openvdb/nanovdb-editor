@@ -265,6 +265,33 @@ static bool showPipelineSelector(const char* label, pnanovdb_pipeline_type_t* pi
     return changed;
 }
 
+// Restore the selected object's shader params to their JSON-declared defaults
+static void showShaderParamsResetButton(EditorSceneManager* scene_manager,
+                                        const pnanovdb_compute_t* compute,
+                                        const char* shader_name)
+{
+    if (!scene_manager || !shader_name || !*shader_name)
+    {
+        return;
+    }
+
+    if (ImGui::Button("Reset"))
+    {
+        if (scene_manager->reset_shader_params_to_defaults(compute, shader_name))
+        {
+            Console::getInstance().addLog("Shader params for '%s' reset to defaults", shader_name);
+        }
+        else
+        {
+            Console::getInstance().addLog("Failed to reset shader params for '%s'", shader_name);
+        }
+    }
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip("Restore JSON-declared defaults for '%s'\nand refresh every object using it", shader_name);
+    }
+}
+
 // Helper to show common visibility and pipeline UI for scene objects
 static void showVisibilityAndPipelineUI(EditorSceneManager* scene_manager,
                                         pnanovdb_editor_token_t* scene_token,
@@ -696,6 +723,7 @@ void Properties::render(imgui_instance_user::Instance* ptr)
 
                 if (!properties_shader_name.empty())
                 {
+                    showShaderParamsResetButton(scene_manager, ptr->compute, properties_shader_name.c_str());
                     scene_manager->shader_params.render(properties_shader_name.c_str());
                 }
             }
@@ -753,6 +781,7 @@ void Properties::render(imgui_instance_user::Instance* ptr)
                 if (!properties_shader_name.empty())
                 {
                     ImGui::Separator();
+                    showShaderParamsResetButton(scene_manager, ptr->compute, properties_shader_name.c_str());
                     scene_manager->shader_params.render(properties_shader_name.c_str());
                 }
             }

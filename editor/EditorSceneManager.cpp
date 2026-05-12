@@ -15,6 +15,8 @@
 
 #include <cstring>
 #include <cstdio>
+#include <set>
+#include <string>
 
 #ifdef _DEBUG
 #    define SCENEMANAGER_LOG(...) printf(__VA_ARGS__)
@@ -121,6 +123,52 @@ void EditorSceneManager::refresh_params_for_shader(const pnanovdb_compute_t* com
             }
         }
     }
+}
+
+bool EditorSceneManager::reset_shader_params_to_defaults(const pnanovdb_compute_t* compute, const char* shader_name)
+{
+    if (!shader_name || !*shader_name)
+    {
+        return false;
+    }
+    if (!shader_params.resetToDefaults(shader_name))
+    {
+        return false;
+    }
+    if (compute)
+    {
+        refresh_params_for_shader(compute, shader_name);
+    }
+    return true;
+}
+
+bool EditorSceneManager::reset_group_params_to_defaults(const pnanovdb_compute_t* compute, const char* group_file_path)
+{
+    if (!group_file_path || !*group_file_path)
+    {
+        return false;
+    }
+    if (!shader_params.loadGroup(group_file_path, false))
+    {
+        return false;
+    }
+    if (!shader_params.resetGroupToDefaults(group_file_path))
+    {
+        return false;
+    }
+    if (compute)
+    {
+        std::set<std::string> seen;
+        shader_params.forEachGroupShader(
+            [&](const std::string& shader_name)
+            {
+                if (seen.insert(shader_name).second)
+                {
+                    refresh_params_for_shader(compute, shader_name.c_str());
+                }
+            });
+    }
+    return true;
 }
 
 size_t capture_shader_default_params(EditorSceneManager& scene_manager,
