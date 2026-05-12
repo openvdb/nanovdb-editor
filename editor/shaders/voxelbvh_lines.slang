@@ -457,15 +457,17 @@ void ray_march_nanovdb(uint thread_idx,
 
                 GroupMemoryBarrierWithGroupSync();
 
+                uint count = total_count - 128u * pass_idx;
+                if (count > 128u)
+                {
+                    count = 128u;
+                }
+
                 // only participate if this pixel actually wanted this data
                 if (s_ijkl[s_min_hdda_idx] == s_ijkl[thread_idx])
                 {
-                    for (uint s_idx = 0u; s_idx < 128; s_idx++)
+                    for (uint s_idx = 0u; s_idx < count; s_idx++)
                     {
-                        if (s_prims[s_idx].id == ~0u)
-                        {
-                            break;
-                        }
                         intersect_line(
                             s_prims[s_idx].pos_a,
                             s_prims[s_idx].pos_b,
