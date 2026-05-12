@@ -194,11 +194,110 @@ jobs:
       - name: Run Python tests
         run: |
           conda activate nanovdb_editor
-          pytest -vvv
+          pytest -vvv -s -ra --tb=long
+
+  nanovdb-editor-build-python-macos:
+    name: Build (macOS)
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build NanoVDB Editor Python module
+        run: |
+          set -e
+          chmod +x ./build.sh
+          ./build.sh -pv
+
+      - name: Upload python artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanovdb-editor-wheel-macos
+          path: |
+            pymodule/dist/
+          retention-days: 2
+
+  nanovdb-editor-test-python-macos:
+    name: Test (macOS)
+    needs: nanovdb-editor-build-python-macos
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Conda env
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          conda-remove-defaults: "true"
+          activate-environment: nanovdb_editor
+          environment-file: pymodule/test_environment.yml
+
+      - name: Install Vulkan runtime
+        run: |
+          set -euo pipefail
+          brew install molten-vk
+
+          BREW_PREFIX="$(brew --prefix)"
+          MOLTENVK_ICD="$(python3 - <<'PY' "${BREW_PREFIX}"
+          import os
+          import sys
+
+          root = sys.argv[1]
+          for dirpath, _, filenames in os.walk(root):
+              if "MoltenVK_icd.json" in filenames:
+                  print(os.path.join(dirpath, "MoltenVK_icd.json"))
+                  raise SystemExit(0)
+          print("")
+          PY
+          )"
+
+          if [ -z "${MOLTENVK_ICD}" ]; then
+            echo "ERROR: MoltenVK_icd.json not found under ${BREW_PREFIX}" >&2
+            exit 1
+          fi
+
+          echo "Found MoltenVK ICD: ${MOLTENVK_ICD}"
+          echo "VK_ICD_FILENAMES=${MOLTENVK_ICD}" >> "${GITHUB_ENV}"
+          echo "VK_DRIVER_FILES=${MOLTENVK_ICD}" >> "${GITHUB_ENV}"
+          echo "DYLD_LIBRARY_PATH=${BREW_PREFIX}/lib:${DYLD_LIBRARY_PATH:-}" >> "${GITHUB_ENV}"
+          echo "DYLD_FALLBACK_LIBRARY_PATH=${BREW_PREFIX}/lib:${DYLD_FALLBACK_LIBRARY_PATH:-}" >> "${GITHUB_ENV}"
+
+      - name: Download package with nanovdb_editor
+        uses: actions/download-artifact@v4
+        with:
+          name: nanovdb-editor-wheel-macos
+          path: ./dist
+
+      - name: Install nanovdb_editor
+        run: |
+          conda activate nanovdb_editor
+          pip install ./dist/nanovdb_editor*.whl
+
+      - name: Run Python tests
+        id: run_python_tests_macos
+        run: |
+          conda activate nanovdb_editor
+          export PYTHONFAULTHANDLER=1
+          export PYTHONUNBUFFERED=1
+          python -X faulthandler -m pytest pytests -vvv -s -ra --tb=long
 
   nanovdb-editor-build-python-windows:
     name: Build (Windows)
     runs-on: windows-latest
+    env:
+      USE_VCPKG: ON
     defaults:
       run:
         shell: pwsh
@@ -210,6 +309,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Set up vcpkg
+        run: |
+          $VcpkgRoot = Join-Path $env:RUNNER_TEMP "vcpkg"
+          git clone --depth 1 https://github.com/microsoft/vcpkg $VcpkgRoot
+          & "$VcpkgRoot\bootstrap-vcpkg.bat"
+          "VCPKG_ROOT=$VcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build NanoVDB Editor Python module
         run: |
@@ -227,6 +333,8 @@ jobs:
     name: Test (Windows)
     needs: nanovdb-editor-build-python-windows
     runs-on: windows-latest
+    env:
+      NANOVDB_EDITOR_WINDOWS_H264: "1"
     defaults:
       run:
         shell: bash -el {0}
@@ -242,6 +350,16 @@ jobs:
           activate-environment: nanovdb_editor
           environment-file: pymodule/test_environment.yml
 
+      - name: Set up vcpkg
+        run: |
+          $VcpkgRoot = Join-Path $env:RUNNER_TEMP "vcpkg"
+          git clone --depth 1 https://github.com/microsoft/vcpkg $VcpkgRoot
+          & "$VcpkgRoot\bootstrap-vcpkg.bat"
+          "VCPKG_ROOT=$VcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & "$VcpkgRoot\vcpkg.exe" install --triplet x64-windows --x-manifest-root $PWD
+          "$PWD\vcpkg_installed\x64-windows\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        shell: pwsh
+
       - name: Install Vulkan Runtime
         run: |
           # Download and install Vulkan Runtime (vulkan-1.dll loader)
@@ -250,10 +368,17 @@ jobs:
           Invoke-WebRequest -Uri $VulkanRuntimeUrl -OutFile $VulkanInstaller
           Start-Process -FilePath $VulkanInstaller -ArgumentList "/S" -Wait
 
-          if (-not (Test-Path "C:\Windows\System32\vulkan-1.dll")) {
+          $SystemLoader = @(
+            "C:\Windows\System32\vulkan-1.dll",
+            "C:\Windows\SysWOW64\vulkan-1.dll"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if (-not $SystemLoader) {
             Write-Host "ERROR: vulkan-1.dll not found after installation"
             exit 1
           }
+
+          Write-Host "Using Vulkan loader: $SystemLoader"
         shell: pwsh
 
       - name: Install Mesa3D lavapipe
@@ -278,12 +403,21 @@ jobs:
           $IcdContent.ICD.library_path = $VulkanDllPath
           $IcdContent | ConvertTo-Json -Depth 10 | Set-Content $VulkanICDPath -Encoding UTF8
 
-          # Register ICD in Windows Registry
-          $RegistryPath = "HKLM:\SOFTWARE\Khronos\Vulkan\Drivers"
-          if (-not (Test-Path $RegistryPath)) {
-            New-Item -Path $RegistryPath -Force | Out-Null
+          # Prefer env vars so pytest does not rely only on registry state.
+          "VK_ICD_FILENAMES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VK_DRIVER_FILES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          # Best-effort registry registration.
+          try {
+            $RegistryPath = "HKLM:\SOFTWARE\Khronos\Vulkan\Drivers"
+            if (-not (Test-Path $RegistryPath)) {
+              New-Item -Path $RegistryPath -Force | Out-Null
+            }
+            New-ItemProperty -Path $RegistryPath -Name $VulkanICDPath -Value 0 -PropertyType DWord -Force | Out-Null
+            Write-Host "Registry entry created: $VulkanICDPath"
+          } catch {
+            Write-Host "WARNING: Could not write Vulkan ICD registry entry: $($_.Exception.Message)"
           }
-          New-ItemProperty -Path $RegistryPath -Name $VulkanICDPath -Value 0 -PropertyType DWord -Force | Out-Null
 
           # Add Mesa to PATH for DLL dependencies
           $MesaBinPath = Join-Path $MesaDir "x64"
@@ -296,15 +430,253 @@ jobs:
           name: nanovdb-editor-wheel-windows
           path: ./dist
 
+      - name: Verify downloaded wheel bundles required runtime DLLs
+        run: |
+          conda activate nanovdb_editor
+          python scripts/ci/verify_windows_runtime.py wheel --dir dist
+
       - name: Install nanovdb_editor
         run: |
           conda activate nanovdb_editor
           pip install ./dist/nanovdb_editor*.whl
 
+      - name: Verify installed runtime libs and compiler smoke test
+        run: |
+          conda activate nanovdb_editor
+          python scripts/ci/verify_windows_runtime.py installed --compiler-smoke-test
+
+      - name: Run Windows native smoke tests before pytest
+        run: |
+          conda activate nanovdb_editor
+          python scripts/ci/windows_native_smoke_test.py
+
       - name: Run Python tests
         run: |
           conda activate nanovdb_editor
-          pytest pytests -vvv --tb=short
+          python -X faulthandler -m pytest pytests -vvv -s -ra --tb=long
+
+  nanovdb-editor-build-python-windows-arm:
+    name: Build (Windows ARM64)
+    runs-on: windows-11-arm
+    env:
+      USE_VCPKG: ON
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: 'arm64'
+
+      - name: Set up vcpkg
+        run: |
+          $VcpkgRoot = Join-Path $env:RUNNER_TEMP "vcpkg"
+          git clone --depth 1 https://github.com/microsoft/vcpkg $VcpkgRoot
+          & "$VcpkgRoot\bootstrap-vcpkg.bat"
+          "VCPKG_ROOT=$VcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build NanoVDB Editor Python module
+        run: |
+          ./build.bat -pfv
+
+      - name: Upload python artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanovdb-editor-wheel-windows-arm64
+          path: |
+            pymodule/dist/
+          retention-days: 2
+
+  nanovdb-editor-test-python-windows-arm:
+    name: Test (Windows ARM64)
+    needs: nanovdb-editor-build-python-windows-arm
+    runs-on: windows-11-arm
+    env:
+      NANOVDB_EDITOR_WINDOWS_H264: "1"
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: 'arm64'
+
+      - name: Set up vcpkg
+        run: |
+          $VcpkgRoot = Join-Path $env:RUNNER_TEMP "vcpkg"
+          git clone --depth 1 https://github.com/microsoft/vcpkg $VcpkgRoot
+          & "$VcpkgRoot\bootstrap-vcpkg.bat"
+          "VCPKG_ROOT=$VcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & "$VcpkgRoot\vcpkg.exe" install --triplet arm64-windows --x-manifest-root $PWD
+          "$PWD\vcpkg_installed\arm64-windows\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install ARM64 Vulkan Runtime
+        run: |
+          Write-Host "Installing ARM64 Vulkan runtime..."
+          $SdkInstaller = Join-Path $env:RUNNER_TEMP "vulkan-sdk-arm64.exe"
+          $SdkRoot = Join-Path $env:RUNNER_TEMP "VulkanSDK"
+
+          if (Test-Path $SdkRoot) {
+            Remove-Item -Recurse -Force $SdkRoot
+          }
+          New-Item -ItemType Directory -Path $SdkRoot -Force | Out-Null
+
+          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/latest/warm/vulkan_sdk.exe" -OutFile $SdkInstaller
+          Start-Process -FilePath $SdkInstaller -ArgumentList @(
+            "--root", $SdkRoot,
+            "--accept-licenses",
+            "--default-answer",
+            "--confirm-command",
+            "install",
+            "copy_only=1"
+          ) -Wait
+
+          $InstalledSdk = Get-ChildItem -Path $SdkRoot -Directory |
+            Where-Object { $_.Name -match '^\d+(\.\d+)+$' } |
+            Sort-Object { [version]$_.Name } -Descending |
+            Select-Object -First 1
+          if (-not $InstalledSdk -and (Test-Path (Join-Path $SdkRoot "Bin"))) {
+            $InstalledSdk = Get-Item $SdkRoot
+          }
+          if (-not $InstalledSdk) {
+            Write-Host "No versioned Vulkan SDK directory found under $SdkRoot"
+            Get-ChildItem -Path $SdkRoot -Directory -ErrorAction SilentlyContinue |
+              Select-Object FullName | Format-Table -AutoSize
+            throw "Installed Vulkan SDK directory not found under $SdkRoot"
+          }
+
+          $RuntimeInstaller = Get-ChildItem -Path $InstalledSdk.FullName -Recurse -File -Filter "VulkanRT.exe" -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if (-not $RuntimeInstaller) {
+            Write-Host "Unable to find VulkanRT.exe under $($InstalledSdk.FullName)"
+            Get-ChildItem -Path $InstalledSdk.FullName -Recurse -File -Filter "*Vulkan*.exe" -ErrorAction SilentlyContinue |
+              Select-Object -First 50 FullName | Format-Table -AutoSize
+            throw "ARM64 Vulkan runtime installer not found in SDK payload"
+          }
+          Write-Host "Running ARM64 Vulkan runtime installer: $($RuntimeInstaller.FullName)"
+          Start-Process -FilePath $RuntimeInstaller.FullName -ArgumentList "/S" -Wait
+
+          $SystemLoader = @(
+            "C:\Windows\System32\vulkan-1.dll",
+            "C:\Windows\SysWOW64\vulkan-1.dll"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if ($SystemLoader) {
+            Write-Host "Using system Vulkan loader: $SystemLoader"
+          } else {
+            $VulkanLoaderFile = Get-ChildItem -Path $InstalledSdk.FullName -Recurse -File -Filter "vulkan-1.dll" -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -notmatch '\\Templates\\' } |
+              Select-Object -First 1
+            if (-not $VulkanLoaderFile) {
+              Write-Host "Unable to find vulkan-1.dll under $($InstalledSdk.FullName)"
+              Get-ChildItem -Path $InstalledSdk.FullName -Recurse -File -Filter "*vulkan*.dll" -ErrorAction SilentlyContinue |
+                Select-Object -First 50 FullName | Format-Table -AutoSize
+              throw "ARM64 Vulkan loader not found after runtime installation"
+            }
+
+            $VulkanBinPath = Split-Path -Parent $VulkanLoaderFile.FullName
+            Write-Warning "System Vulkan runtime was not found; falling back to SDK loader at $($VulkanLoaderFile.FullName)"
+            "VULKAN_SDK=$($InstalledSdk.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            $VulkanBinPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
+
+      - name: Install Mesa3D lavapipe
+        run: |
+          # Download Mesa lavapipe for Windows ARM64 (ARM64 binaries)
+          Write-Host "Downloading Mesa lavapipe for ARM64..."
+          $MesaUrl = "https://github.com/mmozeiko/build-mesa/releases/download/24.3.1/mesa-lavapipe-arm64-24.3.1.zip"
+          $MesaArchive = "$env:TEMP\mesa-lavapipe-arm64.zip"
+          $MesaDir = "$env:TEMP\mesa-lavapipe-arm64"
+
+          if (Test-Path $MesaDir) { Remove-Item -Recurse -Force $MesaDir }
+          New-Item -ItemType Directory -Path $MesaDir -Force | Out-Null
+
+          Invoke-WebRequest -Uri $MesaUrl -OutFile $MesaArchive
+
+          Write-Host "Extracting Mesa..."
+          Expand-Archive -Path $MesaArchive -DestinationPath $MesaDir -Force
+
+          $VulkanLvpDll = Get-ChildItem -Path $MesaDir -Recurse -File -Filter "vulkan_lvp.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $VulkanLvpDll) {
+              Write-Host "ERROR: vulkan_lvp.dll not found in ARM64 lavapipe package!"
+              Get-ChildItem -Path $MesaDir -Recurse -File -Filter "vulkan*.dll" -ErrorAction SilentlyContinue |
+                Select-Object -First 50 FullName | Format-Table -AutoSize
+              exit 1
+          }
+          $MesaBinPath = Split-Path -Parent $VulkanLvpDll.FullName
+          Write-Host "Using lavapipe DLL: $($VulkanLvpDll.FullName)"
+          Write-Host "Using Mesa bin path: $MesaBinPath"
+
+          $VulkanICDJson = Get-ChildItem -Path $MesaBinPath -File -Filter "lvp_icd*.json" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $VulkanICDJson) {
+              $VulkanICDJson = Get-ChildItem -Path $MesaDir -Recurse -File -Filter "lvp_icd*.json" -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          if (-not $VulkanICDJson) {
+              Write-Host "ERROR: lvp_icd*.json not found in ARM64 lavapipe package!"
+              Get-ChildItem -Path $MesaDir -Recurse -File -Filter "*.json" -ErrorAction SilentlyContinue |
+                Select-Object -First 50 FullName | Format-Table -AutoSize
+              exit 1
+          }
+          $VulkanICDPath = $VulkanICDJson.FullName
+          Write-Host "Using lavapipe ICD JSON: $VulkanICDPath"
+
+          $IcdContent = Get-Content $VulkanICDPath -Raw | ConvertFrom-Json
+          $IcdContent.ICD.library_path = $VulkanLvpDll.FullName
+          $IcdContent | ConvertTo-Json -Depth 10 | Set-Content $VulkanICDPath -Encoding UTF8
+
+          $RegistryPath = "HKLM:\SOFTWARE\Khronos\Vulkan\Drivers"
+          if (-not (Test-Path $RegistryPath)) {
+              New-Item -Path $RegistryPath -Force | Out-Null
+          }
+          New-ItemProperty -Path $RegistryPath -Name $VulkanICDPath -Value 0 -PropertyType DWord -Force | Out-Null
+
+          "VK_ICD_FILENAMES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VK_DRIVER_FILES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $MesaBinPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Download package with nanovdb_editor
+        uses: actions/download-artifact@v4
+        with:
+          name: nanovdb-editor-wheel-windows-arm64
+          path: ./dist
+
+      - name: Verify downloaded wheel bundles required runtime DLLs
+        run: |
+          python scripts/ci/verify_windows_runtime.py wheel --dir dist
+
+      - name: Install nanovdb_editor
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest numpy parameterized
+
+          $Wheel = Get-ChildItem -Path ./dist -Filter "nanovdb_editor*.whl" | Select-Object -First 1
+          if (-not $Wheel) {
+            throw "nanovdb_editor wheel not found in ./dist"
+          }
+
+          python -m pip install $Wheel.FullName
+
+      - name: Verify installed runtime libs and compiler smoke test
+        run: |
+          python scripts/ci/verify_windows_runtime.py installed --compiler-smoke-test
+
+      - name: Run Windows ARM64 native smoke tests before pytest
+        run: |
+          python scripts/ci/windows_native_smoke_test.py
+
+      - name: Run Python tests
+        run: |
+          python -X faulthandler -m pytest pytests -vvv -s -ra --tb=long
 
   nanovdb-editor-build-python-linux-arm:
     # if: github.ref == 'refs/heads/main'
@@ -373,14 +745,8 @@ jobs:
       - name: Install and test Python module
         run: |
           pip install ./dist/nanovdb_editor*.whl
-          pip install pytest numpy pytest-timeout
+          pip install pytest numpy pytest-timeout parameterized
           python3 -c 'import nanovdb_editor; print("SUCCESS: Module imported on ARM64")'
-          pytest pytests -vvv --tb=short --timeout=300 --timeout-method=thread || echo 'Tests completed'
-
-  fvdb-viz-integration:
-    name: fVDB Integration
-    needs: nanovdb-editor-build-python-linux
-    uses: ./.github/workflows/fvdb-viz-integration.yml
-    with:
-      wheel_artifact: nanovdb-editor-wheel
-    secrets: inherit
+          export PYTHONFAULTHANDLER=1
+          export PYTHONUNBUFFERED=1
+          python3 -X faulthandler -m pytest pytests -vvv -s -ra --tb=long --timeout=300 --timeout-method=thread

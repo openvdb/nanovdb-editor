@@ -115,3 +115,55 @@ void workgroup_scan_uint64(uint thread_idx,
     total_count = read_smem_64_idx(sdata1_addr, 63) + read_smem_64_idx(sdata1_addr, 127) +
                   read_smem_64_idx(sdata1_addr, 191) + read_smem_64_idx(sdata1_addr, 255);
 }
+
+// ----------------------------- workgroup uint4 max ---------------------------------------
+
+uint64_t workgroup_uint64_max(uint64_t a, uint64_t b)
+{
+    return a > b ? a : b;
+}
+
+void workgroup_uint64_reduce_max(uint thread_idx, vector<uint64_t, 4> val, inout uint64_t total_count)
+{
+    uint sdata0_addr = 0;
+    uint sdata1_addr = 256u;
+
+    uint64_t local_val = workgroup_uint64_max(workgroup_uint64_max(val.x, val.y), workgroup_uint64_max(val.z, val.w));
+    write_smem_64_idx(sdata0_addr, thread_idx, local_val);
+
+    GroupMemoryBarrierWithGroupSync();
+
+    if (thread_idx < 64u)
+    {
+        local_val = workgroup_uint64_max(local_val, read_smem_64_idx(sdata0_addr, thread_idx + 64u));
+        local_val = workgroup_uint64_max(local_val, read_smem_64_idx(sdata0_addr, thread_idx + 128u));
+        local_val = workgroup_uint64_max(local_val, read_smem_64_idx(sdata0_addr, thread_idx + 192u));
+        write_smem_64_idx(sdata1_addr, thread_idx, local_val);
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    if (thread_idx < 16u)
+    {
+        local_val = workgroup_uint64_max(local_val, read_smem_64_idx(sdata1_addr, thread_idx + 16u));
+        local_val = workgroup_uint64_max(local_val, read_smem_64_idx(sdata1_addr, thread_idx + 32u));
+        local_val = workgroup_uint64_max(local_val, read_smem_64_idx(sdata1_addr, thread_idx + 48u));
+        write_smem_64_idx(sdata0_addr, thread_idx, local_val);
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    if (thread_idx < 4u)
+    {
+        local_val = workgroup_uint64_max(local_val, read_smem_64_idx(sdata0_addr, thread_idx + 4u));
+        local_val = workgroup_uint64_max(local_val, read_smem_64_idx(sdata0_addr, thread_idx + 8u));
+        local_val = workgroup_uint64_max(local_val, read_smem_64_idx(sdata0_addr, thread_idx + 12u));
+        write_smem_64_idx(sdata1_addr, thread_idx, local_val);
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    // compute total_count
+    total_count = workgroup_uint64_max(workgroup_uint64_max(read_smem_64_idx(sdata1_addr, 0), read_smem_64_idx(sdata1_addr, 1)),
+                                     workgroup_uint64_max(read_smem_64_idx(sdata1_addr, 2), read_smem_64_idx(sdata1_addr, 3)));
+}

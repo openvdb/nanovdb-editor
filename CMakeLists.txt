@@ -9,6 +9,10 @@
 
 cmake_minimum_required(VERSION 3.25 FATAL_ERROR)
 
+if(DEFINED ENV{VCPKG_INSTALLED_DIR})
+    set(VCPKG_INSTALLED_DIR "$ENV{VCPKG_INSTALLED_DIR}" CACHE PATH "Vcpkg installed root (manifest mode)" FORCE)
+endif()
+
 # Set CMake policies to suppress warnings
 if(POLICY CMP0175)
     cmake_policy(SET CMP0175 NEW)
@@ -71,11 +75,20 @@ if(SKBUILD)
 endif()
 
 if(NANOVDB_EDITOR_USE_VCPKG)
-  find_package(ZLIB REQUIRED)
-  find_package(Blosc REQUIRED)
+  if(NOT VCPKG_TARGET_TRIPLET AND WIN32)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64")
+      set(VCPKG_TARGET_TRIPLET "arm64-windows")
+    else()
+      set(VCPKG_TARGET_TRIPLET "x64-windows")
+    endif()
+  endif()
+
+  if(VCPKG_INSTALLED_DIR AND VCPKG_TARGET_TRIPLET)
+    list(PREPEND CMAKE_PREFIX_PATH "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}")
+  endif()
 
   if(NANOVDB_EDITOR_E57_FORMAT)
-    find_package(e57format REQUIRED)
+    find_package(E57Format CONFIG REQUIRED)
   endif()
 endif()
 
@@ -258,18 +271,13 @@ create_nanovdb_library(pnanovdbeditor
         ${EDITOR_SOURCE_FILES}
         ${SERVER_SOURCE_FILES}
         ${VULKAN_IMGUI_SOURCE_FILES}
-        ${IMGUI_SOURCE_FILES}
-        ${imgui_SOURCE_DIR}/misc/cpp/imgui_stdlib.cpp    # for std::string text input
     HEADERS ${EDITOR_HEADER_FILES}
     INCLUDES
         ./
         ./imgui
         ${nanovdb_SOURCE_DIR}/nanovdb
-        ${imgui_SOURCE_DIR}
         ${glfw_SOURCE_DIR}/include
         ${FileWatch_SOURCE_DIR}
-        ${ImGuiFileDialog_SOURCE_DIR}
-        ${ImGuiColorTextEdit_SOURCE_DIR}
         ${llhttp_SOURCE_DIR}/include
         ${asio_SOURCE_DIR}/asio/include
         ${expected_SOURCE_DIR}/include
@@ -277,6 +285,7 @@ create_nanovdb_library(pnanovdbeditor
     LIBS
         nlohmann_json::nlohmann_json
         llhttp_static
+        imgui
         ImGuiColorTextEdit
         ImGuiFileDialog
         fmt::fmt
@@ -309,12 +318,23 @@ endif()
 add_sanitizer_support(pnanovdbeditor)
 
 if(WIN32 AND TARGET glfw)
-    add_custom_command(
-        TARGET pnanovdbeditor POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_PROPERTY:glfw,IMPORTED_LOCATION>" "${CMAKE_BINARY_DIR}/$<CONFIG>/glfw3.dll"
-        COMMENT "Copying GLFW DLL"
-    )
+    get_target_property(_glfw_type glfw TYPE)
+    get_target_property(_glfw_imported glfw IMPORTED)
+    if(_glfw_imported AND (_glfw_type STREQUAL "SHARED_LIBRARY" OR _glfw_type STREQUAL "UNKNOWN_LIBRARY"))
+        add_custom_command(
+            TARGET pnanovdbeditor POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<TARGET_PROPERTY:glfw,IMPORTED_LOCATION>" "${CMAKE_BINARY_DIR}/$<CONFIG>/glfw3.dll"
+            COMMENT "Copying GLFW DLL"
+        )
+    elseif(_glfw_type STREQUAL "SHARED_LIBRARY")
+        add_custom_command(
+            TARGET pnanovdbeditor POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<TARGET_FILE:glfw>" "${CMAKE_BINARY_DIR}/$<CONFIG>/$<TARGET_FILE_NAME:glfw>"
+            COMMENT "Copying GLFW DLL"
+        )
+    endif()
 endif()
 
 if(NANOVDB_EDITOR_BUILD_TESTS)
@@ -371,6 +391,61 @@ if(SKBUILD)
         COMPONENT python_libs
     )
 
+    if(WIN32 AND VCPKG_INSTALLED_DIR AND VCPKG_TARGET_TRIPLET)
+        # Mirror the Linux wheel layout on Windows: bundle the exact runtime
+        # DLLs we intentionally depend on instead of scanning the full process
+        # dependency graph during install.
+        set(_python_runtime_vcpkg_release_patterns
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin/lz4*.dll"
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin/zlib*.dll"
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin/zstd*.dll"
+        )
+        foreach(_python_runtime_pattern IN LISTS _python_runtime_vcpkg_release_patterns)
+            file(GLOB _python_runtime_matches LIST_DIRECTORIES FALSE "${_python_runtime_pattern}")
+            if(_python_runtime_matches)
+                install(FILES ${_python_runtime_matches}
+                    DESTINATION nanovdb_editor/lib
+                    COMPONENT python_libs
+                )
+            endif()
+        endforeach()
+
+        set(_python_runtime_vcpkg_debug_patterns
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/bin/lz4*.dll"
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/bin/zlib*.dll"
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/bin/zstd*.dll"
+        )
+        foreach(_python_runtime_pattern IN LISTS _python_runtime_vcpkg_debug_patterns)
+            file(GLOB _python_runtime_matches LIST_DIRECTORIES FALSE "${_python_runtime_pattern}")
+            if(_python_runtime_matches)
+                install(FILES ${_python_runtime_matches}
+                    CONFIGURATIONS Debug
+                    DESTINATION nanovdb_editor/lib
+                    COMPONENT python_libs
+                )
+            endif()
+        endforeach()
+    endif()
+
+    if(WIN32 AND NANOVDB_EDITOR_USE_H264)
+        # Install OpenH264 runtime DLL using config-specific lists from packages.cmake
+        # so Debug and Release builds each get the correct DLL (no overwriting).
+        if(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_DEBUG)
+            install(FILES ${NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_DEBUG}
+                CONFIGURATIONS Debug
+                DESTINATION nanovdb_editor/lib
+                COMPONENT python_libs
+            )
+        endif()
+        if(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_RELEASE)
+            install(FILES ${NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_RELEASE}
+                CONFIGURATIONS Release RelWithDebInfo MinSizeRel
+                DESTINATION nanovdb_editor/lib
+                COMPONENT python_libs
+            )
+        endif()
+    endif()
+
     # Install Slang libraries
     if(Slang_ADDED)
         if(WIN32)
@@ -388,6 +463,13 @@ if(SKBUILD)
                     COMPONENT python_libs
                 )
             endif()
+        elseif(APPLE)
+            install(CODE "
+                set(SLANG_RUNTIME_SOURCE_DIR \"${Slang_SOURCE_DIR}/lib\")
+                set(SLANG_RUNTIME_DEST_DIR \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                set(SLANG_RUNTIME_DYLIB_SUFFIX \"${CMAKE_SHARED_LIBRARY_SUFFIX}\")
+                include(\"${CMAKE_CURRENT_SOURCE_DIR}/cmake/slang_runtime_macos.cmake\")
+            " COMPONENT python_libs)
         else()
             if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
                 # Install all slang libraries using install(CODE) to avoid configure-time path resolution
@@ -569,12 +651,24 @@ if(SKBUILD)
         PATTERN "__pycache__" EXCLUDE
     )
 
-    # Install GLFW DLL files that were previously copied
+    # Install GLFW DLL files
     if(WIN32 AND TARGET glfw)
-        install(FILES "${CMAKE_BINARY_DIR}/$<CONFIG>/glfw3.dll"
-            DESTINATION nanovdb_editor/lib
-            COMPONENT python_libs
-        )
+        get_target_property(_glfw_install_type glfw TYPE)
+        if(_glfw_install_type STREQUAL "SHARED_LIBRARY")
+            install(FILES "$<TARGET_FILE:glfw>"
+                DESTINATION nanovdb_editor/lib
+                COMPONENT python_libs
+            )
+        elseif(NOT _glfw_install_type STREQUAL "STATIC_LIBRARY")
+            install(FILES "${CMAKE_BINARY_DIR}/$<CONFIG>/glfw3.dll"
+                DESTINATION nanovdb_editor/lib
+                COMPONENT python_libs
+            )
+        endif()
+    endif()
+
+    if(WIN32 AND NOT TARGET vulkan)
+        message(FATAL_ERROR "Windows Python wheel builds must bundle vulkan-1.dll, but the Vulkan loader target 'vulkan' is unavailable")
     endif()
 
     if(TARGET vulkan)
@@ -593,6 +687,13 @@ if(SKBUILD)
                 DESTINATION nanovdb_editor/lib
                 COMPONENT python_libs
                 RENAME libvulkan.so)
+        elseif(APPLE)
+            install(CODE "
+                set(VULKAN_LOADER_SOURCE_DIR \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                set(VULKAN_LOADER_DEST_DIR \"\${CMAKE_INSTALL_PREFIX}/nanovdb_editor/lib\")
+                set(VULKAN_LOADER_DYLIB_SUFFIX \"${CMAKE_SHARED_LIBRARY_SUFFIX}\")
+                include(\"${CMAKE_CURRENT_SOURCE_DIR}/cmake/vulkan_loader_macos.cmake\")
+            " COMPONENT python_libs)
         endif()
     endif()
 endif()
@@ -658,8 +759,10 @@ if (NOT SKBUILD)
 
     ### PNanoVDB Editor Test App
 
+    file(GLOB TEST_APP_SOURCE_FILES "test/*.cpp")
+
     create_nanovdb_executable(pnanovdbeditortestapp
-        SOURCES test/main.cpp
+        SOURCES ${TEST_APP_SOURCE_FILES}
         INCLUDES
             ./
             ./test

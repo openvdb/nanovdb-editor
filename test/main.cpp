@@ -18,6 +18,7 @@
 
 #include <cstdarg>
 
+#include <cstdint>
 #include <slang.h>
 
 #define SLANG_PRELUDE_NAMESPACE CPPPrelude
@@ -37,6 +38,7 @@
 // #define TEST_E57
 // #define TEST_CAMERA
 #define TEST_IMAGE2D
+#define TEST_VOXELBVH
 
 struct constants_t
 {
@@ -241,8 +243,15 @@ void test_image_2d(pnanovdb_editor_t* editor,
     test_custom_scene_params_api(editor, scene_token);
 }
 
+void voxelbvh_test();
+
 int main(int argc, char* argv[])
 {
+#ifdef TEST_VOXELBVH
+    voxelbvh_test();
+    return 0;
+#endif
+
     auto args = argparse::parse<NanoVDBEditorArgs>(argc, argv);
 
 #if TEST_NODE2

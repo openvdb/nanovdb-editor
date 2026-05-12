@@ -19,15 +19,161 @@ fi
 
 echo "Using cibuildwheel $(python -c 'import cibuildwheel; print(cibuildwheel.__version__)')"
 
-LOCAL_BUILD_SLANG_FROM_SOURCE="${LOCAL_BUILD_SLANG_FROM_SOURCE:-ON}"
+if [ -z "${LOCAL_BUILD_SLANG_FROM_SOURCE+x}" ]; then
+  LOCAL_BUILD_SLANG_FROM_SOURCE="ON"
+fi
 echo "LOCAL_BUILD_SLANG_FROM_SOURCE=${LOCAL_BUILD_SLANG_FROM_SOURCE}"
+LOCAL_WHEEL_TAG="${LOCAL_WHEEL_TAG:-${LOCAL_MANYLINUX_X86_64_TAG:-manylinux_2_27_x86_64}}"
+# quay.io/pypa does not publish a manylinux_2_27_x86_64 image. Build in the
+# oldest available 2_28 container and let auditwheel emit the final compatible
+# 2_27 wheel tag from the linked symbol versions.
+LOCAL_BUILD_IMAGE="${LOCAL_BUILD_IMAGE:-${LOCAL_MANYLINUX_X86_64_IMAGE:-quay.io/pypa/manylinux_2_28_x86_64:latest}}"
+LOCAL_MANYLINUX_X86_64_TAG="${LOCAL_WHEEL_TAG}"
+LOCAL_MANYLINUX_X86_64_IMAGE="${LOCAL_BUILD_IMAGE}"
+LOCAL_SLANG_IMAGE_REF="${LOCAL_SLANG_IMAGE_REF:-}"
+LOCAL_SLANG_IMAGE_ROOT_DIR="${REPO_ROOT}/.ci/slang-image"
+LOCAL_SLANG_IMAGE_LIB_DIR="${LOCAL_SLANG_IMAGE_ROOT_DIR}/lib"
+LOCAL_SLANG_IMAGE_INCLUDE_DIR="${LOCAL_SLANG_IMAGE_ROOT_DIR}/include"
+LOCAL_SLANG_IMAGE_CONTAINER_ROOT_DIR="/project/.ci/slang-image"
+LOCAL_SLANG_IMAGE_CONTAINER_LIB_DIR="${LOCAL_SLANG_IMAGE_CONTAINER_ROOT_DIR}/lib"
+echo "LOCAL_WHEEL_TAG=${LOCAL_WHEEL_TAG}"
+echo "LOCAL_BUILD_IMAGE=${LOCAL_BUILD_IMAGE}"
+if [ -n "${LOCAL_SLANG_IMAGE_REF}" ]; then
+  echo "LOCAL_SLANG_IMAGE_REF=${LOCAL_SLANG_IMAGE_REF}"
+fi
+
+LOCAL_USE_STAGING_COPY="${LOCAL_USE_STAGING_COPY:-ON}"
+LOCAL_KEEP_STAGING_COPY="${LOCAL_KEEP_STAGING_COPY:-OFF}"
+
+if [ "${LOCAL_USE_STAGING_COPY}" = "ON" ] && [ "${LOCAL_STAGING_ACTIVE:-0}" != "1" ]; then
+  ORIGINAL_REPO_ROOT="${REPO_ROOT}"
+  STAGING_ROOT="${LOCAL_STAGING_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/nanovdb-wheel-local.XXXXXX")}"
+
+  echo "Creating filtered staging copy in ${STAGING_ROOT} ..."
+
+  python - <<'PY' "${REPO_ROOT}" "${STAGING_ROOT}"
+import os
+import pathlib
+import shutil
+import sys
+
+src = pathlib.Path(sys.argv[1]).resolve()
+dst = pathlib.Path(sys.argv[2]).resolve()
+
+excluded_dir_names = {
+    ".cache",
+    ".git",
+    ".pytest_cache",
+    ".venv",
+    "__pycache__",
+    "build",
+    "data",
+    "wheelhouse",
+    "wheelhouse-local-ci",
+    "wheelhouse-local-off",
+}
+excluded_relative_paths = {
+    ".ci/slang-image",
+    "pymodule/build",
+}
+
+if dst.exists():
+    shutil.rmtree(dst)
+
+dst.parent.mkdir(parents=True, exist_ok=True)
+
+def ignore(path, names):
+    rel_dir = pathlib.Path(path).resolve().relative_to(src)
+    ignored = []
+    for name in names:
+      rel_path = (rel_dir / name).as_posix() if rel_dir != pathlib.Path(".") else name
+      if name in excluded_dir_names:
+          ignored.append(name)
+          continue
+      if rel_path in excluded_relative_paths:
+          ignored.append(name)
+    return ignored
+
+shutil.copytree(src, dst, ignore=ignore, symlinks=True)
+PY
+
+  status=0
+  (
+    export LOCAL_STAGING_ACTIVE=1
+    export LOCAL_STAGING_DIR="${STAGING_ROOT}"
+    export LOCAL_KEEP_STAGING_COPY="${LOCAL_KEEP_STAGING_COPY}"
+    cd "${STAGING_ROOT}"
+    bash "./dev_utils/test_wheel_local.sh"
+  ) || status=$?
+
+  if [ -d "${STAGING_ROOT}/wheelhouse" ]; then
+    rm -rf "${ORIGINAL_REPO_ROOT}/wheelhouse"
+    cp -a "${STAGING_ROOT}/wheelhouse" "${ORIGINAL_REPO_ROOT}/wheelhouse"
+    echo "Copied built wheels back to ${ORIGINAL_REPO_ROOT}/wheelhouse"
+  fi
+
+  if [ "${LOCAL_KEEP_STAGING_COPY}" = "ON" ] || [ "${status}" -ne 0 ]; then
+    echo "Keeping staging copy at ${STAGING_ROOT}"
+  else
+    rm -rf "${STAGING_ROOT}"
+  fi
+
+  exit "${status}"
+fi
 
 if [ -d "${REPO_ROOT}/pymodule/build" ]; then
   echo "Removing stale pymodule/build/ to avoid container path mismatch..."
   rm -rf "${REPO_ROOT}/pymodule/build"
 fi
 
+if [ -d "${REPO_ROOT}/build" ]; then
+  echo "Removing stale top-level build/ to avoid copying large local artifacts into the manylinux container..."
+  rm -rf "${REPO_ROOT}/build"
+fi
+
 rm -rf "${REPO_ROOT}/wheelhouse"
+
+if [ -n "${LOCAL_SLANG_IMAGE_REF}" ]; then
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "docker not found. Install Docker to reuse a Slang package image locally." >&2
+    exit 1
+  fi
+
+  echo "Pulling Slang package image ${LOCAL_SLANG_IMAGE_REF} ..."
+  docker pull "${LOCAL_SLANG_IMAGE_REF}"
+
+  rm -rf "${LOCAL_SLANG_IMAGE_ROOT_DIR}"
+  mkdir -p "${LOCAL_SLANG_IMAGE_LIB_DIR}" "${LOCAL_SLANG_IMAGE_INCLUDE_DIR}"
+
+  cid=""
+  cleanup_slang_image_extract() {
+    if [ -n "${cid}" ]; then
+      docker rm "${cid}" >/dev/null 2>&1 || true
+    fi
+  }
+  trap cleanup_slang_image_extract EXIT
+
+  cid="$(docker create "${LOCAL_SLANG_IMAGE_REF}" /bin/true)"
+  docker cp "${cid}:/opt/slang/lib/." "${LOCAL_SLANG_IMAGE_LIB_DIR}/"
+  docker cp "${cid}:/opt/slang/include/." "${LOCAL_SLANG_IMAGE_INCLUDE_DIR}/"
+  rm -f "${LOCAL_SLANG_IMAGE_LIB_DIR}"/*.dwarf
+
+  if ! ls "${LOCAL_SLANG_IMAGE_LIB_DIR}"/libslang*.so* >/dev/null 2>&1; then
+    echo "Extracted Slang image is missing libslang*.so*: ${LOCAL_SLANG_IMAGE_REF}" >&2
+    exit 1
+  fi
+  if ! find "${LOCAL_SLANG_IMAGE_INCLUDE_DIR}" -type f | read -r _; then
+    echo "Extracted Slang image is missing headers: ${LOCAL_SLANG_IMAGE_REF}" >&2
+    exit 1
+  fi
+
+  cleanup_slang_image_extract
+  trap - EXIT
+
+  # Reusing a published Slang package image should bypass rebuilding Slang locally.
+  LOCAL_BUILD_SLANG_FROM_SOURCE="OFF"
+  echo "Reusing Slang package from cached image via ${LOCAL_SLANG_IMAGE_ROOT_DIR}"
+fi
 
 REPAIR_CMD='
 set -e
@@ -187,7 +333,7 @@ echo "=== auditwheel show ==="
 AUDITWHEEL_SHOW_FILE="/tmp/nanovdb-auditwheel-show.txt"
 rm -f "${AUDITWHEEL_SHOW_FILE}"
 run_auditwheel show {wheel} 2>&1 | tee "${AUDITWHEEL_SHOW_FILE}" || true
-AUDITWHEEL_DEFAULT_PLAT="manylinux_2_34_x86_64"
+AUDITWHEEL_DEFAULT_PLAT="${LOCAL_WHEEL_TAG}"
 AUDITWHEEL_PLAT="$(python - <<'"'"'PY'"'"' "${AUDITWHEEL_SHOW_FILE}" "${AUDITWHEEL_DEFAULT_PLAT}"
 import pathlib
 import re
@@ -204,10 +350,18 @@ echo "Using auditwheel platform from show output: ${AUDITWHEEL_PLAT}"
 run_auditwheel repair -w {dest_dir} {wheel} --lib-sdir .libs --plat "${AUDITWHEEL_PLAT}"
 '
 
-echo "Building Linux x86_64 wheel via Docker ..."
+echo "Building Linux x86_64 wheel via Docker (wheel tag ${LOCAL_WHEEL_TAG}, image ${LOCAL_BUILD_IMAGE}) ..."
+
+CMAKE_ARGS_VALUE="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=${LOCAL_BUILD_SLANG_FROM_SOURCE} -DFETCHCONTENT_QUIET=OFF"
+CIBW_ENVIRONMENT_VALUE="CMAKE_ARGS=\"${CMAKE_ARGS_VALUE}\" CPM_SOURCE_CACHE=/tmp/cpm-cache LOCAL_WHEEL_TAG=${LOCAL_WHEEL_TAG}"
+
+if [ -n "${LOCAL_SLANG_IMAGE_REF}" ]; then
+  CMAKE_ARGS_VALUE="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=OFF -DNANOVDB_SLANG_IMAGE_ROOT_DIR=${LOCAL_SLANG_IMAGE_CONTAINER_ROOT_DIR} -DFETCHCONTENT_QUIET=OFF"
+  CIBW_ENVIRONMENT_VALUE="CMAKE_ARGS=\"${CMAKE_ARGS_VALUE}\" CPM_SOURCE_CACHE=/tmp/cpm-cache LOCAL_WHEEL_TAG=${LOCAL_WHEEL_TAG} NANOVDB_SLANG_IMAGE_LIB_DIR=${LOCAL_SLANG_IMAGE_CONTAINER_LIB_DIR}"
+fi
 
 CIBW_BUILD="cp311-manylinux_x86_64" \
-CIBW_MANYLINUX_X86_64_IMAGE="quay.io/pypa/manylinux_2_34_x86_64:latest" \
+CIBW_MANYLINUX_X86_64_IMAGE="${LOCAL_BUILD_IMAGE}" \
 CIBW_BUILD_VERBOSITY=1 \
 CIBW_TEST_SKIP="cp311-manylinux_x86_64" \
 CIBW_BEFORE_ALL_LINUX='
@@ -222,7 +376,7 @@ CIBW_BEFORE_ALL_LINUX='
   fi
   cmake --version
 ' \
-CIBW_ENVIRONMENT="CMAKE_ARGS=\"-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DNANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE=${LOCAL_BUILD_SLANG_FROM_SOURCE} -DFETCHCONTENT_QUIET=OFF\" CPM_SOURCE_CACHE=/tmp/cpm-cache" \
+CIBW_ENVIRONMENT="${CIBW_ENVIRONMENT_VALUE}" \
 CIBW_REPAIR_WHEEL_COMMAND_LINUX="${REPAIR_CMD}" \
 python -m cibuildwheel --platform linux pymodule
 

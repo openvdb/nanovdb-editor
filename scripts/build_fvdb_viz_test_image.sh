@@ -23,11 +23,23 @@ TORCH_VERSION="${FVDB_VIZ_TORCH_VERSION:-${FVDB_VIZ_TORCH_VERSION_DEFAULT}}"
 TORCH_INDEX_URL="${FVDB_VIZ_TORCH_INDEX_URL:-${FVDB_VIZ_TORCH_INDEX_URL_DEFAULT}}"
 FVDB_CORE_VERSION="${FVDB_VIZ_CORE_VERSION:-${FVDB_VIZ_CORE_VERSION_DEFAULT}}"
 FVDB_CORE_INDEX_URL="${FVDB_VIZ_CORE_INDEX_URL:-${FVDB_VIZ_CORE_INDEX_URL_DEFAULT}}"
+FVDB_CORE_NIGHTLY_INDEX_URL="${FVDB_VIZ_CORE_NIGHTLY_INDEX_URL:-${FVDB_VIZ_CORE_NIGHTLY_INDEX_URL_DEFAULT}}"
+FVDB_CORE_NIGHTLY="${FVDB_VIZ_CORE_NIGHTLY:-0}"
+FVDB_CORE_NIGHTLY_CUDA_SUFFIX="${FVDB_VIZ_CORE_NIGHTLY_CUDA_SUFFIX:-${FVDB_VIZ_CORE_NIGHTLY_CUDA_SUFFIX_DEFAULT}}"
+IMAGE_BASE_NAME="${FVDB_VIZ_TEST_IMAGE_BASE:-${FVDB_VIZ_TEST_IMAGE_BASE_DEFAULT}}"
+IMAGE_CACHE_ENABLED="${FVDB_VIZ_IMAGE_CACHE_ENABLED:-1}"
+DOCKER_BUILD_NETWORK="${FVDB_VIZ_DOCKER_BUILD_NETWORK:-}"
+DOCKER_BUILDER="${FVDB_VIZ_DOCKER_BUILDER:-}"
 CORE_VERSION_TAG="${FVDB_CORE_VERSION%%+*}"
 if [[ -z "${CORE_VERSION_TAG}" ]]; then
   CORE_VERSION_TAG="${FVDB_CORE_VERSION}"
 fi
-IMAGE_NAME="${FVDB_VIZ_TEST_IMAGE:-fvdb-test-image-${CORE_VERSION_TAG}}"
+if [[ "${FVDB_CORE_NIGHTLY}" != "0" && -n "${FVDB_CORE_NIGHTLY}" ]]; then
+  CORE_SOURCE_TAG="nightly"
+else
+  CORE_SOURCE_TAG="${CORE_VERSION_TAG}"
+fi
+IMAGE_NAME="${FVDB_VIZ_TEST_IMAGE:-${IMAGE_BASE_NAME}-${CORE_SOURCE_TAG}}"
 FORCE_REBUILD="${FVDB_VIZ_FORCE_IMAGE_REBUILD:-0}"
 
 while [[ $# -gt 0 ]]; do
@@ -62,6 +74,10 @@ TORCH_VERSION=${TORCH_VERSION}
 TORCH_INDEX_URL=${TORCH_INDEX_URL}
 FVDB_CORE_VERSION=${FVDB_CORE_VERSION}
 FVDB_CORE_INDEX_URL=${FVDB_CORE_INDEX_URL}
+FVDB_CORE_NIGHTLY=${FVDB_CORE_NIGHTLY}
+FVDB_CORE_NIGHTLY_INDEX_URL=${FVDB_CORE_NIGHTLY_INDEX_URL}
+FVDB_CORE_NIGHTLY_CUDA_SUFFIX=${FVDB_CORE_NIGHTLY_CUDA_SUFFIX}
+DOCKER_BUILDER=${DOCKER_BUILDER}
 EOF
 }
 
@@ -92,22 +108,50 @@ load_from_cache() {
 }
 
 save_to_cache() {
+  if [[ "${IMAGE_CACHE_ENABLED}" != "1" ]]; then
+    echo "Skipping local image tarball cache for ${IMAGE_NAME}"
+    return
+  fi
   ensure_cache_dir
   echo "Saving ${IMAGE_NAME} image tarball to ${TAR_PATH}"
-  docker save "${IMAGE_NAME}" -o "${TAR_PATH}"
-  write_metadata
+  if ! docker save "${IMAGE_NAME}" -o "${TAR_PATH}"; then
+    echo "Warning: failed to save local image tarball cache for ${IMAGE_NAME}; continuing without cache." >&2
+    rm -f "${TAR_PATH}" "${META_PATH}"
+    return 0
+  fi
+  if ! write_metadata; then
+    echo "Warning: failed to write local image cache metadata for ${IMAGE_NAME}; continuing without cache metadata." >&2
+    rm -f "${META_PATH}"
+  fi
 }
 
 build_image() {
   echo "Building ${IMAGE_NAME} for fvdb viz tests (Torch ${TORCH_VERSION})"
-  docker build \
-    -f "${REPO_ROOT}/docker/Dockerfile.fvdb_viz_test" \
-    --build-arg "TORCH_VERSION=${TORCH_VERSION}" \
-    --build-arg "TORCH_INDEX_URL=${TORCH_INDEX_URL}" \
-    --build-arg "FVDB_CORE_VERSION=${FVDB_CORE_VERSION}" \
-    --build-arg "FVDB_CORE_INDEX_URL=${FVDB_CORE_INDEX_URL}" \
-    -t "${IMAGE_NAME}" \
-    "${REPO_ROOT}"
+  local docker_build_args=(
+    -f "${REPO_ROOT}/docker/Dockerfile.fvdb_viz_test"
+    --build-arg "TORCH_VERSION=${TORCH_VERSION}"
+    --build-arg "TORCH_INDEX_URL=${TORCH_INDEX_URL}"
+    --build-arg "FVDB_CORE_VERSION=${FVDB_CORE_VERSION}"
+    --build-arg "FVDB_CORE_INDEX_URL=${FVDB_CORE_INDEX_URL}"
+    --build-arg "FVDB_CORE_NIGHTLY=${FVDB_CORE_NIGHTLY}"
+    --build-arg "FVDB_CORE_NIGHTLY_INDEX_URL=${FVDB_CORE_NIGHTLY_INDEX_URL}"
+    --build-arg "FVDB_CORE_NIGHTLY_CUDA_SUFFIX=${FVDB_CORE_NIGHTLY_CUDA_SUFFIX}"
+    -t "${IMAGE_NAME}"
+  )
+  if [[ -n "${DOCKER_BUILD_NETWORK}" ]]; then
+    docker_build_args+=(--network "${DOCKER_BUILD_NETWORK}")
+  fi
+  if [[ -n "${DOCKER_BUILDER}" ]]; then
+    docker buildx build \
+      --builder "${DOCKER_BUILDER}" \
+      --load \
+      "${docker_build_args[@]}" \
+      "${REPO_ROOT}"
+  else
+    docker build \
+      "${docker_build_args[@]}" \
+      "${REPO_ROOT}"
+  fi
   save_to_cache
 }
 
@@ -121,14 +165,17 @@ if image_exists; then
   exit 0
 fi
 
-if cache_metadata_matches && load_from_cache; then
-  echo "Loaded ${IMAGE_NAME} from cache."
-  exit 0
+if [[ "${IMAGE_CACHE_ENABLED}" == "1" ]]; then
+  if cache_metadata_matches && load_from_cache; then
+    echo "Loaded ${IMAGE_NAME} from cache."
+    exit 0
+  fi
+
+  if [[ -f "${META_PATH}" && ! cache_metadata_matches ]]; then
+    echo "Cached ${IMAGE_NAME} metadata out of date; rebuilding image."
+  fi
+else
+  echo "Image tarball cache disabled for ${IMAGE_NAME}"
 fi
 
-if [[ -f "${META_PATH}" && ! cache_metadata_matches ]]; then
-  echo "Cached ${IMAGE_NAME} metadata out of date; rebuilding image."
-fi
-
-ensure_cache_dir
 build_image

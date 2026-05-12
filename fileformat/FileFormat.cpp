@@ -209,8 +209,10 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
     std::vector<std::string> properties;
 
     uint64_t vertex_count = 0llu;
+    uint64_t face_count = 0llu;
     bool vertex_push_enabled = false;
     bool is_fvdb_gs = false;
+    bool is_big_endian = false;
     char buf[256u] = {};
     while (fgets(buf, 255u, file))
     {
@@ -232,6 +234,12 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
             vertex_count = (uint64_t)std::stoll(count_str);
             vertex_push_enabled = true;
         }
+        else if (line.find("element face") != std::string::npos)
+        {
+            std::string count_str = line.substr(sizeof("element face"));
+            face_count = (uint64_t)std::stoll(count_str);
+            vertex_push_enabled = false;
+        }
         else if (line.find("element") != std::string::npos)
         {
             vertex_push_enabled = false;
@@ -239,6 +247,10 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
         if (line.find("comment fvdb_gs_ply_version fvdb_ply") != std::string::npos)
         {
             is_fvdb_gs = true;
+        }
+        if (line.find("format binary_big_endian 1.0") != std::string::npos)
+        {
+            is_big_endian = true;
         }
     }
     // printf("vertex_count(%llu)\n", (unsigned long long int)vertex_count);
@@ -283,23 +295,77 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
     element.resize(properties.size());
     size_t element_size = element.size() * sizeof(float);
 
-    while (fread(element.data(), 1u, element_size, file) == element_size && arr_opacities.size() < vertex_count)
+    uint64_t element_idx = 0u;
+    while (fread(element.data(), 1u, element_size, file) == element_size && element_idx < vertex_count)
     {
-        arr_means.push_back(element[prop_x]);
-        arr_means.push_back(element[prop_y]);
-        arr_means.push_back(element[prop_z]);
-        arr_opacities.push_back(element[prop_opacity]);
-        arr_quaternions.push_back(element[prop_rot_0]);
-        arr_quaternions.push_back(element[prop_rot_1]);
-        arr_quaternions.push_back(element[prop_rot_2]);
-        arr_quaternions.push_back(element[prop_rot_3]);
-        arr_scales.push_back(element[prop_scale_0]);
-        arr_scales.push_back(element[prop_scale_1]);
-        arr_scales.push_back(element[prop_scale_2]);
+        if (is_big_endian)
+        {
+            for (size_t idx = 0u; idx < element.size(); idx++)
+            {
+                uint32_t val = *((uint32_t*)&element[idx]);
+                uint32_t val_new = (((val)&0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) |
+                                   (((val >> 16u) & 0xFF) << 8u) | (((val >> 24u) & 0xFF) << 0u);
+                *((uint32_t*)&element[idx]) = val_new;
+            }
+        }
+
+        if (prop_x != ~0u)
+        {
+            arr_means.push_back(element[prop_x]);
+        }
+        if (prop_y != ~0u)
+        {
+            arr_means.push_back(element[prop_y]);
+        }
+        if (prop_z != ~0u)
+        {
+            arr_means.push_back(element[prop_z]);
+        }
+        if (prop_opacity != ~0u)
+        {
+            arr_opacities.push_back(element[prop_opacity]);
+        }
+        if (prop_rot_0 != ~0u)
+        {
+            arr_quaternions.push_back(element[prop_rot_0]);
+        }
+        if (prop_rot_1 != ~0u)
+        {
+            arr_quaternions.push_back(element[prop_rot_1]);
+        }
+        if (prop_rot_2 != ~0u)
+        {
+            arr_quaternions.push_back(element[prop_rot_2]);
+        }
+        if (prop_rot_3 != ~0u)
+        {
+            arr_quaternions.push_back(element[prop_rot_3]);
+        }
+        if (prop_scale_0 != ~0u)
+        {
+            arr_scales.push_back(element[prop_scale_0]);
+        }
+        if (prop_scale_1 != ~0u)
+        {
+            arr_scales.push_back(element[prop_scale_1]);
+        }
+        if (prop_scale_2 != ~0u)
+        {
+            arr_scales.push_back(element[prop_scale_2]);
+        }
         // put in rrrgggbbb convention
-        arr_sh_0.push_back(element[prop_f_dc_0]);
-        arr_sh_0.push_back(element[prop_f_dc_1]);
-        arr_sh_0.push_back(element[prop_f_dc_2]);
+        if (prop_f_dc_0 != ~0u)
+        {
+            arr_sh_0.push_back(element[prop_f_dc_0]);
+        }
+        if (prop_f_dc_1 != ~0u)
+        {
+            arr_sh_0.push_back(element[prop_f_dc_1]);
+        }
+        if (prop_f_dc_2 != ~0u)
+        {
+            arr_sh_0.push_back(element[prop_f_dc_2]);
+        }
 
         if (prop_f_rest_0 != ~0u)
         {
@@ -322,6 +388,42 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
                 arr_sh_n.push_back(element[prop_f_rest_0 + 30u + idx]);
             }
         }
+
+        element_idx++;
+    }
+
+    std::vector<uint32_t> arr_indices;
+    uint64_t face_idx = 0u;
+    if (face_count != 0u)
+    {
+        size_t read_count = 0u;
+        do
+        {
+            // read face vert count
+            uint8_t face_vert_count = 0u;
+            read_count = fread(&face_vert_count, 1u, 1u, file);
+            // read indices
+            if (face_vert_count != 3u)
+            {
+                printf("dropped face(%zu) count(%d)\n", face_idx, (int)face_vert_count);
+            }
+            else // only capture triangles for now
+            {
+                for (uint8_t idx = 0u; idx < face_vert_count; idx++)
+                {
+                    uint32_t id = 0u;
+                    read_count += fread(&id, 1u, 4u, file);
+                    if (is_big_endian)
+                    {
+                        uint32_t id_new = (((id)&0xFF) << 24u) | (((id >> 8u) & 0xFF) << 16u) |
+                                          (((id >> 16u) & 0xFF) << 8u) | (((id >> 24u) & 0xFF) << 0u);
+                        id = id_new;
+                    }
+                    arr_indices.push_back(id);
+                }
+            }
+            face_idx++;
+        } while (read_count != 0u && face_idx < face_count);
     }
 
     fclose(file);
@@ -331,8 +433,9 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
     {
         const char* array_name = array_names[i];
         std::vector<float>* source_array = nullptr;
+        std::vector<uint32_t>* source_array_uint32 = nullptr;
 
-        if (strcmp(array_name, "means") == 0)
+        if (strcmp(array_name, "means") == 0 || strcmp(array_name, "positions") == 0)
         {
             source_array = &arr_means;
         }
@@ -356,6 +459,10 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
         {
             source_array = &arr_sh_n;
         }
+        else if (strcmp(array_name, "indices") == 0)
+        {
+            source_array_uint32 = &arr_indices;
+        }
 
         if (source_array && !source_array->empty())
         {
@@ -364,6 +471,14 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
             out_arrays[i]->element_size = sizeof(float);
             out_arrays[i]->data = new float[source_array->size()];
             memcpy(out_arrays[i]->data, source_array->data(), source_array->size() * sizeof(float));
+        }
+        else if (source_array_uint32 && !source_array_uint32->empty())
+        {
+            out_arrays[i] = new pnanovdb_compute_array_t();
+            out_arrays[i]->element_count = source_array_uint32->size();
+            out_arrays[i]->element_size = sizeof(uint32_t);
+            out_arrays[i]->data = new uint32_t[source_array_uint32->size()];
+            memcpy(out_arrays[i]->data, source_array_uint32->data(), source_array_uint32->size() * sizeof(uint32_t));
         }
         else
         {

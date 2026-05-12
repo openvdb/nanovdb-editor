@@ -14,12 +14,15 @@ Run the same Docker build + pytest workflow defined in
 Options:
   -s, --stream {release|dev}  Package stream to validate (default: release)
   -l, --local-wheel [PATH]   Path to nanovdb_editor*.whl inside the repo.
-                             If PATH is omitted, defaults to pymodule/dist/nanovdb_editor-*.whl.
-                             Only valid with --stream release. Mirrors the
-                             GitHub Actions behavior when a local wheel
-                             artifact is provided.
+                             If PATH is omitted, defaults to pymodule/dist/nanovdb_editor*.whl.
+                             Mirrors the GitHub Actions behavior when a local
+                             wheel artifact is provided.
+  --fvdb-nightly             Install the latest fvdb-core[viewer] nightly wheel
+                             (prebuilt, tracks fvdb-core main).
+  --upstream-test-ref REF    Upstream fvdb viz test source to use:
+                             main (default) or release
   -i, --image-name NAME      Override the Docker image tag (default derived
-                             from stream, e.g. fvdb-viz-release)
+                             from fvdb-core version, e.g. nanovdb-editor_fvdb-0.4.2)
   -f, --force-rebuild        Force a rebuild of the fvdb-viz test image cache
   --skip-image-build         Skip building/checking the test image (assume it
                              already exists, useful in CI)
@@ -33,6 +36,8 @@ source "${SCRIPT_DIR}/fvdb_viz_versions.sh"
 
 PACKAGE_STREAM="release"
 LOCAL_WHEEL=""
+FVDB_NIGHTLY="0"
+UPSTREAM_TEST_REF="main"
 IMAGE_NAME=""
 FORCE_REBUILD="0"
 SKIP_IMAGE_BUILD="0"
@@ -52,6 +57,14 @@ while [[ $# -gt 0 ]]; do
         LOCAL_WHEEL="${2}"
         shift 2
       fi
+      ;;
+    --upstream-test-ref)
+      UPSTREAM_TEST_REF="${2:-}"
+      shift 2
+      ;;
+    --fvdb-nightly)
+      FVDB_NIGHTLY="1"
+      shift 1
       ;;
     -i|--image-name)
       IMAGE_NAME="${2:-}"
@@ -85,17 +98,20 @@ case "$PACKAGE_STREAM" in
     ;;
 esac
 
-if [[ -n "$LOCAL_WHEEL" && "$PACKAGE_STREAM" != "release" ]]; then
-  echo "A local wheel can only be used with the release stream." >&2
-  exit 1
-fi
+case "$UPSTREAM_TEST_REF" in
+  main|release) ;;
+  *)
+    echo "Unsupported upstream test ref: $UPSTREAM_TEST_REF" >&2
+    exit 1
+    ;;
+esac
 
 USE_LOCAL="false"
 LOCAL_WHEEL_ABS=""
 if [[ -n "$LOCAL_WHEEL" ]]; then
   if [[ "$LOCAL_WHEEL" == "__DEFAULT__" ]]; then
     # Expand glob to find default wheel
-    DEFAULT_WHEEL_GLOB="${REPO_ROOT}/pymodule/dist/nanovdb_editor-*.whl"
+    DEFAULT_WHEEL_GLOB="${REPO_ROOT}/pymodule/dist/nanovdb_editor*.whl"
     WHEELS=( $DEFAULT_WHEEL_GLOB )
     if [[ ${#WHEELS[@]} -eq 0 || ! -f "${WHEELS[0]}" ]]; then
       echo "No wheel found matching: $DEFAULT_WHEEL_GLOB" >&2
@@ -126,16 +142,22 @@ fi
 : "${FVDB_VIZ_TORCH_INDEX_URL:=${FVDB_VIZ_TORCH_INDEX_URL_DEFAULT}}"
 : "${FVDB_VIZ_CORE_VERSION:=${FVDB_VIZ_CORE_VERSION_DEFAULT}}"
 : "${FVDB_VIZ_CORE_INDEX_URL:=${FVDB_VIZ_CORE_INDEX_URL_DEFAULT}}"
-: "${FVDB_VIZ_SCRIPT_TIMEOUT:=${FVDB_VIZ_SCRIPT_TIMEOUT_DEFAULT}}"
+: "${FVDB_VIZ_CORE_NIGHTLY_INDEX_URL:=${FVDB_VIZ_CORE_NIGHTLY_INDEX_URL_DEFAULT}}"
+: "${FVDB_VIZ_TEST_IMAGE_BASE:=${FVDB_VIZ_TEST_IMAGE_BASE_DEFAULT}}"
 : "${FVDB_VIZ_SKIP_BASE_INSTALL:=1}"
 
 CORE_VERSION_TAG="${FVDB_VIZ_CORE_VERSION%%+*}"
 if [[ -z "${CORE_VERSION_TAG}" ]]; then
   CORE_VERSION_TAG="${FVDB_VIZ_CORE_VERSION}"
 fi
+if [[ "${FVDB_NIGHTLY}" == "1" ]]; then
+  CORE_SOURCE_TAG="nightly"
+else
+  CORE_SOURCE_TAG="${CORE_VERSION_TAG}"
+fi
 
 if [[ -z "${FVDB_VIZ_TEST_IMAGE:-}" ]]; then
-  FVDB_VIZ_TEST_IMAGE="fvdb-test-image-${CORE_VERSION_TAG}"
+  FVDB_VIZ_TEST_IMAGE="${FVDB_VIZ_TEST_IMAGE_BASE}-${CORE_SOURCE_TAG}"
 fi
 
 if [[ -n "$IMAGE_NAME" ]]; then
@@ -151,6 +173,8 @@ if [[ "$SKIP_IMAGE_BUILD" != "1" ]]; then
     FVDB_VIZ_TORCH_INDEX_URL="${FVDB_VIZ_TORCH_INDEX_URL}" \
     FVDB_VIZ_CORE_VERSION="${FVDB_VIZ_CORE_VERSION}" \
     FVDB_VIZ_CORE_INDEX_URL="${FVDB_VIZ_CORE_INDEX_URL}" \
+    FVDB_VIZ_CORE_NIGHTLY_INDEX_URL="${FVDB_VIZ_CORE_NIGHTLY_INDEX_URL}" \
+    FVDB_VIZ_CORE_NIGHTLY="${FVDB_NIGHTLY}" \
     FVDB_VIZ_FORCE_IMAGE_REBUILD="${FORCE_REBUILD}" \
       ./scripts/build_fvdb_viz_test_image.sh
   )
@@ -186,31 +210,21 @@ DOCKER_RUN_COMMON=(
   -e "FVDB_VIZ_TORCH_INDEX_URL=${FVDB_VIZ_TORCH_INDEX_URL}"
   -e "FVDB_VIZ_CORE_VERSION=${FVDB_VIZ_CORE_VERSION}"
   -e "FVDB_VIZ_CORE_INDEX_URL=${FVDB_VIZ_CORE_INDEX_URL}"
-  -e "FVDB_VIZ_SCRIPT_TIMEOUT=${FVDB_VIZ_SCRIPT_TIMEOUT}"
   -e "FVDB_VIZ_SKIP_BASE_INSTALL=${FVDB_VIZ_SKIP_BASE_INSTALL}"
-  -e "VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json"
-  -e "VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json"
-  -e "LP_NUM_THREADS=1"
-  -e "LIBGL_ALWAYS_SOFTWARE=1"
-  -e "GALLIUM_DRIVER=llvmpipe"
+  -e "PYTHONPATH=/workspace"
   -e "PYTHONUNBUFFERED=1"
   -v "${REPO_ROOT}:/workspace"
   -w /workspace
 )
 
-PYTEST_CMD=$'python3 -m pip install --break-system-packages pytest >/tmp/pip.log 2>&1; '\
-$'python3 -c "import importlib; mod = importlib.import_module(\'nanovdb_editor\'); '\
-$'version = getattr(mod, \'__version__\', \'unknown\'); '\
-$'print(f\'nanovdb_editor version: {version}\')"; '\
-$'pytest pytests/test_fvdb_viz_integration.py -k "'"${PYTEST_EXPR}"'" -vv -s --maxfail=1 --full-trace -rA; '\
-$'PYTEST_EXIT=$?; echo "Pytest exit code: $PYTEST_EXIT"; exit $PYTEST_EXIT'
-
 echo "Running pytest selector: ${PYTEST_EXPR}"
 set +e
 "${DOCKER_RUN_COMMON[@]}" \
+  -e "FVDB_VIZ_UPSTREAM_TEST_REF=${UPSTREAM_TEST_REF}" \
+  -e "FVDB_VIZ_PYTEST_EXPR=${PYTEST_EXPR}" \
   "${LOCAL_DIST_ARGS[@]}" \
   "${FVDB_VIZ_TEST_IMAGE}" \
-  sh -c "${PYTEST_CMD}"
+  /workspace/scripts/fvdb_viz_entrypoint.sh
 DOCKER_EXIT_CODE=$?
 set -e
 

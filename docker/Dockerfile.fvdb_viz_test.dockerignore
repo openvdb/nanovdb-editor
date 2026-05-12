@@ -1,0 +1,3 @@
+# The fvdb_viz_test Dockerfile only uses build-args; nothing is COPYed
+# from the build context.  Exclude everything to keep the context tiny.
+*

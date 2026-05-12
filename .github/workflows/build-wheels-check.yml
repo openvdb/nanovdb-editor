@@ -10,6 +10,20 @@ on:
       - 'CODEOWNERS'
       - '**.md'
       - 'dev_utils/**'
+  pull_request:
+    branches:
+      - main
+      - develop
+      - 'release/*'
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths-ignore:
+      - 'CODEOWNERS'
+      - '**.md'
+      - 'dev_utils/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -23,8 +37,10 @@ permissions:
 jobs:
   build:
     name: Build wheels and sdist
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     uses: ./.github/workflows/build-wheels.yml
     with:
       is_dev: false
       linux_x86_build_slang_from_source: false
+      run_fvdb_viz_integration: true
     secrets: inherit

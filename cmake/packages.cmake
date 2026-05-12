@@ -12,6 +12,7 @@ if(NANOVDB_EDITOR_FORCE_REBUILD_DEPS AND EXISTS "$ENV{CPM_SOURCE_CACHE}")
 endif()
 
 # Set global static build preference - all dependencies should be static
+# unless a dependency is explicitly runtime-loaded as a shared library.
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries" FORCE)
 set(BUILD_STATIC_LIBS ON CACHE BOOL "Build static libraries" FORCE)
 
@@ -79,6 +80,8 @@ if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
     endif()
 endif()
 
+# Blosc: always use the project-built static library so the editor and Python
+# wheel do not depend on a vcpkg-provided Blosc runtime package/DLL.
 set(BLOSC_VERSION 1.21.4)
 CPMAddPackage(
     NAME blosc
@@ -219,38 +222,64 @@ if(NANOVDB_EDITOR_USE_GLFW)
     set(GLFW_RELEASE 3.4)
     set(GLFW_BASE_URL "https://github.com/glfw/glfw/releases/download/${GLFW_RELEASE}")
 
-    # For Windows and Apple, download pre-built binaries
+    # Windows x64: prebuilt zip; Windows ARM64: build from source (no prebuilt); Apple: prebuilt; Linux: headers only
     if(WIN32)
-        set(GLFW_URL ${GLFW_BASE_URL}/glfw-${GLFW_RELEASE}.bin.WIN64.zip)
-        set(GLFW_PLATFORM_OPTIONS URL ${GLFW_URL})
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "[Aa][Rr][Mm]64")
+            set(GLFW_PLATFORM_OPTIONS
+                GITHUB_REPOSITORY glfw/glfw
+                GIT_TAG ${GLFW_RELEASE}
+            )
+            set(GLFW_DOWNLOAD_ONLY NO)
+            # GLFW must be built as a shared library when we compile it from source.
+            # The editor loads it dynamically via pnanovdb_load_library()/LoadLibrary,
+            # so a static glfw build would not provide the runtime DLL we depend on.
+            set(GLFW_CPM_EXTRA_ARGS
+                OPTIONS
+                "BUILD_SHARED_LIBS ON"
+            )
+        else()
+            set(GLFW_URL ${GLFW_BASE_URL}/glfw-${GLFW_RELEASE}.bin.WIN64.zip)
+            set(GLFW_PLATFORM_OPTIONS URL ${GLFW_URL})
+            set(GLFW_DOWNLOAD_ONLY YES)
+            set(GLFW_CPM_EXTRA_ARGS)
+        endif()
     elseif(APPLE)
         set(GLFW_URL ${GLFW_BASE_URL}/glfw-${GLFW_RELEASE}.bin.MACOS.zip)
         set(GLFW_PLATFORM_OPTIONS URL ${GLFW_URL})
+        set(GLFW_DOWNLOAD_ONLY YES)
+        set(GLFW_CPM_EXTRA_ARGS)
     else()
-        # For Linux, only download headers
         set(GLFW_PLATFORM_OPTIONS
             GITHUB_REPOSITORY glfw/glfw
             GIT_TAG ${GLFW_RELEASE}
         )
+        set(GLFW_DOWNLOAD_ONLY YES)
+        set(GLFW_CPM_EXTRA_ARGS)
     endif()
 
     CPMAddPackage(
         NAME glfw
         VERSION ${GLFW_RELEASE}
-        DOWNLOAD_ONLY YES
+        DOWNLOAD_ONLY ${GLFW_DOWNLOAD_ONLY}
         ${GLFW_PLATFORM_OPTIONS}
+        ${GLFW_CPM_EXTRA_ARGS}
     )
 endif()
 
 # Create glfw target immediately to prevent CPM recursion
 if(glfw_ADDED)
     if(WIN32)
-        add_library(glfw SHARED IMPORTED)
-        set_target_properties(glfw PROPERTIES
-            IMPORTED_LOCATION ${glfw_SOURCE_DIR}/lib-vc2022/glfw3.dll
-            IMPORTED_IMPLIB ${glfw_SOURCE_DIR}/lib-vc2022/glfw3.lib
-            INTERFACE_INCLUDE_DIRECTORIES ${glfw_SOURCE_DIR}/include
-        )
+        if(EXISTS ${glfw_SOURCE_DIR}/lib-vc2022/glfw3.dll)
+            add_library(glfw SHARED IMPORTED)
+            set_target_properties(glfw PROPERTIES
+                IMPORTED_LOCATION ${glfw_SOURCE_DIR}/lib-vc2022/glfw3.dll
+                IMPORTED_IMPLIB ${glfw_SOURCE_DIR}/lib-vc2022/glfw3.lib
+                INTERFACE_INCLUDE_DIRECTORIES ${glfw_SOURCE_DIR}/include
+            )
+        else()
+            # Windows ARM64: built from source by CPM; target glfw already exists
+            set_target_properties(glfw PROPERTIES POSITION_INDEPENDENT_CODE ON)
+        endif()
     elseif(APPLE)
         add_library(glfw SHARED IMPORTED)
         set_target_properties(glfw PROPERTIES
@@ -292,7 +321,40 @@ CPMAddPackage(
 # Shader compilation
 set(SLANG_VERSION 2025.24)
 
-if(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
+if(DEFINED NANOVDB_SLANG_IMAGE_ROOT_DIR AND NOT "${NANOVDB_SLANG_IMAGE_ROOT_DIR}" STREQUAL "")
+    if(NOT EXISTS "${NANOVDB_SLANG_IMAGE_ROOT_DIR}/include")
+        message(FATAL_ERROR "NANOVDB_SLANG_IMAGE_ROOT_DIR is missing include/: ${NANOVDB_SLANG_IMAGE_ROOT_DIR}")
+    endif()
+    if(WIN32)
+        if(NOT EXISTS "${NANOVDB_SLANG_IMAGE_ROOT_DIR}/bin/slang.dll")
+            message(FATAL_ERROR "NANOVDB_SLANG_IMAGE_ROOT_DIR is missing bin/slang.dll: ${NANOVDB_SLANG_IMAGE_ROOT_DIR}")
+        endif()
+    else()
+        if(NOT EXISTS "${NANOVDB_SLANG_IMAGE_ROOT_DIR}/lib/libslang${CMAKE_SHARED_LIBRARY_SUFFIX}")
+            message(FATAL_ERROR "NANOVDB_SLANG_IMAGE_ROOT_DIR is missing libslang${CMAKE_SHARED_LIBRARY_SUFFIX}: ${NANOVDB_SLANG_IMAGE_ROOT_DIR}")
+        endif()
+    endif()
+    if(UNIX AND NOT APPLE AND NOT SKBUILD)
+        set(_nanovdb_required_slang_libs
+            "lib/libslang-compiler${CMAKE_SHARED_LIBRARY_SUFFIX}.0.${SLANG_VERSION}"
+            "lib/libslang-glslang-${SLANG_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        )
+        foreach(_nanovdb_required_slang_lib IN LISTS _nanovdb_required_slang_libs)
+            if(NOT EXISTS "${NANOVDB_SLANG_IMAGE_ROOT_DIR}/${_nanovdb_required_slang_lib}")
+                message(FATAL_ERROR
+                    "NANOVDB_SLANG_IMAGE_ROOT_DIR is missing required Slang runtime library "
+                    "${_nanovdb_required_slang_lib}: ${NANOVDB_SLANG_IMAGE_ROOT_DIR}"
+                )
+            endif()
+        endforeach()
+        unset(_nanovdb_required_slang_libs)
+        unset(_nanovdb_required_slang_lib)
+    endif()
+
+    message(STATUS "Reusing Slang package from ${NANOVDB_SLANG_IMAGE_ROOT_DIR}")
+    set(Slang_SOURCE_DIR "${NANOVDB_SLANG_IMAGE_ROOT_DIR}")
+    set(Slang_ADDED TRUE)
+elseif(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE)
     if(NOT (UNIX AND NOT APPLE) OR CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
         message(FATAL_ERROR "NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE is only supported on Linux x86_64")
     endif()
@@ -419,8 +481,8 @@ else()
             set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-windows-x86_64.zip)
         endif()
     elseif(APPLE)
-        if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
-            set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-macos-arm64.zip)
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+            set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-macos-aarch64.zip)
         else()
             set(SLANG_URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-macos-x86_64.zip)
         endif()
@@ -583,7 +645,7 @@ CPMAddPackage(
 )
 
 # Optional dependencies
-if(NANOVDB_EDITOR_E57_FORMAT)
+if(NANOVDB_EDITOR_E57_FORMAT AND NOT NANOVDB_EDITOR_USE_VCPKG)
     CPMAddPackage(
         NAME libE57Format
         GITHUB_REPOSITORY asmaloney/libE57Format
@@ -595,7 +657,14 @@ if(NANOVDB_EDITOR_E57_FORMAT)
     )
 endif()
 
-if(NANOVDB_EDITOR_USE_H264)
+if(WIN32 AND NANOVDB_EDITOR_USE_H264 AND NOT NANOVDB_EDITOR_USE_VCPKG)
+    message(FATAL_ERROR
+        "NANOVDB_EDITOR_USE_H264 on Windows requires NANOVDB_EDITOR_USE_VCPKG=ON "
+        "so OpenH264 can be provided by vcpkg."
+    )
+endif()
+
+if(NANOVDB_EDITOR_USE_H264 AND NOT (WIN32 AND NANOVDB_EDITOR_USE_VCPKG))
     CPMAddPackage(
         NAME openh264
         GITHUB_REPOSITORY cisco/openh264
@@ -629,29 +698,41 @@ if(zlib_ADDED)
 endif()
 
 if(imgui_ADDED)
-    add_library(imgui INTERFACE)
-    target_include_directories(imgui INTERFACE ${imgui_SOURCE_DIR})
     file(GLOB IMGUI_SOURCE_FILES "${imgui_SOURCE_DIR}/imgui*.cpp")
-    target_sources(imgui INTERFACE ${IMGUI_SOURCE_FILES})
-    target_compile_features(imgui INTERFACE cxx_std_17)
+    add_library(imgui STATIC
+        ${IMGUI_SOURCE_FILES}
+        ${imgui_SOURCE_DIR}/misc/cpp/imgui_stdlib.cpp
+    )
+    target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR})
+    target_compile_features(imgui PUBLIC cxx_std_17)
+    set_target_properties(imgui PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    if(MSVC)
+        target_compile_options(imgui PRIVATE /bigobj /utf-8)
+    endif()
 endif()
 
 if(ImGuiFileDialog_ADDED)
-    add_library(ImGuiFileDialog INTERFACE)
-    target_include_directories(ImGuiFileDialog INTERFACE ${ImGuiFileDialog_SOURCE_DIR})
     file(GLOB IMGUIFILEDIALOG_SOURCE_FILES "${ImGuiFileDialog_SOURCE_DIR}/*.cpp")
-    target_sources(ImGuiFileDialog INTERFACE ${IMGUIFILEDIALOG_SOURCE_FILES})
-    target_compile_features(ImGuiFileDialog INTERFACE cxx_std_17)
-    target_link_libraries(ImGuiFileDialog INTERFACE imgui)
+    add_library(ImGuiFileDialog STATIC ${IMGUIFILEDIALOG_SOURCE_FILES})
+    target_include_directories(ImGuiFileDialog PUBLIC ${ImGuiFileDialog_SOURCE_DIR})
+    target_compile_features(ImGuiFileDialog PUBLIC cxx_std_17)
+    target_link_libraries(ImGuiFileDialog PUBLIC imgui)
+    set_target_properties(ImGuiFileDialog PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    if(MSVC)
+        target_compile_options(ImGuiFileDialog PRIVATE /bigobj /utf-8)
+    endif()
 endif()
 
 if(ImGuiColorTextEdit_ADDED)
-    add_library(ImGuiColorTextEdit INTERFACE)
-    target_include_directories(ImGuiColorTextEdit INTERFACE ${ImGuiColorTextEdit_SOURCE_DIR})
     file(GLOB IMGUICOLORTEXTEDIT_SOURCE_FILES "${ImGuiColorTextEdit_SOURCE_DIR}/*.cpp")
-    target_sources(ImGuiColorTextEdit INTERFACE ${IMGUICOLORTEXTEDIT_SOURCE_FILES})
-    target_compile_features(ImGuiColorTextEdit INTERFACE cxx_std_17)
-    target_link_libraries(ImGuiColorTextEdit INTERFACE imgui)
+    add_library(ImGuiColorTextEdit STATIC ${IMGUICOLORTEXTEDIT_SOURCE_FILES})
+    target_include_directories(ImGuiColorTextEdit PUBLIC ${ImGuiColorTextEdit_SOURCE_DIR})
+    target_compile_features(ImGuiColorTextEdit PUBLIC cxx_std_17)
+    target_link_libraries(ImGuiColorTextEdit PUBLIC imgui)
+    set_target_properties(ImGuiColorTextEdit PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    if(MSVC)
+        target_compile_options(ImGuiColorTextEdit PRIVATE /bigobj /utf-8)
+    endif()
 endif()
 
 if(asio_ADDED)
@@ -723,6 +804,15 @@ if(Slang_ADDED)
             else()
                 message(STATUS "slang-llvm library not found, skipping copy")
             endif()
+        elseif(APPLE)
+            add_custom_command(TARGET copy_slang_libs POST_BUILD
+                COMMAND ${CMAKE_COMMAND}
+                    -DSLANG_RUNTIME_SOURCE_DIR=${Slang_SOURCE_DIR}/lib
+                    -DSLANG_RUNTIME_DEST_DIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+                    -DSLANG_RUNTIME_DYLIB_SUFFIX=${CMAKE_SHARED_LIBRARY_SUFFIX}
+                    -P ${CMAKE_CURRENT_LIST_DIR}/slang_runtime_macos.cmake
+                COMMENT "Copying macOS Slang runtime libraries"
+            )
         else()
             # Note: libslang-compiler and libslang-glslang have version suffix in filename (e.g., libslang-compiler-2025.23.1.so)
             add_custom_command(TARGET copy_slang_libs POST_BUILD
@@ -778,13 +868,24 @@ if(VulkanLoader_ADDED)
     if(NOT SKBUILD)
         if(TARGET vulkan)
             # Copy the produced Vulkan loader to the main lib directory for runtime loading
-            add_custom_target(copy_vulkan_loader
-                COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    $<TARGET_FILE:vulkan>
-                    ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:vulkan>
-                COMMENT "Copying Vulkan loader to main lib directory"
-            )
+            if(APPLE)
+                add_custom_target(copy_vulkan_loader
+                    COMMAND ${CMAKE_COMMAND}
+                        -DVULKAN_LOADER_SOURCE_FILE=$<TARGET_FILE:vulkan>
+                        -DVULKAN_LOADER_DEST_DIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+                        -DVULKAN_LOADER_DYLIB_SUFFIX=${CMAKE_SHARED_LIBRARY_SUFFIX}
+                        -P ${CMAKE_CURRENT_LIST_DIR}/vulkan_loader_macos.cmake
+                    COMMENT "Copying macOS Vulkan loader to main lib directory"
+                )
+            else()
+                add_custom_target(copy_vulkan_loader
+                    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        $<TARGET_FILE:vulkan>
+                        ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:vulkan>
+                    COMMENT "Copying Vulkan loader to main lib directory"
+                )
+            endif()
         endif()
     endif()
 endif()
@@ -811,11 +912,158 @@ if(NANOVDB_EDITOR_E57_FORMAT AND libE57Format_ADDED AND TARGET E57Format)
     set_target_properties(E57Format PROPERTIES POSITION_INDEPENDENT_CODE ON)
 endif()
 
-if(openh264_ADDED)
+set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_DEBUG "")
+set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_RELEASE "")
+
+if(WIN32 AND NANOVDB_EDITOR_USE_VCPKG AND NANOVDB_EDITOR_USE_H264)
+    find_path(OPENH264_INCLUDE_DIR
+        NAMES wels/codec_api.h
+        REQUIRED
+    )
+
+    find_library(OPENH264_LIBRARY_RELEASE
+        NAMES openh264
+        PATH_SUFFIXES lib
+        REQUIRED
+    )
+
+    find_library(OPENH264_LIBRARY_DEBUG
+        NAMES openh264
+        PATH_SUFFIXES debug/lib lib
+    )
+
+    set(_OPENH264_DLL_HINTS "")
+    foreach(_openh264_lib_candidate IN ITEMS "${OPENH264_LIBRARY_RELEASE}" "${OPENH264_LIBRARY_DEBUG}")
+        if(_openh264_lib_candidate)
+            get_filename_component(_openh264_lib_dir "${_openh264_lib_candidate}" DIRECTORY)
+            get_filename_component(_openh264_root "${_openh264_lib_dir}/.." ABSOLUTE)
+            list(APPEND _OPENH264_DLL_HINTS
+                "${_openh264_root}"
+                "${_openh264_root}/debug"
+            )
+        endif()
+    endforeach()
+    list(REMOVE_DUPLICATES _OPENH264_DLL_HINTS)
+
+    find_file(OPENH264_DLL_RELEASE
+        NAMES openh264.dll
+        HINTS ${_OPENH264_DLL_HINTS}
+        PATH_SUFFIXES bin
+    )
+
+    find_file(OPENH264_DLL_DEBUG
+        NAMES openh264.dll
+        HINTS ${_OPENH264_DLL_HINTS}
+        PATH_SUFFIXES debug/bin bin
+    )
+
+    if(NOT OPENH264_DLL_RELEASE)
+        set(_OPENH264_DLL_RELEASE_GLOBS "")
+        foreach(_openh264_root IN LISTS _OPENH264_DLL_HINTS)
+            list(APPEND _OPENH264_DLL_RELEASE_GLOBS
+                "${_openh264_root}/bin/openh264*.dll"
+            )
+        endforeach()
+        if(_OPENH264_DLL_RELEASE_GLOBS)
+            file(GLOB _OPENH264_DLL_RELEASE_CANDIDATES LIST_DIRECTORIES FALSE ${_OPENH264_DLL_RELEASE_GLOBS})
+            list(SORT _OPENH264_DLL_RELEASE_CANDIDATES)
+            list(LENGTH _OPENH264_DLL_RELEASE_CANDIDATES _OPENH264_DLL_RELEASE_CANDIDATE_COUNT)
+            if(_OPENH264_DLL_RELEASE_CANDIDATE_COUNT GREATER 0)
+                list(GET _OPENH264_DLL_RELEASE_CANDIDATES 0 OPENH264_DLL_RELEASE)
+            endif()
+        endif()
+    endif()
+
+    if(NOT OPENH264_DLL_DEBUG)
+        set(_OPENH264_DLL_DEBUG_GLOBS "")
+        foreach(_openh264_root IN LISTS _OPENH264_DLL_HINTS)
+            list(APPEND _OPENH264_DLL_DEBUG_GLOBS
+                "${_openh264_root}/debug/bin/openh264*.dll"
+                "${_openh264_root}/bin/openh264*.dll"
+            )
+        endforeach()
+        if(_OPENH264_DLL_DEBUG_GLOBS)
+            file(GLOB _OPENH264_DLL_DEBUG_CANDIDATES LIST_DIRECTORIES FALSE ${_OPENH264_DLL_DEBUG_GLOBS})
+            list(SORT _OPENH264_DLL_DEBUG_CANDIDATES)
+            list(LENGTH _OPENH264_DLL_DEBUG_CANDIDATES _OPENH264_DLL_DEBUG_CANDIDATE_COUNT)
+            if(_OPENH264_DLL_DEBUG_CANDIDATE_COUNT GREATER 0)
+                list(GET _OPENH264_DLL_DEBUG_CANDIDATES 0 OPENH264_DLL_DEBUG)
+            endif()
+        endif()
+    endif()
+
+    if(NOT OPENH264_LIBRARY_DEBUG)
+        set(OPENH264_LIBRARY_DEBUG ${OPENH264_LIBRARY_RELEASE})
+    endif()
+
+    if(OPENH264_DLL_RELEASE)
+        if(NOT OPENH264_DLL_DEBUG)
+            set(OPENH264_DLL_DEBUG ${OPENH264_DLL_RELEASE})
+        endif()
+
+        add_library(openh264 SHARED IMPORTED)
+        set_target_properties(openh264 PROPERTIES
+            IMPORTED_CONFIGURATIONS "RELEASE;DEBUG"
+            IMPORTED_IMPLIB_RELEASE ${OPENH264_LIBRARY_RELEASE}
+            IMPORTED_IMPLIB_DEBUG ${OPENH264_LIBRARY_DEBUG}
+            IMPORTED_LOCATION_RELEASE ${OPENH264_DLL_RELEASE}
+            IMPORTED_LOCATION_DEBUG ${OPENH264_DLL_DEBUG}
+            INTERFACE_INCLUDE_DIRECTORIES ${OPENH264_INCLUDE_DIR}
+        )
+
+        # Store Debug and Release runtime DLL paths separately so install rules
+        # can use CONFIGURATIONS and avoid copying both DLLs to the same destination.
+        if(OPENH264_DLL_DEBUG AND NOT OPENH264_DLL_DEBUG STREQUAL OPENH264_DLL_RELEASE)
+            set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_DEBUG "${OPENH264_DLL_DEBUG}")
+            set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_RELEASE "${OPENH264_DLL_RELEASE}")
+        else()
+            # Only one distinct DLL; use it for all configs.
+            set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_DEBUG "${OPENH264_DLL_RELEASE}")
+            set(NANOVDB_EDITOR_OPENH264_RUNTIME_DLL_RELEASE "${OPENH264_DLL_RELEASE}")
+        endif()
+
+        # Enable vcpkg's app-local dependency copying so that the OpenH264 DLL
+        # (and other vcpkg-provided DLLs) are copied next to executables for
+        # non-SKBUILD Windows builds. This avoids requiring users to manually
+        # adjust PATH in order to load openh264.dll at runtime.
+        set(VCPKG_APPLOCAL_DEPS ON CACHE BOOL "Copy vcpkg DLL dependencies next to executables" FORCE)
+    else()
+        add_library(openh264 STATIC IMPORTED)
+        set_target_properties(openh264 PROPERTIES
+            IMPORTED_CONFIGURATIONS "RELEASE;DEBUG"
+            IMPORTED_LOCATION_RELEASE ${OPENH264_LIBRARY_RELEASE}
+            IMPORTED_LOCATION_DEBUG ${OPENH264_LIBRARY_DEBUG}
+            INTERFACE_INCLUDE_DIRECTORIES ${OPENH264_INCLUDE_DIR}
+        )
+    endif()
+elseif(openh264_ADDED)
     file(MAKE_DIRECTORY ${CPM_PACKAGE_openh264_BINARY_DIR})     # DOWNLOAD_ONLY does not create build dir
 
     set(OPENH264_OUTPUT_LIB ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libopenh264${CMAKE_STATIC_LIBRARY_SUFFIX})
     set(OPENH264_BUILD_LIB ${CPM_PACKAGE_openh264_BINARY_DIR}/libopenh264${CMAKE_STATIC_LIBRARY_SUFFIX})
+    set(OPENH264_CFLAGS "-fPIC -DWELS_X86_ASM=0")
+    set(OPENH264_CXXFLAGS "-fPIC -std=c++11 -DWELS_X86_ASM=0")
+    set(OPENH264_ENV_VARS
+        CC=${CMAKE_C_COMPILER}
+        CXX=${CMAKE_CXX_COMPILER}
+    )
+
+    if(APPLE)
+        execute_process(
+            COMMAND xcrun --sdk macosx --show-sdk-path
+            OUTPUT_VARIABLE OPENH264_MACOS_SDK_PATH
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
+        )
+
+        if(OPENH264_MACOS_SDK_PATH)
+            list(APPEND OPENH264_ENV_VARS SDKROOT=${OPENH264_MACOS_SDK_PATH})
+            string(APPEND OPENH264_CFLAGS " -isysroot ${OPENH264_MACOS_SDK_PATH}")
+            string(APPEND OPENH264_CXXFLAGS " -isysroot ${OPENH264_MACOS_SDK_PATH}")
+        else()
+            message(WARNING "Could not determine the macOS SDK path for the openh264 build")
+        endif()
+    endif()
 
     add_custom_command(
         OUTPUT ${OPENH264_OUTPUT_LIB}
@@ -823,11 +1071,11 @@ if(openh264_ADDED)
             ${CPM_PACKAGE_openh264_SOURCE_DIR}
             ${CPM_PACKAGE_openh264_BINARY_DIR}
         # Build encoder and common libraries from root directory
-        COMMAND ${CMAKE_COMMAND} -E env CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER}
+        COMMAND ${CMAKE_COMMAND} -E env ${OPENH264_ENV_VARS}
                 make -j${CMAKE_BUILD_PARALLEL_LEVEL}
                 USE_ASM=No BUILDTYPE=static DECODER=No
-                "CFLAGS=-fPIC -DWELS_X86_ASM=0"
-                "CXXFLAGS=-fPIC -std=c++11 -DWELS_X86_ASM=0"
+                "CFLAGS=${OPENH264_CFLAGS}"
+                "CXXFLAGS=${OPENH264_CXXFLAGS}"
                 libencoder.a libcommon.a libprocessing.a
         # Create our own static library from encoder objects
         COMMAND ${CMAKE_COMMAND} -E rm -rf temp_openh264_objects

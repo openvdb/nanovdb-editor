@@ -1,0 +1,10 @@
+{
+    "ShaderParams": {
+        "sh_degree": {
+            "value": 3,
+            "min": 0,
+            "max": 3,
+            "step": 1
+        }
+    }
+}

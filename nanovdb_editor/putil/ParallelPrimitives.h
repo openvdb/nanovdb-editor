@@ -74,6 +74,15 @@ typedef struct pnanovdb_parallel_primitives_t
                                             pnanovdb_uint32_t key_low_bit_count,
                                             pnanovdb_uint32_t key_high_bit_count);
 
+    void(PNANOVDB_ABI* radix_sort_key64)(const pnanovdb_compute_t* compute,
+                                         pnanovdb_compute_queue_t* queue,
+                                         pnanovdb_parallel_primitives_context_t* context_in,
+                                         pnanovdb_compute_buffer_t* key_inout,
+                                         pnanovdb_compute_buffer_t* val_inout,
+                                         pnanovdb_uint64_t key_count,
+                                         pnanovdb_uint64_t buffer_key_count,
+                                         pnanovdb_uint32_t key_bit_count);
+
     const pnanovdb_compute_t* compute;
 
 } pnanovdb_parallel_primitives_t;
@@ -87,6 +96,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(global_scan_uint64, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(global_scan_max, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(radix_sort, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(radix_sort_dual_key, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(radix_sort_key64, 0, 0)
 PNANOVDB_REFLECT_POINTER(pnanovdb_compute_t, compute, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()

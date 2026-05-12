@@ -151,6 +151,11 @@ void SceneView::add_camera(pnanovdb_editor_token_t* name_token, const CameraView
     SceneViewData* scene = get_current_scene();
     if (scene)
     {
+        auto it = scene->cameras.find(name_token->id);
+        if (it != scene->cameras.end() && it->second.camera_view == camera.camera_view)
+        {
+            return;
+        }
         scene->cameras[name_token->id] = camera;
     }
 }
@@ -164,6 +169,12 @@ void SceneView::add_camera(pnanovdb_editor_token_t* scene_token,
     SceneViewData* scene = get_or_create_scene(scene_token);
     if (scene)
     {
+        auto it = scene->cameras.find(name_token->id);
+        if (it != scene->cameras.end() && it->second.camera_view == camera.camera_view)
+        {
+            set_current_scene(scene_token);
+            return;
+        }
         scene->cameras[name_token->id] = camera;
         set_current_scene(scene_token);
     }

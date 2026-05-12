@@ -49,6 +49,12 @@ jobs:
           sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
           sudo apt-get install -y libxcb1-dev libxcb-keysyms1-dev libxcb-randr0-dev libxcb-xinerama0-dev libx11-xcb-dev libxrandr-dev libwayland-dev wayland-protocols libdirectfb-dev
 
+      - name: Run OpenH264 regression build
+        run: |
+          set -euo pipefail
+          chmod +x ./scripts/test_openh264_build.sh
+          ./scripts/test_openh264_build.sh
+
       - name: Build NanoVDB Editor (GLFW disabled)
         run: |
           set -e
@@ -59,7 +65,11 @@ jobs:
         run: |
           set -e
           chmod +x ./build.sh
-          ./build.sh -rfv
+          ./build.sh -rcv
+
+      - name: Verify incremental build is a no-op
+        run: |
+          bash ./scripts/ci/check_incremental_build.sh "./build.sh -r"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -75,9 +85,83 @@ jobs:
           export LD_LIBRARY_PATH=$PWD/build/Release/lib:$PWD/build/Release/bin:$LD_LIBRARY_PATH
           ctest --test-dir build/Release/gtests -C Release --output-on-failure --verbose
 
+  nanovdb-editor-build-and-test-macos:
+    name: Build and Test (macOS)
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Vulkan dependencies
+        run: |
+          set -euo pipefail
+          brew install molten-vk
+
+          BREW_PREFIX="$(brew --prefix)"
+          MOLTENVK_ICD="$(python3 - <<'PY' "${BREW_PREFIX}"
+          import os
+          import sys
+
+          root = sys.argv[1]
+          for dirpath, _, filenames in os.walk(root):
+              if "MoltenVK_icd.json" in filenames:
+                  print(os.path.join(dirpath, "MoltenVK_icd.json"))
+                  raise SystemExit(0)
+          print("")
+          PY
+          )"
+
+          if [ -z "${MOLTENVK_ICD}" ]; then
+            echo "ERROR: MoltenVK_icd.json not found under ${BREW_PREFIX}" >&2
+            exit 1
+          fi
+
+          echo "Found MoltenVK ICD: ${MOLTENVK_ICD}"
+          echo "VK_ICD_FILENAMES=${MOLTENVK_ICD}" >> "${GITHUB_ENV}"
+          echo "VK_DRIVER_FILES=${MOLTENVK_ICD}" >> "${GITHUB_ENV}"
+          echo "DYLD_LIBRARY_PATH=${BREW_PREFIX}/lib:${DYLD_LIBRARY_PATH:-}" >> "${GITHUB_ENV}"
+          echo "DYLD_FALLBACK_LIBRARY_PATH=${BREW_PREFIX}/lib:${DYLD_FALLBACK_LIBRARY_PATH:-}" >> "${GITHUB_ENV}"
+
+      - name: Run OpenH264 regression build
+        run: |
+          set -euo pipefail
+          chmod +x ./scripts/test_openh264_build.sh
+          ./scripts/test_openh264_build.sh
+
+      - name: Build NanoVDB Editor (GLFW disabled)
+        run: |
+          set -e
+          chmod +x ./build.sh
+          ./build.sh -rfv
+
+      - name: Build NanoVDB Editor (GLFW enabled)
+        run: |
+          set -e
+          chmod +x ./build.sh
+          ./build.sh -rv
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanovdb-editor-build-macos
+          path: |
+            build/
+          retention-days: 2
+
+      - name: Run GTests
+        run: |
+          set -e
+          export DYLD_LIBRARY_PATH="$PWD/build/Release/lib:$PWD/build/Release/bin:${DYLD_LIBRARY_PATH:-}"
+          ctest --test-dir build/Release/gtests -C Release --output-on-failure --verbose
+
   nanovdb-editor-build-and-test-windows:
     name: Build and Test (Windows)
     runs-on: windows-latest
+    env:
+      USE_VCPKG: ON
     defaults:
       run:
         shell: pwsh
@@ -85,13 +169,38 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up vcpkg
+        run: |
+          $VcpkgRoot = Join-Path $env:RUNNER_TEMP "vcpkg"
+          git clone --depth 1 https://github.com/microsoft/vcpkg $VcpkgRoot
+          & "$VcpkgRoot\bootstrap-vcpkg.bat"
+          "VCPKG_ROOT=$VcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Build NanoVDB Editor (GLFW disabled)
         run: |
           ./build.bat -rfv
 
       - name: Build NanoVDB Editor (GLFW enabled)
         run: |
-          ./build.bat -rv
+          ./build.bat -rcv
+
+      - name: Verify GLFW runtime DLL is present
+        run: |
+          $GlfwDll = "build\Release\glfw3.dll"
+          if (-not (Test-Path $GlfwDll)) {
+            Write-Host "ERROR: Expected GLFW runtime DLL was not produced: $GlfwDll"
+            Write-Host "GLFW is loaded dynamically at runtime, so local Windows builds must provide glfw3.dll."
+            if (Test-Path "build\Release") {
+              Write-Host "Contents of build\Release:"
+              Get-ChildItem "build\Release" | Select-Object Name, Length | Format-Table -AutoSize
+            }
+            exit 1
+          }
+          Write-Host "Found GLFW runtime DLL: $GlfwDll"
+
+      - name: Verify incremental build is a no-op
+        run: |
+          ./scripts/ci/check_incremental_build.ps1 -Command "build.bat -r"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -103,46 +212,73 @@ jobs:
 
       - name: Install Mesa3D lavapipe
         run: |
-          # Download Mesa3D with lavapipe for Windows
-          Write-Host "Downloading Mesa3D lavapipe..."
-          $MesaUrl = "https://github.com/pal1000/mesa-dist-win/releases/download/24.2.7/mesa3d-24.2.7-release-msvc.7z"
-          $MesaArchive = "$env:TEMP\mesa3d.7z"
-          $MesaDir = "$env:TEMP\mesa3d"
+          # Download Mesa lavapipe for Windows x64.
+          Write-Host "Downloading Mesa lavapipe for x64..."
+          $MesaUrl = "https://github.com/mmozeiko/build-mesa/releases/download/24.3.1/mesa-lavapipe-x64-24.3.1.zip"
+          $MesaArchive = "$env:TEMP\mesa-lavapipe-x64.zip"
+          $MesaDir = "$env:TEMP\mesa-lavapipe-x64"
+
+          if (Test-Path $MesaDir) { Remove-Item -Recurse -Force $MesaDir }
+          New-Item -ItemType Directory -Path $MesaDir -Force | Out-Null
 
           Invoke-WebRequest -Uri $MesaUrl -OutFile $MesaArchive
 
-          # Extract Mesa3D
-          Write-Host "Extracting Mesa3D..."
-          7z x $MesaArchive -o"$MesaDir" -y
+          # Extract the package.
+          Write-Host "Extracting Mesa..."
+          Expand-Archive -Path $MesaArchive -DestinationPath $MesaDir -Force
 
-          # Verify vulkan_lvp.dll exists
-          $VulkanLvpDll = Join-Path $MesaDir "x64\vulkan_lvp.dll"
-          if (Test-Path $VulkanLvpDll) {
-              Write-Host "Found vulkan_lvp.dll at: $VulkanLvpDll"
-          } else {
-              Write-Host "ERROR: vulkan_lvp.dll not found!"
-              Write-Host "Contents of x64 directory:"
-              Get-ChildItem (Join-Path $MesaDir "x64") | Format-Table Name
+          # Locate lavapipe DLL.
+          $VulkanLvpDll = Get-ChildItem -Path $MesaDir -Recurse -File -Filter "vulkan_lvp.dll" -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if (-not $VulkanLvpDll) {
+              Write-Host "ERROR: vulkan_lvp.dll not found in x64 lavapipe package!"
+              Get-ChildItem -Path $MesaDir -Recurse -File -Filter "vulkan*.dll" -ErrorAction SilentlyContinue |
+                Select-Object -First 50 FullName | Format-Table -AutoSize
               exit 1
           }
+          $MesaBinPath = Split-Path -Parent $VulkanLvpDll.FullName
+          Write-Host "Using lavapipe DLL: $($VulkanLvpDll.FullName)"
+          Write-Host "Using Mesa bin path: $MesaBinPath"
 
-          # Register lavapipe ICD in Windows Registry
-          $VulkanICDPath = Join-Path $MesaDir "x64\lvp_icd.x86_64.json"
-          $RegistryPath = "HKLM:\SOFTWARE\Khronos\Vulkan\Drivers"
-
-          Write-Host "Registering lavapipe ICD in registry..."
-          if (-not (Test-Path $RegistryPath)) {
-              New-Item -Path $RegistryPath -Force | Out-Null
+          # Locate ICD JSON (prefer same directory).
+          $VulkanICDJson = Get-ChildItem -Path $MesaBinPath -File -Filter "lvp_icd*.json" -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if (-not $VulkanICDJson) {
+              $VulkanICDJson = Get-ChildItem -Path $MesaDir -Recurse -File -Filter "lvp_icd*.json" -ErrorAction SilentlyContinue |
+                Select-Object -First 1
           }
-          New-ItemProperty -Path $RegistryPath -Name $VulkanICDPath -Value 0 -PropertyType DWord -Force | Out-Null
+          if (-not $VulkanICDJson) {
+              Write-Host "ERROR: lvp_icd*.json not found in x64 lavapipe package!"
+              Get-ChildItem -Path $MesaDir -Recurse -File -Filter "*.json" -ErrorAction SilentlyContinue |
+                Select-Object -First 50 FullName | Format-Table -AutoSize
+              exit 1
+          }
+          $VulkanICDPath = $VulkanICDJson.FullName
+          Write-Host "Using lavapipe ICD JSON: $VulkanICDPath"
 
-          Write-Host "Registry entry created: $VulkanICDPath"
+          # Point the manifest at the extracted driver DLL explicitly.
+          $IcdContent = Get-Content $VulkanICDPath -Raw | ConvertFrom-Json
+          $IcdContent.ICD.library_path = $VulkanLvpDll.FullName
+          $IcdContent | ConvertTo-Json -Depth 10 | Set-Content $VulkanICDPath -Encoding UTF8
 
-          # Add Mesa to PATH
-          $MesaBinPath = Join-Path $MesaDir "x64"
+          # Prefer env vars so the test job does not rely only on registry state.
+          "VK_ICD_FILENAMES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VK_DRIVER_FILES=$VulkanICDPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          # Best-effort registry registration.
+          try {
+            $RegistryPath = "HKLM:\SOFTWARE\Khronos\Vulkan\Drivers"
+            if (-not (Test-Path $RegistryPath)) { New-Item -Path $RegistryPath -Force | Out-Null }
+            New-ItemProperty -Path $RegistryPath -Name $VulkanICDPath -Value 0 -PropertyType DWord -Force | Out-Null
+            Write-Host "Registry entry created: $VulkanICDPath"
+          } catch {
+            Write-Host "WARNING: Could not write Vulkan ICD registry entry: $($_.Exception.Message)"
+          }
+
+          # Add Mesa to PATH.
           echo "$MesaBinPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-          Write-Host "Lavapipe installed successfully"
+          Write-Host "Lavapipe installed successfully for x64"
 
       - name: Run GTests
         run: |
@@ -159,13 +295,45 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up vcpkg
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git
+          .\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+        env:
+          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+          USE_VCPKG: ON
+
       - name: Build NanoVDB Editor (GLFW disabled)
         run: |
           ./build.bat -rfv
+        env:
+          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+          USE_VCPKG: ON
 
       - name: Build NanoVDB Editor (GLFW enabled)
         run: |
-          ./build.bat -rv
+          ./build.bat -rcv
+        env:
+          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+          USE_VCPKG: ON
+
+      - name: Verify GLFW runtime DLL is present
+        run: |
+          $GlfwDll = "build\Release\glfw3.dll"
+          if (-not (Test-Path $GlfwDll)) {
+            Write-Host "ERROR: Expected GLFW runtime DLL was not produced: $GlfwDll"
+            Write-Host "GLFW is loaded dynamically at runtime, so local Windows builds must provide glfw3.dll."
+            if (Test-Path "build\Release") {
+              Write-Host "Contents of build\Release:"
+              Get-ChildItem "build\Release" | Select-Object Name, Length | Format-Table -AutoSize
+            }
+            exit 1
+          }
+          Write-Host "Found GLFW runtime DLL: $GlfwDll"
+
+      - name: Verify incremental build is a no-op
+        run: |
+          ./scripts/ci/check_incremental_build.ps1 -Command "build.bat -r"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -289,7 +457,11 @@ jobs:
         run: |
           set -e
           chmod +x ./build.sh
-          ./build.sh -rfv
+          ./build.sh -rcv
+
+      - name: Verify incremental build is a no-op
+        run: |
+          bash ./scripts/ci/check_incremental_build.sh "./build.sh -r"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

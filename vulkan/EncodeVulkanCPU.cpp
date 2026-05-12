@@ -19,6 +19,7 @@
 #    include <unistd.h>
 #endif
 
+#include <cstdint>
 #include <string.h>
 #include <vector>
 #include <stdio.h>
@@ -79,6 +80,7 @@ pnanovdb_compute_encoder_t* create_encoder_cpu(pnanovdb_compute_queue_t* queue,
         createInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
         createInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
         createInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        createInfo.flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
 
         loader->vkCreateImage(device->vulkanDevice, &createInfo, nullptr, &ptr->srcImage);
 
@@ -106,14 +108,14 @@ pnanovdb_compute_encoder_t* create_encoder_cpu(pnanovdb_compute_queue_t* queue,
 
     struct constants_t
     {
-        uint grid_dim_x;
-        uint y_width;
-        uint uv_width;
-        uint plane0_end;
-        uint plane1_end;
-        uint plane2_end;
-        uint pad1;
-        uint pad2;
+        uint32_t grid_dim_x;
+        uint32_t y_width;
+        uint32_t uv_width;
+        uint32_t plane0_end;
+        uint32_t plane1_end;
+        uint32_t plane2_end;
+        uint32_t pad1;
+        uint32_t pad2;
     };
     constants_t constants = {};
     constants.y_width = desc->width;

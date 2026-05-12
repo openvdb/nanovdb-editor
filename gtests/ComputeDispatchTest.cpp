@@ -11,6 +11,20 @@
 #include <filesystem>
 #include <cstdarg>
 #include <cstdio>
+#include <string>
+
+namespace
+{
+std::string g_compute_compile_diagnostics;
+
+void capture_compiler_diagnostics(const char* message)
+{
+    if (message)
+    {
+        g_compute_compile_diagnostics += message;
+    }
+}
+} // namespace
 
 static void test_log_print(pnanovdb_compute_log_level_t level, const char* fmt, ...)
 {
@@ -53,6 +67,24 @@ TEST(NanoVDBEditor, ComputeDispatchShaderAddsNumbers)
     {
         FAIL() << "Failed to load compute module";
     }
+
+    pnanovdb_compiler_instance_t* compiler_inst = compiler.create_instance();
+    ASSERT_NE(compiler_inst, nullptr);
+    compiler.set_diagnostic_callback(compiler_inst, capture_compiler_diagnostics);
+
+    pnanovdb_compiler_settings_t compile_settings = {};
+    pnanovdb_compiler_settings_init(&compile_settings);
+    compile_settings.compile_target = PNANOVDB_COMPILE_TARGET_VULKAN;
+    std::strcpy(compile_settings.entry_point_name, "computeMain");
+
+    g_compute_compile_diagnostics.clear();
+    pnanovdb_bool_t compile_result =
+        compiler.compile_shader_from_file(compiler_inst, shader_path.c_str(), &compile_settings, nullptr);
+    compiler.destroy_instance(compiler_inst);
+
+    ASSERT_NE(compile_result, PNANOVDB_FALSE)
+        << "Compilation of shader failed: " << shader_path
+        << (g_compute_compile_diagnostics.empty() ? "" : "\n" + g_compute_compile_diagnostics);
 
     pnanovdb_compute_device_desc_t device_desc = {};
     device_desc.log_print = test_log_print;

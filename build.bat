@@ -10,7 +10,8 @@ set BUILD_DIR=%PROJECT_DIR%build
 set CONFIG_FILE=config.ini
 set SLANG_DEBUG_OUTPUT=OFF
 set CLEAN_SHADERS=OFF
-set USE_VCPKG=OFF
+if not defined NANOVDB_EDITOR_E57_FORMAT set NANOVDB_EDITOR_E57_FORMAT=OFF
+if not defined USE_VCPKG set USE_VCPKG=OFF
 set GLFW_ON=ON
 
 set clean_build=0
@@ -19,6 +20,7 @@ set debug=0
 set verbose=0
 set python_only=0
 set test_only=0
+set force_configure=0
 
 :parse_args
 set args=%1
@@ -67,6 +69,10 @@ if "%arg:~0,1%"=="f" (
     set GLFW_ON=OFF
     goto check_next_char
 )
+if "%arg:~0,1%"=="c" (
+    set force_configure=1
+    goto check_next_char
+)
 if "%arg:~0,1%"=="h" (
     goto Usage
 )
@@ -88,14 +94,22 @@ if "%release%"=="0" (
 )
 
 ::: set env vars from a config file (optional)
-if exist %PROJECT_DIR%%CONFIG_FILE% (
-    for /f "tokens=1,2 delims== eol=#" %%i in (%PROJECT_DIR%%CONFIG_FILE%) do (
-      set %%i=%%j
+if exist "%PROJECT_DIR%%CONFIG_FILE%" (
+    for /f "usebackq tokens=1,* delims== eol=#" %%i in ("%PROJECT_DIR%%CONFIG_FILE%") do (
+      set "%%i=%%j"
     )
 )
 
 if not defined MSVS_VERSION (
     echo MSVS_VERSION not set, using default CMake generator
+)
+
+:: vcpkg triplet and CMake -A arch: default x64; use arm64 on Windows ARM64
+set VCPKG_TRIPLET=x64-windows
+set CMAKE_ARCH=x64
+if "%PROCESSOR_ARCHITECTURE%"=="ARM64" (
+    set VCPKG_TRIPLET=arm64-windows
+    set CMAKE_ARCH=ARM64
 )
 
 if "%USE_VCPKG%"=="ON" (
@@ -104,22 +118,36 @@ if "%USE_VCPKG%"=="ON" (
         set BUILD_ERROR=1
         goto Error
     )
-    :: Install dependencies using vcpkg.json
-    if exist %VCPKG_ROOT%\vcpkg.exe (
-        echo -- Installing dependencies with vcpkg...
-        call %VCPKG_ROOT%\vcpkg.exe install --triplet x64-windows
+    :: Install dependencies using vcpkg.json (run from repo root so manifest is found)
+    if exist "%VCPKG_ROOT%\vcpkg.exe" (
+        echo -- Installing dependencies with vcpkg, triplet %VCPKG_TRIPLET%
+        set VCPKG_FEATURE_ARGS=
+        if /I "%NANOVDB_EDITOR_E57_FORMAT%"=="ON" (
+            set VCPKG_FEATURE_ARGS=--x-feature=e57
+        )
+        pushd "%PROJECT_DIR%"
+        call "%VCPKG_ROOT%\vcpkg.exe" install --triplet %VCPKG_TRIPLET% %VCPKG_FEATURE_ARGS%
         if errorlevel 1 (
+            popd
             echo vcpkg install failed
             set BUILD_ERROR=1
             goto Error
         )
-        set VCPKG_PREFIX_PATH=%VCPKG_ROOT%\installed\x64-windows
+        popd
+        set VCPKG_PREFIX_PATH=%PROJECT_DIR%vcpkg_installed\%VCPKG_TRIPLET%
+        set VCPKG_INSTALLED_DIR_ARG=-DVCPKG_INSTALLED_DIR="%PROJECT_DIR%vcpkg_installed"
+        set "VCPKG_INSTALLED_DIR=%PROJECT_DIR%vcpkg_installed"
     ) else (
-        echo vcpkg.exe not found in %VCPKG_ROOT%
+        echo vcpkg.exe not found in "%VCPKG_ROOT%"
         set BUILD_ERROR=1
         goto Error
     )
     set VCPKG_CMAKE=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake
+) else (
+    set VCPKG_INSTALLED_DIR_ARG=
+    set "VCPKG_INSTALLED_DIR="
+    set "VCPKG_PREFIX_PATH="
+    set "VCPKG_CMAKE="
 )
 
 goto Build
@@ -134,7 +162,7 @@ echo Failure while building %PROJECT_NAME%
 exit /b %BUILD_ERROR%
 
 :Usage
-echo Usage: build [-x] [-r] [-d] [-v] [-s] [-p] [-t] [-f]
+echo Usage: build [-x] [-r] [-d] [-v] [-s] [-p] [-t] [-f] [-c]
 echo        -x  Perform a clean build
 echo        -r  Build in release (default)
 echo        -d  Build in debug
@@ -143,6 +171,7 @@ echo        -s  Compile slang into ASM
 echo        -p  Build only python module (requires Python 3.8+, auto-installs scikit-build ^& wheel)
 echo        -t  Run only tests using ctest
 echo        -f  Disable GLFW (headless build)
+echo        -c  Force CMake reconfigure
 exit /b 1
 
 :Build
@@ -200,6 +229,16 @@ if "%debug%"=="1" (
 
 echo -- Building %PROJECT_NAME%...
 
+if "%clean_build%"=="1" goto RunConfigure
+if "%force_configure%"=="1" goto RunConfigure
+if not exist "%BUILD_DIR%\CMakeCache.txt" goto RunConfigure
+
+echo -- Skipping CMake configure (already configured, use -c to force)
+goto SkipConfigure
+
+:RunConfigure
+echo -- Configuring %PROJECT_NAME%...
+
 set SLANG_PROFILE_ARG=
 if defined SLANG_PROFILE (
     set SLANG_PROFILE_ARG=-DNANOVDB_EDITOR_SLANG_PROFILE=%SLANG_PROFILE%
@@ -208,7 +247,9 @@ if defined SLANG_PROFILE (
 set CMAKE_ARGS=%PROJECT_DIR% -B %BUILD_DIR% ^
     -DCMAKE_TOOLCHAIN_FILE=%VCPKG_CMAKE% ^
     -DCMAKE_PREFIX_PATH=%VCPKG_PREFIX_PATH% ^
+    %VCPKG_INSTALLED_DIR_ARG% ^
     -DNANOVDB_EDITOR_USE_VCPKG=%USE_VCPKG% ^
+    -DNANOVDB_EDITOR_E57_FORMAT=%NANOVDB_EDITOR_E57_FORMAT% ^
     -DNANOVDB_EDITOR_CLEAN_SHADERS=%CLEAN_SHADERS% ^
     -DNANOVDB_EDITOR_SLANG_DEBUG_OUTPUT=%SLANG_DEBUG_OUTPUT% ^
     -DNANOVDB_EDITOR_BUILD_TESTS=ON ^
@@ -216,7 +257,9 @@ set CMAKE_ARGS=%PROJECT_DIR% -B %BUILD_DIR% ^
     %SLANG_PROFILE_ARG%
 
 if defined MSVS_VERSION (
-    cmake -G %MSVS_VERSION% %CMAKE_ARGS%
+    rem Remove any surrounding quotes from MSVS_VERSION before passing to CMake
+    set "MSVS_GENERATOR=%MSVS_VERSION:"=%"
+    cmake -G "%MSVS_GENERATOR%" -A %CMAKE_ARCH% %CMAKE_ARGS%
 ) else (
     cmake %CMAKE_ARGS%
 )
@@ -226,6 +269,8 @@ if "%BUILD_ERROR%" neq "0" (
     echo CMake configuration failed
     goto Error
 )
+
+:SkipConfigure
 
 if "%release%"=="1" (
     call :BuildConfig Release
@@ -311,6 +356,14 @@ if exist _skbuild rmdir /s /q _skbuild 2>nul
 for /d %%i in (*.egg-info) do if exist "%%i" rmdir /s /q "%%i" 2>nul
 for /d %%i in (__pycache__) do if exist "%%i" rmdir /s /q "%%i" 2>nul
 del /q *.whl 2>nul
+
+if "%USE_VCPKG%"=="ON" (
+    set "PY_VCPKG_CMAKE=%VCPKG_CMAKE:\=/%"
+    set "PY_VCPKG_INSTALLED_DIR=%VCPKG_INSTALLED_DIR:\=/%"
+    set "CMAKE_ARGS=-DCMAKE_TOOLCHAIN_FILE=%PY_VCPKG_CMAKE% -DVCPKG_INSTALLED_DIR=%PY_VCPKG_INSTALLED_DIR% -DVCPKG_TARGET_TRIPLET=%VCPKG_TRIPLET% -DNANOVDB_EDITOR_USE_VCPKG=ON -DNANOVDB_EDITOR_E57_FORMAT=%NANOVDB_EDITOR_E57_FORMAT%"
+) else (
+    set "CMAKE_ARGS="
+)
 
 python -m build --wheel
 if errorlevel 1 (
