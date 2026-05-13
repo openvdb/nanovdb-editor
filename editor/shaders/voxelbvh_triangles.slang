@@ -9,23 +9,11 @@
 
 struct EditorParams
 {
-    float4 view_inv_x;
-    float4 view_inv_y;
-    float4 view_inv_z;
-    float4 view_inv_w;
-    float4 projection_inv_x;
-    float4 projection_inv_y;
-    float4 projection_inv_z;
-    float4 projection_inv_w;
+    float4x4 view_inv;
+    float4x4 projection_inv;
 
-    float4 view_x;
-    float4 view_y;
-    float4 view_z;
-    float4 view_w;
-    float4 projection_x;
-    float4 projection_y;
-    float4 projection_z;
-    float4 projection_w;
+    float4x4 view;
+    float4x4 projection;
 
     uint width;
     uint height;
@@ -39,33 +27,10 @@ struct shader_params_t
 };
 
 StructuredBuffer<uint2> buf;
-RWStructuredBuffer<uint> image_out;
+RWStructuredBuffer<uint> image_out_deprecated;
 RWTexture2D<float4> texture_out;
 ConstantBuffer<EditorParams> editor_params;
 ConstantBuffer<shader_params_t> shader_params;
-
-float3 cross_product(float3 a, float3 b)
-{
-    return float3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
-}
-
-// ray origin is implied zero
-bool intersect_box(float3 rayDir, float3 rayDirInv, float3 boxMin, float3 boxMax, out float tnear, out float tfar)
-{
-    // compute intersection of ray with all six bbox planes
-    float3 tbot = boxMin * rayDirInv;
-    float3 ttop = boxMax * rayDirInv;
-
-    // re-order intersections to find smallest and largest on each axis
-    float3 tmin = min(ttop, tbot);
-    float3 tmax = max(ttop, tbot);
-
-    // find the largest tmin and the smallest tmax
-    tnear = max(max(tmin.x, tmin.y), max(tmin.x, tmin.z));
-    tfar = min(min(tmax.x, tmax.y), min(tmax.x, tmax.z));
-
-    return tfar > tnear;
-}
 
 // based on: https://iquilezles.org/articles/intersectors/
 float3 intersect_triangle( in float3 ro, in float3 rd, in float3 v0, in float3 v1, in float3 v2 )
@@ -84,12 +49,13 @@ float3 intersect_triangle( in float3 ro, in float3 rd, in float3 v0, in float3 v
 }
 
 void intersect_triangle(
+    pnanovdb_grid_handle_t grid,
     float3 pos_a,
+    uint id_a,
     float3 pos_b,
+    uint id_b,
     float3 pos_c,
-    float3 color_a,
-    float3 color_b,
-    float3 color_c,
+    uint id_c,
     float3 rayOrigin,
     float tmin,
     float3 rayDir,
@@ -105,6 +71,11 @@ void intersect_triangle(
     float t = 0.f;
     if (t_isect.x > 0.f)
     {
+        pnanovdb_address_t color_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 4u);
+        float3 color_a = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(color_addr, 12u, id_a));
+        float3 color_b = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(color_addr, 12u, id_b));
+        float3 color_c = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(color_addr, 12u, id_c));
+
         alpha = 1.f;
         t = t_isect.x;
         if (shader_params.mode == 1)
@@ -134,26 +105,17 @@ void intersect_triangle(
     }
 }
 
-uint sort_asuint(float f)
-{
-    uint f_uint = asuint(f);
-    uint mask = -int(f_uint >> 31) | 0x80000000;
-    return f_uint ^ mask;
-}
-
 groupshared uint64_t s_voxel_val[128u];
-
 groupshared uint64_t s_range[12u];
 
 struct prim_t
 {
     float3 pos_a;
-    uint id;
+    uint id_a;
     float3 pos_b;
+    uint id_b;
     float3 pos_c;
-    float3 color_a;
-    float3 color_b;
-    float3 color_c;
+    uint id_c;
 };
 groupshared prim_t s_prims[128u];
 
@@ -225,8 +187,6 @@ void workgroup_triangle_process(uint thread_idx,
             pnanovdb_address_t prim_id_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
             uint prim_id = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, list_idx));
 
-            s_prims[thread_idx].id = prim_id;
-
             pnanovdb_address_t index_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
             pnanovdb_uint32_t id_a = pnanovdb_read_uint32(buf, pnanovdb_address_offset(index_addr, 12u * prim_id + 0u));
             pnanovdb_uint32_t id_b = pnanovdb_read_uint32(buf, pnanovdb_address_offset(index_addr, 12u * prim_id + 4u));
@@ -237,17 +197,12 @@ void workgroup_triangle_process(uint thread_idx,
             float3 pos_b = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(pos_addr, 12u, id_b));
             float3 pos_c = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(pos_addr, 12u, id_c));
 
-            pnanovdb_address_t color_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 4u);
-            float3 color_a = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(color_addr, 12u, id_a));
-            float3 color_b = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(color_addr, 12u, id_b));
-            float3 color_c = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(color_addr, 12u, id_c));
-
             s_prims[thread_idx].pos_a = pos_a;
+            s_prims[thread_idx].id_a = id_a;
             s_prims[thread_idx].pos_b = pos_b;
+            s_prims[thread_idx].id_b = id_b;
             s_prims[thread_idx].pos_c = pos_c;
-            s_prims[thread_idx].color_a = color_a;
-            s_prims[thread_idx].color_b = color_b;
-            s_prims[thread_idx].color_c = color_c;
+            s_prims[thread_idx].id_c = id_c;
         }
 
         GroupMemoryBarrierWithGroupSync();
@@ -264,12 +219,13 @@ void workgroup_triangle_process(uint thread_idx,
             for (uint s_idx = 0u; s_idx < count; s_idx++)
             {
                 intersect_triangle(
+                    grid,
                     s_prims[s_idx].pos_a,
+                    s_prims[s_idx].id_a,
                     s_prims[s_idx].pos_b,
+                    s_prims[s_idx].id_b,
                     s_prims[s_idx].pos_c,
-                    s_prims[s_idx].color_a,
-                    s_prims[s_idx].color_b,
-                    s_prims[s_idx].color_c,
+                    s_prims[s_idx].id_c,
                     worldRayOrigin,
                     worldTmin,
                     worldRayDir,
@@ -384,11 +340,6 @@ void ray_hdda_nanovdb(uint thread_idx,
     }
 }
 
-float4 mat_mul(float4 v, float4 x, float4 y, float4 z, float4 w)
-{
-    return float4(dot(v, x), dot(v, y), dot(v, z), dot(v, w));
-}
-
 [shader("compute")][numthreads(16, 8, 1)]
 void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 thread_idx : SV_GroupThreadID)
 {
@@ -403,33 +354,26 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 thread_idx : SV_Gr
     float2 ndc = float2(2.f * ((float(tidx.x) + 0.5f) / float(editor_params.width)) - 1.f,
                         -2.f * ((float(tidx.y) + 0.5f) / float(editor_params.height)) + 1.f);
 
-    float4 pos_d0 = mat_mul(float4(ndc.xy, 0.f, 1.f), editor_params.projection_inv_x, editor_params.projection_inv_y,
-                            editor_params.projection_inv_z, editor_params.projection_inv_w);
-    float4 pos_d1 = mat_mul(float4(ndc.xy, 1.f, 1.f), editor_params.projection_inv_x, editor_params.projection_inv_y,
-                            editor_params.projection_inv_z, editor_params.projection_inv_w);
+    float4 pos_d0 = mul(float4(ndc.xy, 0.f, 1.f), editor_params.projection_inv);
+    float4 pos_d1 = mul(float4(ndc.xy, 1.f, 1.f), editor_params.projection_inv);
 
     float z_d0 = pos_d0.z * (1.f / pos_d0.w);
     float z_d1 = pos_d1.z * (1.f / pos_d1.w);
     bool is_reverse_z = abs(z_d0) > abs(z_d1);
     float4 ray_dir_near = is_reverse_z ? pos_d1 : pos_d0;
 
-    float4 ray_dir_far = ray_dir_near + mat_mul(float4(0.f, 0.f, 1.f, 0.f), editor_params.projection_inv_x,
-                                                editor_params.projection_inv_y, editor_params.projection_inv_z,
-                                                editor_params.projection_inv_w);
+    float4 ray_dir_far = ray_dir_near + mul(float4(0.f, 0.f, 1.f, 0.f), editor_params.projection_inv);
     float3 rayDir = normalize((ray_dir_far.xyz / ray_dir_far.w) - (ray_dir_near.xyz / ray_dir_near.w));
     if (is_reverse_z)
     {
         rayDir = -rayDir;
     }
 
-    rayDir = mat_mul(float4(rayDir, 0.f), editor_params.view_inv_x, editor_params.view_inv_y, editor_params.view_inv_z,
-                     editor_params.view_inv_w)
-                 .xyz;
+    rayDir = mul(float4(rayDir, 0.f), editor_params.view_inv).xyz;
     float3 rayDirInv = float3(1.f, 1.f, 1.f) / rayDir;
 
     float4 rayOrigin4 = is_reverse_z ? pos_d1 : pos_d0;
-    rayOrigin4 = mat_mul(rayOrigin4, editor_params.view_inv_x, editor_params.view_inv_y, editor_params.view_inv_z,
-                         editor_params.view_inv_w);
+    rayOrigin4 = mul(rayOrigin4, editor_params.view_inv);
     float3 rayOrigin = rayOrigin4.xyz / rayOrigin4.w;
 
     pnanovdb_grid_handle_t grid = { pnanovdb_address_null() };
@@ -439,12 +383,5 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 thread_idx : SV_Gr
     float nominalT = 0.f;
     ray_hdda_nanovdb(thread_idx1d, buf, rayOrigin, 0.f, rayDir, 1e9f, rayDirInv, sum, nominalT);
 
-    float4 value = sum;
-    // Note: BGRA target
-    uint rawValue = uint(255.f * max(0.f, min(1.f, value.z))) | (uint(255.f * max(0.f, min(1.f, value.y))) << 8u) |
-                    (uint(255.f * max(0.f, min(1.f, value.x))) << 16u) |
-                    (uint(255.f * max(0.f, min(1.f, value.w))) << 24u);
-    image_out[(editor_params.height - 1 - tidx.y) * editor_params.width + tidx.x] = rawValue;
-
-    texture_out[tidx] = value;
+    texture_out[tidx] = sum;
 }

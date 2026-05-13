@@ -1,5 +1,28 @@
 // workgroup_hdda.slang
 
+float3 cross_product(float3 a, float3 b)
+{
+    return float3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
+}
+
+// ray origin is implied zero
+bool intersect_box(float3 rayDir, float3 rayDirInv, float3 boxMin, float3 boxMax, out float tnear, out float tfar)
+{
+    // compute intersection of ray with all six bbox planes
+    float3 tbot = boxMin * rayDirInv;
+    float3 ttop = boxMax * rayDirInv;
+
+    // re-order intersections to find smallest and largest on each axis
+    float3 tmin = min(ttop, tbot);
+    float3 tmax = max(ttop, tbot);
+
+    // find the largest tmin and the smallest tmax
+    tnear = max(max(tmin.x, tmin.y), max(tmin.x, tmin.z));
+    tfar = min(min(tmax.x, tmax.y), min(tmax.x, tmax.z));
+
+    return tfar > tnear;
+}
+
 struct hdda_t
 {
     int3 ijk;
