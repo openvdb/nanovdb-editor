@@ -332,7 +332,7 @@ void ray_hdda_nanovdb(uint thread_idx,
                 sum, nominalT
             );
         }
-        if (current_hdda_idx == ~0u || sum.a <= 0.0001f)
+        if (sum.a <= 0.0001f)
         {
             workgroup_mark_done(hdda, thread_idx);
         }

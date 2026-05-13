@@ -197,6 +197,11 @@ uint workgroup_hdda_vote(inout workgroup_hdda_t hdda, uint thread_idx)
     }
     GroupMemoryBarrierWithGroupSync();
 
+    // if no result, mark done
+    if (s_hdda_min_idx == ~0u)
+    {
+        hdda.is_active = false;
+    }
     return s_hdda_min_idx;
 }
 
@@ -239,55 +244,3 @@ bool workgroup_this_thread_active(inout workgroup_hdda_t hdda, uint thread_idx)
 {
     return s_hdda_ijkl[s_hdda_min_idx] == s_hdda_ijkl[thread_idx];
 }
-
-#if 0
-groupshared uint64_t s_voxel_val[128u];
-
-void hdda_walk(uint thread_idx, float3 rayOrigin, float3 rayDir, float3 rayDirInv, bool did_hit, float min_t, float max_t)
-{
-    workgroup_hdda_t hdda = {};
-    workgroup_hdda_init(hdda, thread_idx, rayOrigin, rayDir, rayDirInv, did_hit, min_t, max_t);
-    bool should_run = true;
-    while(should_run)
-    {
-        GroupMemoryBarrierWithGroupSync();
-
-        // update HDDA state as needed
-        if (workgroup_hdda_should_update(hdda, thread_idx))
-        {
-            int dim = 1;
-            if (hdda.is_active)
-            {
-                pnanovdb_address_t addr = pnanovdb_readaccessor_get_value_address(grid_type, buf, acc, hdda.ijk);
-                uint64_t val_raw = pnanovdb_read_uint64(buf, addr);
-                uint skip_level = (uint(val_raw) >> 16u) & 0xFFFF;
-
-                s_voxel_val[thread_idx] = val_raw;
-
-                // align HDDA tmin/tmax to current voxel size
-                dim = 1 << skip_level;
-            }
-            else
-            {
-                s_voxel_val[thread_idx] = ~uint64_t(0u);
-            }
-            workgroup_hdda_update(hdda, thread_idx, rayOrigin, rayDir, rayDirInv, dim);
-        }
-
-        uint current_hdda_idx = workgroup_hdda_vote(hdda, thread_idx);
-        // cooperatively process min_voxel_val
-        if (current_hdda_idx != ~0u)
-        {
-            if (s_voxel_val[current_hdda_idx] != ~uint64_t(0u))
-            {
-
-            }
-        }
-        if (current_hdda_idx == ~0u|| sum.a <= 0.0001f)
-        {
-            workgroup_mark_done(hdda, thread_idx);
-        }
-        should_run = workgroup_hdda_step(hdda, thread_idx, rayOrigin, rayDir, rayDirInv);
-    };
-}
-#endif
