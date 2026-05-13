@@ -289,10 +289,10 @@ static void nanovdb_clear(const pnanovdb_compute_t* compute,
 
     struct constants_t
     {
-        pnanovdb_uint32_t nanovdb_word_count;
+        pnanovdb_uint64_t nanovdb_uint64_count;
     };
     constants_t constants = {};
-    constants.nanovdb_word_count = nanovdb_word_count;
+    constants.nanovdb_uint64_count = (nanovdb_word_count >> 1u);
 
     // constants
     pnanovdb_compute_buffer_desc_t buf_desc = {};
@@ -851,8 +851,8 @@ static void nanovdb_add_nodes_from_ijkl_array(const pnanovdb_compute_t* compute,
     pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
     pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
 
-    // default to 1GB return for now
-    uint64_t buf_size = 1024llu * 1024llu * 1024llu;
+    // default to 2GB return for now
+    uint64_t buf_size = 2u * 1024llu * 1024llu * 1024llu;
     uint64_t nanovdb_uint64_count = (buf_size + 7u) / 8u;
 
     pnanovdb_coord_t root_coords[1u] = {};

@@ -463,8 +463,21 @@ void context_flushNodes(Context* context)
             region.dstOffset = params.dst_offset;
             region.size = params.num_bytes;
 
-            loader->vkCmdCopyBuffer(context->deviceQueue->commandBuffer, cast(params.src)->buffer->bufferVk,
-                                    cast(params.dst)->buffer->bufferVk, 1u, &region);
+            static const uint64_t chunk_size = 1024u * 1024u * 1024u;
+            uint64_t chunk_count = (region.size + chunk_size - 1u) / chunk_size;
+            for (uint64_t chunk_idx = 0u; chunk_idx < chunk_count; chunk_idx++)
+            {
+                VkBufferCopy region_chunk = region;
+                region_chunk.srcOffset = chunk_size * chunk_idx;
+                region_chunk.dstOffset = chunk_size * chunk_idx;
+                region_chunk.size = region.size - chunk_size * chunk_idx;
+                if (region_chunk.size > chunk_size)
+                {
+                    region_chunk.size = chunk_size;
+                }
+                loader->vkCmdCopyBuffer(context->deviceQueue->commandBuffer, cast(params.src)->buffer->bufferVk,
+                                        cast(params.dst)->buffer->bufferVk, 1u, &region_chunk);
+            }
         }
 
         profiler_timestamp(context, context->profiler, node->label);
