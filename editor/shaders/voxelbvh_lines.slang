@@ -313,10 +313,10 @@ void ray_hdda_nanovdb(uint thread_idx,
                 uint64_t val_raw = pnanovdb_read_uint64(buf, addr);
                 uint skip_level = (uint(val_raw) >> 16u) & 0xFFFF;
 
-                s_voxel_val[thread_idx] = val_raw;
-
                 // align HDDA tmin/tmax to current voxel size
                 dim = 1 << skip_level;
+
+                s_voxel_val[thread_idx] = val_raw;
             }
             else
             {
