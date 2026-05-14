@@ -6,6 +6,7 @@
 #include "PNanoVDBExt.h"
 
 #include "workgroup_hdda.slang"
+#include "workgroup_voxelbvh.slang"
 #include "workgroup_radix_sort.slang"
 
 struct EditorParams
@@ -307,7 +308,6 @@ float2 compute_hdda_culling_range(StructuredBuffer<uint2> buf,
 }
 
 groupshared uint64_t s_voxel_val[128u];
-groupshared uint64_t s_range[12u];
 
 groupshared float2 s_cull_range[128u];
 groupshared uint s_prim_keys[512u];
@@ -337,61 +337,23 @@ void workgroup_gaussian_process(uint thread_idx,
                                 inout float4 sum,
                                 inout float nominalT)
 {
-    uint active_level_mask = uint(voxel_val_raw) & 0xFFFF;
-    uint list_begin_idx = uint(voxel_val_raw >> 32u);
-
-    // show only smallest three voxel sizes for now
-    uint filter_mask = 0xFFF;
-    uint active_level_count = countbits(active_level_mask & filter_mask);
-
-    if (thread_idx < 12u)
-    {
-        pnanovdb_uint64_t range = {};
-        if (thread_idx < active_level_count)
-        {
-            pnanovdb_address_t range_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 0u);
-            range_addr = pnanovdb_address_offset_product(range_addr, 8u, list_begin_idx);
-            range = pnanovdb_read_uint64(buf, pnanovdb_address_offset(range_addr, 8u * thread_idx));
-        }
-        s_range[thread_idx] = range;
-    }
-    GroupMemoryBarrierWithGroupSync();
-    uint total_count = 0u;
-    for (uint active_level_idx = 0u; active_level_idx < active_level_count; active_level_idx++)
-    {
-        pnanovdb_uint64_t range = s_range[active_level_idx];
-        total_count += uint(range >> 32u) - uint(range);
-    }
+    workgroup_voxelbvh_iterator_t iter = {};
+    workgroup_voxelbvh_iterator_init(iter, thread_idx, 32u, grid, voxel_val_raw);
 
     for (uint layer = 0u; layer <= 16u; layer++)
     {
+        workgroup_voxelbvh_iterator_reset(iter);
+
         uint workgroup_scan_accum = 0u;
-        uint pass_count = (total_count + 127u) / 128u;
-        for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
+        uint prim_id_index = ~0u;
+        while (workgroup_voxelbvh_iterator_get(iter, thread_idx, prim_id_index))
         {
-            uint flat_list_idx = 128u * pass_idx + thread_idx;
-
-            uint list_accum = 0u;
-            uint list_idx = ~0u;
-            for (uint active_level_idx = 0u; active_level_idx < active_level_count; active_level_idx++)
-            {
-                uint range_begin = uint(s_range[active_level_idx]);
-                uint range_end = uint(s_range[active_level_idx] >> 32u);
-                uint list_idx_cmp = range_begin + flat_list_idx - list_accum;
-                if (list_idx_cmp < range_end)
-                {
-                    list_idx = list_idx_cmp;
-                    break;
-                }
-                list_accum += (range_end - range_begin);
-            }
-
             uint prim_key = ~0u;
-            if (list_idx != ~0u)
+            if (prim_id_index != ~0u)
             {
                 // culling stage
                 pnanovdb_address_t prim_id_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
-                uint prim_id = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, list_idx));
+                uint prim_id = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, prim_id_index));
 
                 pnanovdb_address_t mean_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
                 float3 meanf = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(mean_addr, 12u, prim_id));
@@ -430,6 +392,8 @@ void workgroup_gaussian_process(uint thread_idx,
             {
                 break;
             }
+
+            workgroup_voxelbvh_iterator_step(iter);
         }
 
         if (workgroup_scan_accum >= 512u && layer == 0u)
@@ -457,7 +421,7 @@ void workgroup_gaussian_process(uint thread_idx,
             radix_sort(thread_idx);
         }
 
-        pass_count = (workgroup_scan_accum + 127u) / 128u;
+        uint pass_count = (workgroup_scan_accum + 127u) / 128u;
         for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
         {
             uint list_idx = 128u * pass_idx + thread_idx;
