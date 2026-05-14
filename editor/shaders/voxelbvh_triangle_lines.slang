@@ -6,6 +6,7 @@
 #include "PNanoVDBExt.h"
 
 #include "workgroup_hdda.slang"
+#include "workgroup_voxelbvh.slang"
 
 struct EditorParams
 {
@@ -181,7 +182,6 @@ void intersect_triangle(
 }
 
 groupshared uint64_t s_voxel_val[128u];
-groupshared uint64_t s_range[12u];
 
 struct prim_t
 {
@@ -206,61 +206,16 @@ void workgroup_triangle_process(uint thread_idx,
                                 inout float4 sum,
                                 inout float nominalT)
 {
-    uint active_level_mask = uint(voxel_val_raw) & 0xFFFF;
-    uint list_begin_idx = uint(voxel_val_raw >> 32u);
-    uint active_level_count = countbits(active_level_mask);
+    workgroup_voxelbvh_iterator_t iter = {};
+    workgroup_voxelbvh_iterator_init(iter, thread_idx, 32u, grid, voxel_val_raw);
 
-    if (thread_idx < 12u)
+    uint prim_id_index = ~0u;
+    while (workgroup_voxelbvh_iterator_get(iter, thread_idx, prim_id_index))
     {
-        pnanovdb_uint64_t range = {};
-        if (thread_idx < active_level_count)
-        {
-            pnanovdb_address_t range_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 0u);
-            range_addr = pnanovdb_address_offset_product(range_addr, 8u, list_begin_idx);
-            range = pnanovdb_read_uint64(buf, pnanovdb_address_offset(range_addr, 8u * thread_idx));
-        }
-        s_range[thread_idx] = range;
-    }
-    GroupMemoryBarrierWithGroupSync();
-    uint total_count = 0u;
-    for (uint active_level_idx = 0u; active_level_idx < active_level_count; active_level_idx++)
-    {
-        pnanovdb_uint64_t range = s_range[active_level_idx];
-        total_count += uint(range >> 32u) - uint(range);
-    }
-
-    uint pass_count = (total_count + 127u) / 128u;
-    // to avoid excessive shader runtime, we limit max per voxel complexity
-    // disable at your own risk
-    if (pass_count >= 32u)
-    {
-        pass_count = 32u;
-        sum.r = 1.f;
-    }
-    for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
-    {
-        uint flat_list_idx = 128u * pass_idx + thread_idx;
-
-        uint list_accum = 0u;
-        uint list_idx = ~0u;
-        for (uint active_level_idx = 0u; active_level_idx < active_level_count; active_level_idx++)
-        {
-            uint range_begin = uint(s_range[active_level_idx]);
-            uint range_end = uint(s_range[active_level_idx] >> 32u);
-            uint list_idx_cmp = range_begin + flat_list_idx - list_accum;
-            if (list_idx_cmp < range_end)
-            {
-                list_idx = list_idx_cmp;
-                break;
-            }
-            list_accum += (range_end - range_begin);
-        }
-
-        uint prim_key = ~0u;
-        if (list_idx != ~0u)
+        if (prim_id_index != ~0u)
         {
             pnanovdb_address_t prim_id_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
-            uint prim_id = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, list_idx));
+            uint prim_id = pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, prim_id_index));
 
             pnanovdb_address_t index_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 2u);
             pnanovdb_uint32_t id_a = pnanovdb_read_uint32(buf, pnanovdb_address_offset(index_addr, 12u * prim_id + 0u));
@@ -282,11 +237,7 @@ void workgroup_triangle_process(uint thread_idx,
 
         GroupMemoryBarrierWithGroupSync();
 
-        uint count = total_count - 128u * pass_idx;
-        if (count > 128u)
-        {
-            count = 128u;
-        }
+        uint count = workgroup_voxelbvh_iterator_count_in_pass(iter);
 
         // only participate if this pixel actually wanted this data
         if (this_thread_active)
@@ -313,6 +264,8 @@ void workgroup_triangle_process(uint thread_idx,
         }
 
         GroupMemoryBarrierWithGroupSync();
+
+        workgroup_voxelbvh_iterator_step(iter);
     }
 }
 
