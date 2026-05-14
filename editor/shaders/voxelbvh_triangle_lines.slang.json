@@ -1,17 +1,16 @@
 {
     "ShaderParams": {
-        "line_radius": {
-            "value": 0.01,
+        "mode": {
+            "value": 1.0,
             "min": 0,
-            "max": 0.1,
-            "step": 0.001
+            "max": 2.0,
+            "step": 1.0
         },
-        "show_levels": {
-            "value": 0,
+        "line_radius": {
+            "value": 0.1,
             "min": 0,
-            "max": 1,
-            "step": 1,
-            "isBool": true
+            "max": 1.0,
+            "step": 0.001
         }
     }
 }
