@@ -468,8 +468,8 @@ void context_flushNodes(Context* context)
             for (uint64_t chunk_idx = 0u; chunk_idx < chunk_count; chunk_idx++)
             {
                 VkBufferCopy region_chunk = region;
-                region_chunk.srcOffset = chunk_size * chunk_idx;
-                region_chunk.dstOffset = chunk_size * chunk_idx;
+                region_chunk.srcOffset += chunk_size * chunk_idx;
+                region_chunk.dstOffset += chunk_size * chunk_idx;
                 region_chunk.size = region.size - chunk_size * chunk_idx;
                 if (region_chunk.size > chunk_size)
                 {
