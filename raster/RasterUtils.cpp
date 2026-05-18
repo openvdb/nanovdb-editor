@@ -14,8 +14,8 @@
 #include <nanovdb_editor/putil/FileFormat.h>
 #include <nanovdb_editor/putil/Editor.h>
 
-#define PNANOVDB_RASTER_TEST_CONVERT 1
-#if PNANOVDB_RASTER_TEST_CONVERT
+#define PNANOVDB_RASTER_CONVERT_TO_ONINDEX 1
+#if PNANOVDB_RASTER_CONVERT_TO_ONINDEX
 #    include <nanovdb_editor/putil/Convert.h>
 #endif
 
@@ -184,7 +184,7 @@ static pnanovdb_bool_t process_arrays_to_raster_to_nanovdb(pnanovdb_raster_t* ra
         }
         return PNANOVDB_FALSE;
     }
-#if PNANOVDB_RASTER_TEST_CONVERT
+#if PNANOVDB_RASTER_CONVERT_TO_ONINDEX
     pnanovdb_compute_array_t* node2_arr = *nanovdb_arr;
     *nanovdb_arr = compute->create_array(4u, 3u * 256u * 1024u * 1024u, nullptr);
 
