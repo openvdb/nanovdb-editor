@@ -3,27 +3,14 @@
 #define PNANOVDB_ADDRESS_64
 #define PNANOVDB_BUF_HLSL_64
 #include "PNanoVDB.h"
-#include "PNanoVDBExt.h"
 
 struct EditorParams
 {
-    float4 view_inv_x;
-    float4 view_inv_y;
-    float4 view_inv_z;
-    float4 view_inv_w;
-    float4 projection_inv_x;
-    float4 projection_inv_y;
-    float4 projection_inv_z;
-    float4 projection_inv_w;
+    float4x4 view_inv;
+    float4x4 projection_inv;
 
-    float4 view_x;
-    float4 view_y;
-    float4 view_z;
-    float4 view_w;
-    float4 projection_x;
-    float4 projection_y;
-    float4 projection_z;
-    float4 projection_w;
+    float4x4 view;
+    float4x4 projection;
 
     uint width;
     uint height;
@@ -37,12 +24,12 @@ struct shader_params_t
 };
 
 StructuredBuffer<uint2> buf;
-RWStructuredBuffer<uint> image_out;
+RWStructuredBuffer<uint> image_out_deprecated;
 RWTexture2D<float4> texture_out;
 ConstantBuffer<EditorParams> editor_params;
 ConstantBuffer<shader_params_t> shader_params;
 
-[shader("compute")][numthreads(32, 4, 1)]
+[shader("compute")][numthreads(16, 8, 1)]
 void main(uint3 dispatchThreadID : SV_DispatchThreadID)
 {
     int2 tidx = int2(dispatchThreadID.xy);
@@ -77,12 +64,6 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
             (1.f / 255.f) * float((val_raw >> 24u) & 255)
         );
     }
-
-    // Note: BGRA target
-    uint rawValue = uint(255.f * max(0.f, min(1.f, value.z))) | (uint(255.f * max(0.f, min(1.f, value.y))) << 8u) |
-                    (uint(255.f * max(0.f, min(1.f, value.x))) << 16u) |
-                    (uint(255.f * max(0.f, min(1.f, value.w))) << 24u);
-    image_out[(editor_params.height - 1 - tidx.y) * editor_params.width + tidx.x] = rawValue;
 
     texture_out[tidx] = value;
 }
