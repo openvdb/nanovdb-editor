@@ -25,6 +25,10 @@ struct shader_params_t
 {
     uint mode;
     float line_radius;
+    uint enable_slice_plane;
+    float slice_plane_z;
+    uint slice_plane_axis;
+    uint supersample;
 };
 
 StructuredBuffer<uint2> buf;
@@ -275,6 +279,7 @@ void ray_hdda_nanovdb(uint thread_idx,
                        float3 worldRayDir,
                        float rayMaxT,
                        float3 worldRayDirInv,
+                       float3 rayDirCenter,
                        inout float4 sum,
                        inout float nominalT)
 {
@@ -306,6 +311,118 @@ void ray_hdda_nanovdb(uint thread_idx,
 
     float3 bbox_minf = float3(bbox_min - int3(1,1,1));
     float3 bbox_maxf = float3(bbox_max + int3(2,2,2));
+
+    if (shader_params.enable_slice_plane != 0u)
+    {
+        float3 slice_point = (1.f - shader_params.slice_plane_z) * bbox_minf + shader_params.slice_plane_z * bbox_maxf;
+        float3 normal = float3(1.f, 0.f, 0.f);
+        if (shader_params.slice_plane_axis == 1u)
+        {
+            normal = float3(0.f, 1.f, 0.f);
+        }
+        else if (shader_params.slice_plane_axis == 2u)
+        {
+            normal = float3(0.f, 0.f, 1.f);
+        }
+
+        if (shader_params.slice_plane_axis == 1u)
+        {
+            if (dot(normal, rayDirCenter) < 0.f)
+            {
+                bbox_maxf.y = slice_point.y;
+            }
+            else
+            {
+                bbox_minf.y = slice_point.y;
+            }
+        }
+        else if (shader_params.slice_plane_axis == 2u)
+        {
+            if (dot(normal, rayDirCenter) < 0.f)
+            {
+                bbox_maxf.z = slice_point.z;
+            }
+            else
+            {
+                bbox_minf.z = slice_point.z;
+            }
+        }
+        else
+        {
+            if (dot(normal, rayDirCenter) < 0.f)
+            {
+                bbox_maxf.x = slice_point.x;
+            }
+            else
+            {
+                bbox_minf.x = slice_point.x;
+            }
+        }
+
+
+        float d = -dot(slice_point, normal);
+        float plane_t = -(dot(rayOrigin, normal) + d)/dot(rayDir, normal);
+        if (plane_t > 0.f)
+        {
+            float3 ijkf = rayDir * plane_t + rayOrigin;
+
+            int3 ijk = int3(floor(ijkf));
+
+            pnanovdb_address_t addr = pnanovdb_readaccessor_get_value_address(grid_type, buf, acc, ijk);
+            uint64_t val_raw = pnanovdb_read_uint64(buf, addr);
+            uint active_level_mask = uint(val_raw) & 0xFFFF;
+            uint skip_level = (uint(val_raw) >> 16u) & 0xFFFF;
+            uint list_begin_idx = uint(val_raw >> 32u);
+
+            float4 value = float4(0.f, 0.f, 0.f, 0.f);
+
+            if (skip_level == 0u) { value = float4(1.f, 0.f, 0.f, 0.f);}
+            if (skip_level == 1u) { value = float4(1.f, 1.f, 0.f, 0.f);}
+            if (skip_level == 2u) { value = float4(0.f, 1.f, 0.f, 0.f);}
+            if (skip_level == 3u) { value = float4(0.f, 1.f, 1.f, 0.f);}
+            if (skip_level == 4u) { value = float4(0.f, 0.f, 1.f, 0.f);}
+            if (skip_level == 5u) { value = float4(1.f, 0.f, 1.f, 0.f);}
+            if (skip_level == 6u) { value = float4(0.5f, 0.f, 0.f, 0.f);}
+            if (skip_level == 7u) { value = float4(0.5f, 0.5f, 0.f, 0.f);}
+            if (skip_level == 8u) { value = float4(0.f, 0.5f, 0.f, 0.f);}
+            if (skip_level == 9u) { value = float4(0.f, 0.5f, 0.5f, 0.f);}
+            if (skip_level == 10u) { value = float4(0.0f, 0.f, 0.5f, 0.f);}
+            if (skip_level == 11u) { value = float4(0.5f, 0.f, 0.5f, 0.f);}
+            if (skip_level == 12u) { value = float4(0.33f, 0.33f, 0.33f, 0.f);}
+
+            int3 ijk_fine = int3(floor(4.f * ijkf));
+            uint border_mask = (1u << (skip_level + 2)) - 1u;
+            bool is_x_border = (ijk_fine.x & ~border_mask) == ijk_fine.x || (ijk_fine.x | border_mask) == ijk_fine.x;
+            bool is_y_border = (ijk_fine.y & ~border_mask) == ijk_fine.y || (ijk_fine.y | border_mask) == ijk_fine.y;
+            bool is_z_border = (ijk_fine.z & ~border_mask) == ijk_fine.z || (ijk_fine.z | border_mask) == ijk_fine.z;
+            if (shader_params.slice_plane_axis == 1 && (is_x_border || is_z_border))
+            {
+                value.w = 1.f;
+            }
+            else if (shader_params.slice_plane_axis == 2 && (is_x_border || is_y_border))
+            {
+                value.w = 1.f;
+            }
+            else if (shader_params.slice_plane_axis == 0 && (is_y_border || is_z_border))
+            {
+                value.w = 1.f;
+            }
+
+            /*if (((ijk.x ^ ijk.y ^ ijk.z) & 1) != 0u)
+            {
+                value *= 0.9f;
+            }
+            if (((ijk.x ^ ijk.y ^ ijk.z) & 2) != 0u)
+            {
+                value *= 0.7f;
+            }*/
+
+            float4 color = value;
+            nominalT = sum.a * (color.a * plane_t) + nominalT;
+            sum.rgb = sum.a * (color.a * color.rgb) + sum.rgb;
+            sum.a = (1.f - color.a) * sum.a;
+        }
+    }
 
     float boxMinT;
     float boxMaxT;
@@ -354,7 +471,8 @@ void ray_hdda_nanovdb(uint thread_idx,
                 thread_idx, this_thread_active,
                 grid,
                 worldRayOrigin, worldRayDir, worldRayDirInv,
-                hdda.hdda.tmin * rayDirMagnInv, hdda.hdda.tmax * rayDirMagnInv,
+                max(boxMinT, hdda.hdda.tmin) * rayDirMagnInv,
+                min(boxMaxT, hdda.hdda.tmax) * rayDirMagnInv,
                 voxel_val_raw,
                 sum, nominalT
             );
@@ -367,14 +485,32 @@ void ray_hdda_nanovdb(uint thread_idx,
     }
 }
 
-[shader("compute")][numthreads(16, 8, 1)]
-void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 thread_idx : SV_GroupThreadID)
+void get_center_ray_dir(out float3 rayDir)
 {
-    int2 tidx = int2(dispatchThreadID.xy);
-    uint thread_idx1d = thread_idx.x | (thread_idx.y << 4);
+    float2 ndc = float2(0.f, 0.f);
+    float4 pos_d0 = mul(float4(ndc.xy, 0.f, 1.f), editor_params.projection_inv);
+    float4 pos_d1 = mul(float4(ndc.xy, 1.f, 1.f), editor_params.projection_inv);
 
-    float2 ndc = float2(2.f * ((float(tidx.x) + 0.5f) / float(editor_params.width)) - 1.f,
-                        -2.f * ((float(tidx.y) + 0.5f) / float(editor_params.height)) + 1.f);
+    float z_d0 = pos_d0.z * (1.f / pos_d0.w);
+    float z_d1 = pos_d1.z * (1.f / pos_d1.w);
+    bool is_reverse_z = abs(z_d0) > abs(z_d1);
+    float4 ray_dir_near = is_reverse_z ? pos_d1 : pos_d0;
+
+    float4 ray_dir_far = ray_dir_near + mul(float4(0.f, 0.f, 1.f, 0.f), editor_params.projection_inv);
+    rayDir = normalize((ray_dir_far.xyz / ray_dir_far.w) - (ray_dir_near.xyz / ray_dir_near.w));
+    if (is_reverse_z)
+    {
+        rayDir = -rayDir;
+    }
+
+    rayDir = mul(float4(rayDir, 0.f), editor_params.view_inv).xyz;
+    rayDir = normalize(rayDir);
+}
+
+float4 sample_subpixel(float2 tidxf, uint thread_idx1d)
+{
+    float2 ndc = float2(2.f * (tidxf.x / float(editor_params.width)) - 1.f,
+                        -2.f * (tidxf.y / float(editor_params.height)) + 1.f);
 
     float4 pos_d0 = mul(float4(ndc.xy, 0.f, 1.f), editor_params.projection_inv);
     float4 pos_d1 = mul(float4(ndc.xy, 1.f, 1.f), editor_params.projection_inv);
@@ -398,12 +534,43 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 thread_idx : SV_Gr
     rayOrigin4 = mul(rayOrigin4, editor_params.view_inv);
     float3 rayOrigin = rayOrigin4.xyz / rayOrigin4.w;
 
+    float3 rayDirCenter;
+    get_center_ray_dir(rayDirCenter);
+
     pnanovdb_grid_handle_t grid = { pnanovdb_address_null() };
     pnanovdb_uint32_t grid_type = pnanovdb_grid_get_grid_type(buf, grid);
 
     float4 sum = float4(0.f, 0.f, 0.f, 1.f);
     float nominalT = 0.f;
-    ray_hdda_nanovdb(thread_idx1d, buf, rayOrigin, 0.f, rayDir, 1e9f, rayDirInv, sum, nominalT);
+    ray_hdda_nanovdb(thread_idx1d, buf, rayOrigin, 0.f, rayDir, 1e9f, rayDirInv, rayDirCenter, sum, nominalT);
+
+    return sum;
+}
+
+[shader("compute")][numthreads(16, 8, 1)]
+void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 thread_idx : SV_GroupThreadID)
+{
+    int2 tidx = int2(dispatchThreadID.xy);
+    uint thread_idx1d = thread_idx.x | (thread_idx.y << 4);
+
+    float4 sum = float4(0.f, 0.f, 0.f, 0.f);
+    if (shader_params.supersample != 0u)
+    {
+        static const int2 pattern[4u] = {int2(-2, -6), int2(6, -2), int2(-6, 2), int2(2, 6)};
+        for (uint sample_idx = 0u; sample_idx < 4u; sample_idx++)
+        {
+            float2 tidxf = float2(tidx) + 0.5f + (1.f / 16.f) * pattern[sample_idx];
+
+            float4 sample_sum = sample_subpixel(tidxf, thread_idx1d);
+            sum.rgb += (1.f / 4.f) * sample_sum.rgb;
+            sum.a = max(sum.a, sample_sum.a);
+        }
+    }
+    else
+    {
+        float2 tidxf = float2(tidx) + 0.5f;
+        sum = sample_subpixel(tidxf, thread_idx1d);
+    }
 
     texture_out[tidx] = sum;
 }
