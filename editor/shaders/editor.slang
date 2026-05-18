@@ -166,54 +166,35 @@ float4 ray_march_nanovdb_leaf_fetch_float(pnanovdb_grid_type_t grid_type,
     {
         pnanovdb_gridblindmetadata_handle_t metadata = pnanovdb_grid_get_gridblindmetadata(buf, grid, 0u);
         pnanovdb_grid_type_t blind_type = pnanovdb_gridblindmetadata_get_data_type(buf, metadata);
-        if (blind_type == PNANOVDB_GRID_TYPE_RGBA8)
+        pnanovdb_uint64_t val_index64;
+        if (level == 0)
         {
-            pnanovdb_uint64_t val_index64;
-            if (level == 0)
-            {
-                val_index64 = pnanovdb_leaf_onindex_get_value_index(buf, address, ijk);
-            }
-            else
-            {
-                val_index64 = pnanovdb_read_uint64(buf, address);
-            }
-            pnanovdb_uint32_t val_index = pnanovdb_uint64_low(val_index64);
-            pnanovdb_uint64_t value_count = pnanovdb_gridblindmetadata_get_value_count(buf, metadata);
-            if (val_index < pnanovdb_uint64_low(value_count))
-            {
-                pnanovdb_int64_t byte_offset = pnanovdb_gridblindmetadata_get_data_offset(buf, metadata);
-                pnanovdb_address_t val_addr =
-                    pnanovdb_address_offset64(metadata.address, pnanovdb_int64_as_uint64(byte_offset));
-                val_addr = pnanovdb_address_offset_product(val_addr, val_index, 4u);
-                uint value_raw = pnanovdb_read_uint32(buf, val_addr);
-                color = float4(
-                    float((value_raw >> 0) & 255) * (1.f / 255.f), float((value_raw >> 8) & 255) * (1.f / 255.f),
-                    float((value_raw >> 16) & 255) * (1.f / 255.f), float((value_raw >> 24) & 255) * (1.f / 255.f));
-            }
+            val_index64 = pnanovdb_leaf_onindex_get_value_index(buf, address, ijk);
         }
         else
         {
-            float value = 0.f;
-            pnanovdb_uint64_t val_index64;
-            if (level == 0)
-            {
-                val_index64 = pnanovdb_leaf_onindex_get_value_index(buf, address, ijk);
-            }
-            else
-            {
-                val_index64 = pnanovdb_read_uint64(buf, address);
-            }
-            pnanovdb_uint32_t val_index = pnanovdb_uint64_low(val_index64);
-            pnanovdb_gridblindmetadata_handle_t meta = pnanovdb_grid_get_gridblindmetadata(buf, grid, 0u);
-            pnanovdb_uint64_t value_count = pnanovdb_gridblindmetadata_get_value_count(buf, meta);
-            if (val_index < pnanovdb_uint64_low(value_count))
-            {
-                pnanovdb_int64_t byte_offset = pnanovdb_gridblindmetadata_get_data_offset(buf, meta);
-                pnanovdb_address_t val_addr =
-                    pnanovdb_address_offset64(meta.address, pnanovdb_int64_as_uint64(byte_offset));
-                val_addr = pnanovdb_address_offset_product(val_addr, val_index, 4u);
-                value = pnanovdb_read_float(buf, val_addr);
-            }
+            val_index64 = pnanovdb_read_uint64(buf, address);
+        }
+        pnanovdb_uint32_t val_index = pnanovdb_uint64_low(val_index64);
+        pnanovdb_uint64_t value_count = pnanovdb_gridblindmetadata_get_value_count(buf, metadata);
+        pnanovdb_uint32_t value_raw = 0u;
+        if (val_index < pnanovdb_uint64_low(value_count))
+        {
+            pnanovdb_int64_t byte_offset = pnanovdb_gridblindmetadata_get_data_offset(buf, metadata);
+            pnanovdb_address_t val_addr =
+                pnanovdb_address_offset64(metadata.address, pnanovdb_int64_as_uint64(byte_offset));
+            val_addr = pnanovdb_address_offset_product(val_addr, val_index, 4u);
+            value_raw = pnanovdb_read_uint32(buf, val_addr);
+        }
+        if (blind_type == PNANOVDB_GRID_TYPE_RGBA8)
+        {
+            color = float4(
+                float((value_raw >> 0) & 255) * (1.f / 255.f), float((value_raw >> 8) & 255) * (1.f / 255.f),
+                float((value_raw >> 16) & 255) * (1.f / 255.f), float((value_raw >> 24) & 255) * (1.f / 255.f));
+        }
+        else
+        {
+            float value = asuint(value_raw);
             color = levelset_to_color(value);
         }
     }
