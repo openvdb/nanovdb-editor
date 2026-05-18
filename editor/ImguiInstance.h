@@ -52,7 +52,6 @@ static const char* PROFILER = "Profiler";
 static const char* CODE_EDITOR = "Shader Editor";
 static const char* CONSOLE = "Log";
 static const char* SHADER_PARAMS = "Shader Params";
-static const char* BENCHMARK = "Benchmark";
 static const char* FILE_HEADER = "File Header";
 static const char* SCENE = "Scenes";
 static const char* PROPERTIES = "Properties";
@@ -119,7 +118,6 @@ struct WindowState
     bool show_render_settings = true;
     bool show_compiler_settings = false;
     bool show_shader_params = true;
-    bool show_benchmark = false;
     bool show_file_header = false;
     bool show_scene = true;
     bool show_scene_properties = true;

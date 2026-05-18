@@ -13,8 +13,6 @@
 #define PNANOVDB_BUF_BOUNDS_CHECK
 #include "Raster.h"
 
-#include "nanovdb_editor/PNanoVDBExt.h"
-
 #include <stdlib.h>
 #include <math.h>
 #include <vector>

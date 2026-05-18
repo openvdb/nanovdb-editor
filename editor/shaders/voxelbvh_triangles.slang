@@ -3,7 +3,6 @@
 #define PNANOVDB_ADDRESS_64
 #define PNANOVDB_BUF_HLSL_64
 #include "PNanoVDB.h"
-#include "PNanoVDBExt.h"
 
 #include "workgroup_hdda.slang"
 #include "workgroup_voxelbvh.slang"
@@ -297,11 +296,6 @@ void ray_hdda_nanovdb(uint thread_idx,
 void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 thread_idx : SV_GroupThreadID)
 {
     int2 tidx = int2(dispatchThreadID.xy);
-    if (tidx.y >= editor_params.height)
-    {
-        tidx.y -= editor_params.height;
-        tidx.x += editor_params.width / 2u;
-    }
     uint thread_idx1d = thread_idx.x | (thread_idx.y << 4);
 
     float2 ndc = float2(2.f * ((float(tidx.x) + 0.5f) / float(editor_params.width)) - 1.f,

@@ -3,27 +3,14 @@
 #define PNANOVDB_ADDRESS_64
 #define PNANOVDB_BUF_HLSL_64
 #include "PNanoVDB.h"
-#include "PNanoVDBExt.h"
 
 struct EditorParams
 {
-    float4 view_inv_x;
-    float4 view_inv_y;
-    float4 view_inv_z;
-    float4 view_inv_w;
-    float4 projection_inv_x;
-    float4 projection_inv_y;
-    float4 projection_inv_z;
-    float4 projection_inv_w;
+    float4x4 view_inv;
+    float4x4 projection_inv;
 
-    float4 view_x;
-    float4 view_y;
-    float4 view_z;
-    float4 view_w;
-    float4 projection_x;
-    float4 projection_y;
-    float4 projection_z;
-    float4 projection_w;
+    float4x4 view;
+    float4x4 projection;
 
     uint width;
     uint height;
@@ -38,7 +25,7 @@ struct shader_params_t
 };
 
 StructuredBuffer<uint2> buf;
-RWStructuredBuffer<uint> image_out;
+RWStructuredBuffer<uint> image_out_deprecated;
 RWTexture2D<float4> texture_out;
 ConstantBuffer<EditorParams> editor_params;
 ConstantBuffer<shader_params_t> shader_params;
@@ -312,166 +299,38 @@ void ray_march_nanovdb(StructuredBuffer<uint2> buf,
     }
 }
 
-void ray_march_nanovdb_node2_intern(StructuredBuffer<uint2> buf,
-                                    float3 worldRayOrigin,
-                                    float rayMinT,
-                                    float3 worldRayDir,
-                                    float rayMaxT,
-                                    float3 worldRayDirInv,
-                                    float dx_origin,
-                                    float dx_per_T,
-                                    pnanovdb_grid_handle_t grid,
-                                    pnanovdb_node2_handle_t root,
-                                    inout float4 sum,
-                                    inout float nominalT)
-{
-    pnanovdb_node2_accessor_t acc;
-    pnanovdb_node2_accessor_init(PNANOVDB_REF(acc), root);
-
-    // transform ray from world to index space
-    float3 rayOrigin = pnanovdb_grid_world_to_indexf(buf, grid, worldRayOrigin);
-    float3 rayDir = pnanovdb_grid_world_to_index_dirf(buf, grid, worldRayDir);
-    float rayDirMagn = length(rayDir);
-    if (rayDirMagn > 0.f)
-    {
-        rayDir /= rayDirMagn;
-        rayMinT *= rayDirMagn;
-        rayMaxT *= rayDirMagn;
-        dx_origin *= rayDirMagn;
-    }
-    float3 rayDirInv = float3(1.f, 1.f, 1.f) / rayDir;
-
-    // intersect local ray with local bbox
-    pnanovdb_address_t bboxes = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 0u);
-    pnanovdb_coord_t bbox_min = pnanovdb_read_coord(buf, pnanovdb_address_offset(bboxes, 0u));
-    pnanovdb_coord_t bbox_max = pnanovdb_read_coord(buf, pnanovdb_address_offset(bboxes, 12u));
-
-    // auto centering
-    int3 ijk_offset = int3(0, 0, 0);
-    if (shader_params.auto_center != 0u)
-    {
-        int3 bbox_ave = ((bbox_max + bbox_min) >> 1u);
-        ijk_offset = (bbox_ave & ~4095);
-        bbox_min = bbox_min - ijk_offset;
-        bbox_max = bbox_max - ijk_offset;
-        rayOrigin = rayOrigin + float3(bbox_ave - ijk_offset);
-    }
-
-    float3 bbox_minf = float3(bbox_min);
-    float3 bbox_maxf = float3(bbox_max + int3(1, 1, 1));
-
-    float boxMinT;
-    float boxMaxT;
-    bool isHit = intersect_box(rayDir, rayDirInv, bbox_minf - rayOrigin, bbox_maxf - rayOrigin, boxMinT, boxMaxT);
-
-    boxMinT = max(rayMinT, boxMinT);
-    if (boxMinT > boxMaxT)
-    {
-        isHit = false;
-    }
-
-    if (isHit)
-    {
-        float3 rayLocation = rayDir * boxMinT + rayOrigin;
-        int3 location = int3(floor(rayLocation * (1.f / 8.f)));
-
-        int3 finalLocation = ray_march_compute_final_location(
-            rayDir, location, int3(bbox_min >> 3u), int3(bbox_max >> 3u) + int3(1, 1, 1));
-
-        bool hitMax = false;
-        float blockHitT = boxMinT;
-
-        while (location.x != finalLocation.x && location.y != finalLocation.y && location.z != finalLocation.z && !hitMax)
-        {
-            if (shader_params.highlight_bbox != 0u)
-            {
-                sum.g = max(0.1f, sum.g);
-            }
-
-            pnanovdb_coord_t leaf_ijk = int3(location.xyz << 3u) + ijk_offset;
-            pnanovdb_node2_handle_t node = {};
-            pnanovdb_uint32_t node_type = 0u;
-            pnanovdb_uint32_t node_n = 0u;
-            pnanovdb_uint32_t level = 0u;
-            pnanovdb_node2_accessor_find_node(buf, acc, node, node_type, node_n, level, leaf_ijk);
-            if (node_type == PNANOVDB_NODE2_TYPE_LEAF)
-            {
-                ray_march_bbox(rayOrigin, rayMinT, rayDir, rayMaxT, rayDirInv, dx_origin, dx_per_T,
-                               int3(location.xyz << 3u), int3(location.xyz << 3u) + int3(7, 7, 7), sum, nominalT);
-            }
-            if (sum.a < 0.00005f)
-            {
-                hitMax = true;
-            }
-
-            ray_march_advance_ray(float3(8.f, 8.f, 8.f), rayDir, rayDirInv, rayOrigin, location, blockHitT);
-        }
-    }
-}
-
-void ray_march_nanovdb_node2(StructuredBuffer<uint2> buf,
-                             float3 worldRayOrigin,
-                             float rayMinT,
-                             float3 worldRayDir,
-                             float rayMaxT,
-                             float3 worldRayDirInv,
-                             float dx_origin,
-                             float dx_per_T,
-                             inout float4 sum,
-                             inout float nominalT)
-{
-    pnanovdb_grid_handle_t grid = { pnanovdb_address_null() };
-    pnanovdb_tree_handle_t tree = pnanovdb_grid_get_tree(buf, grid);
-    pnanovdb_node2_handle_t root = { pnanovdb_tree_get_root(buf, tree).address.byte_offset >> 3u };
-
-    ray_march_nanovdb_node2_intern(buf, worldRayOrigin, rayMinT, worldRayDir, rayMaxT, worldRayDirInv, dx_origin,
-                                   dx_per_T, grid, root, sum, nominalT);
-}
-
-float4 mat_mul(float4 v, float4 x, float4 y, float4 z, float4 w)
-{
-    return float4(dot(v, x), dot(v, y), dot(v, z), dot(v, w));
-}
-
 void tidx_to_ray(int2 tidx, out float3 rayOrigin, out float3 rayDir, out float3 rayDirInv)
 {
     float2 ndc = float2(2.f * ((float(tidx.x) + 0.5f) / float(editor_params.width)) - 1.f,
                         -2.f * ((float(tidx.y) + 0.5f) / float(editor_params.height)) + 1.f);
 
-    float4 pos_d0 = mat_mul(float4(ndc.xy, 0.f, 1.f), editor_params.projection_inv_x, editor_params.projection_inv_y,
-                            editor_params.projection_inv_z, editor_params.projection_inv_w);
-    float4 pos_d1 = mat_mul(float4(ndc.xy, 1.f, 1.f), editor_params.projection_inv_x, editor_params.projection_inv_y,
-                            editor_params.projection_inv_z, editor_params.projection_inv_w);
+    float4 pos_d0 = mul(float4(ndc.xy, 0.f, 1.f), editor_params.projection_inv);
+    float4 pos_d1 = mul(float4(ndc.xy, 1.f, 1.f), editor_params.projection_inv);
 
     float z_d0 = pos_d0.z * (1.f / pos_d0.w);
     float z_d1 = pos_d1.z * (1.f / pos_d1.w);
     bool is_reverse_z = abs(z_d0) > abs(z_d1);
     float4 ray_dir_near = is_reverse_z ? pos_d1 : pos_d0;
 
-    float4 ray_dir_far = ray_dir_near + mat_mul(float4(0.f, 0.f, 1.f, 0.f), editor_params.projection_inv_x,
-                                                editor_params.projection_inv_y, editor_params.projection_inv_z,
-                                                editor_params.projection_inv_w);
+    float4 ray_dir_far = ray_dir_near + mul(float4(0.f, 0.f, 1.f, 0.f), editor_params.projection_inv);
     rayDir = normalize((ray_dir_far.xyz / ray_dir_far.w) - (ray_dir_near.xyz / ray_dir_near.w));
     if (is_reverse_z)
     {
         rayDir = -rayDir;
     }
 
-    rayDir = mat_mul(float4(rayDir, 0.f), editor_params.view_inv_x, editor_params.view_inv_y, editor_params.view_inv_z,
-                     editor_params.view_inv_w)
-                 .xyz;
+    rayDir = mul(float4(rayDir, 0.f), editor_params.view_inv).xyz;
 
     rayDir = normalize(rayDir);
 
     rayDirInv = float3(1.f, 1.f, 1.f) / rayDir;
 
     float4 rayOrigin4 = is_reverse_z ? pos_d1 : pos_d0;
-    rayOrigin4 = mat_mul(rayOrigin4, editor_params.view_inv_x, editor_params.view_inv_y, editor_params.view_inv_z,
-                         editor_params.view_inv_w);
+    rayOrigin4 = mul(rayOrigin4, editor_params.view_inv);
     rayOrigin = rayOrigin4.xyz / rayOrigin4.w;
 }
 
-[shader("compute")][numthreads(32, 4, 1)]
+[shader("compute")][numthreads(16, 8, 1)]
 void main(uint3 dispatchThreadID : SV_DispatchThreadID)
 {
     int2 tidx = int2(dispatchThreadID.xy);
@@ -494,21 +353,7 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
 
     float4 sum = float4(0.f, 0.f, 0.f, 1.f);
     float nominalT = 0.f;
-    if (grid_type == PNANOVDB_GRID_TYPE_NODE2)
-    {
-        ray_march_nanovdb_node2(buf, rayOrigin, 0.f, rayDir, 1e9f, rayDirInv, dx_origin, dx_per_T, sum, nominalT);
-    }
-    else
-    {
-        ray_march_nanovdb(buf, rayOrigin, 0.f, rayDir, 1e9f, rayDirInv, dx_origin, dx_per_T, sum, nominalT);
-    }
+    ray_march_nanovdb(buf, rayOrigin, 0.f, rayDir, 1e9f, rayDirInv, dx_origin, dx_per_T, sum, nominalT);
 
-    float4 value = sum;
-    // Note: BGRA target
-    uint rawValue = uint(255.f * max(0.f, min(1.f, value.z))) | (uint(255.f * max(0.f, min(1.f, value.y))) << 8u) |
-                    (uint(255.f * max(0.f, min(1.f, value.x))) << 16u) |
-                    (uint(255.f * max(0.f, min(1.f, value.w))) << 24u);
-    image_out[(editor_params.height - 1 - tidx.y) * editor_params.width + tidx.x] = rawValue;
-
-    texture_out[tidx] = value;
+    texture_out[tidx] = sum;
 }
