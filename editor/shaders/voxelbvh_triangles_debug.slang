@@ -276,30 +276,31 @@ void workgroup_triangle_process(uint thread_idx,
     }
 }
 
-float4 color_idx_lookup(uint color_idx)
+float3 color_idx_lookup(uint color_idx)
 {
-    float4 value = float4(0.f, 0.f, 0.f, 0.f);
-    if (color_idx == 0u) { value = float4(1.f, 0.f, 0.f, 0.f);}
-    if (color_idx == 1u) { value = float4(1.f, 1.f, 0.f, 0.f);}
-    if (color_idx == 2u) { value = float4(0.f, 1.f, 0.f, 0.f);}
-    if (color_idx == 3u) { value = float4(0.f, 1.f, 1.f, 0.f);}
-    if (color_idx == 4u) { value = float4(0.f, 0.f, 1.f, 0.f);}
-    if (color_idx == 5u) { value = float4(1.f, 0.f, 1.f, 0.f);}
-    if (color_idx == 6u) { value = float4(0.5f, 0.f, 0.f, 0.f);}
-    if (color_idx == 7u) { value = float4(0.5f, 0.5f, 0.f, 0.f);}
-    if (color_idx == 8u) { value = float4(0.f, 0.5f, 0.f, 0.f);}
-    if (color_idx == 9u) { value = float4(0.f, 0.5f, 0.5f, 0.f);}
-    if (color_idx == 10u) { value = float4(0.0f, 0.f, 0.5f, 0.f);}
-    if (color_idx == 11u) { value = float4(0.5f, 0.f, 0.5f, 0.f);}
-    if (color_idx == 12u) { value = float4(0.33f, 0.33f, 0.33f, 0.f);}
-    if (color_idx == 13u) { value = float4(1.f, 0.5f, 0.f, 0.f);}
+    float3 value = float3(0.f, 0.f, 0.f);
+    if (color_idx == 0u) { value = float3(1.f, 0.f, 0.f);}
+    if (color_idx == 1u) { value = float3(1.f, 1.f, 0.f);}
+    if (color_idx == 2u) { value = float3(0.f, 1.f, 0.f);}
+    if (color_idx == 3u) { value = float3(0.f, 1.f, 1.f);}
+    if (color_idx == 4u) { value = float3(0.f, 0.f, 1.f);}
+    if (color_idx == 5u) { value = float3(1.f, 0.f, 1.f);}
+    if (color_idx == 6u) { value = float3(0.5f, 0.f, 0.f);}
+    if (color_idx == 7u) { value = float3(0.5f, 0.5f, 0.f);}
+    if (color_idx == 8u) { value = float3(0.f, 0.5f, 0.f);}
+    if (color_idx == 9u) { value = float3(0.f, 0.5f, 0.5f);}
+    if (color_idx == 10u) { value = float3(0.0f, 0.f, 0.5f);}
+    if (color_idx == 11u) { value = float3(0.5f, 0.f, 0.5f);}
+    if (color_idx == 12u) { value = float3(0.33f, 0.33f, 0.33f);}
+    if (color_idx == 13u) { value = float3(1.f, 0.5f, 0.f);}
     return value;
 }
 
-bool grid_border_test(float3 ijkf, uint border_level)
+bool grid_border_test(float3 ijkf, int width_level, uint border_level)
 {
-    int3 ijk_fine = int3(floor(4.f * ijkf));
-    uint border_mask = (1u << (border_level + 2)) - 1u;
+    float widthf = float(1u << width_level);
+    int3 ijk_fine = int3(floor(widthf * ijkf));
+    uint border_mask = (1u << (border_level + width_level)) - 1u;
     bool is_x_border = (ijk_fine.x & ~border_mask) == ijk_fine.x || (ijk_fine.x | border_mask) == ijk_fine.x;
     bool is_y_border = (ijk_fine.y & ~border_mask) == ijk_fine.y || (ijk_fine.y | border_mask) == ijk_fine.y;
     bool is_z_border = (ijk_fine.z & ~border_mask) == ijk_fine.z || (ijk_fine.z | border_mask) == ijk_fine.z;
@@ -363,26 +364,6 @@ void ray_debug_plane(
         {
             color_idx = list_begin_idx % 12;
         }
-        if (shader_params.show_nanovdb_level != 0u)
-        {
-            color_idx = 12u;
-            border_level = 12u;
-            if (acc.leaf.address.byte_offset != 0u)
-            {
-                color_idx = 0u;
-                border_level = 0u;
-            }
-            else if (acc.lower.address.byte_offset != 0u)
-            {
-                color_idx = 2u;
-                border_level = 3u;
-            }
-            else if (acc.upper.address.byte_offset != 0u)
-            {
-                color_idx = 4u;
-                border_level = 7u;
-            }
-        }
         if (shader_params.show_inactive != 0u)
         {
             if (active_level_mask == 0u)
@@ -391,10 +372,33 @@ void ray_debug_plane(
             }
         }
 
-        float4 value = color_idx_lookup(color_idx);
-        if (grid_border_test(ijkf, border_level))
+        float4 value = float4(0.f, 0.f, 0.f, 0.f);
+        if (grid_border_test(ijkf, 2, border_level))
         {
-            value.w = 1.f;
+            value.rgb = color_idx_lookup(color_idx);
+            value.a = 1.f;
+        }
+
+        if (shader_params.show_nanovdb_level != 0u && value.a < 0.5f)
+        {
+            border_level = 12u;
+            if (acc.leaf.address.byte_offset != 0u)
+            {
+                border_level = 0u;
+            }
+            else if (acc.lower.address.byte_offset != 0u)
+            {
+                border_level = 3u;
+            }
+            else if (acc.upper.address.byte_offset != 0u)
+            {
+                border_level = 7u;
+            }
+            if (grid_border_test(ijkf, 3, border_level))
+            {
+                value.rgb = float3(0.5f, 0.5f, 0.5f);
+                value.a = 1.f;
+            }
         }
 
         float4 color = value;
