@@ -28,6 +28,10 @@ struct shader_params_t
     uint enable_slice_plane;
     float slice_plane_z;
     uint slice_plane_axis;
+    uint show_first_active_level;
+    uint show_list_ids;
+    uint show_nanovdb_level;
+    uint show_inactive;
     uint supersample;
 };
 
@@ -272,6 +276,39 @@ void workgroup_triangle_process(uint thread_idx,
     }
 }
 
+float4 color_idx_lookup(uint color_idx)
+{
+    float4 value = float4(0.f, 0.f, 0.f, 0.f);
+    if (color_idx == 0u) { value = float4(1.f, 0.f, 0.f, 0.f);}
+    if (color_idx == 1u) { value = float4(1.f, 1.f, 0.f, 0.f);}
+    if (color_idx == 2u) { value = float4(0.f, 1.f, 0.f, 0.f);}
+    if (color_idx == 3u) { value = float4(0.f, 1.f, 1.f, 0.f);}
+    if (color_idx == 4u) { value = float4(0.f, 0.f, 1.f, 0.f);}
+    if (color_idx == 5u) { value = float4(1.f, 0.f, 1.f, 0.f);}
+    if (color_idx == 6u) { value = float4(0.5f, 0.f, 0.f, 0.f);}
+    if (color_idx == 7u) { value = float4(0.5f, 0.5f, 0.f, 0.f);}
+    if (color_idx == 8u) { value = float4(0.f, 0.5f, 0.f, 0.f);}
+    if (color_idx == 9u) { value = float4(0.f, 0.5f, 0.5f, 0.f);}
+    if (color_idx == 10u) { value = float4(0.0f, 0.f, 0.5f, 0.f);}
+    if (color_idx == 11u) { value = float4(0.5f, 0.f, 0.5f, 0.f);}
+    if (color_idx == 12u) { value = float4(0.33f, 0.33f, 0.33f, 0.f);}
+    if (color_idx == 13u) { value = float4(1.f, 0.5f, 0.f, 0.f);}
+    return value;
+}
+
+bool grid_border_test(float3 ijkf, uint border_level)
+{
+    int3 ijk_fine = int3(floor(4.f * ijkf));
+    uint border_mask = (1u << (border_level + 2)) - 1u;
+    bool is_x_border = (ijk_fine.x & ~border_mask) == ijk_fine.x || (ijk_fine.x | border_mask) == ijk_fine.x;
+    bool is_y_border = (ijk_fine.y & ~border_mask) == ijk_fine.y || (ijk_fine.y | border_mask) == ijk_fine.y;
+    bool is_z_border = (ijk_fine.z & ~border_mask) == ijk_fine.z || (ijk_fine.z | border_mask) == ijk_fine.z;
+    is_x_border = is_x_border && !(shader_params.slice_plane_axis == 0);
+    is_y_border = is_y_border && !(shader_params.slice_plane_axis == 1);
+    is_z_border = is_z_border && !(shader_params.slice_plane_axis == 2);
+    return is_x_border || is_y_border || is_z_border;
+}
+
 void ray_debug_plane(
     StructuredBuffer<uint2> buf,
     uint grid_type,
@@ -285,57 +322,28 @@ void ray_debug_plane(
     inout float nominalT)
 {
     float3 slice_point = (1.f - shader_params.slice_plane_z) * bbox_minf + shader_params.slice_plane_z * bbox_maxf;
-    float3 normal = float3(1.f, 0.f, 0.f);
-    if (shader_params.slice_plane_axis == 1u)
-    {
-        normal = float3(0.f, 1.f, 0.f);
-    }
-    else if (shader_params.slice_plane_axis == 2u)
-    {
-        normal = float3(0.f, 0.f, 1.f);
-    }
+    float3 normal = float3(
+        shader_params.slice_plane_axis == 0u ? 1.f : 0.f,
+        shader_params.slice_plane_axis == 1u ? 1.f : 0.f,
+        shader_params.slice_plane_axis == 2u ? 1.f : 0.f);
 
-    if (shader_params.slice_plane_axis == 1u)
-    {
-        if (dot(normal, rayDirCenter) < 0.f)
-        {
-            bbox_maxf.y = slice_point.y;
-        }
-        else
-        {
-            bbox_minf.y = slice_point.y;
-        }
-    }
-    else if (shader_params.slice_plane_axis == 2u)
-    {
-        if (dot(normal, rayDirCenter) < 0.f)
-        {
-            bbox_maxf.z = slice_point.z;
-        }
-        else
-        {
-            bbox_minf.z = slice_point.z;
-        }
-    }
-    else
-    {
-        if (dot(normal, rayDirCenter) < 0.f)
-        {
-            bbox_maxf.x = slice_point.x;
-        }
-        else
-        {
-            bbox_minf.x = slice_point.x;
-        }
-    }
-
+    bool is_plane_front = dot(normal, rayDirCenter) < 0.f;
+    bbox_minf = float3(
+        (shader_params.slice_plane_axis == 0u && !is_plane_front) ? slice_point.x : bbox_minf.x,
+        (shader_params.slice_plane_axis == 1u && !is_plane_front) ? slice_point.y : bbox_minf.y,
+        (shader_params.slice_plane_axis == 2u && !is_plane_front) ? slice_point.z : bbox_minf.z
+    );
+    bbox_maxf = float3(
+        (shader_params.slice_plane_axis == 0u && is_plane_front) ? slice_point.x : bbox_maxf.x,
+        (shader_params.slice_plane_axis == 1u && is_plane_front) ? slice_point.y : bbox_maxf.y,
+        (shader_params.slice_plane_axis == 2u && is_plane_front) ? slice_point.z : bbox_maxf.z
+    );
 
     float d = -dot(slice_point, normal);
     float plane_t = -(dot(rayOrigin, normal) + d)/dot(rayDir, normal);
     if (plane_t > 0.f)
     {
         float3 ijkf = rayDir * plane_t + rayOrigin;
-
         int3 ijk = int3(floor(ijkf));
 
         pnanovdb_address_t addr = pnanovdb_readaccessor_get_value_address(grid_type, buf, acc, ijk);
@@ -344,48 +352,50 @@ void ray_debug_plane(
         uint skip_level = (uint(val_raw) >> 16u) & 0xFFFF;
         uint list_begin_idx = uint(val_raw >> 32u);
 
-        float4 value = float4(0.f, 0.f, 0.f, 0.f);
+        uint border_level = skip_level;
+        uint color_idx = skip_level;
+        if (shader_params.show_first_active_level != 0u)
+        {
+            color_idx = firstbitlow(active_level_mask);
+            border_level = color_idx;
+        }
+        if (shader_params.show_list_ids != 0u)
+        {
+            color_idx = list_begin_idx % 12;
+        }
+        if (shader_params.show_nanovdb_level != 0u)
+        {
+            color_idx = 12u;
+            border_level = 12u;
+            if (acc.leaf.address.byte_offset != 0u)
+            {
+                color_idx = 0u;
+                border_level = 0u;
+            }
+            else if (acc.lower.address.byte_offset != 0u)
+            {
+                color_idx = 2u;
+                border_level = 3u;
+            }
+            else if (acc.upper.address.byte_offset != 0u)
+            {
+                color_idx = 4u;
+                border_level = 7u;
+            }
+        }
+        if (shader_params.show_inactive != 0u)
+        {
+            if (active_level_mask == 0u)
+            {
+                color_idx = 13u;
+            }
+        }
 
-        if (skip_level == 0u) { value = float4(1.f, 0.f, 0.f, 0.f);}
-        if (skip_level == 1u) { value = float4(1.f, 1.f, 0.f, 0.f);}
-        if (skip_level == 2u) { value = float4(0.f, 1.f, 0.f, 0.f);}
-        if (skip_level == 3u) { value = float4(0.f, 1.f, 1.f, 0.f);}
-        if (skip_level == 4u) { value = float4(0.f, 0.f, 1.f, 0.f);}
-        if (skip_level == 5u) { value = float4(1.f, 0.f, 1.f, 0.f);}
-        if (skip_level == 6u) { value = float4(0.5f, 0.f, 0.f, 0.f);}
-        if (skip_level == 7u) { value = float4(0.5f, 0.5f, 0.f, 0.f);}
-        if (skip_level == 8u) { value = float4(0.f, 0.5f, 0.f, 0.f);}
-        if (skip_level == 9u) { value = float4(0.f, 0.5f, 0.5f, 0.f);}
-        if (skip_level == 10u) { value = float4(0.0f, 0.f, 0.5f, 0.f);}
-        if (skip_level == 11u) { value = float4(0.5f, 0.f, 0.5f, 0.f);}
-        if (skip_level == 12u) { value = float4(0.33f, 0.33f, 0.33f, 0.f);}
-
-        int3 ijk_fine = int3(floor(4.f * ijkf));
-        uint border_mask = (1u << (skip_level + 2)) - 1u;
-        bool is_x_border = (ijk_fine.x & ~border_mask) == ijk_fine.x || (ijk_fine.x | border_mask) == ijk_fine.x;
-        bool is_y_border = (ijk_fine.y & ~border_mask) == ijk_fine.y || (ijk_fine.y | border_mask) == ijk_fine.y;
-        bool is_z_border = (ijk_fine.z & ~border_mask) == ijk_fine.z || (ijk_fine.z | border_mask) == ijk_fine.z;
-        if (shader_params.slice_plane_axis == 1 && (is_x_border || is_z_border))
+        float4 value = color_idx_lookup(color_idx);
+        if (grid_border_test(ijkf, border_level))
         {
             value.w = 1.f;
         }
-        else if (shader_params.slice_plane_axis == 2 && (is_x_border || is_y_border))
-        {
-            value.w = 1.f;
-        }
-        else if (shader_params.slice_plane_axis == 0 && (is_y_border || is_z_border))
-        {
-            value.w = 1.f;
-        }
-
-        /*if (((ijk.x ^ ijk.y ^ ijk.z) & 1) != 0u)
-        {
-            value *= 0.9f;
-        }
-        if (((ijk.x ^ ijk.y ^ ijk.z) & 2) != 0u)
-        {
-            value *= 0.7f;
-        }*/
 
         float4 color = value;
         nominalT = sum.a * (color.a * plane_t) + nominalT;
