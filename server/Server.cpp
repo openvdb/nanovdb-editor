@@ -188,14 +188,21 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
     router->http_get("/screenshot.bmp",
                      [](auto req, auto params)
                      {
+                         for (int attempt = 0; attempt < 60; attempt++)
                          {
-                             std::lock_guard<std::mutex> guard(g_mutex[instance_idx]);
-
-                             g_server_instance[instance_idx]->screenshots_requested++;
+                             {
+                                 std::lock_guard<std::mutex> guard(g_mutex[instance_idx]);
+                                 if (attempt == 0)
+                                 {
+                                     g_server_instance[instance_idx]->screenshots_requested++;
+                                 }
+                                 if (g_server_instance[instance_idx]->screenshots_pending > 0)
+                                 {
+                                     break;
+                                 }
+                             }
+                             std::this_thread::sleep_for(std::chrono::milliseconds(16));
                          }
-
-                         // try to wait 1 second, see if result comes in
-                         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
                          std::lock_guard<std::mutex> guard(g_mutex[instance_idx]);
 
@@ -215,8 +222,6 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
                          int wh = w * h;
                          int size = 4u * wh;
                          int size_with_header = size + 54;
-
-                         printf("Returning bitmap of %d x %d\n", w, h);
 
                          std::vector<uint8_t> bmp;
                          bmp.push_back(0x42);
@@ -291,8 +296,6 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
                                  }
                              }
                          }
-
-                         printf("Returning bitmap size of %zu\n", bmp.size());
 
                          return req->create_response()
                              .append_header(restinio::http_field::server, "NanoVDB Editor Server")
