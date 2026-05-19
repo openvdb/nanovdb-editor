@@ -47,17 +47,15 @@ inline constexpr const char* s_render_settings_default = "default";
 inline constexpr const char* s_viewer_profile_name = "viewer";
 
 // UI labels
-inline constexpr const char* RENDER_SETTINGS = "Settings";
-inline constexpr const char* COMPILER_SETTINGS = "Compiler";
-inline constexpr const char* PROFILER = "Profiler";
-inline constexpr const char* CODE_EDITOR = "Shader Editor";
-inline constexpr const char* CONSOLE = "Log";
-inline constexpr const char* SHADER_PARAMS = "Shader Params";
-inline constexpr const char* BENCHMARK = "Benchmark";
-inline constexpr const char* FILE_HEADER = "File Header";
-inline constexpr const char* SCENE = "Scenes";
-inline constexpr const char* SCENE_PARAMS = "Params";
-inline constexpr const char* PROPERTIES = "Properties";
+static const char* RENDER_SETTINGS = "Settings";
+static const char* COMPILER_SETTINGS = "Compiler";
+static const char* PROFILER = "Profiler";
+static const char* CODE_EDITOR = "Shader Editor";
+static const char* CONSOLE = "Log";
+static const char* SHADER_PARAMS = "Shader Params";
+static const char* FILE_HEADER = "File Header";
+static const char* SCENE = "Scenes";
+static const char* PROPERTIES = "Properties";
 
 enum class ShaderSelectionMode : int
 {
@@ -110,7 +108,6 @@ struct WindowState
     bool show_render_settings = true;
     bool show_compiler_settings = false;
     bool show_shader_params = true;
-    bool show_benchmark = false;
     bool show_file_header = false;
     bool show_scene = true;
     bool show_scene_params = false;

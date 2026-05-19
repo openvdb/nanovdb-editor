@@ -11,6 +11,7 @@
 */
 
 #include "CommonVulkan.h"
+#include "vulkan/vulkan_core.h"
 
 namespace pnanovdb_vulkan
 {
@@ -172,12 +173,20 @@ pnanovdb_compute_pipeline_t* createComputePipeline(pnanovdb_compute_context_t* c
         stage.pName = "main";
         stage.pSpecializationInfo = nullptr;
 
+        VkPipelineCreateFlags2CreateInfo createFlags = {};
+        createFlags.sType = VK_STRUCTURE_TYPE_PIPELINE_CREATE_FLAGS_2_CREATE_INFO;
+        createFlags.flags = VK_PIPELINE_CREATE_2_64_BIT_INDEXING_BIT_EXT;
+
         VkComputePipelineCreateInfo createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
 
         stage.module = ptr->module;
         createInfo.stage = stage;
         createInfo.layout = ptr->pipelineLayout;
+        if (context->deviceQueue->device->enabledFeatures.shader64BitIndexing)
+        {
+            createInfo.pNext = &createFlags;
+        }
 
         VkResult result =
             loader->vkCreateComputePipelines(vulkanDevice, VK_NULL_HANDLE, 1u, &createInfo, nullptr, &ptr->pipeline);

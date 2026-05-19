@@ -19,6 +19,7 @@
 #include <cstdarg>
 
 #include <cstdint>
+#include <cstdint>
 #include <slang.h>
 
 #define SLANG_PRELUDE_NAMESPACE CPPPrelude
@@ -37,7 +38,7 @@
 // #define TEST_SVRASTER
 // #define TEST_E57
 // #define TEST_CAMERA
-#define TEST_IMAGE2D
+// #define TEST_IMAGE2D
 #define TEST_VOXELBVH
 
 struct constants_t

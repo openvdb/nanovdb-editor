@@ -29,7 +29,6 @@ void showPropertiesWindow(Instance* ptr);
 void showRenderSettingsWindow(Instance* ptr);
 void showCompilerSettingsWindow(Instance* ptr);
 void showShaderParamsWindow(Instance* ptr);
-void showBenchmarkWindow(Instance* ptr);
 void showFileHeaderWindow(Instance* ptr);
 void showCodeEditorWindow(Instance* ptr);
 void showProfilerWindow(Instance* ptr, float delta_time);

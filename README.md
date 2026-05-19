@@ -26,7 +26,10 @@ docker run --runtime=nvidia --net=host --gpus=all ...
 - C++ compiler
 - CMake at least 3.25
 - Python 3.x
-- Vulkan library `vulkan-1` (should be installed with graphics driver)
+- Vulkan runtime/loader:
+  - Windows: Vulkan Runtime (`vulkan-1`)
+  - Linux: system Vulkan loader/driver packages
+  - macOS: MoltenVK (or the macOS Vulkan SDK)
 
 #### Streaming
 - NVIDIA Driver Version at least 550.0 (https://developer.nvidia.com/vulkan/video/get-started)
@@ -50,7 +53,7 @@ echo $VULKAN_SDK
 ```
 
 #### Windows
-- vcpkg (optional - recommended for e57 dependency)
+- vcpkg (recommended; required for Windows H.264 support)
 
 ### Dependencies
 
@@ -67,25 +70,27 @@ In Conda environment:
 
 `- mesalib`
 
-The `NANOVDB_EDITOR_USE_GLFW` option can be disabled when using the editor in haedless and streaming mode only. In that case, `libvulkan.so.1` is built locally to ensure compatibility.
+The `NANOVDB_EDITOR_USE_GLFW` option can be disabled when using the editor in headless and streaming mode only. In that case, `libvulkan.so.1` is built locally to ensure compatibility.
 
-The `NANOVDB_EDITOR_USE_H264` is enabled by default, make sure you have:
+The `NANOVDB_EDITOR_USE_H264` option is enabled by default. Make sure you have:
 ```sh
 sudo apt-get install make
 ```
 
 #### macOS
-Currently not actively used, might be stale.
 
 ```sh
-# install Vulkan SDK from https://vulkan.lunarg.com/sdk/home#mac
 # install homebrew from https://brew.sh
-# brew install cmake
-brew install glfw      # TODO: will be optional for streaming
-
+brew install cmake molten-vk
 ```
+
+Notes:
+- If the Vulkan loader does not discover MoltenVK automatically on your machine, point `VK_ICD_FILENAMES` and `VK_DRIVER_FILES` at `MoltenVK_icd.json`.
+
 #### Windows
-Optionally, the project can use `vcpkg` for dependency management. If `NANOVDB_EDITOR_USE_VCPKG` is set, `vcpkg.json` automatically installs required dependencies.
+The project can use `vcpkg` for dependency management. If `NANOVDB_EDITOR_USE_VCPKG` is set, `vcpkg.json` automatically installs required dependencies.
+
+`NANOVDB_EDITOR_USE_H264` is supported on Windows only when `NANOVDB_EDITOR_USE_VCPKG=ON`. In that configuration, CMake consumes the `openh264` package from `vcpkg` instead of the Unix-only source build path used on Linux.
 
 To set up vcpkg:
 ```bat
@@ -95,8 +100,8 @@ bootstrap-vcpkg.bat
 ```
 
 The following dependencies are automatically managed by `vcpkg.json`:
-- blosc
-- libe57format (and xerces-c dependency)
+- libe57format (and xerces-c dependency) when `NANOVDB_EDITOR_E57_FORMAT=ON`
+- openh264
 
 ### Assets
 Put any data files into the `data` folder, which is linked to the location next to the libraries.
@@ -119,10 +124,12 @@ The Linux/macOS build script supports the following flags (combine as needed):
 - **-e**: Install the Python module in editable mode (use with `-p`)
 - **-t**: Run tests (ctest + pytest); honors `-r`/`-d` to pick configuration
 - **-f**: Disable GLFW for a headless build
+- **-c**: Force CMake reconfigure (needed when switching build options like GLFW on/off)
 
 Notes:
 - If neither `-r` nor `-d` is provided (and not using `-p` or `-t`), the script defaults to a Release build.
 - For Python builds (`-p`), `-d` selects Debug wheels; otherwise Release is used.
+- CMake configure is skipped automatically when the build directory already exists. Use `-c` to force reconfigure when changing options (e.g., switching between GLFW enabled/disabled).
 
 Examples:
 
@@ -147,6 +154,9 @@ Examples:
 
 # Generate Slang ASM during build
 ./build.sh -s -r
+
+# Rebuild after changing options
+./build.sh -r -c
 ```
 
 #### Linux
@@ -155,14 +165,19 @@ Examples:
 ```
 
 #### Windows
-Optionally, rename the config file `config` next to the build script to `config.ini` and fill in the environment variables:
+Optionally, rename the config file `config` next to the build script to `config.ini` and set the environment variables (use unquoted values; `build.bat` passes them to CMake with quotes):
 ```
-MSVS_VERSION="Visual Studio 17 2022"
+MSVS_VERSION=Visual Studio 17 2022
 USE_VCPKG=ON
+NANOVDB_EDITOR_E57_FORMAT=ON
 VCPKG_ROOT=path/to/vcpkg
 ```
 
-To select a different profile for Slang compiler (https://github.com/shader-slang/slang/blob/master/source/slang/slang-profile-defs.h):
+When `USE_VCPKG=ON`, `NANOVDB_EDITOR_USE_H264` defaults to `ON` on Windows. Without `vcpkg`, H.264 remains disabled on Windows because the fallback OpenH264 source build depends on Unix command-line tools.
+
+Set `NANOVDB_EDITOR_E57_FORMAT=ON` to enable E57 support and install the optional `vcpkg` `e57` feature on Windows.
+
+To select a different profile for the Slang compiler (https://github.com/shader-slang/slang/blob/master/source/slang/slang-profile-defs.h):
 ```
 SLANG_PROFILE="sm_5_1"
 ```
@@ -215,7 +230,7 @@ gdb -p <PID>
 
 ## fvdb.viz Integration Tests
 
-We keep the Vulkan headless FVDB viewer validated in both CI and local development by sharing a cached Docker image and integration suite.
+We keep the Vulkan headless FVDB viewer validated in both CI and local development with a shared integration suite and a consistent Docker image recipe.
 
 ### Local workflow
 
@@ -233,20 +248,25 @@ We keep the Vulkan headless FVDB viewer validated in both CI and local developme
 
 # Smoke-test a locally built wheel
 ./scripts/run_fvdb_viz_integration.sh --local-wheel pymodule/dist/nanovdb_editor-*.whl
+
+# Test against the latest fvdb-core nightly (pip install --pre)
+./scripts/run_fvdb_viz_integration.sh --fvdb-nightly
 ```
 
 Highlights:
-- Ensures (and caches) the `fvdb-test-image-<fvdb-core-version>` Docker image (for example, `fvdb-test-image-0.3.0`) with matching Torch/fvdb-core versions.
+- Ensures (and caches) the `nanovdb-editor_fvdb-<fvdb-core-version>` Docker image with matching Torch/fvdb-core versions.
 - Prints the installed `nanovdb_editor` version inside the container before running `pytests/test_fvdb_viz_integration.py -vv -s --full-trace`.
+- Prints the available Vulkan ICDs plus `vulkaninfo --summary`, then fails fast if `fvdb.viz` cannot initialize instead of reporting a skipped upstream suite.
 - Accepts `--force-rebuild` to bypass the local `.cache` tarball when you need a fresh base image.
 
 ### CI workflow
 
 `.github/workflows/fvdb-viz-integration.yml` runs on `workflow_dispatch` or `workflow_call` and:
 - Resolves the package stream (release/dev) plus optional wheel artifact.
-- Restores a cached Docker image package with installed latest `fvdb-core` before building and executes the same pytest selector in Docker.
+- Builds a lightweight `ubuntu:24.04`-based Docker image with prebuilt fvdb-core wheels (pinned release or nightly via `pip install --pre`).
+- Runs the same pytest selector in Docker.
 
-Use the workflow dispatch inputs in GitHub Actions to pick the stream or supply a wheel artifact.
+`build-wheels.yml` triggers two parallel integration jobs when `run_fvdb_viz_integration` is enabled: one against the pinned fvdb-core release and one against the latest nightly.
 
 ## NanoVDB Editor GUI
 
@@ -335,7 +355,7 @@ To display a group of shader parameters from different shaders, define a group J
 
 ## Video Encoding To File
 
-To convert output file to mp4:
+To convert the output to mp4:
 
 ```
 ffmpeg -i input.h264 -c:v copy -f mp4 output.mp4

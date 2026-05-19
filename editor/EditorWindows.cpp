@@ -23,7 +23,6 @@
 #include "InstanceSettingsHandler.h"
 #include "ShaderMonitor.h"
 #include "ShaderCompileUtils.h"
-#include "Node2Verify.h"
 #include "SceneTree.h"
 #include "Properties.h"
 
@@ -156,10 +155,6 @@ void createMenu(imgui_instance_user::Instance* ptr)
                 ImGui::MenuItem(FILE_HEADER, "", &ptr->window.show_file_header);
             }
             ImGui::MenuItem(CONSOLE, "", &ptr->window.show_console);
-            if (!isViewerProfile)
-            {
-                ImGui::MenuItem(BENCHMARK, "", &ptr->window.show_benchmark);
-            }
             ImGui::EndMenu();
         }
 
@@ -907,31 +902,6 @@ void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
         else
         {
             ImGui::TextDisabled("No shader selected");
-        }
-    }
-    ImGui::End();
-}
-
-void showBenchmarkWindow(imgui_instance_user::Instance* ptr)
-{
-    if (!ptr->window.show_benchmark)
-        return;
-
-    if (ImGui::Begin(BENCHMARK, &ptr->window.show_benchmark))
-    {
-        if (ImGui::Button("Run Benchmark"))
-        {
-            // For now, guess the ref nvdb by convention
-            std::string ref_nvdb = ptr->nanovdb_filepath;
-            std::string suffix = "_node2.nvdb";
-            if (ref_nvdb.size() > suffix.size())
-            {
-                ref_nvdb.erase(ref_nvdb.size() - suffix.size(), suffix.size());
-            }
-            ref_nvdb.append(".nvdb");
-            printf("nanovdbFile_(%s) ref_nvdb(%s) suffix(%s)\n", ptr->nanovdb_filepath.c_str(), ref_nvdb.c_str(),
-                   suffix.c_str());
-            pnanovdb_editor::node2_verify_gpu(ref_nvdb.c_str(), ptr->nanovdb_filepath.c_str());
         }
     }
     ImGui::End();

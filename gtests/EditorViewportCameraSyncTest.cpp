@@ -11,7 +11,7 @@ namespace pnanovdb_editor
 namespace
 {
 
-TEST(NanoVDBEditor, SyncCameraOwnerPreservesViewportCameraContext)
+TEST(NanoVDBEditor, SceneViewPreservesViewportCameraContextOnReAdd)
 {
     EditorToken::getInstance().clear();
 
@@ -35,7 +35,10 @@ TEST(NanoVDBEditor, SyncCameraOwnerPreservesViewportCameraContext)
     ASSERT_EQ(original_context.camera_view->configs, original_context.camera_config.get());
     ASSERT_EQ(original_context.camera_view->states, original_context.camera_state.get());
 
-    scene_view.sync_camera_owner(scene_token, viewport_token, original_context.camera_view);
+    CameraViewContext replacement_context;
+    replacement_context.camera_view = original_context.camera_view;
+
+    scene_view.add_camera(scene_token, viewport_token, replacement_context);
 
     scene = scene_view.get_or_create_scene(scene_token);
     ASSERT_NE(scene, nullptr);
@@ -45,12 +48,21 @@ TEST(NanoVDBEditor, SyncCameraOwnerPreservesViewportCameraContext)
 
     const CameraViewContext& synced_context = synced_it->second;
     EXPECT_EQ(synced_context.camera_view, original_context.camera_view);
-    ASSERT_TRUE(synced_context.camera_config);
-    ASSERT_TRUE(synced_context.camera_state);
-    EXPECT_EQ(synced_context.camera_config.get(), original_context.camera_config.get());
-    EXPECT_EQ(synced_context.camera_state.get(), original_context.camera_state.get());
-    EXPECT_EQ(synced_context.camera_view->configs, synced_context.camera_config.get());
-    EXPECT_EQ(synced_context.camera_view->states, synced_context.camera_state.get());
+    EXPECT_TRUE(synced_context.camera_config)
+        << "Re-adding an already tracked viewport camera must keep the config owner alive.";
+    EXPECT_TRUE(synced_context.camera_state)
+        << "Re-adding an already tracked viewport camera must keep the state owner alive.";
+
+    if (synced_context.camera_config)
+    {
+        EXPECT_EQ(synced_context.camera_config.get(), original_context.camera_config.get());
+        EXPECT_EQ(synced_context.camera_view->configs, synced_context.camera_config.get());
+    }
+    if (synced_context.camera_state)
+    {
+        EXPECT_EQ(synced_context.camera_state.get(), original_context.camera_state.get());
+        EXPECT_EQ(synced_context.camera_view->states, synced_context.camera_state.get());
+    }
 }
 
 } // namespace

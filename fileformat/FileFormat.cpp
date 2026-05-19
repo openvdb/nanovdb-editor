@@ -259,6 +259,10 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
         {
             is_big_endian = true;
         }
+        if (line.find("format binary_big_endian 1.0") != std::string::npos)
+        {
+            is_big_endian = true;
+        }
     }
     // printf("vertex_count(%llu)\n", (unsigned long long int)vertex_count);
 
@@ -268,6 +272,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
     std::vector<float> arr_scales;
     std::vector<float> arr_sh_0;
     std::vector<float> arr_sh_n;
+    std::vector<float> arr_colors;
 
     auto resolve_prop = [&](const char* str)
     {
@@ -297,20 +302,23 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
     uint32_t prop_f_dc_1 = resolve_prop("property float f_dc_1\n");
     uint32_t prop_f_dc_2 = resolve_prop("property float f_dc_2\n");
     uint32_t prop_f_rest_0 = resolve_prop("property float f_rest_0\n");
+    uint32_t prop_red = resolve_prop("property float red\n");
+    uint32_t prop_green = resolve_prop("property float green\n");
+    uint32_t prop_blue = resolve_prop("property float blue\n");
 
     std::vector<float> element;
     element.resize(properties.size());
     size_t element_size = element.size() * sizeof(float);
 
     uint64_t element_idx = 0u;
-    while (element_idx < vertex_count && fread(element.data(), 1u, element_size, file) == element_size)
+    while (fread(element.data(), 1u, element_size, file) == element_size && element_idx < vertex_count)
     {
         if (is_big_endian)
         {
             for (size_t idx = 0u; idx < element.size(); idx++)
             {
                 uint32_t val = *((uint32_t*)&element[idx]);
-                uint32_t val_new = (((val)&0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) |
+                uint32_t val_new = (((val) & 0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) |
                                    (((val >> 16u) & 0xFF) << 8u) | (((val >> 24u) & 0xFF) << 0u);
                 *((uint32_t*)&element[idx]) = val_new;
             }
@@ -372,6 +380,18 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
         if (prop_f_dc_2 != ~0u)
         {
             arr_sh_0.push_back(element[prop_f_dc_2]);
+        }
+        if (prop_red != ~0u)
+        {
+            arr_colors.push_back(element[prop_red]);
+        }
+        if (prop_green != ~0u)
+        {
+            arr_colors.push_back(element[prop_green]);
+        }
+        if (prop_blue != ~0u)
+        {
+            arr_colors.push_back(element[prop_blue]);
         }
 
         if (prop_f_rest_0 != ~0u)
@@ -467,6 +487,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
         const char* array_name = array_names[i];
         std::vector<float>* source_array = nullptr;
         std::vector<uint32_t>* source_array_uint32 = nullptr;
+        std::vector<uint32_t>* source_array_uint32 = nullptr;
 
         if (strcmp(array_name, "means") == 0 || strcmp(array_name, "positions") == 0)
         {
@@ -494,11 +515,15 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
         }
         else if (strcmp(array_name, "indices") == 0)
         {
-            source_array_uint32 = !arr_indices.empty() ? &arr_indices : &arr_line_indices;
+            source_array_uint32 = &arr_indices;
         }
         else if (strcmp(array_name, "line_indices") == 0)
         {
             source_array_uint32 = &arr_line_indices;
+        }
+        else if (strcmp(array_name, "colors") == 0)
+        {
+            source_array = &arr_colors;
         }
 
         const bool is_line_indices = (source_array_uint32 == &arr_line_indices);
