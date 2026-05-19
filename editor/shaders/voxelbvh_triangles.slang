@@ -279,7 +279,8 @@ void ray_hdda_nanovdb(uint thread_idx,
                 thread_idx, this_thread_active,
                 grid,
                 worldRayOrigin, worldRayDir, worldRayDirInv,
-                hdda.hdda.tmin * rayDirMagnInv, hdda.hdda.tmax * rayDirMagnInv,
+                max(boxMinT, hdda.hdda.tmin) * rayDirMagnInv,
+                min(boxMaxT, hdda.hdda.tmax) * rayDirMagnInv,
                 voxel_val_raw,
                 sum, nominalT
             );
