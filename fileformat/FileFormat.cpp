@@ -210,6 +210,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
 
     uint64_t vertex_count = 0llu;
     uint64_t face_count = 0llu;
+    uint64_t edge_count = 0llu;
     bool vertex_push_enabled = false;
     bool is_fvdb_gs = false;
     bool is_big_endian = false;
@@ -238,6 +239,12 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
         {
             std::string count_str = line.substr(sizeof("element face"));
             face_count = (uint64_t)std::stoll(count_str);
+            vertex_push_enabled = false;
+        }
+        else if (line.find("element edge") != std::string::npos)
+        {
+            std::string count_str = line.substr(sizeof("element edge"));
+            edge_count = (uint64_t)std::stoll(count_str);
             vertex_push_enabled = false;
         }
         else if (line.find("element") != std::string::npos)
@@ -296,7 +303,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
     size_t element_size = element.size() * sizeof(float);
 
     uint64_t element_idx = 0u;
-    while (fread(element.data(), 1u, element_size, file) == element_size && element_idx < vertex_count)
+    while (element_idx < vertex_count && fread(element.data(), 1u, element_size, file) == element_size)
     {
         if (is_big_endian)
         {
@@ -393,6 +400,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
     }
 
     std::vector<uint32_t> arr_indices;
+    std::vector<uint32_t> arr_line_indices; // packed as (v0,v1,v0,v1,...)
     uint64_t face_idx = 0u;
     if (face_count != 0u)
     {
@@ -424,6 +432,31 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
             }
             face_idx++;
         } while (read_count != 0u && face_idx < face_count);
+    }
+
+    if (edge_count != 0u)
+    {
+        for (uint64_t edge_idx = 0u; edge_idx < edge_count; edge_idx++)
+        {
+            uint32_t v[2] = { 0u, 0u };
+            size_t got = fread(v, 1u, sizeof(v), file);
+            if (got != sizeof(v))
+            {
+                printf("dropped edge(%zu): short read (%zu/%zu bytes)\n", edge_idx, got, sizeof(v));
+                break;
+            }
+            if (is_big_endian)
+            {
+                for (int k = 0; k < 2; k++)
+                {
+                    uint32_t val = v[k];
+                    v[k] = (((val)&0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) | (((val >> 16u) & 0xFF) << 8u) |
+                           (((val >> 24u) & 0xFF) << 0u);
+                }
+            }
+            arr_line_indices.push_back(v[0]);
+            arr_line_indices.push_back(v[1]);
+        }
     }
 
     fclose(file);
@@ -461,8 +494,14 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
         }
         else if (strcmp(array_name, "indices") == 0)
         {
-            source_array_uint32 = &arr_indices;
+            source_array_uint32 = !arr_indices.empty() ? &arr_indices : &arr_line_indices;
         }
+        else if (strcmp(array_name, "line_indices") == 0)
+        {
+            source_array_uint32 = &arr_line_indices;
+        }
+
+        const bool is_line_indices = (source_array_uint32 == &arr_line_indices);
 
         if (source_array && !source_array->empty())
         {
@@ -475,8 +514,16 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
         else if (source_array_uint32 && !source_array_uint32->empty())
         {
             out_arrays[i] = new pnanovdb_compute_array_t();
-            out_arrays[i]->element_count = source_array_uint32->size();
-            out_arrays[i]->element_size = sizeof(uint32_t);
+            if (is_line_indices)
+            {
+                out_arrays[i]->element_count = source_array_uint32->size() / 2u;
+                out_arrays[i]->element_size = 2u * sizeof(uint32_t);
+            }
+            else
+            {
+                out_arrays[i]->element_count = source_array_uint32->size();
+                out_arrays[i]->element_size = sizeof(uint32_t);
+            }
             out_arrays[i]->data = new uint32_t[source_array_uint32->size()];
             memcpy(out_arrays[i]->data, source_array_uint32->data(), source_array_uint32->size() * sizeof(uint32_t));
         }

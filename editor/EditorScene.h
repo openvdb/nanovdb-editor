@@ -14,6 +14,7 @@
 #include "SceneView.h"
 #include "nanovdb_editor/putil/Editor.h"
 #include "PipelineTypes.h"
+#include "EditorImport.h"
 #include "imgui/ImguiWindow.h"
 
 #include <string>
@@ -298,6 +299,10 @@ public:
                             pnanovdb_pipeline_type_t process_pipeline,
                             pnanovdb_pipeline_type_t render_pipeline,
                             float voxels_per_unit);
+
+    bool load_mesh_file(pnanovdb_editor_token_t* scene,
+                        const char* filepath,
+                        const pnanovdb_editor::mesh_import::Options& options = {});
 
 private:
     void copy_shader_params(pnanovdb_pipeline_render_method_t render_method,

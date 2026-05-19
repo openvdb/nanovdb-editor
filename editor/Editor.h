@@ -11,6 +11,7 @@
 
 #include "nanovdb_editor/putil/Reflect.h"
 #include "nanovdb_editor/putil/Editor.h"
+#include "nanovdb_editor/putil/VoxelBVH.h"
 #include "PipelineTypes.h"
 
 #include <thread>
@@ -67,6 +68,8 @@ struct pnanovdb_editor_impl_t
     pnanovdb_camera_view_t* camera_view;
     pnanovdb_raster_t* raster;
     pnanovdb_raster_context_t* raster_ctx;
+    pnanovdb_voxelbvh_t* voxelbvh;
+    pnanovdb_voxelbvh_context_t* voxelbvh_ctx;
     std::string shader_name = pnanovdb_editor::s_default_editor_shader;
     void* shader_params;
     const pnanovdb_reflect_data_type_t* shader_params_data_type;

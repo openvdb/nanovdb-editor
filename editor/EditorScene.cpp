@@ -12,6 +12,7 @@
 #include "EditorScene.h"
 #include "SceneView.h"
 #include "Editor.h"
+#include "EditorImport.h"
 #include "EditorSceneManager.h"
 #include "EditorToken.h"
 #include "ShaderMonitor.h"
@@ -25,6 +26,7 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <vector>
 
 namespace pnanovdb_editor
 {
@@ -1343,6 +1345,12 @@ bool EditorScene::is_selection_valid(const SceneSelection& selection) const
                     // Pipeline-converted Gaussian->NanoVDB stores result in converted_nanovdb
                     is_valid = true;
                 }
+                else if (obj->type == SceneObjectType::Array &&
+                         pnanovdb_pipeline_get_render_method(obj->render_pipeline()) ==
+                             pnanovdb_pipeline_render_method_nanovdb)
+                {
+                    is_valid = true;
+                }
             }
             else if (selection.type == ViewType::GaussianScenes && obj->type == SceneObjectType::GaussianData)
             {
@@ -1859,21 +1867,14 @@ void EditorScene::select_render_view(pnanovdb_editor_token_t* scene, pnanovdb_ed
 
 bool EditorScene::load_nanovdb_file(pnanovdb_editor_token_t* scene, const char* filepath)
 {
-    if (!scene || !filepath || !m_compute)
-    {
-        return false;
-    }
+    return nanovdb_import::nanovdb(*this, m_compute, scene, filepath);
+}
 
-    pnanovdb_compute_array_t* array = m_compute->load_nanovdb(filepath);
-    if (!array)
-    {
-        pnanovdb_editor::Console::getInstance().addLog(Console::LogLevel::Error, "Failed to load '%s'", filepath);
-        return false;
-    }
-
-    handle_nanovdb_data_load(scene, array, filepath);
-    pnanovdb_editor::Console::getInstance().addLog("Loaded NanoVDB from '%s'", filepath);
-    return true;
+bool EditorScene::load_mesh_file(pnanovdb_editor_token_t* scene,
+                                 const char* filepath,
+                                 const pnanovdb_editor::mesh_import::Options& options)
+{
+    return mesh_import::mesh(*this, m_scene_manager, m_compute, scene, filepath, options);
 }
 
 bool EditorScene::save_nanovdb_file(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name, const char* filepath)
@@ -1918,11 +1919,6 @@ bool EditorScene::load_gaussian_file(const char* filepath,
                                      pnanovdb_pipeline_type_t render_pipeline,
                                      float voxels_per_unit)
 {
-    if (!filepath || !m_editor || !m_editor->impl)
-    {
-        return false;
-    }
-
     pnanovdb_editor_token_t* scene_token = get_current_scene_token();
     if (!scene_token)
     {
@@ -1930,26 +1926,8 @@ bool EditorScene::load_gaussian_file(const char* filepath,
         return false;
     }
 
-    bool rasterize_to_nanovdb = (process_pipeline == pnanovdb_pipeline_type_raster3d);
-
-    // Build pipeline context from editor state
-    PipelineContext ctx;
-    ctx.compute = m_editor->impl->compute;
-    ctx.device = m_editor->impl->device;
-    ctx.queue = m_editor->impl->device_queue;
-    ctx.compute_queue = m_editor->impl->compute_queue;
-    ctx.raster = m_editor->impl->raster;
-    ctx.raster_ctx = m_editor->impl->raster_ctx;
-    ctx.renderer = m_editor->impl->renderer;
-    ctx.scene_manager = &m_scene_manager;
-
-    if (!pipeline_start_rasterization(filepath, voxels_per_unit, rasterize_to_nanovdb, process_pipeline,
-                                      render_pipeline, this, &m_scene_manager, scene_token, ctx))
-    {
-        return false;
-    }
-
-    return true;
+    return gaussian_import::gaussian(
+        *this, m_scene_manager, m_compute, scene_token, filepath, process_pipeline, render_pipeline, voxels_per_unit);
 }
 
 std::string EditorScene::get_selected_object_shader_name() const

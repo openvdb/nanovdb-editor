@@ -17,7 +17,86 @@
 
 #include <cstdarg>
 #include <cstdint>
+#include <cstdio>
 #include <math.h>
+
+static void save_ply(pnanovdb_compute_t& compute,
+                     pnanovdb_compute_array_t* positions,
+                     pnanovdb_compute_array_t* indices,
+                     const char* path)
+{
+    if (!positions || !indices || !path)
+    {
+        return;
+    }
+    const bool is_lines = (indices->element_size == 2u * sizeof(uint32_t));
+    const bool is_triangles = (indices->element_size == sizeof(uint32_t) && indices->element_count % 3u == 0u);
+    if (!is_lines && !is_triangles)
+    {
+        printf("save_ply: unsupported indices layout (element_size=%u, element_count=%zu); skipped '%s'\n",
+               (unsigned)indices->element_size, (size_t)indices->element_count, path);
+        return;
+    }
+
+    const float* pos = (const float*)compute.map_array(positions);
+    const uint32_t* idx = (const uint32_t*)compute.map_array(indices);
+    if (!pos || !idx)
+    {
+        printf("save_ply: failed to map arrays for '%s'\n", path);
+        return;
+    }
+
+    const uint64_t vert_count = positions->element_count / 3u;
+    const uint64_t prim_count = is_lines ? indices->element_count : (indices->element_count / 3u);
+
+    FILE* f = fopen(path, "wb");
+    if (!f)
+    {
+        printf("save_ply: cannot open '%s' for write\n", path);
+        return;
+    }
+
+    fprintf(f, "ply\n");
+    fprintf(f, "format binary_little_endian 1.0\n");
+    fprintf(f, "element vertex %zu\n", (size_t)vert_count);
+    fprintf(f, "property float x\n");
+    fprintf(f, "property float y\n");
+    fprintf(f, "property float z\n");
+    if (is_triangles)
+    {
+        fprintf(f, "element face %zu\n", (size_t)prim_count);
+        fprintf(f, "property list uchar int vertex_index\n");
+    }
+    else
+    {
+        fprintf(f, "element edge %zu\n", (size_t)prim_count);
+        fprintf(f, "property int vertex1\n");
+        fprintf(f, "property int vertex2\n");
+    }
+    fprintf(f, "end_header\n");
+
+    fwrite(pos, sizeof(float), 3u * vert_count, f);
+
+    if (is_triangles)
+    {
+        for (uint64_t i = 0u; i < prim_count; i++)
+        {
+            const uint8_t count = 3u;
+            fwrite(&count, 1u, 1u, f);
+            fwrite(&idx[3u * i], sizeof(uint32_t), 3u, f);
+        }
+    }
+    else
+    {
+        // 2 * uint32 per edge; packed bytes match the loader's uint2 expectation
+        fwrite(idx, 2u * sizeof(uint32_t), prim_count, f);
+    }
+
+    fclose(f);
+
+    printf("Saved PLY '%s' (%zu verts, %zu %s)\n", path, (size_t)vert_count, (size_t)prim_count,
+           is_triangles ? "faces" : "edges");
+}
 
 static void log_print(pnanovdb_compute_log_level_t level, const char* format, ...)
 {
@@ -163,6 +242,8 @@ void voxelbvh_test()
     const float inflation_radius = is_triangle_lines ? 0.02f : (is_triangle ? 0.f : 2.f);
     const char* out_file = is_triangle_lines ? "./data/triangle_lines.nvdb" :
                                                (is_triangle ? "./data/triangles.nvdb" : "./data/lines.nvdb");
+    const char* out_ply =
+        is_triangle_lines ? "./data/triangle_lines.ply" : (is_triangle ? "./data/triangles.ply" : "./data/lines.ply");
 
 #    if 1
     const pnanovdb_uint32_t integer_space_max = 511u;
@@ -651,6 +732,8 @@ void voxelbvh_test()
             printf("\n");
         }
     }
+
+    save_ply(compute, positions_array, indices_array, out_ply);
 
     // save NanoVDB out to disk
     compute.save_nanovdb(nanovdb_meta, out_file);

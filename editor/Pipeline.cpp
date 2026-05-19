@@ -36,9 +36,18 @@ struct Raster3DParams
     float voxels_per_unit = 128.f;
 };
 
+struct VoxelBVHBuildParams
+{
+    float source_type = 0.f; // pnanovdb_pipeline_voxelbvh_source_t
+    float integer_space_max = 511.f;
+    float inflation_radius = 0.f;
+};
+
 static void init_raster3d_params(pnanovdb_pipeline_params_t* params);
 static float pnanovdb_pipeline_params_get_voxels_per_unit(pnanovdb_pipeline_params_t* params);
 static void pnanovdb_pipeline_params_set_voxels_per_unit(pnanovdb_pipeline_params_t* params, float value);
+static void init_voxelbvh_build_params(pnanovdb_pipeline_params_t* params);
+static void* map_voxelbvh_build_params(pnanovdb_scene_object_t* obj);
 
 // ============================================================================
 // Pipeline Registry
@@ -429,6 +438,271 @@ static pnanovdb_pipeline_result_t execute_raster2d(pnanovdb_scene_object_t* obj,
     return pnanovdb_pipeline_result_success;
 }
 
+static pnanovdb_compute_array_t* get_or_synthesize_colors(pnanovdb_editor::SceneObject* scene_obj,
+                                                          const pnanovdb_compute_t* compute,
+                                                          pnanovdb_compute_array_t* positions)
+{
+    auto& arrays = scene_obj->named_arrays();
+    auto it = arrays.find("colors");
+    if (it != arrays.end() && it->second)
+        return it->second;
+    if (!positions || !compute || !compute->create_array)
+        return nullptr;
+
+    std::vector<float> white(positions->element_count, 1.0f);
+    pnanovdb_compute_array_t* fallback = compute->create_array(sizeof(float), positions->element_count, white.data());
+    if (fallback)
+    {
+        arrays["colors"] = fallback;
+        Console::getInstance().addLog(Console::LogLevel::Debug,
+                                      "VoxelBVH build: synthesized default white colors (%llu floats)",
+                                      (unsigned long long)positions->element_count);
+    }
+    return fallback;
+}
+
+namespace
+{
+constexpr float k_mesh_wireframe_voxel_multiplier = 0.1f;
+constexpr float k_mesh_lines_voxel_multiplier = 2.0f;
+
+float bbox_max_extent(const pnanovdb_compute_array_t* positions)
+{
+    if (!positions || !positions->data || positions->element_count == 0u)
+        return 0.f;
+    const float* p = static_cast<const float*>(positions->data);
+    const uint64_t vert_count = positions->element_count / 3u;
+    if (vert_count == 0u)
+        return 0.f;
+    float mn[3] = { p[0], p[1], p[2] };
+    float mx[3] = { p[0], p[1], p[2] };
+    for (uint64_t v = 1u; v < vert_count; v++)
+    {
+        for (int a = 0; a < 3; a++)
+        {
+            const float val = p[3u * v + a];
+            if (val < mn[a])
+                mn[a] = val;
+            if (val > mx[a])
+                mx[a] = val;
+        }
+    }
+    return std::max({ mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2] });
+}
+} // namespace
+
+static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t* obj, pnanovdb_pipeline_context_t* ctx)
+{
+    auto* scene_obj = cast(obj);
+    if (!scene_obj)
+    {
+        return pnanovdb_pipeline_result_no_data;
+    }
+
+    if (!ctx || !ctx->voxelbvh || !ctx->voxelbvh_ctx || !ctx->compute || !ctx->queue)
+    {
+        Console::getInstance().addLog(
+            Console::LogLevel::Error, "VoxelBVH build: missing voxelbvh interface or compute context");
+        scene_obj->process_dirty() = false;
+        return pnanovdb_pipeline_result_error;
+    }
+
+    auto& process_params = scene_obj->process_params();
+    if (!process_params.data || process_params.size < sizeof(VoxelBVHBuildParams))
+    {
+        free(process_params.data);
+        process_params.data = nullptr;
+        process_params.size = 0;
+        init_voxelbvh_build_params(&process_params);
+    }
+    const auto* build_params = static_cast<const VoxelBVHBuildParams*>(process_params.data);
+
+    const int source_type_raw = (int)(build_params->source_type + 0.5f);
+    const int source_type = source_type_raw < 0 ? 0 : (source_type_raw > 3 ? 3 : source_type_raw);
+    const pnanovdb_uint32_t integer_space_max = (pnanovdb_uint32_t)(build_params->integer_space_max + 0.5f);
+    const float user_inflation_radius = build_params->inflation_radius;
+
+    auto* voxelbvh = ctx->voxelbvh;
+    auto* voxelbvh_ctx = ctx->voxelbvh_ctx;
+    auto* compute = ctx->compute;
+    auto* queue = ctx->queue;
+
+    pnanovdb_compute_array_t* result = nullptr;
+    float effective_inflation_radius = user_inflation_radius;
+
+    auto get_named_array = [&](const char* key) -> pnanovdb_compute_array_t*
+    {
+        auto& arrays = scene_obj->named_arrays();
+        auto it = arrays.find(key);
+        return it == arrays.end() ? nullptr : it->second;
+    };
+
+    switch (source_type)
+    {
+    case pnanovdb_pipeline_voxelbvh_source_gaussian_file:
+    {
+        const std::string& path = scene_obj->resources.source_filepath;
+        if (path.empty())
+        {
+            Console::getInstance().addLog(
+                Console::LogLevel::Error, "VoxelBVH build (GaussianFile): scene object has no source_filepath");
+            scene_obj->process_dirty() = false;
+            return pnanovdb_pipeline_result_no_data;
+        }
+        if (!voxelbvh->nanovdb_from_gaussians_file)
+        {
+            Console::getInstance().addLog(
+                Console::LogLevel::Error, "VoxelBVH build: voxelbvh interface missing nanovdb_from_gaussians_file");
+            scene_obj->process_dirty() = false;
+            return pnanovdb_pipeline_result_error;
+        }
+        result = voxelbvh->nanovdb_from_gaussians_file(compute, queue, voxelbvh_ctx, path.c_str(), integer_space_max);
+        break;
+    }
+    case pnanovdb_pipeline_voxelbvh_source_triangles:
+    {
+        auto* indices = get_named_array("indices");
+        auto* positions = get_named_array("positions");
+        if (!indices || !positions)
+        {
+            Console::getInstance().addLog(
+                Console::LogLevel::Error,
+                "VoxelBVH build (Triangles): missing named arrays 'indices' and/or 'positions'");
+            scene_obj->process_dirty() = false;
+            return pnanovdb_pipeline_result_no_data;
+        }
+        auto* colors = get_or_synthesize_colors(scene_obj, compute, positions);
+        if (!colors)
+        {
+            Console::getInstance().addLog(
+                Console::LogLevel::Error, "VoxelBVH build (Triangles): failed to obtain or synthesize 'colors'");
+            scene_obj->process_dirty() = false;
+            return pnanovdb_pipeline_result_error;
+        }
+        if (!voxelbvh->nanovdb_from_triangles_array)
+        {
+            Console::getInstance().addLog(
+                Console::LogLevel::Error, "VoxelBVH build: voxelbvh interface missing nanovdb_from_triangles_array");
+            scene_obj->process_dirty() = false;
+            return pnanovdb_pipeline_result_error;
+        }
+
+        const bool auto_inflation = (user_inflation_radius == 0.f);
+        if (auto_inflation && scene_obj->render_pipeline() == pnanovdb_pipeline_type_voxelbvh_triangle_lines_render &&
+            integer_space_max > 0u)
+        {
+            const float voxel_size = bbox_max_extent(positions) / static_cast<float>(integer_space_max);
+            if (voxel_size > 0.f)
+                effective_inflation_radius = k_mesh_wireframe_voxel_multiplier * voxel_size;
+        }
+
+        result = voxelbvh->nanovdb_from_triangles_array(
+            compute, queue, voxelbvh_ctx, indices, positions, colors, effective_inflation_radius, integer_space_max);
+        break;
+    }
+    case pnanovdb_pipeline_voxelbvh_source_lines:
+    {
+        auto* indices = get_named_array("indices");
+        auto* positions = get_named_array("positions");
+        if (!indices || !positions)
+        {
+            Console::getInstance().addLog(
+                Console::LogLevel::Error, "VoxelBVH build (Lines): missing named arrays 'indices' and/or 'positions'");
+            scene_obj->process_dirty() = false;
+            return pnanovdb_pipeline_result_no_data;
+        }
+        auto* colors = get_or_synthesize_colors(scene_obj, compute, positions);
+        if (!colors)
+        {
+            Console::getInstance().addLog(
+                Console::LogLevel::Error, "VoxelBVH build (Lines): failed to obtain or synthesize 'colors'");
+            scene_obj->process_dirty() = false;
+            return pnanovdb_pipeline_result_error;
+        }
+        if (!voxelbvh->nanovdb_from_lines_array)
+        {
+            Console::getInstance().addLog(
+                Console::LogLevel::Error, "VoxelBVH build: voxelbvh interface missing nanovdb_from_lines_array");
+            scene_obj->process_dirty() = false;
+            return pnanovdb_pipeline_result_error;
+        }
+
+        // When the user leaves inflation_radius at 0 (e.g. Import Mesh -> Lines on
+        // a triangle PLY), pick a per-voxel default so the resulting line tubes
+        // are visible. Matches TestVoxelBVH.cpp which uses a non-zero
+        // inflation_radius for its lines case.
+        const bool auto_inflation = (user_inflation_radius == 0.f);
+        if (auto_inflation && integer_space_max > 0u)
+        {
+            const float voxel_size = bbox_max_extent(positions) / static_cast<float>(integer_space_max);
+            if (voxel_size > 0.f)
+                effective_inflation_radius = k_mesh_lines_voxel_multiplier * voxel_size;
+        }
+
+        result = voxelbvh->nanovdb_from_lines_array(
+            compute, queue, voxelbvh_ctx, indices, positions, colors, effective_inflation_radius, integer_space_max);
+        break;
+    }
+    case pnanovdb_pipeline_voxelbvh_source_gaussian_arrays:
+    {
+        static const char* gaussian_keys[6] = { "means", "opacities", "quaternions", "scales", "sh_0", "sh_n" };
+        pnanovdb_compute_array_t* gaussian_arrays[6] = {};
+        for (int i = 0; i < 6; ++i)
+        {
+            gaussian_arrays[i] = get_named_array(gaussian_keys[i]);
+            if (!gaussian_arrays[i])
+            {
+                Console::getInstance().addLog(Console::LogLevel::Error,
+                                              "VoxelBVH build (GaussianArrays): missing named array '%s'",
+                                              gaussian_keys[i]);
+                scene_obj->process_dirty() = false;
+                return pnanovdb_pipeline_result_no_data;
+            }
+        }
+        if (!voxelbvh->nanovdb_from_gaussians_array)
+        {
+            Console::getInstance().addLog(
+                Console::LogLevel::Error, "VoxelBVH build: voxelbvh interface missing nanovdb_from_gaussians_array");
+            scene_obj->process_dirty() = false;
+            return pnanovdb_pipeline_result_error;
+        }
+        result =
+            voxelbvh->nanovdb_from_gaussians_array(compute, queue, voxelbvh_ctx, gaussian_arrays, 6u, integer_space_max);
+        break;
+    }
+    default:
+        Console::getInstance().addLog(Console::LogLevel::Error, "VoxelBVH build: unknown source_type %d", source_type);
+        scene_obj->process_dirty() = false;
+        return pnanovdb_pipeline_result_error;
+    }
+
+    if (!result)
+    {
+        Console::getInstance().addLog(
+            Console::LogLevel::Error, "VoxelBVH build: nanovdb_from_* returned null (source_type=%d)", source_type);
+        scene_obj->process_dirty() = false;
+        return pnanovdb_pipeline_result_error;
+    }
+
+    std::shared_ptr<pnanovdb_compute_array_t> owner(result,
+                                                    [compute](pnanovdb_compute_array_t* arr)
+                                                    {
+                                                        if (arr && compute)
+                                                            compute->destroy_array(arr);
+                                                    });
+    scene_obj->nanovdb_array() = result;
+    scene_obj->resources.nanovdb_array_owner = owner;
+
+    Console::getInstance().addLog(
+        "VoxelBVH build: source_type=%d, render_pipeline=%d, integer_space_max=%u, "
+        "inflation_radius=%.5f, nanovdb (%llu elements)",
+        source_type, static_cast<int>(scene_obj->render_pipeline()), integer_space_max, effective_inflation_radius,
+        (unsigned long long)result->element_count);
+
+    scene_obj->process_dirty() = false;
+    return pnanovdb_pipeline_result_success;
+}
+
 static pnanovdb_pipeline_result_t execute_raster3d(pnanovdb_scene_object_t* obj, pnanovdb_pipeline_context_t* ctx)
 {
     auto* scene_obj = cast(obj);
@@ -521,6 +795,15 @@ static void init_raster3d_params(pnanovdb_pipeline_params_t* params)
         *static_cast<Raster3DParams*>(params->data) = Raster3DParams{};
 }
 
+static void init_voxelbvh_build_params(pnanovdb_pipeline_params_t* params)
+{
+    params->size = sizeof(VoxelBVHBuildParams);
+    params->type = nullptr;
+    params->data = malloc(sizeof(VoxelBVHBuildParams));
+    if (params->data)
+        *static_cast<VoxelBVHBuildParams*>(params->data) = VoxelBVHBuildParams{};
+}
+
 // ============================================================================
 // Pipeline Render Method Functions
 // ============================================================================
@@ -554,6 +837,12 @@ static void* map_raster3d_params(pnanovdb_scene_object_t* obj)
     return scene_obj ? scene_obj->process_params().data : nullptr;
 }
 
+static void* map_voxelbvh_build_params(pnanovdb_scene_object_t* obj)
+{
+    auto* scene_obj = cast(obj);
+    return scene_obj ? scene_obj->process_params().data : nullptr;
+}
+
 // ============================================================================
 // Built-in Pipeline Definitions
 // ============================================================================
@@ -569,10 +858,42 @@ PNANOVDB_DEFINE_PIPELINE_SHADERS(s_raster2d_shaders,
 PNANOVDB_DEFINE_PIPELINE_SHADERS(s_raster3d_shaders,
                                  PNANOVDB_PIPELINE_SHADER("raster/gaussian_frag_color.slang", nullptr, PNANOVDB_TRUE));
 
+PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_render_shaders,
+                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh.slang", nullptr, PNANOVDB_TRUE));
+
+PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_lines_render_shaders,
+                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_lines.slang", nullptr, PNANOVDB_TRUE));
+
+PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_triangles_render_shaders,
+                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_triangles.slang", nullptr, PNANOVDB_TRUE));
+
+PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_triangle_lines_render_shaders,
+                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_triangle_lines.slang", nullptr, PNANOVDB_TRUE));
+
+PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_debug_render_shaders,
+                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_debug.slang", nullptr, PNANOVDB_TRUE));
+
 // Field descriptors for Raster3DParams (voxels_per_unit)
 static const pnanovdb_pipeline_param_field_t s_raster3d_param_fields[] = {
     { "Voxels/Unit", "Higher = finer detail, more memory", PNANOVDB_REFLECT_TYPE_FLOAT,
-      offsetof(Raster3DParams, voxels_per_unit), 128.0f, 1.0f, 512.0f, 1.0f }
+      offsetof(Raster3DParams, voxels_per_unit), 128.0f, 1.0f, 512.0f, 1.0f, nullptr, 0 }
+};
+
+// Field descriptors for VoxelBVHBuildParams. Source type and mesh display
+// mode are set programmatically (by the Import Mesh flow and by the chosen
+// Render pipeline) and intentionally NOT exposed in the Properties panel:
+//   * Render pipeline (above this widget group) already drives the
+//     Triangles / Wireframe / Lines visualization choice.
+//   * Source type for mesh imports is always Triangles; gaussian sources
+//     are configured via separate import flows.
+// Only the build-time numerical knobs that have no equivalent elsewhere
+// (Int Space Max, Inflation Radius) remain visible.
+static const pnanovdb_pipeline_param_field_t s_voxelbvh_build_param_fields[] = {
+    { "Int Space Max", "Max BVH integer coordinate (1..4095). Higher = finer voxel grid.", PNANOVDB_REFLECT_TYPE_FLOAT,
+      offsetof(VoxelBVHBuildParams, integer_space_max), 511.0f, 1.0f, 4095.0f, 1.0f, nullptr, 0 },
+    { "Inflation Radius", "World-space inflation applied to lines/triangles. 0 = auto for Wireframe/Lines renders.",
+      PNANOVDB_REFLECT_TYPE_FLOAT, offsetof(VoxelBVHBuildParams, inflation_radius), 0.0f, 0.0f, 100.0f, 0.01f, nullptr,
+      0 },
 };
 
 // Complete pipeline descriptors with all function pointers
@@ -631,6 +952,113 @@ static const pnanovdb_pipeline_descriptor_t s_raster3d_descriptor = {
                                // nanovdb, then
                                // renders as nanovdb
     map_raster3d_params, s_raster3d_param_fields, sizeof(s_raster3d_param_fields) / sizeof(s_raster3d_param_fields[0])
+};
+
+// Voxel BVH render pipelines: read a NanoVDB array (same as nanovdb_render) but
+// dispatch one of the voxelbvh.slang variants. Each variant has its own shader
+// params JSON, so they get separate pipeline types to surface as distinct
+// entries in the "Render Pipeline" dropdown.
+static const pnanovdb_pipeline_descriptor_t s_voxelbvh_render_descriptor = {
+    pnanovdb_pipeline_type_voxelbvh_render,
+    pnanovdb_pipeline_stage_render,
+    "Voxel BVH Render",
+    s_voxelbvh_render_shaders,
+    1,
+    sizeof(NanoVDBRenderParams),
+    "NanoVDBRenderParams",
+    init_nanovdb_render_params,
+    execute_nanovdb_render,
+    get_render_method_nanovdb,
+    map_nanovdb_render_params,
+    nullptr,
+    0 // param_fields
+};
+
+static const pnanovdb_pipeline_descriptor_t s_voxelbvh_lines_render_descriptor = {
+    pnanovdb_pipeline_type_voxelbvh_lines_render,
+    pnanovdb_pipeline_stage_render,
+    "Voxel BVH Lines",
+    s_voxelbvh_lines_render_shaders,
+    1,
+    sizeof(NanoVDBRenderParams),
+    "NanoVDBRenderParams",
+    init_nanovdb_render_params,
+    execute_nanovdb_render,
+    get_render_method_nanovdb,
+    map_nanovdb_render_params,
+    nullptr,
+    0 // param_fields
+};
+
+static const pnanovdb_pipeline_descriptor_t s_voxelbvh_triangles_render_descriptor = {
+    pnanovdb_pipeline_type_voxelbvh_triangles_render,
+    pnanovdb_pipeline_stage_render,
+    "Voxel BVH Triangles",
+    s_voxelbvh_triangles_render_shaders,
+    1,
+    sizeof(NanoVDBRenderParams),
+    "NanoVDBRenderParams",
+    init_nanovdb_render_params,
+    execute_nanovdb_render,
+    get_render_method_nanovdb,
+    map_nanovdb_render_params,
+    nullptr,
+    0 // param_fields
+};
+
+static const pnanovdb_pipeline_descriptor_t s_voxelbvh_triangle_lines_render_descriptor = {
+    pnanovdb_pipeline_type_voxelbvh_triangle_lines_render,
+    pnanovdb_pipeline_stage_render,
+    "Voxel BVH Triangle Lines",
+    s_voxelbvh_triangle_lines_render_shaders,
+    1,
+    sizeof(NanoVDBRenderParams),
+    "NanoVDBRenderParams",
+    init_nanovdb_render_params,
+    execute_nanovdb_render,
+    get_render_method_nanovdb,
+    map_nanovdb_render_params,
+    nullptr,
+    0 // param_fields
+};
+
+// Voxel BVH build (process stage): builds a metadata-augmented NanoVDB from a
+// raw source (gaussian PLY file, in-memory gaussian arrays, triangle mesh, or
+// line set) via the high-level pnanovdb_voxelbvh_t::nanovdb_from_* entry points
+// and stores the result back on the scene object's nanovdb_array().
+//
+// All work is dispatched by pnanovdb_voxelbvh_t so this descriptor has no shaders;
+// the params struct lets the user pick which source to feed in.
+static const pnanovdb_pipeline_descriptor_t s_voxelbvh_build_descriptor = {
+    pnanovdb_pipeline_type_voxelbvh_build,
+    pnanovdb_pipeline_stage_process,
+    "Voxel BVH Build",
+    nullptr,
+    0,
+    sizeof(VoxelBVHBuildParams),
+    "VoxelBVHBuildParams",
+    init_voxelbvh_build_params,
+    execute_voxelbvh_build,
+    get_render_method_nanovdb,
+    map_voxelbvh_build_params,
+    s_voxelbvh_build_param_fields,
+    sizeof(s_voxelbvh_build_param_fields) / sizeof(s_voxelbvh_build_param_fields[0])
+};
+
+static const pnanovdb_pipeline_descriptor_t s_voxelbvh_debug_render_descriptor = {
+    pnanovdb_pipeline_type_voxelbvh_debug_render,
+    pnanovdb_pipeline_stage_render,
+    "Voxel BVH Debug",
+    s_voxelbvh_debug_render_shaders,
+    1,
+    sizeof(NanoVDBRenderParams),
+    "NanoVDBRenderParams",
+    init_nanovdb_render_params,
+    execute_nanovdb_render,
+    get_render_method_nanovdb,
+    map_nanovdb_render_params,
+    nullptr,
+    0 // param_fields
 };
 
 // ============================================================================
@@ -907,6 +1335,53 @@ static void pnanovdb_pipeline_params_set_voxels_per_unit(pnanovdb_pipeline_param
     static_cast<Raster3DParams*>(params->data)->voxels_per_unit = value;
 }
 
+// ----------------------------------------------------------------------------
+// Voxel BVH build params setters (public; declared in Pipeline.h)
+//
+// VoxelBVHBuildParams is intentionally kept private to this TU. Callers
+// modify the params blob via these helpers so a future struct change (extra
+// field, reordering) doesn't silently break editor code.
+// ----------------------------------------------------------------------------
+static bool ensure_voxelbvh_build_params(pnanovdb_pipeline_params_t* params)
+{
+    if (!params)
+        return false;
+    if (!params->data || params->size < sizeof(VoxelBVHBuildParams))
+    {
+        free(params->data);
+        params->data = nullptr;
+        params->size = 0;
+        init_voxelbvh_build_params(params);
+    }
+    return params->data != nullptr;
+}
+
+bool pnanovdb_pipeline_voxelbvh_build_params_set_source_type(pnanovdb_pipeline_params_t* params,
+                                                             pnanovdb_pipeline_voxelbvh_source_t source)
+{
+    if (!ensure_voxelbvh_build_params(params))
+        return false;
+    static_cast<VoxelBVHBuildParams*>(params->data)->source_type = static_cast<float>(source);
+    return true;
+}
+
+bool pnanovdb_pipeline_voxelbvh_build_params_set_inflation_radius(pnanovdb_pipeline_params_t* params, float radius)
+{
+    if (!ensure_voxelbvh_build_params(params))
+        return false;
+    static_cast<VoxelBVHBuildParams*>(params->data)->inflation_radius = radius;
+    return true;
+}
+
+bool pnanovdb_pipeline_voxelbvh_build_params_set_integer_space_max(pnanovdb_pipeline_params_t* params,
+                                                                   pnanovdb_uint32_t integer_space_max)
+{
+    if (!ensure_voxelbvh_build_params(params))
+        return false;
+    static_cast<VoxelBVHBuildParams*>(params->data)->integer_space_max = static_cast<float>(integer_space_max);
+    return true;
+}
+
 // ============================================================================
 // Shader Parameter Provider System Implementation
 // ============================================================================
@@ -1027,6 +1502,12 @@ void pipeline_register_builtins()
     pnanovdb_pipeline_register(&s_nanovdb_render_descriptor);
     pnanovdb_pipeline_register(&s_raster2d_descriptor);
     pnanovdb_pipeline_register(&s_raster3d_descriptor);
+    pnanovdb_pipeline_register(&s_voxelbvh_render_descriptor);
+    pnanovdb_pipeline_register(&s_voxelbvh_lines_render_descriptor);
+    pnanovdb_pipeline_register(&s_voxelbvh_triangles_render_descriptor);
+    pnanovdb_pipeline_register(&s_voxelbvh_triangle_lines_render_descriptor);
+    pnanovdb_pipeline_register(&s_voxelbvh_debug_render_descriptor);
+    pnanovdb_pipeline_register(&s_voxelbvh_build_descriptor);
 }
 
 // ============================================================================
@@ -1045,10 +1526,10 @@ pnanovdb_pipeline_result_t pipeline_execute_process(SceneObject* obj, const Pipe
     if (!obj->process_dirty())
         return pnanovdb_pipeline_result_skipped;
 
-    pnanovdb_pipeline_context_t pipeline_ctx = { ctx.compute,        ctx.device,
-                                                 ctx.queue,          ctx.compute_queue,
-                                                 ctx.raster,         ctx.raster_ctx,
-                                                 cast(ctx.renderer), cast(ctx.scene_manager) };
+    pnanovdb_pipeline_context_t pipeline_ctx = {
+        ctx.compute,    ctx.device,   ctx.queue,        ctx.compute_queue,  ctx.raster,
+        ctx.raster_ctx, ctx.voxelbvh, ctx.voxelbvh_ctx, cast(ctx.renderer), cast(ctx.scene_manager)
+    };
     return pnanovdb_pipeline_execute(obj->process_pipeline(), cast(obj), &pipeline_ctx);
 }
 

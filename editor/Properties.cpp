@@ -32,6 +32,9 @@ using namespace imgui_instance_user;
 
 const float EPSILON = 1e-6f;
 
+static constexpr float k_property_field_width = 100.0f;
+static constexpr float k_property_combo_width = 200.0f;
+
 static void renderPipelineProcessParams(EditorSceneManager* scene_manager,
                                         pnanovdb_editor_token_t* scene_token,
                                         pnanovdb_editor_token_t* name_token,
@@ -93,7 +96,38 @@ static void renderPipelineProcessParams(EditorSceneManager* scene_manager,
 
         snprintf(id_buf, sizeof(id_buf), "%s%s", field.name, suffix);
 
-        ImGui::SetNextItemWidth(100.0f);
+        // Enum dropdown: render the FLOAT-backed value as a combo of labels
+        // (selected index is stored as a float in [0, enum_count - 1]).
+        if (field.enum_labels && field.enum_count > 0)
+        {
+            int current = (int)(field_values[i] + 0.5f);
+            if (current < 0)
+                current = 0;
+            if (current >= (int)field.enum_count)
+                current = (int)field.enum_count - 1;
+
+            ImGui::SetNextItemWidth(k_property_combo_width);
+            bool edited = ImGui::Combo(id_buf, &current, field.enum_labels, (int)field.enum_count);
+            if (ImGui::IsItemHovered() && field.tooltip)
+                ImGui::SetTooltip("%s", field.tooltip);
+
+            if (edited)
+            {
+                field_values[i] = (float)current;
+                float val = field_values[i];
+                pnanovdb_uint64_t off = field.offset;
+                scene_manager->with_object(scene_token, name_token,
+                                           [val, off](pnanovdb_editor::SceneObject* scene_obj)
+                                           {
+                                               if (scene_obj && scene_obj->process_params().data)
+                                                   *(float*)((char*)scene_obj->process_params().data + off) = val;
+                                           });
+                any_committed = true;
+            }
+            continue;
+        }
+
+        ImGui::SetNextItemWidth(k_property_field_width);
         ImGui::InputFloat(id_buf, &field_values[i], field.step, field.step * 10.0f, "%.1f");
         if (ImGui::IsItemHovered() && field.tooltip)
             ImGui::SetTooltip("%s", field.tooltip);

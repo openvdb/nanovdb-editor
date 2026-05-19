@@ -124,8 +124,9 @@ void createMenu(imgui_instance_user::Instance* ptr)
         if (!isViewerProfile && ImGui::BeginMenu("File"))
         {
             ImGui::MenuItem("Load NanoVDB...", "", &ptr->pending.open_file);
-            ImGui::MenuItem("Import Gaussian...", "", &ptr->pending.find_raster_file);
             ImGui::MenuItem("Save NanoVDB...", "", &ptr->pending.save_file);
+            ImGui::MenuItem("Import Gaussian...", "", &ptr->pending.find_raster_file);
+            ImGui::MenuItem("Import Mesh...", "", &ptr->pending.find_mesh_file);
             ImGui::Separator();
             if (ImGui::MenuItem("Save INI"))
             {
@@ -1049,14 +1050,14 @@ static bool gaussianImportSidePane(const char* /*vFilter*/, IGFDUserDatas vUserD
     ImGui::Text("Import Options:");
     ImGui::Separator();
 
-    int rasterMode = ptr->raster_to_nanovdb ? 1 : 0;
-    ImGui::RadioButton("Raster2D (Gaussian Splatting)", &rasterMode, 0);
-    ImGui::RadioButton("Raster3D (Convert to NanoVDB)", &rasterMode, 1);
-    ptr->raster_to_nanovdb = (rasterMode == 1);
+    using pnanovdb_editor::gaussian_import::Mode;
+    ImGui::RadioButton("Raster2D (Gaussian Splatting)", &ptr->gaussian_import_mode, static_cast<int>(Mode::Raster2D));
+    ImGui::RadioButton("Raster3D (Convert to NanoVDB)", &ptr->gaussian_import_mode, static_cast<int>(Mode::Raster3D));
+    ImGui::RadioButton("VoxelBVH (NanoVDB via BVH build)", &ptr->gaussian_import_mode, static_cast<int>(Mode::VoxelBVH));
 
     ImGui::Spacing();
 
-    if (ptr->raster_to_nanovdb)
+    if (static_cast<Mode>(ptr->gaussian_import_mode) == Mode::Raster3D)
     {
         ImGui::Text("Voxel Size:");
         ImGui::SetNextItemWidth(150.0f);
@@ -1066,6 +1067,22 @@ static bool gaussianImportSidePane(const char* /*vFilter*/, IGFDUserDatas vUserD
             ImGui::SetTooltip("Voxels per unit (higher = finer resolution)");
         }
     }
+
+    return true;
+}
+
+static bool meshImportSidePane(const char* /*vFilter*/, IGFDUserDatas vUserDatas, bool* /*cantContinue*/)
+{
+    auto* ptr = static_cast<imgui_instance_user::Instance*>(vUserDatas);
+    if (!ptr)
+        return false;
+
+    ImGui::Text("Import Options:");
+    ImGui::Separator();
+
+    ImGui::Text("Mesh Display:");
+    ImGui::RadioButton("Triangles", &ptr->mesh_import_display_mode, 0);
+    ImGui::RadioButton("Wireframe", &ptr->mesh_import_display_mode, 1);
 
     return true;
 }
@@ -1116,6 +1133,19 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
         ImGuiFileDialog::Instance()->OpenDialog(
             "OpenRasterFileDlgKey", "Open Gaussian File", "Gaussian Files (*.npy *.npz *.ply){.npy,.npz,.ply}", config);
     }
+    if (ptr->pending.find_mesh_file)
+    {
+        ptr->pending.find_mesh_file = false;
+
+        IGFD::FileDialogConfig config;
+        config.path = ".";
+        config.sidePane = meshImportSidePane;
+        config.sidePaneWidth = 250.0f * getDialogDpiScale();
+        config.flags = ImGuiFileDialogFlags_None;
+        config.userDatas = ptr;
+
+        ImGuiFileDialog::Instance()->OpenDialog("OpenMeshFileDlgKey", "Import Mesh", "Mesh Files (*.ply){.ply}", config);
+    }
 
     if (ImGuiFileDialog::Instance()->IsOpened())
     {
@@ -1140,22 +1170,67 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
             if (ImGuiFileDialog::Instance()->IsOk())
             {
                 ptr->raster_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
-                std::string voxel_info =
-                    ptr->raster_to_nanovdb ? " (voxel size: " + std::to_string(ptr->raster_voxels_per_unit) + ")" : "";
+
+                pnanovdb_pipeline_type_t convert = pnanovdb_pipeline_type_noop;
+                pnanovdb_pipeline_type_t render = pnanovdb_pipeline_type_raster2d;
+                const char* mode_label = "Raster2D";
+                std::string voxel_info;
+                using pnanovdb_editor::gaussian_import::Mode;
+                switch (static_cast<Mode>(ptr->gaussian_import_mode))
+                {
+                case Mode::Raster3D:
+                    convert = pnanovdb_pipeline_type_raster3d;
+                    render = pnanovdb_pipeline_type_nanovdb_render;
+                    mode_label = "Raster3D";
+                    voxel_info = " (voxel size: " + std::to_string(ptr->raster_voxels_per_unit) + ")";
+                    break;
+                case Mode::VoxelBVH:
+                    convert = pnanovdb_pipeline_type_voxelbvh_build;
+                    render = pnanovdb_pipeline_type_voxelbvh_render;
+                    mode_label = "VoxelBVH";
+                    break;
+                case Mode::Raster2D:
+                    break;
+                }
                 pnanovdb_editor::Console::getInstance().addLog(
-                    "Importing Gaussian file '%s' as %s%s", ptr->raster_filepath.c_str(),
-                    ptr->raster_to_nanovdb ? "Raster3D" : "Raster2D", voxel_info.c_str());
+                    "Importing Gaussian file '%s' as %s%s", ptr->raster_filepath.c_str(), mode_label, voxel_info.c_str());
 
                 if (ptr->editor_scene)
                 {
-                    pnanovdb_pipeline_type_t convert =
-                        ptr->raster_to_nanovdb ? pnanovdb_pipeline_type_raster3d : pnanovdb_pipeline_type_noop;
-                    pnanovdb_pipeline_type_t render = ptr->raster_to_nanovdb ? pnanovdb_pipeline_type_nanovdb_render :
-                                                                               pnanovdb_pipeline_type_raster2d;
                     ptr->editor_scene->load_gaussian_file(
                         ptr->raster_filepath.c_str(), convert, render, ptr->raster_voxels_per_unit);
                 }
                 ptr->pending.find_raster_file = false;
+            }
+            ImGuiFileDialog::Instance()->Close();
+        }
+        else if (ImGuiFileDialog::Instance()->Display("OpenMeshFileDlgKey"))
+        {
+            if (ImGuiFileDialog::Instance()->IsOk())
+            {
+                ptr->mesh_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
+
+                pnanovdb_editor::mesh_import::Options options;
+                const char* display_label;
+                if (ptr->mesh_import_display_mode == 0)
+                {
+                    options.render_pipeline = pnanovdb_pipeline_type_voxelbvh_triangles_render;
+                    display_label = "Triangles";
+                }
+                else
+                {
+                    options.render_pipeline = pnanovdb_pipeline_type_voxelbvh_triangle_lines_render;
+                    display_label = "Wireframe";
+                }
+
+                pnanovdb_editor::Console::getInstance().addLog(
+                    "Importing mesh '%s' (display=%s)", ptr->mesh_filepath.c_str(), display_label);
+
+                if (ptr->editor_scene)
+                {
+                    pnanovdb_editor_token_t* scene = ptr->editor_scene->get_current_scene_token();
+                    ptr->editor_scene->load_mesh_file(scene, ptr->mesh_filepath.c_str(), options);
+                }
             }
             ImGuiFileDialog::Instance()->Close();
         }
