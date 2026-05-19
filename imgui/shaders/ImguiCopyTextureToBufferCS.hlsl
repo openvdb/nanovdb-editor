@@ -32,7 +32,7 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
     color = max(0.f, min(1.f, color));
     color *= 255.f;
 
-    uint color_bgra = int(color.b) | (int(color.g) << 8u) | (int(color.r) << 16u) | (int(color.a) << 24u);
+    uint color_bgra = int(color.r) | (int(color.g) << 8u) | (int(color.b) << 16u) | (int(color.a) << 24u);
 
-    colorOut[(constants.height - 1u - tidx.y) * constants.width + tidx.x] = color_bgra;
+    colorOut[tidx.y * constants.width + tidx.x] = color_bgra;
 }

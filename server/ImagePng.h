@@ -92,28 +92,27 @@ static void write_chunk(std::vector<uint8_t>& f, const char* type, const uint8_t
     f.insert(f.end(), tail, tail + 4);
 }
 
-static void raw_image_to_png(std::vector<uint8_t>& f, const uint8_t* input_data, int32_t width, int32_t height)
+static void raw_image_to_png(
+    std::vector<uint8_t>& f, const uint8_t* input_data, int32_t width, int32_t height, bool force_opaque)
 {
-    static const int channels = 4;
     /* Build the PNG raw scanline buffer: per row, one filter byte (0=None)
        followed by RGB(A) samples, top to bottom. */
-    size_t row_len = 1u + (size_t)width * (size_t)channels;
+    size_t row_len = 1u + (size_t)width * 4u;
     size_t raw_len = row_len * (size_t)height;
     uint8_t* raw = (uint8_t*)malloc(raw_len);
 
     for (int32_t y = 0; y < height; y++)
     {
-        int32_t sy = (height - 1 - y);
-        const uint8_t* src = input_data + (size_t)sy * width * channels;
+        const uint8_t* src = input_data + (size_t)y * width * 4u;
         uint8_t* dst = raw + (size_t)y * row_len;
         *dst++ = 0;
         for (int32_t x = 0; x < width; x++)
         {
             const uint8_t* p = src + (size_t)x * 4u;
-            dst[0] = p[2];
+            dst[0] = p[0];
             dst[1] = p[1];
-            dst[2] = p[0];
-            dst[3] = 255;
+            dst[2] = p[2];
+            dst[3] = force_opaque ? 255 : p[3];
             dst += 4;
         }
     }

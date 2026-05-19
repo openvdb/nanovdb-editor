@@ -225,7 +225,7 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
                          std::vector<uint8_t> png;
                          if (input_data)
                          {
-                             raw_image_to_png(png, input_data, w, h);
+                             raw_image_to_png(png, input_data, w, h, true);
                          }
 
                          return req->create_response()
