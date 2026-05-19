@@ -98,7 +98,7 @@ CPMAddPackage(
 )
 
 # Graphics and UI dependencies
-set(VULKAN_VERSION 1.3.300)
+set(VULKAN_VERSION 1.4.341)
 
 set(VULKAN_HEADERS_ENABLE_MODULE OFF CACHE BOOL "Disable C++20 module in Vulkan-Headers" FORCE)
 

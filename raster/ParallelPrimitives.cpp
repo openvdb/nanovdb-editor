@@ -13,7 +13,6 @@
 #include "Common.h"
 #include "nanovdb_editor/putil/ParallelPrimitives.h"
 #include "nanovdb_editor/putil/ThreadPool.hpp"
-#include "nanovdb_editor/PNanoVDBExt.h"
 
 #include <stdlib.h>
 #include <math.h>

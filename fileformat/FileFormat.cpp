@@ -261,6 +261,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
     std::vector<float> arr_scales;
     std::vector<float> arr_sh_0;
     std::vector<float> arr_sh_n;
+    std::vector<float> arr_colors;
 
     auto resolve_prop = [&](const char* str)
     {
@@ -290,6 +291,9 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
     uint32_t prop_f_dc_1 = resolve_prop("property float f_dc_1\n");
     uint32_t prop_f_dc_2 = resolve_prop("property float f_dc_2\n");
     uint32_t prop_f_rest_0 = resolve_prop("property float f_rest_0\n");
+    uint32_t prop_red = resolve_prop("property float red\n");
+    uint32_t prop_green = resolve_prop("property float green\n");
+    uint32_t prop_blue = resolve_prop("property float blue\n");
 
     std::vector<float> element;
     element.resize(properties.size());
@@ -303,7 +307,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
             for (size_t idx = 0u; idx < element.size(); idx++)
             {
                 uint32_t val = *((uint32_t*)&element[idx]);
-                uint32_t val_new = (((val)&0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) |
+                uint32_t val_new = (((val) & 0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) |
                                    (((val >> 16u) & 0xFF) << 8u) | (((val >> 24u) & 0xFF) << 0u);
                 *((uint32_t*)&element[idx]) = val_new;
             }
@@ -366,6 +370,18 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
         {
             arr_sh_0.push_back(element[prop_f_dc_2]);
         }
+        if (prop_red != ~0u)
+        {
+            arr_colors.push_back(element[prop_red]);
+        }
+        if (prop_green != ~0u)
+        {
+            arr_colors.push_back(element[prop_green]);
+        }
+        if (prop_blue != ~0u)
+        {
+            arr_colors.push_back(element[prop_blue]);
+        }
 
         if (prop_f_rest_0 != ~0u)
         {
@@ -415,7 +431,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
                     read_count += fread(&id, 1u, 4u, file);
                     if (is_big_endian)
                     {
-                        uint32_t id_new = (((id)&0xFF) << 24u) | (((id >> 8u) & 0xFF) << 16u) |
+                        uint32_t id_new = (((id) & 0xFF) << 24u) | (((id >> 8u) & 0xFF) << 16u) |
                                           (((id >> 16u) & 0xFF) << 8u) | (((id >> 24u) & 0xFF) << 0u);
                         id = id_new;
                     }
@@ -462,6 +478,10 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
         else if (strcmp(array_name, "indices") == 0)
         {
             source_array_uint32 = &arr_indices;
+        }
+        else if (strcmp(array_name, "colors") == 0)
+        {
+            source_array = &arr_colors;
         }
 
         if (source_array && !source_array->empty())

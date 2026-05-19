@@ -74,10 +74,6 @@ Size=288,276
 Collapsed=0
 DockId=0x0000000D,0
 
-[Window][Benchmark]
-Collapsed=0
-DockId=0x0000000D
-
 [Window][WindowOverViewport_11111111]
 Pos=0,21
 Size=1440,699
@@ -132,7 +128,6 @@ ShowViewportSettings=0
 ShowRenderSettings=0
 ShowCompilerSettings=0
 ShowShaderParams=0
-ShowBenchmark=0
 ShowFileHeader=0
 ShowScene=1
 ShowSceneParams=1

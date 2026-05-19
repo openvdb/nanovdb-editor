@@ -3,27 +3,14 @@
 #define PNANOVDB_ADDRESS_64
 #define PNANOVDB_BUF_HLSL_64
 #include "PNanoVDB.h"
-#include "PNanoVDBExt.h"
 
 struct EditorParams
 {
-    float4 view_inv_x;
-    float4 view_inv_y;
-    float4 view_inv_z;
-    float4 view_inv_w;
-    float4 projection_inv_x;
-    float4 projection_inv_y;
-    float4 projection_inv_z;
-    float4 projection_inv_w;
+    float4x4 view_inv;
+    float4x4 projection_inv;
 
-    float4 view_x;
-    float4 view_y;
-    float4 view_z;
-    float4 view_w;
-    float4 projection_x;
-    float4 projection_y;
-    float4 projection_z;
-    float4 projection_w;
+    float4x4 view;
+    float4x4 projection;
 
     uint width;
     uint height;
@@ -55,7 +42,7 @@ float4 mat_mul(float4 v, float4 x, float4 y, float4 z, float4 w)
     return float4(dot(v, x), dot(v, y), dot(v, z), dot(v, w));
 }
 
-[shader("compute")][numthreads(32, 4, 1)]
+[shader("compute")][numthreads(16, 8, 1)]
 void main(uint3 dispatchThreadID : SV_DispatchThreadID)
 {
     int2 tidx = int2(dispatchThreadID.xy);

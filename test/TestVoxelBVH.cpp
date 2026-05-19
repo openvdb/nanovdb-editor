@@ -9,6 +9,7 @@
     \brief
 */
 
+#include "nanovdb_editor/putil/Compute.h"
 #include <nanovdb_editor/putil/Raster.h>
 #include <nanovdb_editor/putil/Editor.h>
 #include <nanovdb_editor/putil/FileFormat.h>
@@ -170,10 +171,11 @@ void voxelbvh_test()
     pnanovdb_fileformat_t fileformat = {};
     pnanovdb_fileformat_load(&fileformat, &compute);
 
-    static const char* array_names[] = { "positions", "indices" };
-    static const uint32_t array_count = 2;
+    static const char* array_names[] = { "positions", "indices", "colors" };
+    static const uint32_t array_count = 3;
     pnanovdb_compute_array_t* arrays[array_count] = {};
-    pnanovdb_bool_t loaded = fileformat.load_file("./data/xyzrgb_dragon.ply", array_count, array_names, arrays);
+    pnanovdb_bool_t loaded = fileformat.load_file("./data/IsaacWarehouse.ply", array_count, array_names, arrays);
+    //pnanovdb_bool_t loaded = fileformat.load_file("./data/Kitchen_set.ply", array_count, array_names, arrays);
 
     printf("Dragon vertices(%zu) triangles(%zu)\n", arrays[0]->element_count / 3u, arrays[1]->element_count / 3u);
 
@@ -181,17 +183,19 @@ void voxelbvh_test()
 
     pnanovdb_compute_array_t* indices_array = arrays[1];
     pnanovdb_compute_array_t* positions_array = arrays[0];
-    pnanovdb_compute_array_t* colors_array = compute.create_array(4u, arrays[0]->element_count, nullptr);
+    pnanovdb_compute_array_t* colors_array = arrays[2]; //compute.create_array(4u, arrays[0]->element_count, nullptr);
 
     uint32_t* mapped_indices = (uint32_t*)compute.map_array(indices_array);
     float* mapped_positions = (float*)compute.map_array(positions_array);
     float* mapped_colors = (float*)compute.map_array(colors_array);
+#if 0
     for (uint64_t idx = 0u; idx < positions_array->element_count; idx++)
     {
         uint64_t vert_idx = idx / 3u;
         uint32_t color_mod = uint32_t(vert_idx % 3);
         mapped_colors[idx] = (idx % 3) == color_mod ? 1.f : 0.f;
     }
+#endif
 
     printf("indices:\n");
     for (uint64_t idx = 0u; idx < indices_array->element_count && idx < 32u; idx++)

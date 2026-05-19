@@ -202,7 +202,6 @@ static void initializeDocking(Instance* ptr)
         ImGui::DockBuilderSetNodeSize(dock_id_left_bottom, ImVec2(left_dock_width, window_height));
         ImGui::DockBuilderDockWindow(PROPERTIES, dock_id_left_bottom);
         ImGui::DockBuilderDockWindow(SHADER_PARAMS, dock_id_left_bottom);
-        ImGui::DockBuilderDockWindow(BENCHMARK, dock_id_left_bottom);
 #else
         float left_dock_width = window_width * 0.25f;
         float right_dock_width = window_width * 0.20f;
@@ -251,7 +250,6 @@ static void initializeDocking(Instance* ptr)
             ImGui::DockBuilderSplitNode(dock_id_left_top, ImGuiDir_Down, 0.f, nullptr, &dock_id_left_top);
         ImGui::DockBuilderSetNodeSize(dock_id_left_bottom, ImVec2(left_dock_width, window_height));
         ImGui::DockBuilderDockWindow(SHADER_PARAMS, dock_id_left_bottom);
-        ImGui::DockBuilderDockWindow(BENCHMARK, dock_id_left_bottom);
 
         ImGui::DockBuilderFinish(dockspace_id);
 #endif
@@ -269,7 +267,6 @@ static void showWindows(Instance* ptr, float delta_time)
     showCompilerSettingsWindow(ptr);
     showShaderParamsWindow(ptr);
     showPropertiesWindow(ptr);
-    showBenchmarkWindow(ptr);
     showFileHeaderWindow(ptr);
     showCodeEditorWindow(ptr);
     showProfilerWindow(ptr, delta_time);
@@ -306,7 +303,6 @@ static void markIniDirtyIfNewWindowsAppeared(Instance* ptr)
     ensure_entry(SCENE);
     ensure_entry(SCENE_PARAMS);
     ensure_entry(PROPERTIES);
-    ensure_entry(BENCHMARK);
     ensure_entry(RENDER_SETTINGS);
     ensure_entry(COMPILER_SETTINGS);
 
