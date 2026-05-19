@@ -583,7 +583,7 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
                     buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_SRC;
                     buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
                     buf_desc.structure_stride = 4u;
-                    buf_desc.size_in_bytes = 4u *ptr->width * ptr->height;
+                    buf_desc.size_in_bytes = 4u * ptr->width * ptr->height;
 
                     pnanovdb_compute_buffer_t* screenshot_gpu =
                         ptr->compute_interface.create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
@@ -598,8 +598,8 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
                         ptr->compute_interface.register_buffer_as_transient(context, screenshot_buf);
 
                     auto& inst = ptr->imgui_instances[0u];
-                    inst.renderer_interface.copy_texture_to_buffer(compute, context, inst.renderer, ptr->width, ptr->height,
-                                                                   front_texture, screenshot_gpu_transient);
+                    inst.renderer_interface.copy_texture_to_buffer(compute, context, inst.renderer, ptr->width,
+                                                                   ptr->height, front_texture, screenshot_gpu_transient);
 
                     pnanovdb_compute_copy_buffer_params_t copy_params = {};
                     copy_params.num_bytes = buf_desc.size_in_bytes;
@@ -636,7 +636,8 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
         {
             void* mapped = ptr->compute_interface.map_buffer(context, screenshot_buf);
 
-            pnanovdb_get_server()->push_screenshot(ptr->server, mapped, 4u * ptr->width * ptr->height, ptr->width, ptr->height);
+            pnanovdb_get_server()->push_screenshot(
+                ptr->server, mapped, 4u * ptr->width * ptr->height, ptr->width, ptr->height);
 
             ptr->compute_interface.destroy_buffer(context, screenshot_buf);
         }

@@ -189,9 +189,9 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
                      [](auto req, auto params)
                      {
                          {
-                            std::lock_guard<std::mutex> guard(g_mutex[instance_idx]);
+                             std::lock_guard<std::mutex> guard(g_mutex[instance_idx]);
 
-                            g_server_instance[instance_idx]->screenshots_requested++;
+                             g_server_instance[instance_idx]->screenshots_requested++;
                          }
 
                          // try to wait 1 second, see if result comes in
@@ -205,12 +205,12 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
                          size_t input_data_size = 0u;
                          if (g_server_instance[instance_idx]->screenshots_pending > 0)
                          {
-                            g_server_instance[instance_idx]->screenshots_pending = 0;
+                             g_server_instance[instance_idx]->screenshots_pending = 0;
 
-                            w = g_server_instance[instance_idx]->screenshot_width;
-                            h = g_server_instance[instance_idx]->screenshot_height;
-                            input_data = g_server_instance[instance_idx]->screenshot_data.data();
-                            input_data_size = g_server_instance[instance_idx]->screenshot_data.size();
+                             w = g_server_instance[instance_idx]->screenshot_width;
+                             h = g_server_instance[instance_idx]->screenshot_height;
+                             input_data = g_server_instance[instance_idx]->screenshot_data.data();
+                             input_data_size = g_server_instance[instance_idx]->screenshot_data.size();
                          }
                          int wh = w * h;
                          int size = 4u * wh;
@@ -275,21 +275,21 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
                          bmp.push_back(0);
                          if (input_data)
                          {
-                            bmp.insert(bmp.end(), input_data, input_data + input_data_size);
+                             bmp.insert(bmp.end(), input_data, input_data + input_data_size);
                          }
                          else
                          {
-                            for (int j = 0; j < h; j++)
-                            {
-                                for (int i = 0; i < w; i++)
-                                {
-                                    bool check = ((i ^ j) & 8) != 0u;
-                                    bmp.push_back(check ? 255 : 0);
-                                    bmp.push_back(check ? 255 : 0);
-                                    bmp.push_back(check ? 255 : 0);
-                                    bmp.push_back(255);
-                                }
-                            }
+                             for (int j = 0; j < h; j++)
+                             {
+                                 for (int i = 0; i < w; i++)
+                                 {
+                                     bool check = ((i ^ j) & 8) != 0u;
+                                     bmp.push_back(check ? 255 : 0);
+                                     bmp.push_back(check ? 255 : 0);
+                                     bmp.push_back(check ? 255 : 0);
+                                     bmp.push_back(255);
+                                 }
+                             }
                          }
 
                          printf("Returning bitmap size of %zu\n", bmp.size());

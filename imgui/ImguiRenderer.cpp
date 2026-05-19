@@ -659,7 +659,7 @@ void copy_texture_to_buffer(const pnanovdb_compute_t* compute,
         pnanovdb_uint32_t width;
         pnanovdb_uint32_t height;
     };
-    constants_t constants = {width, height};
+    constants_t constants = { width, height };
 
     pnanovdb_compute_buffer_desc_t buf_desc = {};
     buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT;
@@ -681,8 +681,8 @@ void copy_texture_to_buffer(const pnanovdb_compute_t* compute,
     resources[1u].texture_transient = colorIn;
     resources[2u].buffer_transient = colorOut;
 
-    compute->dispatch_shader(&ptr->compute_interface, context, ptr->shader_context[imgui_copy_texture_to_buffer_cs], resources,
-                             (width + 7u) / 8u, (height + 7u) / 8u, 1u, "imgui_copy_texture_to_buffer");
+    compute->dispatch_shader(&ptr->compute_interface, context, ptr->shader_context[imgui_copy_texture_to_buffer_cs],
+                             resources, (width + 7u) / 8u, (height + 7u) / 8u, 1u, "imgui_copy_texture_to_buffer");
 
     ptr->compute_interface.destroy_buffer(context, constant_buffer);
 }
