@@ -29,6 +29,8 @@
 
 #include <imgui.h>
 
+#include "ImagePng.h"
+
 namespace rws = restinio::websocket::basic;
 namespace restinio
 {
@@ -185,7 +187,7 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
                              .done();
                      });
 
-    router->http_get("/screenshot.bmp",
+    router->http_get("/screenshot.png",
                      [](auto req, auto params)
                      {
                          for (int attempt = 0; attempt < 60; attempt++)
@@ -206,8 +208,8 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
 
                          std::lock_guard<std::mutex> guard(g_mutex[instance_idx]);
 
-                         int w = 256;
-                         int h = 256;
+                         int w = 0;
+                         int h = 0;
                          const uint8_t* input_data = nullptr;
                          size_t input_data_size = 0u;
                          if (g_server_instance[instance_idx]->screenshots_pending > 0)
@@ -219,89 +221,18 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
                              input_data = g_server_instance[instance_idx]->screenshot_data.data();
                              input_data_size = g_server_instance[instance_idx]->screenshot_data.size();
                          }
-                         int wh = w * h;
-                         int size = 4u * wh;
-                         int size_with_header = size + 54;
 
-                         std::vector<uint8_t> bmp;
-                         bmp.push_back(0x42);
-                         bmp.push_back(0x4D);
-                         bmp.push_back((size_with_header >> 0) & 255);
-                         bmp.push_back((size_with_header >> 8) & 255);
-                         bmp.push_back((size_with_header >> 16) & 255);
-                         bmp.push_back((size_with_header >> 24) & 255);
-                         bmp.push_back(0);
-                         bmp.push_back(0);
-                         bmp.push_back(0);
-                         bmp.push_back(0);
-                         bmp.push_back(54);
-                         bmp.push_back(0);
-                         bmp.push_back(0);
-                         bmp.push_back(0);
-                         bmp.push_back(40);
-                         bmp.push_back(0);
-                         bmp.push_back(0);
-                         bmp.push_back(0);
-                         bmp.push_back((w >> 0) & 255);
-                         bmp.push_back((w >> 8) & 255);
-                         bmp.push_back((w >> 16) & 255);
-                         bmp.push_back((w >> 24) & 255);
-                         bmp.push_back((h >> 0) & 255);
-                         bmp.push_back((h >> 8) & 255);
-                         bmp.push_back((h >> 16) & 255);
-                         bmp.push_back((h >> 24) & 255);
-                         bmp.push_back(1);
-                         bmp.push_back(0);
-                         bmp.push_back(32);
-                         bmp.push_back(0);
-                         bmp.push_back(0);
-                         bmp.push_back(0);
-                         bmp.push_back(0);
-                         bmp.push_back(0);
-                         bmp.push_back((size >> 0) & 255);
-                         bmp.push_back((size >> 8) & 255);
-                         bmp.push_back((size >> 16) & 255);
-                         bmp.push_back((size >> 24) & 255);
-                         bmp.push_back(0x13);
-                         bmp.push_back(0x0B);
-                         bmp.push_back(0x00);
-                         bmp.push_back(0x00);
-                         bmp.push_back(0x13);
-                         bmp.push_back(0x0B);
-                         bmp.push_back(0x00);
-                         bmp.push_back(0x00);
-                         bmp.push_back(0);
-                         bmp.push_back(0);
-                         bmp.push_back(0);
-                         bmp.push_back(0);
-                         bmp.push_back(0);
-                         bmp.push_back(0);
-                         bmp.push_back(0);
-                         bmp.push_back(0);
+                         std::vector<uint8_t> png;
                          if (input_data)
                          {
-                             bmp.insert(bmp.end(), input_data, input_data + input_data_size);
-                         }
-                         else
-                         {
-                             for (int j = 0; j < h; j++)
-                             {
-                                 for (int i = 0; i < w; i++)
-                                 {
-                                     bool check = ((i ^ j) & 8) != 0u;
-                                     bmp.push_back(check ? 255 : 0);
-                                     bmp.push_back(check ? 255 : 0);
-                                     bmp.push_back(check ? 255 : 0);
-                                     bmp.push_back(255);
-                                 }
-                             }
+                            raw_image_to_png(png, input_data, w, h);
                          }
 
                          return req->create_response()
                              .append_header(restinio::http_field::server, "NanoVDB Editor Server")
                              .append_header_date_field()
-                             .append_header(restinio::http_field::content_type, "image/bmp")
-                             .set_body(bmp)
+                             .append_header(restinio::http_field::content_type, "image/png")
+                             .set_body(png)
                              .done();
                      });
 
