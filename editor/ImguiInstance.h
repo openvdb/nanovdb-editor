@@ -55,6 +55,7 @@ static const char* CONSOLE = "Log";
 static const char* SHADER_PARAMS = "Shader Params";
 static const char* FILE_HEADER = "File Header";
 static const char* SCENE = "Scenes";
+static const char* SCENE_PARAMS = "Params";
 static const char* PROPERTIES = "Properties";
 
 enum class ShaderSelectionMode : int

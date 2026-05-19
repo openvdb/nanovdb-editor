@@ -443,7 +443,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
                     read_count += fread(&id, 1u, 4u, file);
                     if (is_big_endian)
                     {
-                        uint32_t id_new = (((id)&0xFF) << 24u) | (((id >> 8u) & 0xFF) << 16u) |
+                        uint32_t id_new = (((id) & 0xFF) << 24u) | (((id >> 8u) & 0xFF) << 16u) |
                                           (((id >> 16u) & 0xFF) << 8u) | (((id >> 24u) & 0xFF) << 0u);
                         id = id_new;
                     }
@@ -470,7 +470,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
                 for (int k = 0; k < 2; k++)
                 {
                     uint32_t val = v[k];
-                    v[k] = (((val)&0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) | (((val >> 16u) & 0xFF) << 8u) |
+                    v[k] = (((val) & 0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) | (((val >> 16u) & 0xFF) << 8u) |
                            (((val >> 24u) & 0xFF) << 0u);
                 }
             }
@@ -486,7 +486,6 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
     {
         const char* array_name = array_names[i];
         std::vector<float>* source_array = nullptr;
-        std::vector<uint32_t>* source_array_uint32 = nullptr;
         std::vector<uint32_t>* source_array_uint32 = nullptr;
 
         if (strcmp(array_name, "means") == 0 || strcmp(array_name, "positions") == 0)
