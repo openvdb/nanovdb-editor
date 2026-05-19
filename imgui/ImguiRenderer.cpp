@@ -46,6 +46,7 @@ enum imgui_shader
 {
     imgui_cs,
     imgui_copy_texture_cs,
+    imgui_copy_texture_to_buffer_cs,
     imgui_copy_texture_yuv2_cs,
     imgui_copy_texture_yuv3_cs,
     imgui_background_cs,
@@ -61,6 +62,7 @@ enum imgui_shader
 static const char* imgui_shader_names[shader_count] = {
     "imgui/ImguiCS.hlsl",
     "imgui/ImguiCopyTextureCS.hlsl",
+    "imgui/ImguiCopyTextureToBufferCS.hlsl",
     "imgui/ImguiCopyTextureYUV2CS.hlsl",
     "imgui/ImguiCopyTextureYUV3CS.hlsl",
     "imgui/ImguiBackgroundCS.hlsl",
@@ -642,6 +644,49 @@ void copy_texture_yuv(const pnanovdb_compute_t* compute,
                              plane2Out ? "imgui_copy_texture_yuv3" : "imgui_copy_texture_yuv2");
 }
 
+void copy_texture_to_buffer(const pnanovdb_compute_t* compute,
+                            pnanovdb_compute_context_t* context,
+                            pnanovdb_imgui_renderer_t* renderer,
+                            pnanovdb_uint32_t width,
+                            pnanovdb_uint32_t height,
+                            pnanovdb_compute_texture_transient_t* colorIn,
+                            pnanovdb_compute_buffer_transient_t* colorOut)
+{
+    auto ptr = cast(renderer);
+
+    struct constants_t
+    {
+        pnanovdb_uint32_t width;
+        pnanovdb_uint32_t height;
+    };
+    constants_t constants = {width, height};
+
+    pnanovdb_compute_buffer_desc_t buf_desc = {};
+    buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT;
+    buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+    buf_desc.structure_stride = 0u;
+    buf_desc.size_in_bytes = sizeof(constants_t);
+    pnanovdb_compute_buffer_t* constant_buffer =
+        ptr->compute_interface.create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &buf_desc);
+
+    void* mapped_constants = ptr->compute_interface.map_buffer(context, constant_buffer);
+    memcpy(mapped_constants, &constants, sizeof(constants_t));
+    ptr->compute_interface.unmap_buffer(context, constant_buffer);
+
+    pnanovdb_compute_buffer_transient_t* constant_transient =
+        ptr->compute_interface.register_buffer_as_transient(context, constant_buffer);
+
+    pnanovdb_compute_resource_t resources[3u] = {};
+    resources[0u].buffer_transient = constant_transient;
+    resources[1u].texture_transient = colorIn;
+    resources[2u].buffer_transient = colorOut;
+
+    compute->dispatch_shader(&ptr->compute_interface, context, ptr->shader_context[imgui_copy_texture_to_buffer_cs], resources,
+                             (width + 7u) / 8u, (height + 7u) / 8u, 1u, "imgui_copy_texture_to_buffer");
+
+    ptr->compute_interface.destroy_buffer(context, constant_buffer);
+}
+
 void update_texture(pnanovdb_compute_context_t* context,
                     pnanovdb_imgui_renderer_t* renderer,
                     pnanovdb_imgui_texture_t* texture,
@@ -749,5 +794,6 @@ pnanovdb_imgui_renderer_interface_t* pnanovdb_imgui_get_renderer_interface()
     iface.create_texture = create_texture;
     iface.update_texture = update_texture;
     iface.destroy_texture = destroy_texture;
+    iface.copy_texture_to_buffer = copy_texture_to_buffer;
     return &iface;
 }

@@ -80,6 +80,12 @@ struct server_instance_t
     uint32_t ring_buffer_idx = 0u;
     uint64_t frame_id_counter = 0llu;
     std::vector<pnanovdb_server_event_t> events;
+
+    int screenshots_requested = 0;
+    int screenshots_pending = 0;
+    std::vector<uint8_t> screenshot_data;
+    uint32_t screenshot_width = 0u;
+    uint32_t screenshot_height = 0u;
 };
 
 PNANOVDB_CAST_PAIR(pnanovdb_server_instance_t, server_instance_t)
@@ -176,6 +182,123 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
                              .append_header_date_field()
                              .append_header(restinio::http_field::content_type, "text/javascript")
                              .set_body(JMUXER_JS)
+                             .done();
+                     });
+
+    router->http_get("/screenshot.bmp",
+                     [](auto req, auto params)
+                     {
+                         {
+                            std::lock_guard<std::mutex> guard(g_mutex[instance_idx]);
+
+                            g_server_instance[instance_idx]->screenshots_requested++;
+                         }
+
+                         // try to wait 1 second, see if result comes in
+                         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+                         std::lock_guard<std::mutex> guard(g_mutex[instance_idx]);
+
+                         int w = 256;
+                         int h = 256;
+                         const uint8_t* input_data = nullptr;
+                         size_t input_data_size = 0u;
+                         if (g_server_instance[instance_idx]->screenshots_pending > 0)
+                         {
+                            g_server_instance[instance_idx]->screenshots_pending = 0;
+
+                            w = g_server_instance[instance_idx]->screenshot_width;
+                            h = g_server_instance[instance_idx]->screenshot_height;
+                            input_data = g_server_instance[instance_idx]->screenshot_data.data();
+                            input_data_size = g_server_instance[instance_idx]->screenshot_data.size();
+                         }
+                         int wh = w * h;
+                         int size = 4u * wh;
+                         int size_with_header = size + 54;
+
+                         printf("Returning bitmap of %d x %d\n", w, h);
+
+                         std::vector<uint8_t> bmp;
+                         bmp.push_back(0x42);
+                         bmp.push_back(0x4D);
+                         bmp.push_back((size_with_header >> 0) & 255);
+                         bmp.push_back((size_with_header >> 8) & 255);
+                         bmp.push_back((size_with_header >> 16) & 255);
+                         bmp.push_back((size_with_header >> 24) & 255);
+                         bmp.push_back(0);
+                         bmp.push_back(0);
+                         bmp.push_back(0);
+                         bmp.push_back(0);
+                         bmp.push_back(54);
+                         bmp.push_back(0);
+                         bmp.push_back(0);
+                         bmp.push_back(0);
+                         bmp.push_back(40);
+                         bmp.push_back(0);
+                         bmp.push_back(0);
+                         bmp.push_back(0);
+                         bmp.push_back((w >> 0) & 255);
+                         bmp.push_back((w >> 8) & 255);
+                         bmp.push_back((w >> 16) & 255);
+                         bmp.push_back((w >> 24) & 255);
+                         bmp.push_back((h >> 0) & 255);
+                         bmp.push_back((h >> 8) & 255);
+                         bmp.push_back((h >> 16) & 255);
+                         bmp.push_back((h >> 24) & 255);
+                         bmp.push_back(1);
+                         bmp.push_back(0);
+                         bmp.push_back(32);
+                         bmp.push_back(0);
+                         bmp.push_back(0);
+                         bmp.push_back(0);
+                         bmp.push_back(0);
+                         bmp.push_back(0);
+                         bmp.push_back((size >> 0) & 255);
+                         bmp.push_back((size >> 8) & 255);
+                         bmp.push_back((size >> 16) & 255);
+                         bmp.push_back((size >> 24) & 255);
+                         bmp.push_back(0x13);
+                         bmp.push_back(0x0B);
+                         bmp.push_back(0x00);
+                         bmp.push_back(0x00);
+                         bmp.push_back(0x13);
+                         bmp.push_back(0x0B);
+                         bmp.push_back(0x00);
+                         bmp.push_back(0x00);
+                         bmp.push_back(0);
+                         bmp.push_back(0);
+                         bmp.push_back(0);
+                         bmp.push_back(0);
+                         bmp.push_back(0);
+                         bmp.push_back(0);
+                         bmp.push_back(0);
+                         bmp.push_back(0);
+                         if (input_data)
+                         {
+                            bmp.insert(bmp.end(), input_data, input_data + input_data_size);
+                         }
+                         else
+                         {
+                            for (int j = 0; j < h; j++)
+                            {
+                                for (int i = 0; i < w; i++)
+                                {
+                                    bool check = ((i ^ j) & 8) != 0u;
+                                    bmp.push_back(check ? 255 : 0);
+                                    bmp.push_back(check ? 255 : 0);
+                                    bmp.push_back(check ? 255 : 0);
+                                    bmp.push_back(255);
+                                }
+                            }
+                         }
+
+                         printf("Returning bitmap size of %zu\n", bmp.size());
+
+                         return req->create_response()
+                             .append_header(restinio::http_field::server, "NanoVDB Editor Server")
+                             .append_header_date_field()
+                             .append_header(restinio::http_field::content_type, "image/bmp")
+                             .set_body(bmp)
                              .done();
                      });
 
@@ -544,6 +667,37 @@ void destroy_instance(pnanovdb_server_instance_t* instance)
     delete ptr;
 }
 
+pnanovdb_bool_t screenshot_requested(pnanovdb_server_instance_t* instance)
+{
+    auto ptr = cast(instance);
+    uint32_t instance_idx = ptr->instance_idx;
+
+    std::lock_guard<std::mutex> guard(g_mutex[instance_idx]);
+
+    return g_server_instance[instance_idx]->screenshots_requested > 0;
+}
+
+void push_screenshot(pnanovdb_server_instance_t* instance,
+                     const void* data,
+                     pnanovdb_uint64_t data_size,
+                     pnanovdb_uint32_t width,
+                     pnanovdb_uint32_t height)
+{
+    auto ptr = cast(instance);
+    uint32_t instance_idx = ptr->instance_idx;
+
+    std::lock_guard<std::mutex> guard(g_mutex[instance_idx]);
+
+    ptr->screenshot_data.assign((const uint8_t*)data, ((const uint8_t*)data) + data_size);
+    ptr->screenshot_width = width;
+    ptr->screenshot_height = height;
+    ptr->screenshots_pending++;
+    if (ptr->screenshots_requested > 0)
+    {
+        ptr->screenshots_requested--;
+    }
+}
+
 struct key_map_t
 {
     int key;
@@ -728,6 +882,8 @@ pnanovdb_server_t* pnanovdb_get_server()
     iface.pop_event = pop_event;
     iface.wait_until_active = wait_until_active;
     iface.destroy_instance = destroy_instance;
+    iface.screenshot_requested = screenshot_requested;
+    iface.push_screenshot = push_screenshot;
 
     return &iface;
 }
