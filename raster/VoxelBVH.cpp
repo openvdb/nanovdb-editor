@@ -331,33 +331,30 @@ static void nanovdb_init(const pnanovdb_compute_t* compute,
                          pnanovdb_compute_buffer_t* nanovdb_inout,
                          pnanovdb_uint64_t nanovdb_word_count,
                          pnanovdb_compute_buffer_t* world_bbox_in,
-                         pnanovdb_uint32_t integer_space_max,
-                         const pnanovdb_coord_t* root_tile_coords,
-                         pnanovdb_uint32_t root_tile_count)
+                         pnanovdb_uint32_t resolution,
+                         pnanovdb_uint32_t grid_type)
 {
     auto ctx = cast(voxelbvh_context);
 
     pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
     pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
 
-    pnanovdb_uint32_t grid_type = PNANOVDB_GRID_TYPE_INT64;
     float voxel_size = 1.f;
     float voxel_size_inv = 1.f / voxel_size;
 
-    pnanovdb_uint64_t size = PNANOVDB_GRID_SIZE + PNANOVDB_TREE_SIZE + PNANOVDB_GRID_TYPE_GET(grid_type, root_size) +
-                             root_tile_count * PNANOVDB_GRID_TYPE_GET(grid_type, root_tile_size);
+    pnanovdb_uint64_t size = PNANOVDB_GRID_SIZE + PNANOVDB_TREE_SIZE + PNANOVDB_GRID_TYPE_GET(grid_type, root_size);
 
     // constants
     struct constants_t
     {
         pnanovdb_uint32_t grid_size;
-        pnanovdb_uint32_t integer_space_max;
+        pnanovdb_uint32_t resolution;
         pnanovdb_uint32_t pad0;
         pnanovdb_uint32_t pad1;
     };
     constants_t constants = {};
     constants.grid_size = (pnanovdb_uint32_t)size;
-    constants.integer_space_max = integer_space_max;
+    constants.resolution = resolution;
 
     // constants
     pnanovdb_compute_buffer_desc_t buf_desc = {};
@@ -424,15 +421,6 @@ static void nanovdb_init(const pnanovdb_compute_t* compute,
 
     pnanovdb_tree_set_first_root(buf, tree, root);
 
-    pnanovdb_root_set_tile_count(buf, root, root_tile_count);
-    for (pnanovdb_uint32_t n = 0u; n < root_tile_count; n++)
-    {
-        pnanovdb_root_tile_handle_t root_tile = pnanovdb_root_get_tile(grid_type, root, n);
-
-        pnanovdb_uint64_t key = pnanovdb_coord_to_key(root_tile_coords + n);
-        pnanovdb_root_tile_set_key(buf, root_tile, key);
-    }
-
     compute_interface->unmap_buffer(context, upload_buffer);
 
     pnanovdb_compute_buffer_transient_t* constant_transient =
@@ -463,6 +451,22 @@ static void nanovdb_init(const pnanovdb_compute_t* compute,
 
     compute_interface->destroy_buffer(context, upload_buffer);
     compute_interface->destroy_buffer(context, constant_buffer);
+}
+
+static void nanovdb_duplicate_topology(const pnanovdb_compute_t* compute,
+                                       pnanovdb_compute_queue_t* queue,
+                                       pnanovdb_voxelbvh_context_t* voxelbvh_context,
+                                       pnanovdb_compute_buffer_t* dst_nanovdb_inout,
+                                       pnanovdb_uint64_t dst_nanovdb_word_count,
+                                       pnanovdb_compute_buffer_t* src_nanovdb_in,
+                                       pnanovdb_uint32_t dst_grid_type)
+{
+    auto ctx = cast(voxelbvh_context);
+
+    pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
+    pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
+
+    // TODO
 }
 
 static void nanovdb_add_nodes(const pnanovdb_compute_t* compute,
@@ -845,7 +849,7 @@ static void nanovdb_add_nodes_from_ijkl_array(const pnanovdb_compute_t* compute,
                                               pnanovdb_compute_array_t* ijkl_in,
                                               pnanovdb_compute_array_t* range_in,
                                               pnanovdb_compute_array_t* world_bbox_in,
-                                              pnanovdb_uint32_t integer_space_max)
+                                              pnanovdb_uint32_t resolution)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -855,8 +859,6 @@ static void nanovdb_add_nodes_from_ijkl_array(const pnanovdb_compute_t* compute,
     // default to 2GB return for now
     uint64_t buf_size = 2u * 1024llu * 1024llu * 1024llu;
     uint64_t nanovdb_uint64_count = (buf_size + 7u) / 8u;
-
-    pnanovdb_coord_t root_coords[1u] = {};
 
     uint64_t ijkl_count = (ijkl_in->element_size * ijkl_in->element_count) / 8u;
     uint64_t range_count = (range_in->element_size * range_in->element_count) / 8u;
@@ -877,7 +879,7 @@ static void nanovdb_add_nodes_from_ijkl_array(const pnanovdb_compute_t* compute,
     gpu_array_alloc_device(compute, queue, flat_range_gpu_array, flat_range_array);
 
     nanovdb_init(compute, queue, voxelbvh_context, nanovdb_gpu_array->device_buffer, 2u * nanovdb_uint64_count,
-                 world_bbox_gpu_array->device_buffer, integer_space_max, root_coords, 1u);
+                 world_bbox_gpu_array->device_buffer, resolution, PNANOVDB_GRID_TYPE_INT64);
 
     nanovdb_add_nodes_from_ijkl_buffer(compute, queue, voxelbvh_context, nanovdb_gpu_array->device_buffer,
                                        2u * nanovdb_uint64_count, flat_range_gpu_array->device_buffer,
@@ -916,7 +918,7 @@ static void ijkl_from_gaussians(const pnanovdb_compute_t* compute,
                                 pnanovdb_compute_buffer_t* prim_id_out,
                                 pnanovdb_compute_buffer_t* range_out,
                                 pnanovdb_compute_buffer_t* world_bbox_out,
-                                pnanovdb_uint32_t integer_space_max)
+                                pnanovdb_uint32_t resolution)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -942,14 +944,14 @@ static void ijkl_from_gaussians(const pnanovdb_compute_t* compute,
         pnanovdb_uint32_t workgroup_count;
         pnanovdb_uint32_t voxel_count;
         pnanovdb_uint32_t voxel_workgroup_count;
-        pnanovdb_uint32_t integer_space_max;
+        pnanovdb_uint32_t resolution;
     };
     constants_t constants = {};
     constants.point_count = (pnanovdb_uint32_t)gaussian_count;
     constants.workgroup_count = (constants.point_count + 255u) / 256u;
     constants.voxel_count = 8u * constants.point_count;
     constants.voxel_workgroup_count = (constants.voxel_count + 255u) / 256u;
-    constants.integer_space_max = integer_space_max;
+    constants.resolution = resolution;
 
     // constants
     pnanovdb_compute_buffer_desc_t buf_desc = {};
@@ -1102,7 +1104,7 @@ static void ijkl_from_gaussians_file(const pnanovdb_compute_t* compute,
                                      pnanovdb_compute_array_t** prim_id_out,
                                      pnanovdb_compute_array_t** range_out,
                                      pnanovdb_compute_array_t** world_bbox_out,
-                                     pnanovdb_uint32_t integer_space_max,
+                                     pnanovdb_uint32_t resolution,
                                      pnanovdb_compute_array_t** gaussian_arrays_out,
                                      pnanovdb_uint32_t gaussian_array_count)
 {
@@ -1192,7 +1194,7 @@ static void ijkl_from_gaussians_file(const pnanovdb_compute_t* compute,
 
         ijkl_from_gaussians(compute, queue, voxelbvh_context, gpu_buffers, 6u, gaussian_count,
                             ijkl_gpu_array->device_buffer, prim_id_gpu_array->device_buffer,
-                            range_gpu_array->device_buffer, world_bbox_gpu_array->device_buffer, integer_space_max);
+                            range_gpu_array->device_buffer, world_bbox_gpu_array->device_buffer, resolution);
 
         gpu_array_destroy(compute, queue, means_gpu_array);
         gpu_array_destroy(compute, queue, opacities_gpu_array);
@@ -1315,7 +1317,7 @@ void ijkl_from_lines(const pnanovdb_compute_t* compute,
                      pnanovdb_compute_buffer_t* prim_id_out,
                      pnanovdb_compute_buffer_t* range_out,
                      pnanovdb_compute_buffer_t* world_bbox_out,
-                     pnanovdb_uint32_t integer_space_max)
+                     pnanovdb_uint32_t resolution)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -1333,7 +1335,7 @@ void ijkl_from_lines(const pnanovdb_compute_t* compute,
         pnanovdb_uint32_t workgroup_count;
         pnanovdb_uint32_t voxel_count;
         pnanovdb_uint32_t voxel_workgroup_count;
-        pnanovdb_uint32_t integer_space_max;
+        pnanovdb_uint32_t resolution;
         float inflation_radius;
     };
     constants_t constants = {};
@@ -1341,7 +1343,7 @@ void ijkl_from_lines(const pnanovdb_compute_t* compute,
     constants.workgroup_count = (constants.line_count + 255u) / 256u;
     constants.voxel_count = 8u * constants.line_count;
     constants.voxel_workgroup_count = (constants.voxel_count + 255u) / 256u;
-    constants.integer_space_max = integer_space_max;
+    constants.resolution = resolution;
     constants.inflation_radius = inflation_radius;
 
     // constants
@@ -1490,7 +1492,7 @@ void ijkl_from_lines_array(const pnanovdb_compute_t* compute,
                            pnanovdb_compute_array_t** prim_id_out,
                            pnanovdb_compute_array_t** range_out,
                            pnanovdb_compute_array_t** world_bbox_out,
-                           pnanovdb_uint32_t integer_space_max)
+                           pnanovdb_uint32_t resolution)
 {
     // ignore array semantics, assume 32-bit uint line indices for now
     pnanovdb_uint64_t line_count = indices_array->element_count * indices_array->element_size / (8u);
@@ -1521,7 +1523,7 @@ void ijkl_from_lines_array(const pnanovdb_compute_t* compute,
     ijkl_from_lines(compute, queue, voxelbvh_context, indices_gpu_array->device_buffer,
                     positions_gpu_array->device_buffer, line_count, inflation_radius, ijkl_gpu_array->device_buffer,
                     prim_id_gpu_array->device_buffer, range_gpu_array->device_buffer,
-                    world_bbox_gpu_array->device_buffer, integer_space_max);
+                    world_bbox_gpu_array->device_buffer, resolution);
 
     gpu_array_destroy(compute, queue, indices_gpu_array);
     gpu_array_destroy(compute, queue, positions_gpu_array);
@@ -1564,7 +1566,7 @@ void ijkl_from_triangles(const pnanovdb_compute_t* compute,
                          pnanovdb_compute_buffer_t* prim_id_out,
                          pnanovdb_compute_buffer_t* range_out,
                          pnanovdb_compute_buffer_t* world_bbox_out,
-                         pnanovdb_uint32_t integer_space_max)
+                         pnanovdb_uint32_t resolution)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -1582,7 +1584,7 @@ void ijkl_from_triangles(const pnanovdb_compute_t* compute,
         pnanovdb_uint32_t workgroup_count;
         pnanovdb_uint32_t voxel_count;
         pnanovdb_uint32_t voxel_workgroup_count;
-        pnanovdb_uint32_t integer_space_max;
+        pnanovdb_uint32_t resolution;
         float inflation_radius;
     };
     constants_t constants = {};
@@ -1590,7 +1592,7 @@ void ijkl_from_triangles(const pnanovdb_compute_t* compute,
     constants.workgroup_count = (constants.triangle_count + 255u) / 256u;
     constants.voxel_count = 8u * constants.triangle_count;
     constants.voxel_workgroup_count = (constants.voxel_count + 255u) / 256u;
-    constants.integer_space_max = integer_space_max;
+    constants.resolution = resolution;
     constants.inflation_radius = inflation_radius;
 
     // constants
@@ -1739,7 +1741,7 @@ void ijkl_from_triangles_array(const pnanovdb_compute_t* compute,
                                pnanovdb_compute_array_t** prim_id_out,
                                pnanovdb_compute_array_t** range_out,
                                pnanovdb_compute_array_t** world_bbox_out,
-                               pnanovdb_uint32_t integer_space_max)
+                               pnanovdb_uint32_t resolution)
 {
     // ignore array semantics, assume 32-bit uint triangle for now
     pnanovdb_uint64_t triangle_count = indices_array->element_count * indices_array->element_size / (12u);
@@ -1770,7 +1772,7 @@ void ijkl_from_triangles_array(const pnanovdb_compute_t* compute,
     ijkl_from_triangles(compute, queue, voxelbvh_context, indices_gpu_array->device_buffer,
                         positions_gpu_array->device_buffer, triangle_count, inflation_radius,
                         ijkl_gpu_array->device_buffer, prim_id_gpu_array->device_buffer, range_gpu_array->device_buffer,
-                        world_bbox_gpu_array->device_buffer, integer_space_max);
+                        world_bbox_gpu_array->device_buffer, resolution);
 
     gpu_array_destroy(compute, queue, indices_gpu_array);
     gpu_array_destroy(compute, queue, positions_gpu_array);
@@ -1823,6 +1825,7 @@ pnanovdb_voxelbvh_t* pnanovdb_get_voxelbvh()
     iface.ijkl_from_lines_array = ijkl_from_lines_array;
     iface.ijkl_from_triangles = ijkl_from_triangles;
     iface.ijkl_from_triangles_array = ijkl_from_triangles_array;
+    iface.nanovdb_duplicate_topology = nanovdb_duplicate_topology;
 
     return &iface;
 }
