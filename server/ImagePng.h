@@ -57,21 +57,6 @@ static void put_u32_be(uint8_t* p, uint32_t v)
     p[3] = (uint8_t)v;
 }
 
-static uint16_t get_u16_le(const uint8_t* p)
-{
-    return (uint16_t)(p[0] | (p[1] << 8));
-}
-
-static uint32_t get_u32_le(const uint8_t* p)
-{
-    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
-}
-
-static int32_t get_i32_le(const uint8_t* p)
-{
-    return (int32_t)get_u32_le(p);
-}
-
 static void write_chunk(std::vector<uint8_t>& f, const char* type, const uint8_t* data, size_t len)
 {
     uint8_t hdr[8];
