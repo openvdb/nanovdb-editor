@@ -25,6 +25,10 @@ RWStructuredBuffer<uint> colorOut;
 [numthreads(8, 8, 1)]
 void main(uint3 dispatchThreadID : SV_DispatchThreadID)
 {
+    if (dispatchThreadID.x >= constants.width || dispatchThreadID.y >= constants.height)
+    {
+        return;
+    }
     int2 tidx = int2(dispatchThreadID.xy);
 
     float4 color = colorIn[tidx];
