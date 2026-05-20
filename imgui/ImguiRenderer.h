@@ -80,6 +80,14 @@ typedef struct pnanovdb_imgui_renderer_interface_t
     void(PNANOVDB_ABI* destroy_texture)(pnanovdb_compute_context_t* context,
                                         pnanovdb_imgui_renderer_t* renderer,
                                         pnanovdb_imgui_texture_t* texture);
+
+    void(PNANOVDB_ABI* copy_texture_to_buffer)(const pnanovdb_compute_t* compute,
+                                               pnanovdb_compute_context_t* context,
+                                               pnanovdb_imgui_renderer_t* renderer,
+                                               pnanovdb_uint32_t width,
+                                               pnanovdb_uint32_t height,
+                                               pnanovdb_compute_texture_transient_t* colorIn,
+                                               pnanovdb_compute_buffer_transient_t* colorOut);
 } pnanovdb_imgui_renderer_interface_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_imgui_renderer_interface_t
@@ -92,6 +100,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(copy_texture_yuv, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(create_texture, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(update_texture, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(destroy_texture, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(copy_texture_to_buffer, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE

@@ -18,6 +18,7 @@
 #include <string>
 
 #include "Socket.h"
+#include "nanovdb_editor/putil/Compute.h"
 #include <server/Server.h>
 
 #include <stdlib.h>
@@ -571,6 +572,46 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
     // encode frame
     if (ptr->encoder)
     {
+        pnanovdb_compute_buffer_t* screenshot_buf = nullptr;
+        if (ptr->server)
+        {
+            if (pnanovdb_get_server()->screenshot_requested(ptr->server))
+            {
+                if (ptr->imgui_instances.size() != 0u)
+                {
+                    pnanovdb_compute_buffer_desc_t buf_desc = {};
+                    buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_SRC;
+                    buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+                    buf_desc.structure_stride = 4u;
+                    buf_desc.size_in_bytes = 4u * ptr->width * ptr->height;
+
+                    pnanovdb_compute_buffer_t* screenshot_gpu =
+                        ptr->compute_interface.create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+
+                    buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_DST;
+                    screenshot_buf =
+                        ptr->compute_interface.create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_READBACK, &buf_desc);
+
+                    pnanovdb_compute_buffer_transient_t* screenshot_gpu_transient =
+                        ptr->compute_interface.register_buffer_as_transient(context, screenshot_gpu);
+                    pnanovdb_compute_buffer_transient_t* screenshot_buf_transient =
+                        ptr->compute_interface.register_buffer_as_transient(context, screenshot_buf);
+
+                    auto& inst = ptr->imgui_instances[0u];
+                    inst.renderer_interface.copy_texture_to_buffer(compute, context, inst.renderer, ptr->width,
+                                                                   ptr->height, front_texture, screenshot_gpu_transient);
+
+                    pnanovdb_compute_copy_buffer_params_t copy_params = {};
+                    copy_params.num_bytes = buf_desc.size_in_bytes;
+                    copy_params.src = screenshot_gpu_transient;
+                    copy_params.dst = screenshot_buf_transient;
+                    ptr->compute_interface.copy_buffer(context, &copy_params);
+
+                    ptr->compute_interface.destroy_buffer(context, screenshot_gpu);
+                }
+            }
+        }
+
         pnanovdb_uint64_t encoder_flushed_frame = 0llu;
         ptr->device_interface.present_encoder(ptr->encoder, &encoder_flushed_frame);
         pnanovdb_uint64_t encoder_data_size = 0llu;
@@ -589,6 +630,18 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
             fwrite(encoder_data, 1u, encoder_data_size, ptr->encode_file);
         }
         ptr->device_interface.unmap_encoder_data(ptr->encoder);
+
+        // host-device sync happened in map_encoder_data, safe now to read screenshot readback
+        if (screenshot_buf)
+        {
+            void* mapped = ptr->compute_interface.map_buffer(context, screenshot_buf);
+
+            pnanovdb_get_server()->push_screenshot(
+                ptr->server, mapped, 4u * ptr->width * ptr->height, ptr->width, ptr->height);
+
+            ptr->compute_interface.unmap_buffer(context, screenshot_buf);
+            ptr->compute_interface.destroy_buffer(context, screenshot_buf);
+        }
     }
 
     // no encoder, no swapchain, need flush
