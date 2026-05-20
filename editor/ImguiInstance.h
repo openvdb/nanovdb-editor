@@ -142,7 +142,7 @@ struct Instance
     std::string mesh_filepath = "";
     float raster_voxels_per_unit = 128.f;
     int gaussian_import_mode = static_cast<int>(pnanovdb_editor::gaussian_import::Mode::Raster2D);
-    int mesh_import_display_mode = 0;
+    bool mesh_import_show_debug = false;
 
     // shader params window selection
     std::string shader_group = "";

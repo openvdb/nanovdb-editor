@@ -463,7 +463,7 @@ static pnanovdb_compute_array_t* get_or_synthesize_colors(pnanovdb_editor::Scene
 
 namespace
 {
-constexpr float k_mesh_wireframe_voxel_multiplier = 0.1f;
+constexpr float k_mesh_debug_voxel_multiplier = 0.1f;
 constexpr float k_mesh_lines_voxel_multiplier = 2.0f;
 
 float bbox_max_extent(const pnanovdb_compute_array_t* positions)
@@ -588,12 +588,12 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
         }
 
         const bool auto_inflation = (user_inflation_radius == 0.f);
-        if (auto_inflation && scene_obj->render_pipeline() == pnanovdb_pipeline_type_voxelbvh_triangle_lines_render &&
+        if (auto_inflation && scene_obj->render_pipeline() == pnanovdb_pipeline_type_voxelbvh_triangles_debug_render &&
             integer_space_max > 0u)
         {
             const float voxel_size = bbox_max_extent(positions) / static_cast<float>(integer_space_max);
             if (voxel_size > 0.f)
-                effective_inflation_radius = k_mesh_wireframe_voxel_multiplier * voxel_size;
+                effective_inflation_radius = k_mesh_debug_voxel_multiplier * voxel_size;
         }
 
         result = voxelbvh->nanovdb_from_triangles_array(
@@ -867,8 +867,8 @@ PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_lines_render_shaders,
 PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_triangles_render_shaders,
                                  PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_triangles.slang", nullptr, PNANOVDB_TRUE));
 
-PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_triangle_lines_render_shaders,
-                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_triangle_lines.slang", nullptr, PNANOVDB_TRUE));
+PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_triangles_debug_render_shaders,
+                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_triangles_debug.slang", nullptr, PNANOVDB_TRUE));
 
 PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_debug_render_shaders,
                                  PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_debug.slang", nullptr, PNANOVDB_TRUE));
@@ -879,19 +879,11 @@ static const pnanovdb_pipeline_param_field_t s_raster3d_param_fields[] = {
       offsetof(Raster3DParams, voxels_per_unit), 128.0f, 1.0f, 512.0f, 1.0f, nullptr, 0 }
 };
 
-// Field descriptors for VoxelBVHBuildParams. Source type and mesh display
-// mode are set programmatically (by the Import Mesh flow and by the chosen
-// Render pipeline) and intentionally NOT exposed in the Properties panel:
-//   * Render pipeline (above this widget group) already drives the
-//     Triangles / Wireframe / Lines visualization choice.
-//   * Source type for mesh imports is always Triangles; gaussian sources
-//     are configured via separate import flows.
-// Only the build-time numerical knobs that have no equivalent elsewhere
-// (Int Space Max, Inflation Radius) remain visible.
+// Field descriptors for VoxelBVHBuildParams
 static const pnanovdb_pipeline_param_field_t s_voxelbvh_build_param_fields[] = {
     { "Int Space Max", "Max BVH integer coordinate (1..4095). Higher = finer voxel grid.", PNANOVDB_REFLECT_TYPE_FLOAT,
       offsetof(VoxelBVHBuildParams, integer_space_max), 511.0f, 1.0f, 4095.0f, 1.0f, nullptr, 0 },
-    { "Inflation Radius", "World-space inflation applied to lines/triangles. 0 = auto for Wireframe/Lines renders.",
+    { "Inflation Radius", "World-space inflation applied to lines/triangles. 0 = auto for Debug/Lines renders.",
       PNANOVDB_REFLECT_TYPE_FLOAT, offsetof(VoxelBVHBuildParams, inflation_radius), 0.0f, 0.0f, 100.0f, 0.01f, nullptr,
       0 },
 };
@@ -1006,11 +998,11 @@ static const pnanovdb_pipeline_descriptor_t s_voxelbvh_triangles_render_descript
     0 // param_fields
 };
 
-static const pnanovdb_pipeline_descriptor_t s_voxelbvh_triangle_lines_render_descriptor = {
-    pnanovdb_pipeline_type_voxelbvh_triangle_lines_render,
+static const pnanovdb_pipeline_descriptor_t s_voxelbvh_triangles_debug_render_descriptor = {
+    pnanovdb_pipeline_type_voxelbvh_triangles_debug_render,
     pnanovdb_pipeline_stage_render,
-    "Voxel BVH Triangle Lines",
-    s_voxelbvh_triangle_lines_render_shaders,
+    "Voxel BVH Triangles Debug",
+    s_voxelbvh_triangles_debug_render_shaders,
     1,
     sizeof(NanoVDBRenderParams),
     "NanoVDBRenderParams",
@@ -1505,7 +1497,7 @@ void pipeline_register_builtins()
     pnanovdb_pipeline_register(&s_voxelbvh_render_descriptor);
     pnanovdb_pipeline_register(&s_voxelbvh_lines_render_descriptor);
     pnanovdb_pipeline_register(&s_voxelbvh_triangles_render_descriptor);
-    pnanovdb_pipeline_register(&s_voxelbvh_triangle_lines_render_descriptor);
+    pnanovdb_pipeline_register(&s_voxelbvh_triangles_debug_render_descriptor);
     pnanovdb_pipeline_register(&s_voxelbvh_debug_render_descriptor);
     pnanovdb_pipeline_register(&s_voxelbvh_build_descriptor);
 }

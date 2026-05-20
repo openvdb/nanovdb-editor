@@ -21,10 +21,6 @@ namespace pnanovdb_editor
 class EditorScene;
 class EditorSceneManager;
 
-// ============================================================================
-// Mesh import (PLY triangle/line meshes)
-// ============================================================================
-
 namespace mesh_import
 {
 

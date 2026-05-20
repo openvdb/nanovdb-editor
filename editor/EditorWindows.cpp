@@ -1047,12 +1047,7 @@ static bool meshImportSidePane(const char* /*vFilter*/, IGFDUserDatas vUserDatas
     if (!ptr)
         return false;
 
-    ImGui::Text("Import Options:");
-    ImGui::Separator();
-
-    ImGui::Text("Mesh Display:");
-    ImGui::RadioButton("Triangles", &ptr->mesh_import_display_mode, 0);
-    ImGui::RadioButton("Wireframe", &ptr->mesh_import_display_mode, 1);
+    ImGui::Checkbox("Debug", &ptr->mesh_import_show_debug);
 
     return true;
 }
@@ -1182,15 +1177,15 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
 
                 pnanovdb_editor::mesh_import::Options options;
                 const char* display_label;
-                if (ptr->mesh_import_display_mode == 0)
+                if (ptr->mesh_import_show_debug)
                 {
-                    options.render_pipeline = pnanovdb_pipeline_type_voxelbvh_triangles_render;
-                    display_label = "Triangles";
+                    options.render_pipeline = pnanovdb_pipeline_type_voxelbvh_triangles_debug_render;
+                    display_label = "Triangles (Debug)";
                 }
                 else
                 {
-                    options.render_pipeline = pnanovdb_pipeline_type_voxelbvh_triangle_lines_render;
-                    display_label = "Wireframe";
+                    options.render_pipeline = pnanovdb_pipeline_type_voxelbvh_triangles_render;
+                    display_label = "Triangles";
                 }
 
                 pnanovdb_editor::Console::getInstance().addLog(

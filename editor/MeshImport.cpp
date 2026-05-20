@@ -33,13 +33,15 @@ namespace mesh_import
 namespace
 {
 
-bool load_ply_positions_indices(const pnanovdb_compute_t* compute,
-                                const char* filepath,
-                                pnanovdb_compute_array_t** out_positions,
-                                pnanovdb_compute_array_t** out_indices)
+bool load_ply_arrays(const pnanovdb_compute_t* compute,
+                     const char* filepath,
+                     pnanovdb_compute_array_t** out_positions,
+                     pnanovdb_compute_array_t** out_indices,
+                     pnanovdb_compute_array_t** out_colors)
 {
     *out_positions = nullptr;
     *out_indices = nullptr;
+    *out_colors = nullptr;
 
     pnanovdb_fileformat_t fileformat = {};
     pnanovdb_fileformat_load(&fileformat, compute);
@@ -49,17 +51,18 @@ bool load_ply_positions_indices(const pnanovdb_compute_t* compute,
         return false;
     }
 
-    static const char* array_names[] = { "positions", "indices" };
-    pnanovdb_compute_array_t* arrays[2] = {};
-    pnanovdb_bool_t loaded = fileformat.load_file(filepath, 2u, array_names, arrays);
+    static const char* array_names[] = { "positions", "indices", "colors" };
+    pnanovdb_compute_array_t* arrays[3] = {};
+    pnanovdb_bool_t loaded = fileformat.load_file(filepath, 3u, array_names, arrays);
     pnanovdb_fileformat_free(&fileformat);
 
     if (!loaded || !arrays[0] || !arrays[1])
     {
-        if (arrays[0])
-            compute->destroy_array(arrays[0]);
-        if (arrays[1])
-            compute->destroy_array(arrays[1]);
+        for (int i = 0; i < 3; ++i)
+        {
+            if (arrays[i])
+                compute->destroy_array(arrays[i]);
+        }
         Console::getInstance().addLog(
             Console::LogLevel::Error, "Import Mesh: failed to read positions+indices from '%s'", filepath);
         return false;
@@ -67,6 +70,7 @@ bool load_ply_positions_indices(const pnanovdb_compute_t* compute,
 
     *out_positions = arrays[0];
     *out_indices = arrays[1];
+    *out_colors = arrays[2]; // may be nullptr if the file has no per-vertex color
     return true;
 }
 
@@ -91,7 +95,8 @@ bool mesh(EditorScene& editor_scene,
 
     pnanovdb_compute_array_t* positions = nullptr;
     pnanovdb_compute_array_t* indices = nullptr;
-    if (!load_ply_positions_indices(compute, filepath, &positions, &indices))
+    pnanovdb_compute_array_t* colors = nullptr;
+    if (!load_ply_arrays(compute, filepath, &positions, &indices, &colors))
         return false;
 
     const uint64_t index_element_count = indices->element_count;
@@ -103,6 +108,8 @@ bool mesh(EditorScene& editor_scene,
     {
         compute->destroy_array(positions);
         compute->destroy_array(indices);
+        if (colors)
+            compute->destroy_array(colors);
         Console::getInstance().addLog(
             Console::LogLevel::Error,
             "Import Mesh: index buffer is not a triangle stream and not a line stream (%llu indices, "
@@ -111,7 +118,20 @@ bool mesh(EditorScene& editor_scene,
         return false;
     }
 
-    pnanovdb_compute_array_t* colors = synthesize_white_colors(compute, positions);
+    const bool has_ply_colors = (colors != nullptr);
+    if (!has_ply_colors)
+    {
+        colors = synthesize_white_colors(compute, positions);
+    }
+    else if (colors->element_count != positions->element_count)
+    {
+        Console::getInstance().addLog(
+            Console::LogLevel::Warning,
+            "Import Mesh: '%s' has 'colors' with %llu floats but 'positions' has %llu; falling back to white", filepath,
+            (unsigned long long)colors->element_count, (unsigned long long)positions->element_count);
+        compute->destroy_array(colors);
+        colors = synthesize_white_colors(compute, positions);
+    }
 
     std::filesystem::path fs_path(filepath);
     std::string view_name = fs_path.stem().string();
@@ -151,10 +171,10 @@ bool mesh(EditorScene& editor_scene,
     editor_scene.select_render_view(scene, name_token);
 
     Console::getInstance().addLog(
-        "Loaded mesh from '%s' (vertices=%llu, %s=%llu, render_pipeline=%d, inflation=%.5f, int_space=%u)", filepath,
-        (unsigned long long)(positions->element_count / 3u), is_line_indices ? "lines" : "triangles",
-        (unsigned long long)prim_count, static_cast<int>(effective_render_pipeline), options.inflation_radius,
-        options.integer_space_max);
+        "Loaded mesh from '%s' (vertices=%llu, %s=%llu, colors=%s, render_pipeline=%d, inflation=%.5f, int_space=%u)",
+        filepath, (unsigned long long)(positions->element_count / 3u), is_line_indices ? "lines" : "triangles",
+        (unsigned long long)prim_count, has_ply_colors ? "ply" : "white", static_cast<int>(effective_render_pipeline),
+        options.inflation_radius, options.integer_space_max);
 
     return true;
 }

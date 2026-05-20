@@ -672,8 +672,9 @@ static void nanovdb_add_nodes_from_ijkl_buffer(const pnanovdb_compute_t* compute
 
             compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_set_mask_ijkl_slang],
                                      resources, workgroup_count, 1u, 1u, "voxelbvh_nanovdb_set_mask_ijkl");
-            compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_set_mask_ijkl_apply_slang],
-                                     resources, workgroup_count, 1u, 1u, "voxelbvh_nanovdb_set_mask_ijkl_apply");
+            compute->dispatch_shader(compute_interface, context,
+                                     ctx->shader_ctx[voxelbvh_nanovdb_set_mask_ijkl_apply_slang], resources,
+                                     workgroup_count, 1u, 1u, "voxelbvh_nanovdb_set_mask_ijkl_apply");
         }
 
         if (pass_id == 3u)
@@ -1767,8 +1768,8 @@ void ijkl_from_triangles_array(const pnanovdb_compute_t* compute,
     gpu_array_upload(compute, queue, positions_gpu_array, positions_array);
 
     ijkl_from_triangles(compute, queue, voxelbvh_context, indices_gpu_array->device_buffer,
-                        positions_gpu_array->device_buffer, triangle_count, inflation_radius, ijkl_gpu_array->device_buffer,
-                        prim_id_gpu_array->device_buffer, range_gpu_array->device_buffer,
+                        positions_gpu_array->device_buffer, triangle_count, inflation_radius,
+                        ijkl_gpu_array->device_buffer, prim_id_gpu_array->device_buffer, range_gpu_array->device_buffer,
                         world_bbox_gpu_array->device_buffer, integer_space_max);
 
     gpu_array_destroy(compute, queue, indices_gpu_array);

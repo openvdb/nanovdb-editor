@@ -133,6 +133,7 @@ struct VoxelBVHRuntime
     pnanovdb_voxelbvh_t voxelbvh{};
     pnanovdb_voxelbvh_context_t* voxelbvh_ctx = nullptr;
     bool initialized = false;
+    bool voxelbvh_unsupported = false;
 
     bool init()
     {
@@ -181,7 +182,7 @@ struct VoxelBVHRuntime
         voxelbvh_ctx = voxelbvh.create_context(&compute, queue);
         if (!voxelbvh_ctx)
         {
-            ADD_FAILURE() << "Failed to create voxelbvh context";
+            voxelbvh_unsupported = true;
             return false;
         }
         initialized = true;
@@ -215,6 +216,11 @@ TEST(NanoVDBEditor, VoxelBVHBuildPipelineLinesSynthetic)
         if (!rt.device_manager || !rt.device)
         {
             GTEST_SKIP() << "No Vulkan-compatible device available on this machine";
+        }
+        if (rt.voxelbvh_unsupported)
+        {
+            // MoltenVK does not support 64-bit indexing required by the voxelbvh shaders
+            GTEST_SKIP() << "VoxelBVH shader pipeline is not supported on this Vulkan runtime";
         }
         FAIL();
     }
@@ -264,6 +270,10 @@ TEST(NanoVDBEditor, VoxelBVHBuildPipelineTrianglesSynthetic)
         {
             GTEST_SKIP() << "No Vulkan-compatible device available on this machine";
         }
+        if (rt.voxelbvh_unsupported)
+        {
+            GTEST_SKIP() << "VoxelBVH shader pipeline is not supported on this Vulkan runtime";
+        }
         FAIL();
     }
 
@@ -303,6 +313,10 @@ TEST(NanoVDBEditor, VoxelBVHBuildPipelineTrianglesFromDragonPly)
         if (!rt.device_manager || !rt.device)
         {
             GTEST_SKIP() << "No Vulkan-compatible device available on this machine";
+        }
+        if (rt.voxelbvh_unsupported)
+        {
+            GTEST_SKIP() << "VoxelBVH shader pipeline is not supported on this Vulkan runtime";
         }
         FAIL();
     }
@@ -359,6 +373,10 @@ TEST(NanoVDBEditor, VoxelBVHBuildPipelineLinesFromEdgePly)
         if (!rt.device_manager || !rt.device)
         {
             GTEST_SKIP() << "No Vulkan-compatible device available on this machine";
+        }
+        if (rt.voxelbvh_unsupported)
+        {
+            GTEST_SKIP() << "VoxelBVH shader pipeline is not supported on this Vulkan runtime";
         }
         FAIL();
     }
