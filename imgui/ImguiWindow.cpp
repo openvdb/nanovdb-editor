@@ -639,6 +639,7 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
             pnanovdb_get_server()->push_screenshot(
                 ptr->server, mapped, 4u * ptr->width * ptr->height, ptr->width, ptr->height);
 
+            ptr->compute_interface.unmap_buffer(context, screenshot_buf);
             ptr->compute_interface.destroy_buffer(context, screenshot_buf);
         }
     }
