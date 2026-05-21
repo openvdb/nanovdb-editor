@@ -177,7 +177,7 @@ typedef struct pnanovdb_voxelbvh_t
                                                                          pnanovdb_compute_queue_t* queue,
                                                                          pnanovdb_voxelbvh_context_t* context,
                                                                          const char* filename,
-                                                                         pnanovdb_uint32_t integer_space_max);
+                                                                         pnanovdb_uint32_t resolution);
 
     pnanovdb_compute_array_t*(PNANOVDB_ABI* nanovdb_from_gaussians_array)(
         const pnanovdb_compute_t* compute,
@@ -185,7 +185,7 @@ typedef struct pnanovdb_voxelbvh_t
         pnanovdb_voxelbvh_context_t* context,
         pnanovdb_compute_array_t** gaussian_arrays, // [means, opacities, quaternions, scales, sh_0, sh_n]
         pnanovdb_uint32_t gaussian_array_count, // must be 6
-        pnanovdb_uint32_t integer_space_max);
+        pnanovdb_uint32_t resolution);
 
     pnanovdb_compute_array_t*(PNANOVDB_ABI* nanovdb_from_triangles_array)(const pnanovdb_compute_t* compute,
                                                                           pnanovdb_compute_queue_t* queue,
@@ -194,7 +194,7 @@ typedef struct pnanovdb_voxelbvh_t
                                                                           pnanovdb_compute_array_t* positions_array,
                                                                           pnanovdb_compute_array_t* colors_array,
                                                                           float inflation_radius,
-                                                                          pnanovdb_uint32_t integer_space_max);
+                                                                          pnanovdb_uint32_t resolution);
 
     pnanovdb_compute_array_t*(PNANOVDB_ABI* nanovdb_from_lines_array)(const pnanovdb_compute_t* compute,
                                                                       pnanovdb_compute_queue_t* queue,
@@ -203,7 +203,7 @@ typedef struct pnanovdb_voxelbvh_t
                                                                       pnanovdb_compute_array_t* positions_array,
                                                                       pnanovdb_compute_array_t* colors_array,
                                                                       float inflation_radius,
-                                                                      pnanovdb_uint32_t integer_space_max);
+                                                                      pnanovdb_uint32_t resolution);
 
 } pnanovdb_voxelbvh_t;
 

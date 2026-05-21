@@ -1873,7 +1873,7 @@ static pnanovdb_compute_array_t* nanovdb_from_ijkl_and_metadata(const pnanovdb_c
                                                                 pnanovdb_compute_array_t* world_bbox_array,
                                                                 pnanovdb_compute_array_t** prim_meta_arrays,
                                                                 pnanovdb_uint32_t prim_meta_count,
-                                                                pnanovdb_uint32_t integer_space_max)
+                                                                pnanovdb_uint32_t resolution)
 {
     if (!ijkl_array || !prim_id_array || !range_array || !world_bbox_array)
     {
@@ -1891,7 +1891,7 @@ static pnanovdb_compute_array_t* nanovdb_from_ijkl_and_metadata(const pnanovdb_c
     pnanovdb_compute_array_t* built_nanovdb_array = nullptr;
     pnanovdb_compute_array_t* built_flat_range_array = nullptr;
     nanovdb_add_nodes_from_ijkl_array(compute, queue, voxelbvh_context, &built_nanovdb_array, &built_flat_range_array,
-                                      ijkl_array, range_array, world_bbox_array, integer_space_max);
+                                      ijkl_array, range_array, world_bbox_array, resolution);
 
     if (!built_nanovdb_array || !built_nanovdb_array->data || !built_flat_range_array ||
         !built_flat_range_array->data || !ijkl_array->data)
@@ -1968,7 +1968,7 @@ static pnanovdb_compute_array_t* nanovdb_from_gaussians_file(const pnanovdb_comp
                                                              pnanovdb_compute_queue_t* queue,
                                                              pnanovdb_voxelbvh_context_t* voxelbvh_context,
                                                              const char* filename,
-                                                             pnanovdb_uint32_t integer_space_max)
+                                                             pnanovdb_uint32_t resolution)
 {
     pnanovdb_compute_array_t* ijkl_array = nullptr;
     pnanovdb_compute_array_t* prim_id_array = nullptr;
@@ -1977,7 +1977,7 @@ static pnanovdb_compute_array_t* nanovdb_from_gaussians_file(const pnanovdb_comp
     pnanovdb_compute_array_t* gaussian_arrays[6] = {};
 
     ijkl_from_gaussians_file(compute, queue, voxelbvh_context, filename, &ijkl_array, &prim_id_array, &range_array,
-                             &world_bbox_array, integer_space_max, gaussian_arrays, 6u);
+                             &world_bbox_array, resolution, gaussian_arrays, 6u);
 
     if (!ijkl_array)
     {
@@ -1986,7 +1986,7 @@ static pnanovdb_compute_array_t* nanovdb_from_gaussians_file(const pnanovdb_comp
 
     pnanovdb_compute_array_t* nanovdb_meta =
         nanovdb_from_ijkl_and_metadata(compute, queue, voxelbvh_context, ijkl_array, prim_id_array, range_array,
-                                       world_bbox_array, gaussian_arrays, 6u, integer_space_max);
+                                       world_bbox_array, gaussian_arrays, 6u, resolution);
 
     for (pnanovdb_uint32_t idx = 0u; idx < 6u; idx++)
     {
@@ -2003,7 +2003,7 @@ static pnanovdb_compute_array_t* nanovdb_from_gaussians_array(const pnanovdb_com
                                                               pnanovdb_voxelbvh_context_t* voxelbvh_context,
                                                               pnanovdb_compute_array_t** gaussian_arrays,
                                                               pnanovdb_uint32_t gaussian_array_count,
-                                                              pnanovdb_uint32_t integer_space_max)
+                                                              pnanovdb_uint32_t resolution)
 {
     if (gaussian_array_count != 6u || !gaussian_arrays)
     {
@@ -2056,7 +2056,7 @@ static pnanovdb_compute_array_t* nanovdb_from_gaussians_array(const pnanovdb_com
 
     ijkl_from_gaussians(compute, queue, voxelbvh_context, gpu_buffers, 6u, gaussian_count,
                         ijkl_gpu_array->device_buffer, prim_id_gpu_array->device_buffer, range_gpu_array->device_buffer,
-                        world_bbox_gpu_array->device_buffer, integer_space_max);
+                        world_bbox_gpu_array->device_buffer, resolution);
 
     gpu_array_destroy(compute, queue, means_gpu_array);
     gpu_array_destroy(compute, queue, opacities_gpu_array);
@@ -2085,7 +2085,7 @@ static pnanovdb_compute_array_t* nanovdb_from_gaussians_array(const pnanovdb_com
     gpu_array_destroy(compute, queue, world_bbox_gpu_array);
 
     return nanovdb_from_ijkl_and_metadata(compute, queue, voxelbvh_context, ijkl_array, prim_id_array, range_array,
-                                          world_bbox_array, gaussian_arrays, 6u, integer_space_max);
+                                          world_bbox_array, gaussian_arrays, 6u, resolution);
 }
 
 static pnanovdb_compute_array_t* nanovdb_from_triangles_array(const pnanovdb_compute_t* compute,
@@ -2095,7 +2095,7 @@ static pnanovdb_compute_array_t* nanovdb_from_triangles_array(const pnanovdb_com
                                                               pnanovdb_compute_array_t* positions_array,
                                                               pnanovdb_compute_array_t* colors_array,
                                                               float inflation_radius,
-                                                              pnanovdb_uint32_t integer_space_max)
+                                                              pnanovdb_uint32_t resolution)
 {
     if (!indices_array || !positions_array || !colors_array)
     {
@@ -2108,11 +2108,11 @@ static pnanovdb_compute_array_t* nanovdb_from_triangles_array(const pnanovdb_com
     pnanovdb_compute_array_t* world_bbox_array = nullptr;
 
     ijkl_from_triangles_array(compute, queue, voxelbvh_context, indices_array, positions_array, inflation_radius,
-                              &ijkl_array, &prim_id_array, &range_array, &world_bbox_array, integer_space_max);
+                              &ijkl_array, &prim_id_array, &range_array, &world_bbox_array, resolution);
 
     pnanovdb_compute_array_t* prim_meta[3] = { indices_array, positions_array, colors_array };
     return nanovdb_from_ijkl_and_metadata(compute, queue, voxelbvh_context, ijkl_array, prim_id_array, range_array,
-                                          world_bbox_array, prim_meta, 3u, integer_space_max);
+                                          world_bbox_array, prim_meta, 3u, resolution);
 }
 
 static pnanovdb_compute_array_t* nanovdb_from_lines_array(const pnanovdb_compute_t* compute,
@@ -2122,7 +2122,7 @@ static pnanovdb_compute_array_t* nanovdb_from_lines_array(const pnanovdb_compute
                                                           pnanovdb_compute_array_t* positions_array,
                                                           pnanovdb_compute_array_t* colors_array,
                                                           float inflation_radius,
-                                                          pnanovdb_uint32_t integer_space_max)
+                                                          pnanovdb_uint32_t resolution)
 {
     if (!indices_array || !positions_array || !colors_array)
     {
@@ -2135,11 +2135,11 @@ static pnanovdb_compute_array_t* nanovdb_from_lines_array(const pnanovdb_compute
     pnanovdb_compute_array_t* world_bbox_array = nullptr;
 
     ijkl_from_lines_array(compute, queue, voxelbvh_context, indices_array, positions_array, inflation_radius,
-                          &ijkl_array, &prim_id_array, &range_array, &world_bbox_array, integer_space_max);
+                          &ijkl_array, &prim_id_array, &range_array, &world_bbox_array, resolution);
 
     pnanovdb_compute_array_t* prim_meta[3] = { indices_array, positions_array, colors_array };
     return nanovdb_from_ijkl_and_metadata(compute, queue, voxelbvh_context, ijkl_array, prim_id_array, range_array,
-                                          world_bbox_array, prim_meta, 3u, integer_space_max);
+                                          world_bbox_array, prim_meta, 3u, resolution);
 }
 
 }

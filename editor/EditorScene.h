@@ -239,7 +239,7 @@ public:
                                pnanovdb_pipeline_type_t render_pipeline,
                                bool is_line_indices,
                                float inflation_radius = 0.f,
-                               pnanovdb_uint32_t integer_space_max = 511u);
+                               pnanovdb_uint32_t resolution = 511u);
 
     // Remove object from scene (UI, loaded data, renderer state, selection)
     bool remove_object(pnanovdb_editor_token_t* scene_token, const char* name);

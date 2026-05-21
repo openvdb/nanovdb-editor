@@ -147,13 +147,13 @@ bool mesh(EditorScene& editor_scene,
     }
 
     editor_scene.handle_mesh_data_load(scene, indices, positions, colors, filepath, effective_render_pipeline,
-                                       is_line_indices, options.inflation_radius, options.integer_space_max);
+                                       is_line_indices, options.inflation_radius, options.resolution);
 
     Console::getInstance().addLog(
         "Loaded mesh from '%s' (vertices=%llu, %s=%llu, colors=%s, render_pipeline=%d, inflation=%.5f, int_space=%u)",
         filepath, (unsigned long long)(positions->element_count / 3u), is_line_indices ? "lines" : "triangles",
         (unsigned long long)prim_count, has_ply_colors ? "ply" : "white", static_cast<int>(effective_render_pipeline),
-        options.inflation_radius, options.integer_space_max);
+        options.inflation_radius, options.resolution);
 
     return true;
 }

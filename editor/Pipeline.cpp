@@ -39,7 +39,7 @@ struct Raster3DParams
 struct VoxelBVHBuildParams
 {
     float source_type = 0.f; // pnanovdb_pipeline_voxelbvh_source_t
-    float integer_space_max = 511.f;
+    float resolution = 511.f;
     float inflation_radius = 0.f;
 };
 
@@ -343,7 +343,7 @@ enum class VoxelBVHBuildSource
 struct VoxelBVHBuildRequest
 {
     VoxelBVHBuildSource source = VoxelBVHBuildSource::GaussianFile;
-    pnanovdb_uint32_t integer_space_max = 511u;
+    pnanovdb_uint32_t resolution = 511u;
     float inflation_radius = 0.f;
     std::string filepath; // only for GaussianFile
     // Triangles/Lines: array_owners/_ptrs[0]=indices, [1]=positions, [2]=colors
@@ -496,17 +496,17 @@ bool start_voxelbvh_build(pnanovdb_editor::SceneObject* scene_obj,
             case VoxelBVHBuildSource::GaussianFile:
                 s_pending_voxelbvh_result = s_voxelbvh_iface->nanovdb_from_gaussians_file(
                     s_pending_voxelbvh_compute, s_voxelbvh_worker_queue, s_voxelbvh_worker_ctx, r.filepath.c_str(),
-                    r.integer_space_max);
+                    r.resolution);
                 break;
             case VoxelBVHBuildSource::Triangles:
                 s_pending_voxelbvh_result = s_voxelbvh_iface->nanovdb_from_triangles_array(
                     s_pending_voxelbvh_compute, s_voxelbvh_worker_queue, s_voxelbvh_worker_ctx, r.array_ptrs[0],
-                    r.array_ptrs[1], r.array_ptrs[2], r.inflation_radius, r.integer_space_max);
+                    r.array_ptrs[1], r.array_ptrs[2], r.inflation_radius, r.resolution);
                 break;
             case VoxelBVHBuildSource::Lines:
                 s_pending_voxelbvh_result = s_voxelbvh_iface->nanovdb_from_lines_array(
                     s_pending_voxelbvh_compute, s_voxelbvh_worker_queue, s_voxelbvh_worker_ctx, r.array_ptrs[0],
-                    r.array_ptrs[1], r.array_ptrs[2], r.inflation_radius, r.integer_space_max);
+                    r.array_ptrs[1], r.array_ptrs[2], r.inflation_radius, r.resolution);
                 break;
             case VoxelBVHBuildSource::GaussianArrays:
             {
@@ -514,7 +514,7 @@ bool start_voxelbvh_build(pnanovdb_editor::SceneObject* scene_obj,
                                                         r.array_ptrs[3], r.array_ptrs[4], r.array_ptrs[5] };
                 s_pending_voxelbvh_result = s_voxelbvh_iface->nanovdb_from_gaussians_array(
                     s_pending_voxelbvh_compute, s_voxelbvh_worker_queue, s_voxelbvh_worker_ctx, arrays, 6u,
-                    r.integer_space_max);
+                    r.resolution);
                 break;
             }
             }
@@ -839,7 +839,7 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
 
     const int source_type_raw = (int)(build_params->source_type + 0.5f);
     const int source_type = source_type_raw < 0 ? 0 : (source_type_raw > 3 ? 3 : source_type_raw);
-    const pnanovdb_uint32_t integer_space_max = (pnanovdb_uint32_t)(build_params->integer_space_max + 0.5f);
+    const pnanovdb_uint32_t resolution = (pnanovdb_uint32_t)(build_params->resolution + 0.5f);
     const float user_inflation_radius = build_params->inflation_radius;
 
     auto* voxelbvh = ctx->voxelbvh;
@@ -904,13 +904,13 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
 
         VoxelBVHBuildRequest req;
         req.source = VoxelBVHBuildSource::GaussianFile;
-        req.integer_space_max = integer_space_max;
+        req.resolution = resolution;
         req.filepath = path;
         const pnanovdb_pipeline_result_t async_result = try_start_async(std::move(req));
         if (async_result == pnanovdb_pipeline_result_pending)
             return pnanovdb_pipeline_result_pending;
 
-        result = voxelbvh->nanovdb_from_gaussians_file(compute, queue, voxelbvh_ctx, path.c_str(), integer_space_max);
+        result = voxelbvh->nanovdb_from_gaussians_file(compute, queue, voxelbvh_ctx, path.c_str(), resolution);
         break;
     }
     case pnanovdb_pipeline_voxelbvh_source_triangles:
@@ -943,16 +943,16 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
 
         const bool auto_inflation = (user_inflation_radius == 0.f);
         if (auto_inflation && scene_obj->render_pipeline() == pnanovdb_pipeline_type_voxelbvh_triangles_debug_render &&
-            integer_space_max > 0u)
+            resolution > 0u)
         {
-            const float voxel_size = bbox_max_extent(positions) / static_cast<float>(integer_space_max);
+            const float voxel_size = bbox_max_extent(positions) / static_cast<float>(resolution);
             if (voxel_size > 0.f)
                 effective_inflation_radius = k_mesh_debug_voxel_multiplier * voxel_size;
         }
 
         VoxelBVHBuildRequest req;
         req.source = VoxelBVHBuildSource::Triangles;
-        req.integer_space_max = integer_space_max;
+        req.resolution = resolution;
         req.inflation_radius = effective_inflation_radius;
         req.array_owners[0] = get_named_owner("indices");
         req.array_owners[1] = get_named_owner("positions");
@@ -965,7 +965,7 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
             return pnanovdb_pipeline_result_pending;
 
         result = voxelbvh->nanovdb_from_triangles_array(
-            compute, queue, voxelbvh_ctx, indices, positions, colors, effective_inflation_radius, integer_space_max);
+            compute, queue, voxelbvh_ctx, indices, positions, colors, effective_inflation_radius, resolution);
         break;
     }
     case pnanovdb_pipeline_voxelbvh_source_lines:
@@ -995,16 +995,16 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
             return pnanovdb_pipeline_result_error;
         }
         const bool auto_inflation = (user_inflation_radius == 0.f);
-        if (auto_inflation && integer_space_max > 0u)
+        if (auto_inflation && resolution > 0u)
         {
-            const float voxel_size = bbox_max_extent(positions) / static_cast<float>(integer_space_max);
+            const float voxel_size = bbox_max_extent(positions) / static_cast<float>(resolution);
             if (voxel_size > 0.f)
                 effective_inflation_radius = k_mesh_lines_voxel_multiplier * voxel_size;
         }
 
         VoxelBVHBuildRequest req;
         req.source = VoxelBVHBuildSource::Lines;
-        req.integer_space_max = integer_space_max;
+        req.resolution = resolution;
         req.inflation_radius = effective_inflation_radius;
         req.array_owners[0] = get_named_owner("indices");
         req.array_owners[1] = get_named_owner("positions");
@@ -1017,7 +1017,7 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
             return pnanovdb_pipeline_result_pending;
 
         result = voxelbvh->nanovdb_from_lines_array(
-            compute, queue, voxelbvh_ctx, indices, positions, colors, effective_inflation_radius, integer_space_max);
+            compute, queue, voxelbvh_ctx, indices, positions, colors, effective_inflation_radius, resolution);
         break;
     }
     case pnanovdb_pipeline_voxelbvh_source_gaussian_arrays:
@@ -1046,7 +1046,7 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
 
         VoxelBVHBuildRequest req;
         req.source = VoxelBVHBuildSource::GaussianArrays;
-        req.integer_space_max = integer_space_max;
+        req.resolution = resolution;
         for (int i = 0; i < 6; ++i)
         {
             req.array_owners[i] = get_named_owner(gaussian_keys[i]);
@@ -1057,7 +1057,7 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
             return pnanovdb_pipeline_result_pending;
 
         result =
-            voxelbvh->nanovdb_from_gaussians_array(compute, queue, voxelbvh_ctx, gaussian_arrays, 6u, integer_space_max);
+            voxelbvh->nanovdb_from_gaussians_array(compute, queue, voxelbvh_ctx, gaussian_arrays, 6u, resolution);
         break;
     }
     default:
@@ -1084,9 +1084,9 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
     scene_obj->resources.nanovdb_array_owner = owner;
 
     Console::getInstance().addLog(
-        "VoxelBVH build: source_type=%d, render_pipeline=%d, integer_space_max=%u, "
+        "VoxelBVH build: source_type=%d, render_pipeline=%d, resolution=%u, "
         "inflation_radius=%.5f, nanovdb (%llu elements)",
-        source_type, static_cast<int>(scene_obj->render_pipeline()), integer_space_max, effective_inflation_radius,
+        source_type, static_cast<int>(scene_obj->render_pipeline()), resolution, effective_inflation_radius,
         (unsigned long long)result->element_count);
 
     scene_obj->process_dirty() = false;
@@ -1271,8 +1271,8 @@ static const pnanovdb_pipeline_param_field_t s_raster3d_param_fields[] = {
 
 // Field descriptors for VoxelBVHBuildParams
 static const pnanovdb_pipeline_param_field_t s_voxelbvh_build_param_fields[] = {
-    { "Int Space Max", "Max BVH integer coordinate (1..4095). Higher = finer voxel grid.", PNANOVDB_REFLECT_TYPE_FLOAT,
-      offsetof(VoxelBVHBuildParams, integer_space_max), 511.0f, 1.0f, 4095.0f, 1.0f, nullptr, 0 },
+    { "Resolution", "Max BVH integer coordinate (1..4095). Higher = finer voxel grid.", PNANOVDB_REFLECT_TYPE_FLOAT,
+      offsetof(VoxelBVHBuildParams, resolution), 511.0f, 1.0f, 4095.0f, 1.0f, nullptr, 0 },
     { "Inflation Radius", "World-space inflation applied to lines/triangles. 0 = auto for Debug/Lines renders.",
       PNANOVDB_REFLECT_TYPE_FLOAT, offsetof(VoxelBVHBuildParams, inflation_radius), 0.0f, 0.0f, 100.0f, 0.01f, nullptr,
       0 },
@@ -1744,12 +1744,12 @@ bool pnanovdb_pipeline_voxelbvh_build_params_set_inflation_radius(pnanovdb_pipel
     return true;
 }
 
-bool pnanovdb_pipeline_voxelbvh_build_params_set_integer_space_max(pnanovdb_pipeline_params_t* params,
-                                                                   pnanovdb_uint32_t integer_space_max)
+bool pnanovdb_pipeline_voxelbvh_build_params_set_resolution(pnanovdb_pipeline_params_t* params,
+                                                                   pnanovdb_uint32_t resolution)
 {
     if (!ensure_voxelbvh_build_params(params))
         return false;
-    static_cast<VoxelBVHBuildParams*>(params->data)->integer_space_max = static_cast<float>(integer_space_max);
+    static_cast<VoxelBVHBuildParams*>(params->data)->resolution = static_cast<float>(resolution);
     return true;
 }
 

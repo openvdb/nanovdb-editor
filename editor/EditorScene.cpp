@@ -1071,7 +1071,7 @@ void EditorScene::handle_mesh_data_load(pnanovdb_editor_token_t* scene,
                                         pnanovdb_pipeline_type_t render_pipeline,
                                         bool is_line_indices,
                                         float inflation_radius,
-                                        pnanovdb_uint32_t integer_space_max)
+                                        pnanovdb_uint32_t resolution)
 {
     if (!scene || !filename || !indices || !positions || !colors)
     {
@@ -1093,7 +1093,7 @@ void EditorScene::handle_mesh_data_load(pnanovdb_editor_token_t* scene,
     std::string filepath_copy = filename;
     m_scene_manager.with_object(
         scene_token, name_token,
-        [filepath_copy, source_type, inflation_radius, integer_space_max](SceneObject* obj)
+        [filepath_copy, source_type, inflation_radius, resolution](SceneObject* obj)
         {
             if (!obj)
                 return;
@@ -1101,7 +1101,7 @@ void EditorScene::handle_mesh_data_load(pnanovdb_editor_token_t* scene,
             auto& process_params = obj->process_params();
             pnanovdb_pipeline_voxelbvh_build_params_set_source_type(&process_params, source_type);
             pnanovdb_pipeline_voxelbvh_build_params_set_inflation_radius(&process_params, inflation_radius);
-            pnanovdb_pipeline_voxelbvh_build_params_set_integer_space_max(&process_params, integer_space_max);
+            pnanovdb_pipeline_voxelbvh_build_params_set_resolution(&process_params, resolution);
             obj->process_dirty() = true;
         });
 
