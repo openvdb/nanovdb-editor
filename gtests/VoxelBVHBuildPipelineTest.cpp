@@ -247,8 +247,8 @@ TEST(NanoVDBEditor, VoxelBVHBuildPipelineLinesSynthetic)
     ASSERT_NE(indices, nullptr);
     ASSERT_NE(colors, nullptr);
 
-    const pnanovdb_uint32_t integer_space_max = 511u;
-    const float inflation_radius = 0.1f; // ~0.1% of 100-unit bbox
+    const pnanovdb_uint32_t integer_space_max = 127u;
+    const float inflation_radius = 1.0f;
 
     pnanovdb_compute_array_t* nanovdb_array = rt.voxelbvh.nanovdb_from_lines_array(
         &rt.compute, rt.queue, rt.voxelbvh_ctx, indices, positions, colors, inflation_radius, integer_space_max);
