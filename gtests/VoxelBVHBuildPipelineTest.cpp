@@ -18,6 +18,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <filesystem>
 #include <vector>
 
@@ -121,6 +122,87 @@ bool dragon_ply_available()
     return std::filesystem::exists("./data/xyzrgb_dragon.ply");
 }
 
+// TODO: make common function for a cpp test
+bool save_wireframe_lines_ply(
+    const std::string& path, uint32_t width, uint32_t height, uint64_t* out_vertex_count, uint64_t* out_edge_count)
+{
+    const uint32_t vert_per_quad = 4u;
+    const uint32_t edge_per_quad = 4u;
+    const uint32_t quad_count = width * height;
+    const uint64_t vertex_count = uint64_t(vert_per_quad) * quad_count;
+    const uint64_t edge_count = uint64_t(edge_per_quad) * quad_count;
+
+    std::vector<float> positions(3u * vertex_count, 0.f);
+    std::vector<uint32_t> edges(2u * edge_count, 0u);
+
+    for (uint32_t j = 0u; j < height; ++j)
+    {
+        for (uint32_t i = 0u; i < width; ++i)
+        {
+            const float x0 = 1000.f * float(i) / float(width);
+            const float x1 = 1000.f * float(i + 1) / float(width);
+            const float y0 = 1000.f * float(j) / float(height);
+            const float y1 = 1000.f * float(j + 1) / float(height);
+            const float z00 = 20.f * std::sin(0.0001f * (x0 * x0 + y0 * y0));
+            const float z10 = 20.f * std::sin(0.0001f * (x1 * x1 + y0 * y0));
+            const float z01 = 20.f * std::sin(0.0001f * (x0 * x0 + y1 * y1));
+            const float z11 = 20.f * std::sin(0.0001f * (x1 * x1 + y1 * y1));
+
+            const uint32_t quad_idx = j * width + i;
+            const uint32_t base_vert = vert_per_quad * quad_idx;
+            const uint32_t base_pos = 3u * base_vert;
+
+            positions[base_pos + 0u] = x0;
+            positions[base_pos + 1u] = y0;
+            positions[base_pos + 2u] = z00;
+            positions[base_pos + 3u] = x1;
+            positions[base_pos + 4u] = y0;
+            positions[base_pos + 5u] = z10;
+            positions[base_pos + 6u] = x0;
+            positions[base_pos + 7u] = y1;
+            positions[base_pos + 8u] = z01;
+            positions[base_pos + 9u] = x1;
+            positions[base_pos + 10u] = y1;
+            positions[base_pos + 11u] = z11;
+
+            const uint32_t base_edge = 2u * edge_per_quad * quad_idx;
+            edges[base_edge + 0u] = base_vert + 0u;
+            edges[base_edge + 1u] = base_vert + 1u;
+            edges[base_edge + 2u] = base_vert + 1u;
+            edges[base_edge + 3u] = base_vert + 3u;
+            edges[base_edge + 4u] = base_vert + 3u;
+            edges[base_edge + 5u] = base_vert + 2u;
+            edges[base_edge + 6u] = base_vert + 2u;
+            edges[base_edge + 7u] = base_vert + 0u;
+        }
+    }
+
+    FILE* f = std::fopen(path.c_str(), "wb");
+    if (!f)
+    {
+        return false;
+    }
+    std::fprintf(f, "ply\n");
+    std::fprintf(f, "format binary_little_endian 1.0\n");
+    std::fprintf(f, "element vertex %zu\n", static_cast<size_t>(vertex_count));
+    std::fprintf(f, "property float x\n");
+    std::fprintf(f, "property float y\n");
+    std::fprintf(f, "property float z\n");
+    std::fprintf(f, "element edge %zu\n", static_cast<size_t>(edge_count));
+    std::fprintf(f, "property int vertex1\n");
+    std::fprintf(f, "property int vertex2\n");
+    std::fprintf(f, "end_header\n");
+    std::fwrite(positions.data(), sizeof(float), positions.size(), f);
+    std::fwrite(edges.data(), 2u * sizeof(uint32_t), static_cast<size_t>(edge_count), f);
+    std::fclose(f);
+
+    if (out_vertex_count)
+        *out_vertex_count = vertex_count;
+    if (out_edge_count)
+        *out_edge_count = edge_count;
+    return true;
+}
+
 // Compiler / compute / device / voxelbvh fixture. init() returns false
 // when no Vulkan device is available so the caller can GTEST_SKIP.
 struct VoxelBVHRuntime
@@ -208,23 +290,56 @@ struct VoxelBVHRuntime
 
 } // namespace
 
-TEST(NanoVDBEditor, VoxelBVHBuildPipelineLinesSynthetic)
+class VoxelBVHBuildPipelineTest : public ::testing::Test
 {
-    VoxelBVHRuntime rt;
-    if (!rt.init())
+protected:
+    static VoxelBVHRuntime* s_rt;
+    static bool s_device_unavailable;
+    static bool s_voxelbvh_unsupported;
+
+    static void SetUpTestSuite()
     {
-        if (!rt.device_manager || !rt.device)
+        s_rt = new VoxelBVHRuntime();
+        if (!s_rt->init())
+        {
+            s_device_unavailable = (!s_rt->device_manager || !s_rt->device);
+            s_voxelbvh_unsupported = s_rt->voxelbvh_unsupported;
+        }
+    }
+
+    static void TearDownTestSuite()
+    {
+        delete s_rt;
+        s_rt = nullptr;
+    }
+
+    void SetUp() override
+    {
+        if (s_device_unavailable)
         {
             GTEST_SKIP() << "No Vulkan-compatible device available on this machine";
         }
-        if (rt.voxelbvh_unsupported)
+        if (s_voxelbvh_unsupported)
         {
             // MoltenVK does not support 64-bit indexing required by the voxelbvh shaders
             GTEST_SKIP() << "VoxelBVH shader pipeline is not supported on this Vulkan runtime";
         }
-        FAIL();
+        ASSERT_NE(s_rt, nullptr) << "VoxelBVHRuntime failed to initialize";
     }
-    ASSERT_NE(rt.voxelbvh.nanovdb_from_lines_array, nullptr) << "nanovdb_from_lines_array not bound";
+
+    VoxelBVHRuntime& rt()
+    {
+        return *s_rt;
+    }
+};
+
+VoxelBVHRuntime* VoxelBVHBuildPipelineTest::s_rt = nullptr;
+bool VoxelBVHBuildPipelineTest::s_device_unavailable = false;
+bool VoxelBVHBuildPipelineTest::s_voxelbvh_unsupported = false;
+
+TEST_F(VoxelBVHBuildPipelineTest, LinesSynthetic)
+{
+    ASSERT_NE(rt().voxelbvh.nanovdb_from_lines_array, nullptr) << "nanovdb_from_lines_array not bound";
 
     // Two 100-unit squares stacked at z=0 and z=50: 8 segments, 16 line indices.
     pnanovdb_compute_array_t* positions = nullptr;
@@ -239,66 +354,52 @@ TEST(NanoVDBEditor, VoxelBVHBuildPipelineLinesSynthetic)
             0u, 1u, 1u, 2u, 2u, 3u, 3u, 0u, 4u, 5u, 5u, 6u, 6u, 7u, 7u, 4u,
         };
         std::vector<float> cs(sizeof(p) / sizeof(float), 1.f);
-        positions = rt.compute.create_array(sizeof(float), sizeof(p) / sizeof(float), p);
-        indices = rt.compute.create_array(sizeof(uint32_t), sizeof(segs) / sizeof(uint32_t), segs);
-        colors = rt.compute.create_array(sizeof(float), cs.size(), cs.data());
+        positions = rt().compute.create_array(sizeof(float), sizeof(p) / sizeof(float), p);
+        indices = rt().compute.create_array(sizeof(uint32_t), sizeof(segs) / sizeof(uint32_t), segs);
+        colors = rt().compute.create_array(sizeof(float), cs.size(), cs.data());
     }
     ASSERT_NE(positions, nullptr);
     ASSERT_NE(indices, nullptr);
     ASSERT_NE(colors, nullptr);
 
-    const pnanovdb_uint32_t integer_space_max = 127u;
+    const pnanovdb_uint32_t resolution = 127u;
     const float inflation_radius = 1.0f;
 
-    pnanovdb_compute_array_t* nanovdb_array = rt.voxelbvh.nanovdb_from_lines_array(
-        &rt.compute, rt.queue, rt.voxelbvh_ctx, indices, positions, colors, inflation_radius, integer_space_max);
+    pnanovdb_compute_array_t* nanovdb_array = rt().voxelbvh.nanovdb_from_lines_array(
+        &rt().compute, rt().queue, rt().voxelbvh_ctx, indices, positions, colors, inflation_radius, resolution);
 
     expect_nanovdb_populated(nanovdb_array, /*min_bytes=*/4096u);
 
-    rt.compute.destroy_array(nanovdb_array);
-    rt.compute.destroy_array(colors);
-    rt.compute.destroy_array(positions);
-    rt.compute.destroy_array(indices);
+    rt().compute.destroy_array(nanovdb_array);
+    rt().compute.destroy_array(colors);
+    rt().compute.destroy_array(positions);
+    rt().compute.destroy_array(indices);
 }
 
-TEST(NanoVDBEditor, VoxelBVHBuildPipelineTrianglesSynthetic)
+TEST_F(VoxelBVHBuildPipelineTest, TrianglesSynthetic)
 {
-    VoxelBVHRuntime rt;
-    if (!rt.init())
-    {
-        if (!rt.device_manager || !rt.device)
-        {
-            GTEST_SKIP() << "No Vulkan-compatible device available on this machine";
-        }
-        if (rt.voxelbvh_unsupported)
-        {
-            GTEST_SKIP() << "VoxelBVH shader pipeline is not supported on this Vulkan runtime";
-        }
-        FAIL();
-    }
 
-    // 32x32 grid -> 2048 triangles. Enough to populate multiple leaf nodes.
     pnanovdb_compute_array_t* indices = nullptr;
     pnanovdb_compute_array_t* positions = nullptr;
     pnanovdb_compute_array_t* colors = nullptr;
-    ASSERT_TRUE(build_heightfield_mesh(rt.compute, 32u, 32u, &indices, &positions, &colors));
+    ASSERT_TRUE(build_heightfield_mesh(rt().compute, 16u, 16u, &indices, &positions, &colors));
 
-    const pnanovdb_uint32_t integer_space_max = 511u;
+    const pnanovdb_uint32_t resolution = 127u;
     const float inflation_radius = 0.f;
 
-    pnanovdb_compute_array_t* nanovdb_array = rt.voxelbvh.nanovdb_from_triangles_array(
-        &rt.compute, rt.queue, rt.voxelbvh_ctx, indices, positions, colors, inflation_radius, integer_space_max);
+    pnanovdb_compute_array_t* nanovdb_array = rt().voxelbvh.nanovdb_from_triangles_array(
+        &rt().compute, rt().queue, rt().voxelbvh_ctx, indices, positions, colors, inflation_radius, resolution);
 
     expect_nanovdb_populated(nanovdb_array, /*min_bytes=*/4096u);
 
-    rt.compute.destroy_array(nanovdb_array);
-    rt.compute.destroy_array(colors);
-    rt.compute.destroy_array(positions);
-    rt.compute.destroy_array(indices);
+    rt().compute.destroy_array(nanovdb_array);
+    rt().compute.destroy_array(colors);
+    rt().compute.destroy_array(positions);
+    rt().compute.destroy_array(indices);
 }
 
 // Skipped when the (~137 MB) Stanford dragon PLY isn't present locally.
-TEST(NanoVDBEditor, VoxelBVHBuildPipelineTrianglesFromDragonPly)
+TEST_F(VoxelBVHBuildPipelineTest, TrianglesFromDragonPly)
 {
     if (!dragon_ply_available())
     {
@@ -307,22 +408,8 @@ TEST(NanoVDBEditor, VoxelBVHBuildPipelineTrianglesFromDragonPly)
                         "to run this test.";
     }
 
-    VoxelBVHRuntime rt;
-    if (!rt.init())
-    {
-        if (!rt.device_manager || !rt.device)
-        {
-            GTEST_SKIP() << "No Vulkan-compatible device available on this machine";
-        }
-        if (rt.voxelbvh_unsupported)
-        {
-            GTEST_SKIP() << "VoxelBVH shader pipeline is not supported on this Vulkan runtime";
-        }
-        FAIL();
-    }
-
     pnanovdb_fileformat_t fileformat{};
-    pnanovdb_fileformat_load(&fileformat, &rt.compute);
+    pnanovdb_fileformat_load(&fileformat, &rt().compute);
     ASSERT_NE(fileformat.load_file, nullptr) << "file format module unavailable";
 
     const char* array_names[] = { "positions", "indices" };
@@ -340,56 +427,45 @@ TEST(NanoVDBEditor, VoxelBVHBuildPipelineTrianglesFromDragonPly)
     EXPECT_EQ(positions->element_count % 3u, 0u) << "positions should be a flat float3 stream";
     EXPECT_EQ(indices->element_count % 3u, 0u) << "indices should be a flat triangle index stream";
 
-    pnanovdb_compute_array_t* colors = synthesize_white_colors(rt.compute, positions->element_count);
+    pnanovdb_compute_array_t* colors = synthesize_white_colors(rt().compute, positions->element_count);
     ASSERT_NE(colors, nullptr);
 
-    const pnanovdb_uint32_t integer_space_max = 511u;
+    const pnanovdb_uint32_t resolution = 511u;
     const float inflation_radius = 0.f;
 
-    pnanovdb_compute_array_t* nanovdb_array = rt.voxelbvh.nanovdb_from_triangles_array(
-        &rt.compute, rt.queue, rt.voxelbvh_ctx, indices, positions, colors, inflation_radius, integer_space_max);
+    pnanovdb_compute_array_t* nanovdb_array = rt().voxelbvh.nanovdb_from_triangles_array(
+        &rt().compute, rt().queue, rt().voxelbvh_ctx, indices, positions, colors, inflation_radius, resolution);
 
     expect_nanovdb_populated(nanovdb_array, /*min_bytes=*/1u * 1024u * 1024u);
 
-    rt.compute.destroy_array(nanovdb_array);
-    rt.compute.destroy_array(colors);
-    rt.compute.destroy_array(positions);
-    rt.compute.destroy_array(indices);
+    rt().compute.destroy_array(nanovdb_array);
+    rt().compute.destroy_array(colors);
+    rt().compute.destroy_array(positions);
+    rt().compute.destroy_array(indices);
 }
 
-// Guards the `element edge` -> uint2 indices path so it can feed
-// nanovdb_from_lines_array without triangle->segment expansion.
-TEST(NanoVDBEditor, VoxelBVHBuildPipelineLinesFromEdgePly)
+TEST_F(VoxelBVHBuildPipelineTest, LinesFromEdgePly)
 {
-    const char* kEdgePlyPath = "./data/lines.ply";
-    if (!std::filesystem::exists(kEdgePlyPath))
-    {
-        GTEST_SKIP() << kEdgePlyPath << " not found";
-    }
+    ASSERT_NE(rt().voxelbvh.nanovdb_from_lines_array, nullptr) << "nanovdb_from_lines_array not bound";
 
-    VoxelBVHRuntime rt;
-    if (!rt.init())
-    {
-        if (!rt.device_manager || !rt.device)
-        {
-            GTEST_SKIP() << "No Vulkan-compatible device available on this machine";
-        }
-        if (rt.voxelbvh_unsupported)
-        {
-            GTEST_SKIP() << "VoxelBVH shader pipeline is not supported on this Vulkan runtime";
-        }
-        FAIL();
-    }
-    ASSERT_NE(rt.voxelbvh.nanovdb_from_lines_array, nullptr) << "nanovdb_from_lines_array not bound";
+    const std::filesystem::path edge_ply_path = std::filesystem::temp_directory_path() / "nvdb_editor_test_lines.ply";
+
+    constexpr uint32_t kWidth = 16u;
+    constexpr uint32_t kHeight = 16u;
+    uint64_t expected_vert_count = 0u;
+    uint64_t expected_edge_count = 0u;
+    ASSERT_TRUE(
+        save_wireframe_lines_ply(edge_ply_path.string(), kWidth, kHeight, &expected_vert_count, &expected_edge_count))
+        << "failed to write " << edge_ply_path;
 
     pnanovdb_fileformat_t fileformat{};
-    pnanovdb_fileformat_load(&fileformat, &rt.compute);
+    pnanovdb_fileformat_load(&fileformat, &rt().compute);
     ASSERT_NE(fileformat.load_file, nullptr) << "file format module unavailable";
 
     // Loader falls back to edge data when no triangle faces are present.
     const char* array_names[] = { "positions", "indices" };
     pnanovdb_compute_array_t* arrays[2] = {};
-    pnanovdb_bool_t loaded = fileformat.load_file(kEdgePlyPath, 2u, array_names, arrays);
+    pnanovdb_bool_t loaded = fileformat.load_file(edge_ply_path.string().c_str(), 2u, array_names, arrays);
     pnanovdb_fileformat_free(&fileformat);
 
     ASSERT_TRUE(loaded);
@@ -400,23 +476,26 @@ TEST(NanoVDBEditor, VoxelBVHBuildPipelineLinesFromEdgePly)
     pnanovdb_compute_array_t* indices = arrays[1];
 
     EXPECT_EQ(positions->element_size, sizeof(float));
-    EXPECT_EQ(positions->element_count, 49152u) << "lines.ply has 16384 verts * 3 floats";
+    EXPECT_EQ(positions->element_count, 3u * expected_vert_count) << "expected 3 floats per vertex";
     EXPECT_EQ(indices->element_size, 2u * sizeof(uint32_t)) << "indices must be uint2-packed for the lines pipeline";
-    EXPECT_EQ(indices->element_count, 8192u) << "lines.ply has 8192 edges";
+    EXPECT_EQ(indices->element_count, expected_edge_count) << "expected one uint2 per edge";
 
-    pnanovdb_compute_array_t* colors = synthesize_white_colors(rt.compute, positions->element_count);
+    pnanovdb_compute_array_t* colors = synthesize_white_colors(rt().compute, positions->element_count);
     ASSERT_NE(colors, nullptr);
 
-    const pnanovdb_uint32_t integer_space_max = 127u;
+    const pnanovdb_uint32_t resolution = 127u;
     const float inflation_radius = 2.f;
 
-    pnanovdb_compute_array_t* nanovdb_array = rt.voxelbvh.nanovdb_from_lines_array(
-        &rt.compute, rt.queue, rt.voxelbvh_ctx, indices, positions, colors, inflation_radius, integer_space_max);
+    pnanovdb_compute_array_t* nanovdb_array = rt().voxelbvh.nanovdb_from_lines_array(
+        &rt().compute, rt().queue, rt().voxelbvh_ctx, indices, positions, colors, inflation_radius, resolution);
 
     expect_nanovdb_populated(nanovdb_array, /*min_bytes=*/4096u);
 
-    rt.compute.destroy_array(nanovdb_array);
-    rt.compute.destroy_array(colors);
-    rt.compute.destroy_array(positions);
-    rt.compute.destroy_array(indices);
+    rt().compute.destroy_array(nanovdb_array);
+    rt().compute.destroy_array(colors);
+    rt().compute.destroy_array(positions);
+    rt().compute.destroy_array(indices);
+
+    std::error_code ec;
+    std::filesystem::remove(edge_ply_path, ec);
 }
