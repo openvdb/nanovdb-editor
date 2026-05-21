@@ -74,6 +74,14 @@ typedef struct pnanovdb_server_t
 
     void(PNANOVDB_ABI* destroy_instance)(pnanovdb_server_instance_t* instance);
 
+    pnanovdb_bool_t(PNANOVDB_ABI* screenshot_requested)(pnanovdb_server_instance_t* instance);
+
+    void(PNANOVDB_ABI* push_screenshot)(pnanovdb_server_instance_t* instance,
+                                        const void* data,
+                                        pnanovdb_uint64_t data_size,
+                                        pnanovdb_uint32_t width,
+                                        pnanovdb_uint32_t height);
+
 } pnanovdb_server_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_server_t
@@ -83,6 +91,8 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(push_h264, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(pop_event, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(wait_until_active, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(destroy_instance, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(screenshot_requested, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(push_screenshot, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE

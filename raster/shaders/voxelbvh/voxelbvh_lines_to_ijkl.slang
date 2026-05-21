@@ -6,7 +6,7 @@ struct constants_t
     uint workgroup_count;
     uint voxel_count;
     uint voxel_workgroup_count;
-    uint integer_space_max;
+    uint resolution;
     float inflation_radius;
 };
 
@@ -20,6 +20,15 @@ StructuredBuffer<float> bbox_in;
 RWStructuredBuffer<uint64_t> keys_out;
 RWStructuredBuffer<uint> bbox_ids_out;
 
+float4 compute_world_to_voxel(float3 world_min, float3 world_max)
+{
+    float3 world_delta = world_max - world_min;
+    float world_delta_max = max(world_delta.x, max(world_delta.y, world_delta.z));
+    float scale = float(constants.resolution - 1u) / (world_delta_max);
+    float3 offset = -world_min * scale + 0.5f;
+    return float4(offset, scale);
+}
+
 [shader("compute")][numthreads(256, 1, 1)]
 void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
@@ -27,10 +36,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 
     float3 g_aabb_min = float3(bbox_in[0], bbox_in[1], bbox_in[2]);
     float3 g_aabb_max = float3(bbox_in[3], bbox_in[4], bbox_in[5]);
-    float3 g_aabb_delta = g_aabb_max - g_aabb_min;
-    float g_aabb_delta_max = max(g_aabb_delta.x, max(g_aabb_delta.y, g_aabb_delta.z));
-    float scale = float(constants.integer_space_max) / (g_aabb_delta_max);
-    float3 offset = -g_aabb_min * scale;
+    float4 world_to_voxel = compute_world_to_voxel(g_aabb_min, g_aabb_max);
 
     uint write_subidx = 0u;
     if (idx < constants.line_count)
@@ -58,8 +64,8 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         aabb_max += constants.inflation_radius;
 
         // transform world space to voxel space
-        int3 ijk_min = int3(floor(scale * aabb_min + offset));
-        int3 ijk_max = int3(floor(scale * aabb_max + offset));
+        int3 ijk_min = int3(floor(world_to_voxel.w * aabb_min + world_to_voxel.xyz));
+        int3 ijk_max = int3(floor(world_to_voxel.w * aabb_max + world_to_voxel.xyz));
 
         const uint level_step = 1u;
 

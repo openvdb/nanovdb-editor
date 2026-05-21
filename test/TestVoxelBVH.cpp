@@ -217,7 +217,7 @@ void voxelbvh_test()
     static const pnanovdb_uint32_t prim_meta_count = 6u;
     pnanovdb_compute_array_t* prim_meta_arrays[prim_meta_count] = {};
 
-    const pnanovdb_uint32_t integer_space_max = 2047u;
+    const pnanovdb_uint32_t resolution = 2048u;
     const char* in_file = "./data/garden_eps2d03.ply";
     const char* out_file = "./data/garden_eps2d03.nvdb";
 
@@ -226,7 +226,7 @@ void voxelbvh_test()
     pnanovdb_compute_array_t* range_array = nullptr;
     pnanovdb_compute_array_t* world_bbox_array = nullptr;
     voxel_bvh.ijkl_from_gaussians_file(&compute, queue, voxelbvh_ctx, in_file, &ijkl_array, &prim_id_array,
-                                       &range_array, &world_bbox_array, integer_space_max, prim_meta_arrays, 6u);
+                                       &range_array, &world_bbox_array, resolution, prim_meta_arrays, 6u);
 
     uint64_t range_count = range_array->element_count;
     uint64_t ijkl_count = ijkl_array->element_count;
@@ -246,7 +246,7 @@ void voxelbvh_test()
         is_triangle_lines ? "./data/triangle_lines.ply" : (is_triangle ? "./data/triangles.ply" : "./data/lines.ply");
 
 #    if 1
-    const pnanovdb_uint32_t integer_space_max = 511u;
+    const pnanovdb_uint32_t resolution = 512u;
 
     pnanovdb_fileformat_t fileformat = {};
     pnanovdb_fileformat_load(&fileformat, &compute);
@@ -259,8 +259,9 @@ void voxelbvh_test()
     static const char* array_names[] = { "positions", "indices", "colors" };
     static const uint32_t array_count = 3;
     pnanovdb_compute_array_t* arrays[array_count] = {};
-    pnanovdb_bool_t loaded = fileformat.load_file("./data/IsaacWarehouse.ply", array_count, array_names, arrays);
-    // pnanovdb_bool_t loaded = fileformat.load_file("./data/Kitchen_set.ply", array_count, array_names, arrays);
+    // pnanovdb_bool_t loaded = fileformat.load_file("./data/IsaacWarehouse.ply", array_count, array_names, arrays);
+    pnanovdb_bool_t loaded = fileformat.load_file("./data/Kitchen_set.ply", array_count, array_names, arrays);
+    // pnanovdb_bool_t loaded = fileformat.load_file("./data/cube.ply", array_count, array_names, arrays);
 
     printf("Dragon vertices(%zu) triangles(%zu)\n", arrays[0]->element_count / 3u, arrays[1]->element_count / 3u);
 
@@ -296,7 +297,7 @@ void voxelbvh_test()
     printf("\n");
 
 #    else
-    const pnanovdb_uint32_t integer_space_max = 127u;
+    const pnanovdb_uint32_t resolution = 128u;
     static const pnanovdb_uint32_t width = 64u;
     static const pnanovdb_uint32_t height = 64u;
     static const pnanovdb_uint32_t prim_count = 2u * width * height;
@@ -381,12 +382,12 @@ void voxelbvh_test()
     {
         voxel_bvh.ijkl_from_triangles_array(&compute, queue, voxelbvh_ctx, indices_array, positions_array,
                                             inflation_radius, &ijkl_array, &prim_id_array, &range_array,
-                                            &world_bbox_array, integer_space_max);
+                                            &world_bbox_array, resolution);
     }
     else
     {
         voxel_bvh.ijkl_from_lines_array(&compute, queue, voxelbvh_ctx, indices_array, positions_array, inflation_radius,
-                                        &ijkl_array, &prim_id_array, &range_array, &world_bbox_array, integer_space_max);
+                                        &ijkl_array, &prim_id_array, &range_array, &world_bbox_array, resolution);
     }
 
     uint64_t range_count = range_array->element_count;
@@ -399,7 +400,7 @@ void voxelbvh_test()
     pnanovdb_compute_array_t* built_flat_range_array = nullptr;
     voxel_bvh.nanovdb_add_nodes_from_ijkl_array(&compute, queue, voxelbvh_ctx, &built_nanovdb_array,
                                                 &built_flat_range_array, ijkl_array, range_array, world_bbox_array,
-                                                integer_space_max);
+                                                resolution);
 
     pnanovdb_buf_t buf = pnanovdb_make_buf((uint32_t*)built_nanovdb_array->data,
                                            built_nanovdb_array->element_size * built_nanovdb_array->element_count / 4u);
