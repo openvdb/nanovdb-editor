@@ -1063,6 +1063,52 @@ void EditorScene::handle_nanovdb_data_load(pnanovdb_editor_token_t* scene,
         scene_token, name_token, nanovdb_array, params_array ? params_array->data : nullptr);
 }
 
+void EditorScene::handle_mesh_data_load(pnanovdb_editor_token_t* scene,
+                                        pnanovdb_compute_array_t* indices,
+                                        pnanovdb_compute_array_t* positions,
+                                        pnanovdb_compute_array_t* colors,
+                                        const char* filename,
+                                        pnanovdb_pipeline_type_t render_pipeline,
+                                        bool is_line_indices,
+                                        float inflation_radius,
+                                        pnanovdb_uint32_t integer_space_max)
+{
+    if (!scene || !filename || !indices || !positions || !colors)
+    {
+        return;
+    }
+
+    std::filesystem::path fsPath(filename);
+    std::string view_name = fsPath.stem().string();
+
+    pnanovdb_editor_token_t* scene_token = scene;
+    pnanovdb_editor_token_t* name_token = EditorToken::getInstance().getToken(view_name.c_str());
+
+    m_scene_manager.add_mesh(scene_token, name_token, indices, positions, colors, m_compute,
+                             pnanovdb_pipeline_type_voxelbvh_build, render_pipeline);
+
+    const pnanovdb_pipeline_voxelbvh_source_t source_type =
+        is_line_indices ? pnanovdb_pipeline_voxelbvh_source_lines : pnanovdb_pipeline_voxelbvh_source_triangles;
+
+    std::string filepath_copy = filename;
+    m_scene_manager.with_object(
+        scene_token, name_token,
+        [filepath_copy, source_type, inflation_radius, integer_space_max](SceneObject* obj)
+        {
+            if (!obj)
+                return;
+            obj->resources.source_filepath = filepath_copy;
+            auto& process_params = obj->process_params();
+            pnanovdb_pipeline_voxelbvh_build_params_set_source_type(&process_params, source_type);
+            pnanovdb_pipeline_voxelbvh_build_params_set_inflation_radius(&process_params, inflation_radius);
+            pnanovdb_pipeline_voxelbvh_build_params_set_integer_space_max(&process_params, integer_space_max);
+            obj->process_dirty() = true;
+        });
+
+    add_nanovdb_placeholder(scene_token, name_token);
+    select_render_view(scene_token, name_token);
+}
+
 void EditorScene::handle_gaussian_data_load(pnanovdb_editor_token_t* scene,
                                             pnanovdb_raster_gaussian_data_t* gaussian_data,
                                             pnanovdb_raster_shader_params_t* raster_params,
@@ -1880,7 +1926,7 @@ bool EditorScene::load_mesh_file(pnanovdb_editor_token_t* scene,
                                  const char* filepath,
                                  const pnanovdb_editor::mesh_import::Options& options)
 {
-    return mesh_import::mesh(*this, m_scene_manager, m_compute, scene, filepath, options);
+    return mesh_import::mesh(*this, m_compute, scene, filepath, options);
 }
 
 bool EditorScene::save_nanovdb_file(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name, const char* filepath)

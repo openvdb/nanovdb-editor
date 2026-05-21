@@ -12,17 +12,13 @@
 #include "EditorImport.h"
 
 #include "EditorScene.h"
-#include "EditorSceneManager.h"
-#include "EditorToken.h"
 #include "Console.h"
-#include "Pipeline.h"
 #include "PipelineTypes.h"
 
 #include "nanovdb_editor/putil/Compute.h"
 #include "nanovdb_editor/putil/FileFormat.h"
 
 #include <cstdint>
-#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -84,7 +80,6 @@ pnanovdb_compute_array_t* synthesize_white_colors(const pnanovdb_compute_t* comp
 } // namespace
 
 bool mesh(EditorScene& editor_scene,
-          EditorSceneManager& scene_manager,
           const pnanovdb_compute_t* compute,
           pnanovdb_editor_token_t* scene,
           const char* filepath,
@@ -133,10 +128,6 @@ bool mesh(EditorScene& editor_scene,
         colors = synthesize_white_colors(compute, positions);
     }
 
-    std::filesystem::path fs_path(filepath);
-    std::string view_name = fs_path.stem().string();
-    pnanovdb_editor_token_t* name_token = EditorToken::getInstance().getToken(view_name.c_str());
-
     pnanovdb_pipeline_type_t effective_render_pipeline;
     if (is_line_indices)
     {
@@ -155,29 +146,8 @@ bool mesh(EditorScene& editor_scene,
                                                          pnanovdb_pipeline_type_voxelbvh_triangles_render;
     }
 
-    scene_manager.add_mesh(scene, name_token, indices, positions, colors, compute,
-                           pnanovdb_pipeline_type_voxelbvh_build, effective_render_pipeline);
-
-    const pnanovdb_pipeline_voxelbvh_source_t source_type = is_line_indices ?
-                                                                pnanovdb_pipeline_voxelbvh_source_lines :
-                                                                pnanovdb_pipeline_voxelbvh_source_triangles;
-
-    scene_manager.with_object(
-        scene, name_token,
-        [filepath, options, source_type](SceneObject* obj)
-        {
-            if (!obj)
-                return;
-            obj->resources.source_filepath = filepath;
-            auto& process_params = obj->process_params();
-            pnanovdb_pipeline_voxelbvh_build_params_set_source_type(&process_params, source_type);
-            pnanovdb_pipeline_voxelbvh_build_params_set_inflation_radius(&process_params, options.inflation_radius);
-            pnanovdb_pipeline_voxelbvh_build_params_set_integer_space_max(&process_params, options.integer_space_max);
-            obj->process_dirty() = true;
-        });
-
-    editor_scene.add_nanovdb_placeholder(scene, name_token);
-    editor_scene.select_render_view(scene, name_token);
+    editor_scene.handle_mesh_data_load(scene, indices, positions, colors, filepath, effective_render_pipeline,
+                                       is_line_indices, options.inflation_radius, options.integer_space_max);
 
     Console::getInstance().addLog(
         "Loaded mesh from '%s' (vertices=%llu, %s=%llu, colors=%s, render_pipeline=%d, inflation=%.5f, int_space=%u)",

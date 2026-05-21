@@ -32,7 +32,6 @@ struct Options
 };
 
 bool mesh(EditorScene& editor_scene,
-          EditorSceneManager& scene_manager,
           const pnanovdb_compute_t* compute,
           pnanovdb_editor_token_t* scene,
           const char* filepath,
