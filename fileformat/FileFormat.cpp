@@ -434,6 +434,12 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
             if (face_vert_count != 3u)
             {
                 printf("dropped face(%zu) count(%d)\n", face_idx, (int)face_vert_count);
+
+                // still consume the index payload to keep the file stream aligned
+                if (face_vert_count > 0u && fseek(file, (long)face_vert_count * 4, SEEK_CUR) != 0)
+                {
+                    read_count = 0u;
+                }
             }
             else // only capture triangles for now
             {

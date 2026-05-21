@@ -42,20 +42,75 @@ pnanovdb_uint32_t required_blind_metadata_count(pnanovdb_pipeline_type_t render_
     }
 }
 
-pnanovdb_uint32_t get_blind_metadata_count(const pnanovdb_compute_array_t* array)
+bool is_voxelbvh_metadata(const pnanovdb_compute_array_t* array, pnanovdb_uint32_t required_count)
 {
     if (!array || !array->data || array->element_count == 0u || array->element_size == 0u)
     {
-        return 0u;
+        return false;
     }
-    const pnanovdb_uint64_t uint32_count = array->element_size * array->element_count / 4u;
+    const pnanovdb_uint64_t grid_bytes = array->element_size * array->element_count;
+    const pnanovdb_uint64_t uint32_count = grid_bytes / 4u;
     if (uint32_count == 0u)
     {
-        return 0u;
+        return false;
     }
+
     pnanovdb_buf_t buf = pnanovdb_make_buf(static_cast<pnanovdb_uint32_t*>(array->data), uint32_count);
     pnanovdb_grid_handle_t grid = { pnanovdb_address_null() };
-    return pnanovdb_grid_get_blind_metadata_count(buf, grid);
+
+    if (pnanovdb_grid_get_blind_metadata_count(buf, grid) < required_count)
+    {
+        return false;
+    }
+    const pnanovdb_int64_t meta_off_signed = pnanovdb_grid_get_blind_metadata_offset(buf, grid);
+    if (meta_off_signed <= 0)
+    {
+        return false;
+    }
+    const pnanovdb_uint64_t reported_grid_size = pnanovdb_grid_get_grid_size(buf, grid);
+    const pnanovdb_uint64_t grid_size =
+        (reported_grid_size > 0u && reported_grid_size <= grid_bytes) ? reported_grid_size : grid_bytes;
+    const pnanovdb_uint64_t meta_off = static_cast<pnanovdb_uint64_t>(meta_off_signed);
+    if (meta_off > grid_size ||
+        static_cast<pnanovdb_uint64_t>(PNANOVDB_GRIDBLINDMETADATA_SIZE) * required_count > grid_size - meta_off)
+    {
+        return false;
+    }
+
+    for (pnanovdb_uint32_t i = 0u; i < required_count; ++i)
+    {
+        pnanovdb_gridblindmetadata_handle_t meta = pnanovdb_grid_get_gridblindmetadata(buf, grid, i);
+
+        const pnanovdb_uint32_t value_size = pnanovdb_gridblindmetadata_get_value_size(buf, meta);
+        const pnanovdb_uint64_t value_count = pnanovdb_gridblindmetadata_get_value_count(buf, meta);
+        const pnanovdb_uint32_t data_class = pnanovdb_gridblindmetadata_get_data_class(buf, meta);
+        const pnanovdb_int64_t data_off_signed = pnanovdb_gridblindmetadata_get_data_offset(buf, meta);
+
+        if (data_class == 3u || value_count == 0u || data_off_signed <= 0)
+        {
+            return false;
+        }
+        const pnanovdb_uint32_t expected_size = (i == 0u) ? 8u : 4u;
+        if (value_size != expected_size)
+        {
+            return false;
+        }
+
+        const pnanovdb_uint64_t entry_base =
+            meta_off + static_cast<pnanovdb_uint64_t>(PNANOVDB_GRIDBLINDMETADATA_SIZE) * i;
+        const pnanovdb_uint64_t data_off = static_cast<pnanovdb_uint64_t>(data_off_signed);
+        if (entry_base > grid_size || data_off > grid_size - entry_base)
+        {
+            return false;
+        }
+        const pnanovdb_uint64_t payload_bytes = static_cast<pnanovdb_uint64_t>(value_size) * value_count;
+        if (payload_bytes > grid_size - (entry_base + data_off))
+        {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 } // namespace
@@ -78,19 +133,13 @@ bool nanovdb(EditorScene& editor_scene,
         return false;
     }
 
-    // fall back to standard NanoVDB rendering when the requested VoxelBVH variant
-    // cannot be used (e.g. the file does not carry the required blind metadata).
     const pnanovdb_uint32_t required_metadata = required_blind_metadata_count(render_pipeline);
-    if (required_metadata > 0u)
+    if (required_metadata > 0u && !is_voxelbvh_metadata(array, required_metadata))
     {
-        const pnanovdb_uint32_t metadata_count = get_blind_metadata_count(array);
-        if (metadata_count < required_metadata)
-        {
-            Console::getInstance().addLog("'%s' has no VoxelBVH blind metadata (have %u, need %u); "
-                                          "using standard NanoVDB render",
-                                          filepath, metadata_count, required_metadata);
-            render_pipeline = pnanovdb_pipeline_type_nanovdb_render;
-        }
+        Console::getInstance().addLog(Console::LogLevel::Warning,
+                                      "'%s' is not a VoxelBVH NanoVDB; falling back to standard NanoVDB render",
+                                      filepath);
+        render_pipeline = pnanovdb_pipeline_type_nanovdb_render;
     }
 
     editor_scene.handle_nanovdb_data_load(scene, array, filepath, render_pipeline);

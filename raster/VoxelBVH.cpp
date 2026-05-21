@@ -1893,6 +1893,20 @@ static pnanovdb_compute_array_t* nanovdb_from_ijkl_and_metadata(const pnanovdb_c
     nanovdb_add_nodes_from_ijkl_array(compute, queue, voxelbvh_context, &built_nanovdb_array, &built_flat_range_array,
                                       ijkl_array, range_array, world_bbox_array, integer_space_max);
 
+    if (!built_nanovdb_array || !built_nanovdb_array->data || !built_flat_range_array ||
+        !built_flat_range_array->data || !ijkl_array->data)
+    {
+        if (built_nanovdb_array)
+            compute->destroy_array(built_nanovdb_array);
+        if (built_flat_range_array)
+            compute->destroy_array(built_flat_range_array);
+        compute->destroy_array(ijkl_array);
+        compute->destroy_array(prim_id_array);
+        compute->destroy_array(range_array);
+        compute->destroy_array(world_bbox_array);
+        return nullptr;
+    }
+
     // CPU shrink: find last valid key in ijkl to truncate prim_id
     pnanovdb_uint64_t ijkl_count = ijkl_array->element_count;
     pnanovdb_uint64_t* mapped_ijkl = (pnanovdb_uint64_t*)ijkl_array->data;
