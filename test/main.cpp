@@ -19,7 +19,6 @@
 #include <cstdarg>
 
 #include <cstdint>
-#include <cstdint>
 #include <slang.h>
 
 #define SLANG_PRELUDE_NAMESPACE CPPPrelude

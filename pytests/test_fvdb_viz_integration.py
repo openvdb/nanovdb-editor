@@ -6,8 +6,6 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
-import urllib.error
-import urllib.request
 from functools import lru_cache
 from pathlib import Path
 

@@ -143,6 +143,7 @@ struct Instance
     float raster_voxels_per_unit = 128.f;
     int gaussian_import_mode = static_cast<int>(pnanovdb_editor::gaussian_import::Mode::Raster2D);
     bool mesh_import_show_debug = false;
+    bool nanovdb_use_voxelbvh_render = false;
 
     // shader params window selection
     std::string shader_group = "";

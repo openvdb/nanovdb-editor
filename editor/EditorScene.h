@@ -219,7 +219,8 @@ public:
 
     void handle_nanovdb_data_load(pnanovdb_editor_token_t* scene,
                                   pnanovdb_compute_array_t* nanovdb_array,
-                                  const char* filename);
+                                  const char* filename,
+                                  pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_nanovdb_render);
 
     void handle_gaussian_data_load(pnanovdb_editor_token_t* scene,
                                    pnanovdb_raster_gaussian_data_t* gaussian_data,
@@ -293,7 +294,9 @@ public:
     }
 
     void select_render_view(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
-    bool load_nanovdb_file(pnanovdb_editor_token_t* scene, const char* filepath);
+    bool load_nanovdb_file(pnanovdb_editor_token_t* scene,
+                           const char* filepath,
+                           pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_nanovdb_render);
     bool save_nanovdb_file(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name, const char* filepath);
     bool load_gaussian_file(const char* filepath,
                             pnanovdb_pipeline_type_t process_pipeline,

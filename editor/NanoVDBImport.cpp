@@ -24,7 +24,8 @@ namespace nanovdb_import
 bool nanovdb(EditorScene& editor_scene,
              const pnanovdb_compute_t* compute,
              pnanovdb_editor_token_t* scene,
-             const char* filepath)
+             const char* filepath,
+             pnanovdb_pipeline_type_t render_pipeline)
 {
     if (!scene || !filepath || !compute)
     {
@@ -38,8 +39,9 @@ bool nanovdb(EditorScene& editor_scene,
         return false;
     }
 
-    editor_scene.handle_nanovdb_data_load(scene, array, filepath);
-    Console::getInstance().addLog("Loaded NanoVDB from '%s'", filepath);
+    editor_scene.handle_nanovdb_data_load(scene, array, filepath, render_pipeline);
+    Console::getInstance().addLog(
+        "Loaded NanoVDB from '%s' (render_pipeline=%d)", filepath, static_cast<int>(render_pipeline));
     return true;
 }
 

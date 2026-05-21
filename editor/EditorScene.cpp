@@ -1032,7 +1032,8 @@ void EditorScene::add_nanovdb_placeholder(pnanovdb_editor_token_t* scene_token, 
 
 void EditorScene::handle_nanovdb_data_load(pnanovdb_editor_token_t* scene,
                                            pnanovdb_compute_array_t* nanovdb_array,
-                                           const char* filename)
+                                           const char* filename,
+                                           pnanovdb_pipeline_type_t render_pipeline)
 {
     if (!scene || !filename)
     {
@@ -1049,10 +1050,13 @@ void EditorScene::handle_nanovdb_data_load(pnanovdb_editor_token_t* scene,
     // Do not create per-object params now; use shared defaults until user edits (copy-on-write)
     pnanovdb_compute_array_t* params_array = nullptr;
 
-    pnanovdb_editor_token_t* shader_name_token =
-        EditorToken::getInstance().getToken(m_nanovdb_params.shader_name.c_str());
+    const char* pipeline_shader = pnanovdb_pipeline_get_shader_name(render_pipeline);
+    const char* shader_name =
+        (pipeline_shader && pipeline_shader[0] != '\0') ? pipeline_shader : m_nanovdb_params.shader_name.c_str();
+    pnanovdb_editor_token_t* shader_name_token = EditorToken::getInstance().getToken(shader_name);
 
-    m_scene_manager.add_nanovdb(scene_token, name_token, nanovdb_array, params_array, m_compute, shader_name_token);
+    m_scene_manager.add_nanovdb(scene_token, name_token, nanovdb_array, params_array, m_compute, shader_name_token,
+                                pnanovdb_pipeline_type_noop, render_pipeline);
 
     // Register in SceneView (for scene tree display)
     m_scene_view.add_nanovdb_to_scene(
@@ -1865,9 +1869,11 @@ void EditorScene::select_render_view(pnanovdb_editor_token_t* scene, pnanovdb_ed
     sync_selected_view_with_current();
 }
 
-bool EditorScene::load_nanovdb_file(pnanovdb_editor_token_t* scene, const char* filepath)
+bool EditorScene::load_nanovdb_file(pnanovdb_editor_token_t* scene,
+                                    const char* filepath,
+                                    pnanovdb_pipeline_type_t render_pipeline)
 {
-    return nanovdb_import::nanovdb(*this, m_compute, scene, filepath);
+    return nanovdb_import::nanovdb(*this, m_compute, scene, filepath, render_pipeline);
 }
 
 bool EditorScene::load_mesh_file(pnanovdb_editor_token_t* scene,

@@ -259,10 +259,6 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
         {
             is_big_endian = true;
         }
-        if (line.find("format binary_big_endian 1.0") != std::string::npos)
-        {
-            is_big_endian = true;
-        }
     }
     // printf("vertex_count(%llu)\n", (unsigned long long int)vertex_count);
 
@@ -514,7 +510,15 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
         }
         else if (strcmp(array_name, "indices") == 0)
         {
-            source_array_uint32 = &arr_indices;
+            // prefer triangle indices when faces are present, otherwise use edge indices
+            if (!arr_indices.empty() || arr_line_indices.empty())
+            {
+                source_array_uint32 = &arr_indices;
+            }
+            else
+            {
+                source_array_uint32 = &arr_line_indices;
+            }
         }
         else if (strcmp(array_name, "line_indices") == 0)
         {

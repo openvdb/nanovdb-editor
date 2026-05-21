@@ -46,7 +46,8 @@ namespace nanovdb_import
 bool nanovdb(EditorScene& editor_scene,
              const pnanovdb_compute_t* compute,
              pnanovdb_editor_token_t* scene,
-             const char* filepath);
+             const char* filepath,
+             pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_nanovdb_render);
 
 } // namespace nanovdb_import
 

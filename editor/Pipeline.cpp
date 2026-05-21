@@ -446,7 +446,7 @@ static pnanovdb_compute_array_t* get_or_synthesize_colors(pnanovdb_editor::Scene
     auto it = arrays.find("colors");
     if (it != arrays.end() && it->second)
         return it->second;
-    if (!positions || !compute || !compute->create_array)
+    if (!positions || !compute || !compute->create_array || !compute->destroy_array)
         return nullptr;
 
     std::vector<float> white(positions->element_count, 1.0f);
@@ -454,6 +454,13 @@ static pnanovdb_compute_array_t* get_or_synthesize_colors(pnanovdb_editor::Scene
     if (fallback)
     {
         arrays["colors"] = fallback;
+        scene_obj->resources.named_array_owners["colors"] =
+            std::shared_ptr<pnanovdb_compute_array_t>(fallback,
+                                                      [compute](pnanovdb_compute_array_t* arr)
+                                                      {
+                                                          if (arr && compute && compute->destroy_array)
+                                                              compute->destroy_array(arr);
+                                                      });
         Console::getInstance().addLog(Console::LogLevel::Debug,
                                       "VoxelBVH build: synthesized default white colors (%llu floats)",
                                       (unsigned long long)positions->element_count);
@@ -946,10 +953,6 @@ static const pnanovdb_pipeline_descriptor_t s_raster3d_descriptor = {
     map_raster3d_params, s_raster3d_param_fields, sizeof(s_raster3d_param_fields) / sizeof(s_raster3d_param_fields[0])
 };
 
-// Voxel BVH render pipelines: read a NanoVDB array (same as nanovdb_render) but
-// dispatch one of the voxelbvh.slang variants. Each variant has its own shader
-// params JSON, so they get separate pipeline types to surface as distinct
-// entries in the "Render Pipeline" dropdown.
 static const pnanovdb_pipeline_descriptor_t s_voxelbvh_render_descriptor = {
     pnanovdb_pipeline_type_voxelbvh_render,
     pnanovdb_pipeline_stage_render,
@@ -1014,13 +1017,6 @@ static const pnanovdb_pipeline_descriptor_t s_voxelbvh_triangles_debug_render_de
     0 // param_fields
 };
 
-// Voxel BVH build (process stage): builds a metadata-augmented NanoVDB from a
-// raw source (gaussian PLY file, in-memory gaussian arrays, triangle mesh, or
-// line set) via the high-level pnanovdb_voxelbvh_t::nanovdb_from_* entry points
-// and stores the result back on the scene object's nanovdb_array().
-//
-// All work is dispatched by pnanovdb_voxelbvh_t so this descriptor has no shaders;
-// the params struct lets the user pick which source to feed in.
 static const pnanovdb_pipeline_descriptor_t s_voxelbvh_build_descriptor = {
     pnanovdb_pipeline_type_voxelbvh_build,
     pnanovdb_pipeline_stage_process,

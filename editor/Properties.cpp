@@ -364,23 +364,35 @@ static void showVisibilityAndPipelineUI(EditorSceneManager* scene_manager,
 
     if (pipeline_changed)
     {
-        scene_manager->with_object(scene_token, name_token,
-                                   [process_pipeline, render_pipeline](SceneObject* scene_obj)
-                                   {
-                                       if (scene_obj)
-                                       {
-                                           // Reinitialize process params when type changes so
-                                           // they match the new pipeline
-                                           if (scene_obj->process_pipeline() != process_pipeline)
-                                           {
-                                               pnanovdb_pipeline_get_default_params(
-                                                   process_pipeline, &scene_obj->process_params());
-                                           }
-                                           scene_obj->process_pipeline() = process_pipeline;
-                                           scene_obj->render_pipeline() = render_pipeline;
-                                           scene_obj->process_dirty() = true;
-                                       }
-                                   });
+        bool render_pipeline_changed = false;
+        std::string new_default_shader;
+        scene_manager->with_object(
+            scene_token, name_token,
+            [&](SceneObject* scene_obj)
+            {
+                if (!scene_obj)
+                    return;
+                if (scene_obj->process_pipeline() != process_pipeline)
+                {
+                    pnanovdb_pipeline_get_default_params(process_pipeline, &scene_obj->process_params());
+                }
+                render_pipeline_changed = (scene_obj->render_pipeline() != render_pipeline);
+                scene_obj->process_pipeline() = process_pipeline;
+                scene_obj->render_pipeline() = render_pipeline;
+                scene_obj->process_dirty() = true;
+                if (render_pipeline_changed)
+                {
+                    pnanovdb_pipeline_get_default_params(render_pipeline, &scene_obj->render_params());
+                    if (const char* s = pnanovdb_pipeline_get_shader_name(render_pipeline))
+                    {
+                        new_default_shader = s;
+                    }
+                }
+            });
+        if (render_pipeline_changed && !new_default_shader.empty() && editor_scene)
+        {
+            editor_scene->set_selected_object_shader_name(new_default_shader);
+        }
     }
 }
 
