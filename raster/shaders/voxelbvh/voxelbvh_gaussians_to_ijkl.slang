@@ -6,7 +6,7 @@ struct constants_t
     uint workgroup_count;
     uint voxel_count;
     uint voxel_workgroup_count;
-    uint integer_space_max;
+    uint resolution;
 };
 
 ConstantBuffer<constants_t> constants;
@@ -21,7 +21,7 @@ StructuredBuffer<float> bbox_in;
 RWStructuredBuffer<uint64_t> keys_out;
 RWStructuredBuffer<uint> bbox_ids_out;
 
-bool voxel_ellipsoid_overlap(uint idx, float scale, float3 offset, int3 ijk, uint level)
+bool voxel_ellipsoid_overlap(uint idx, float4 world_to_voxel, int3 ijk, uint level)
 {
     float3 meansf = float3(
         means_in[3u * idx + 0u],
@@ -52,7 +52,7 @@ bool voxel_ellipsoid_overlap(uint idx, float scale, float3 offset, int3 ijk, uin
         if ((vert_idx & 2u) != 0u) { voxel_pos.y += float(1u << level);}
         if ((vert_idx & 4u) != 0u) { voxel_pos.z += float(1u << level);}
 
-        float3 local_pos = (voxel_pos - offset) / scale;
+        float3 local_pos = (voxel_pos - world_to_voxel.xyz) / world_to_voxel.w;
         local_pos -= meansf;
 
         float3 rot0_inv = float3(
@@ -96,6 +96,15 @@ bool voxel_ellipsoid_overlap(uint idx, float scale, float3 offset, int3 ijk, uin
     return dist2 > 0.f;
 }
 
+float4 compute_world_to_voxel(float3 world_min, float3 world_max)
+{
+    float3 world_delta = world_max - world_min;
+    float world_delta_max = max(world_delta.x, max(world_delta.y, world_delta.z));
+    float scale = float(constants.resolution - 1u) / (world_delta_max);
+    float3 offset = -world_min * scale + 0.5f;
+    return float4(offset, scale);
+}
+
 [shader("compute")][numthreads(256, 1, 1)]
 void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
@@ -103,10 +112,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 
     float3 g_aabb_min = float3(bbox_in[0], bbox_in[1], bbox_in[2]);
     float3 g_aabb_max = float3(bbox_in[3], bbox_in[4], bbox_in[5]);
-    float3 g_aabb_delta = g_aabb_max - g_aabb_min;
-    float g_aabb_delta_max = max(g_aabb_delta.x, max(g_aabb_delta.y, g_aabb_delta.z));
-    float scale = float(constants.integer_space_max) / (g_aabb_delta_max);
-    float3 offset = -g_aabb_min * scale;
+    float4 world_to_voxel = compute_world_to_voxel(g_aabb_min, g_aabb_max);
 
     uint write_subidx = 0u;
     if (idx < constants.point_count)
@@ -165,8 +171,8 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         }
 
         // transform world space to voxel space
-        int3 ijk_min = int3(floor(scale * aabb_min + offset));
-        int3 ijk_max = int3(floor(scale * aabb_max + offset));
+        int3 ijk_min = int3(floor(world_to_voxel.w * aabb_min + world_to_voxel.xyz));
+        int3 ijk_max = int3(floor(world_to_voxel.w * aabb_max + world_to_voxel.xyz));
 
         const uint level_step = 1u;
 
@@ -184,7 +190,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                     for (int k = ijk_min_level.z; k <= ijk_max_level.z; k += (1u << level))
                     {
                         int3 ijk = int3(i,j,k);
-                        bool is_overlap = voxel_ellipsoid_overlap(idx, scale, offset, ijk, level);
+                        bool is_overlap = voxel_ellipsoid_overlap(idx, world_to_voxel, ijk, level);
                         if (is_overlap)
                         {
                             overlap_count++;
@@ -220,7 +226,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                     for (int k = ijk_min_level.z; k <= ijk_max_level.z; k += (1u << level))
                     {
                         int3 ijk = int3(i,j,k);
-                        bool is_overlap = voxel_ellipsoid_overlap(idx, scale, offset, ijk, level);
+                        bool is_overlap = voxel_ellipsoid_overlap(idx, world_to_voxel, ijk, level);
                         if (is_overlap && write_subidx < 8u)
                         {
                             uint64_t key = (uint64_t(i) << 48u) | (uint64_t(j) << 32u) |

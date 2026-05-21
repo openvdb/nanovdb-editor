@@ -300,8 +300,12 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
     size_t element_size = element.size() * sizeof(float);
 
     uint64_t element_idx = 0u;
-    while (fread(element.data(), 1u, element_size, file) == element_size && element_idx < vertex_count)
+    while (element_idx < vertex_count)
     {
+        if (fread(element.data(), 1u, element_size, file) != element_size)
+        {
+            break;
+        }
         if (is_big_endian)
         {
             for (size_t idx = 0u; idx < element.size(); idx++)

@@ -51,9 +51,8 @@ typedef struct pnanovdb_voxelbvh_t
                                      pnanovdb_compute_buffer_t* nanovdb_inout,
                                      pnanovdb_uint64_t nanovdb_word_count,
                                      pnanovdb_compute_buffer_t* world_bbox_in,
-                                     pnanovdb_uint32_t integer_space_max,
-                                     const pnanovdb_coord_t* root_tile_coords,
-                                     pnanovdb_uint32_t root_tile_count);
+                                     pnanovdb_uint32_t resolution,
+                                     pnanovdb_uint32_t grid_type);
 
     void(PNANOVDB_ABI* nanovdb_add_nodes)(const pnanovdb_compute_t* compute,
                                           pnanovdb_compute_queue_t* queue,
@@ -81,7 +80,7 @@ typedef struct pnanovdb_voxelbvh_t
                                                           pnanovdb_compute_array_t* ijkl_in,
                                                           pnanovdb_compute_array_t* range_in,
                                                           pnanovdb_compute_array_t* world_bbox_in,
-                                                          pnanovdb_uint32_t integer_space_max);
+                                                          pnanovdb_uint32_t resolution);
 
     void(PNANOVDB_ABI* ijkl_from_gaussians)(const pnanovdb_compute_t* compute,
                                             pnanovdb_compute_queue_t* queue,
@@ -95,7 +94,7 @@ typedef struct pnanovdb_voxelbvh_t
                                             pnanovdb_compute_buffer_t* prim_id_out,
                                             pnanovdb_compute_buffer_t* range_out,
                                             pnanovdb_compute_buffer_t* world_bbox_out,
-                                            pnanovdb_uint32_t integer_space_max);
+                                            pnanovdb_uint32_t resolution);
 
     void(PNANOVDB_ABI* ijkl_from_gaussians_file)(const pnanovdb_compute_t* compute,
                                                  pnanovdb_compute_queue_t* queue,
@@ -105,7 +104,7 @@ typedef struct pnanovdb_voxelbvh_t
                                                  pnanovdb_compute_array_t** prim_id_out,
                                                  pnanovdb_compute_array_t** range_out,
                                                  pnanovdb_compute_array_t** world_bbox_out,
-                                                 pnanovdb_uint32_t integer_space_max,
+                                                 pnanovdb_uint32_t resolution,
                                                  pnanovdb_compute_array_t** gaussian_arrays_out,
                                                  pnanovdb_uint32_t gaussian_array_count);
 
@@ -126,7 +125,7 @@ typedef struct pnanovdb_voxelbvh_t
                                         pnanovdb_compute_buffer_t* prim_id_out,
                                         pnanovdb_compute_buffer_t* range_out,
                                         pnanovdb_compute_buffer_t* world_bbox_out,
-                                        pnanovdb_uint32_t integer_space_max);
+                                        pnanovdb_uint32_t resolution);
 
     void(PNANOVDB_ABI* ijkl_from_lines_array)(const pnanovdb_compute_t* compute,
                                               pnanovdb_compute_queue_t* queue,
@@ -138,7 +137,7 @@ typedef struct pnanovdb_voxelbvh_t
                                               pnanovdb_compute_array_t** prim_id_out,
                                               pnanovdb_compute_array_t** range_out,
                                               pnanovdb_compute_array_t** world_bbox_out,
-                                              pnanovdb_uint32_t integer_space_max);
+                                              pnanovdb_uint32_t resolution);
 
     void(PNANOVDB_ABI* ijkl_from_triangles)(const pnanovdb_compute_t* compute,
                                             pnanovdb_compute_queue_t* queue,
@@ -151,7 +150,7 @@ typedef struct pnanovdb_voxelbvh_t
                                             pnanovdb_compute_buffer_t* prim_id_out,
                                             pnanovdb_compute_buffer_t* range_out,
                                             pnanovdb_compute_buffer_t* world_bbox_out,
-                                            pnanovdb_uint32_t integer_space_max);
+                                            pnanovdb_uint32_t resolution);
 
     void(PNANOVDB_ABI* ijkl_from_triangles_array)(const pnanovdb_compute_t* compute,
                                                   pnanovdb_compute_queue_t* queue,
@@ -163,7 +162,16 @@ typedef struct pnanovdb_voxelbvh_t
                                                   pnanovdb_compute_array_t** prim_id_out,
                                                   pnanovdb_compute_array_t** range_out,
                                                   pnanovdb_compute_array_t** world_bbox_out,
-                                                  pnanovdb_uint32_t integer_space_max);
+                                                  pnanovdb_uint32_t resolution);
+
+    void(PNANOVDB_ABI* nanovdb_duplicate_topology)(const pnanovdb_compute_t* compute,
+                                                   pnanovdb_compute_queue_t* queue,
+                                                   pnanovdb_voxelbvh_context_t* context,
+                                                   pnanovdb_compute_buffer_t* dst_nanovdb_inout,
+                                                   pnanovdb_uint64_t dst_nanovdb_word_count,
+                                                   pnanovdb_compute_buffer_t* src_nanovdb_in,
+                                                   pnanovdb_uint32_t resolution,
+                                                   pnanovdb_uint32_t dst_grid_type);
 
 } pnanovdb_voxelbvh_t;
 
@@ -185,6 +193,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(ijkl_from_lines, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(ijkl_from_lines_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(ijkl_from_triangles, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(ijkl_from_triangles_array, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_duplicate_topology, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE
