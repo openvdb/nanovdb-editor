@@ -328,6 +328,319 @@ bool get_conversion_progress(std::string& text, float& value)
 }
 
 // ============================================================================
+// VoxelBVH Build Worker (async gaussian_file / triangles / lines /
+// gaussian_arrays -> NanoVDB via BVH)
+// ============================================================================
+
+enum class VoxelBVHBuildSource
+{
+    GaussianFile = 0,
+    Triangles = 1,
+    Lines = 2,
+    GaussianArrays = 3,
+};
+
+struct VoxelBVHBuildRequest
+{
+    VoxelBVHBuildSource source = VoxelBVHBuildSource::GaussianFile;
+    pnanovdb_uint32_t integer_space_max = 511u;
+    float inflation_radius = 0.f;
+    std::string filepath; // only for GaussianFile
+    // Triangles/Lines: array_owners/_ptrs[0]=indices, [1]=positions, [2]=colors
+    // GaussianArrays:  array_owners/_ptrs[0..5]=means, opacities, quaternions, scales, sh_0, sh_n
+    std::shared_ptr<pnanovdb_compute_array_t> array_owners[6];
+    pnanovdb_compute_array_t* array_ptrs[6] = {};
+};
+
+static pnanovdb_util::WorkerThread s_voxelbvh_worker;
+static pnanovdb_util::WorkerThread::TaskId s_voxelbvh_task_id = pnanovdb_util::WorkerThread::invalidTaskId();
+static bool s_voxelbvh_enqueued = false;
+
+// Captured per-task before enqueue; only the worker thread reads these between
+// enqueue and completion (single-task-at-a-time enforced by hasRunningTask()).
+static pnanovdb_voxelbvh_t* s_voxelbvh_iface = nullptr;
+static pnanovdb_voxelbvh_context_t* s_voxelbvh_worker_ctx = nullptr;
+static pnanovdb_compute_queue_t* s_voxelbvh_worker_queue = nullptr;
+
+static pnanovdb_uint32_t s_pending_voxelbvh_scene_token_id = 0;
+static pnanovdb_uint32_t s_pending_voxelbvh_name_token_id = 0;
+static pnanovdb_editor::EditorSceneManager* s_pending_voxelbvh_scene_manager = nullptr;
+static const pnanovdb_compute_t* s_pending_voxelbvh_compute = nullptr;
+static VoxelBVHBuildRequest s_pending_voxelbvh_request;
+static pnanovdb_compute_array_t* s_pending_voxelbvh_result = nullptr;
+static std::mutex s_voxelbvh_mutex;
+
+static const char* voxelbvh_source_label(VoxelBVHBuildSource source)
+{
+    switch (source)
+    {
+    case VoxelBVHBuildSource::GaussianFile:
+        return "GaussianFile";
+    case VoxelBVHBuildSource::Triangles:
+        return "Triangles";
+    case VoxelBVHBuildSource::Lines:
+        return "Lines";
+    case VoxelBVHBuildSource::GaussianArrays:
+        return "GaussianArrays";
+    }
+    return "<unknown>";
+}
+
+bool is_voxelbvh_build_running()
+{
+    std::lock_guard<std::mutex> lock(s_voxelbvh_mutex);
+    return s_voxelbvh_enqueued || s_voxelbvh_worker.isTaskRunning(s_voxelbvh_task_id);
+}
+
+bool is_voxelbvh_build_completed()
+{
+    return s_voxelbvh_worker.isTaskCompleted(s_voxelbvh_task_id);
+}
+
+bool get_voxelbvh_build_progress(std::string& text, float& value)
+{
+    std::lock_guard<std::mutex> lock(s_voxelbvh_mutex);
+    if (s_voxelbvh_worker.isTaskRunning(s_voxelbvh_task_id))
+    {
+        text = s_voxelbvh_worker.getTaskProgressText(s_voxelbvh_task_id);
+        if (text.empty())
+        {
+            text = "Building VoxelBVH...";
+        }
+        value = s_voxelbvh_worker.getTaskProgress(s_voxelbvh_task_id);
+        return true;
+    }
+    if (s_voxelbvh_enqueued)
+    {
+        text = "Waiting for worker...";
+        value = 0.0f;
+        return true;
+    }
+    return false;
+}
+
+bool start_voxelbvh_build(pnanovdb_editor::SceneObject* scene_obj,
+                          pnanovdb_editor::EditorSceneManager* scene_manager,
+                          const pnanovdb_pipeline_context_t* ctx,
+                          VoxelBVHBuildRequest req)
+{
+    std::lock_guard<std::mutex> lock(s_voxelbvh_mutex);
+
+    if (!scene_obj || !scene_manager || !ctx || !ctx->compute || !ctx->voxelbvh)
+    {
+        return false;
+    }
+    pnanovdb_compute_queue_t* worker_queue = ctx->compute_queue ? ctx->compute_queue : ctx->queue;
+    if (!worker_queue)
+    {
+        return false;
+    }
+    if (s_voxelbvh_worker.hasRunningTask())
+    {
+        return false;
+    }
+
+    switch (req.source)
+    {
+    case VoxelBVHBuildSource::GaussianFile:
+        if (req.filepath.empty() || !ctx->voxelbvh->nanovdb_from_gaussians_file)
+            return false;
+        break;
+    case VoxelBVHBuildSource::Triangles:
+        if (!ctx->voxelbvh->nanovdb_from_triangles_array || !req.array_ptrs[0] || !req.array_ptrs[1] ||
+            !req.array_ptrs[2])
+            return false;
+        break;
+    case VoxelBVHBuildSource::Lines:
+        if (!ctx->voxelbvh->nanovdb_from_lines_array || !req.array_ptrs[0] || !req.array_ptrs[1] || !req.array_ptrs[2])
+            return false;
+        break;
+    case VoxelBVHBuildSource::GaussianArrays:
+        if (!ctx->voxelbvh->nanovdb_from_gaussians_array)
+            return false;
+        for (int i = 0; i < 6; ++i)
+        {
+            if (!req.array_ptrs[i])
+                return false;
+        }
+        break;
+    }
+
+    s_voxelbvh_iface = ctx->voxelbvh;
+    s_voxelbvh_worker_queue = worker_queue;
+
+    s_pending_voxelbvh_scene_token_id = scene_obj->scene_token ? scene_obj->scene_token->id : 0;
+    s_pending_voxelbvh_name_token_id = scene_obj->name_token ? scene_obj->name_token->id : 0;
+    s_pending_voxelbvh_scene_manager = scene_manager;
+    s_pending_voxelbvh_compute = ctx->compute;
+    s_pending_voxelbvh_request = std::move(req);
+    s_pending_voxelbvh_result = nullptr;
+    s_voxelbvh_enqueued = true;
+
+    s_voxelbvh_task_id = s_voxelbvh_worker.enqueue(
+        []() -> bool
+        {
+            if (!s_voxelbvh_worker_ctx && s_voxelbvh_iface && s_voxelbvh_iface->create_context && s_voxelbvh_worker_queue)
+            {
+                s_voxelbvh_worker_ctx =
+                    s_voxelbvh_iface->create_context(s_voxelbvh_iface->compute, s_voxelbvh_worker_queue);
+            }
+            if (!s_voxelbvh_worker_ctx || !s_voxelbvh_iface || !s_pending_voxelbvh_compute || !s_voxelbvh_worker_queue)
+            {
+                return false;
+            }
+
+            const VoxelBVHBuildRequest& r = s_pending_voxelbvh_request;
+            switch (r.source)
+            {
+            case VoxelBVHBuildSource::GaussianFile:
+                s_pending_voxelbvh_result = s_voxelbvh_iface->nanovdb_from_gaussians_file(
+                    s_pending_voxelbvh_compute, s_voxelbvh_worker_queue, s_voxelbvh_worker_ctx, r.filepath.c_str(),
+                    r.integer_space_max);
+                break;
+            case VoxelBVHBuildSource::Triangles:
+                s_pending_voxelbvh_result = s_voxelbvh_iface->nanovdb_from_triangles_array(
+                    s_pending_voxelbvh_compute, s_voxelbvh_worker_queue, s_voxelbvh_worker_ctx, r.array_ptrs[0],
+                    r.array_ptrs[1], r.array_ptrs[2], r.inflation_radius, r.integer_space_max);
+                break;
+            case VoxelBVHBuildSource::Lines:
+                s_pending_voxelbvh_result = s_voxelbvh_iface->nanovdb_from_lines_array(
+                    s_pending_voxelbvh_compute, s_voxelbvh_worker_queue, s_voxelbvh_worker_ctx, r.array_ptrs[0],
+                    r.array_ptrs[1], r.array_ptrs[2], r.inflation_radius, r.integer_space_max);
+                break;
+            case VoxelBVHBuildSource::GaussianArrays:
+            {
+                pnanovdb_compute_array_t* arrays[6] = { r.array_ptrs[0], r.array_ptrs[1], r.array_ptrs[2],
+                                                        r.array_ptrs[3], r.array_ptrs[4], r.array_ptrs[5] };
+                s_pending_voxelbvh_result = s_voxelbvh_iface->nanovdb_from_gaussians_array(
+                    s_pending_voxelbvh_compute, s_voxelbvh_worker_queue, s_voxelbvh_worker_ctx, arrays, 6u,
+                    r.integer_space_max);
+                break;
+            }
+            }
+            return s_pending_voxelbvh_result != nullptr;
+        });
+
+    if (s_pending_voxelbvh_request.source == VoxelBVHBuildSource::GaussianFile)
+    {
+        pnanovdb_editor::Console::getInstance().addLog(
+            "Starting VoxelBVH build from '%s'...", s_pending_voxelbvh_request.filepath.c_str());
+    }
+    else
+    {
+        pnanovdb_editor::Console::getInstance().addLog(
+            "Starting VoxelBVH build (%s)...", voxelbvh_source_label(s_pending_voxelbvh_request.source));
+    }
+    return true;
+}
+
+bool handle_voxelbvh_build_completion()
+{
+    if (!is_voxelbvh_build_completed())
+    {
+        return false;
+    }
+
+    const bool success = s_voxelbvh_worker.isTaskSuccessful(s_voxelbvh_task_id);
+    const pnanovdb_compute_t* pending_compute = s_pending_voxelbvh_compute;
+    pnanovdb_compute_array_t* result_array = s_pending_voxelbvh_result;
+
+    pnanovdb_editor_token_t* scene_token =
+        pnanovdb_editor::EditorToken::getInstance().getTokenById(s_pending_voxelbvh_scene_token_id);
+    pnanovdb_editor_token_t* name_token =
+        pnanovdb_editor::EditorToken::getInstance().getTokenById(s_pending_voxelbvh_name_token_id);
+
+    auto clear_dirty = [&]()
+    {
+        if (!s_pending_voxelbvh_scene_manager || !scene_token || !name_token)
+        {
+            return;
+        }
+        s_pending_voxelbvh_scene_manager->with_object(scene_token, name_token,
+                                                      [](pnanovdb_editor::SceneObject* obj)
+                                                      {
+                                                          if (obj)
+                                                              obj->process_dirty() = false;
+                                                      });
+    };
+
+    const VoxelBVHBuildSource source = s_pending_voxelbvh_request.source;
+    const std::string& source_filepath = s_pending_voxelbvh_request.filepath;
+    auto describe_input = [&]() -> std::string
+    {
+        if (source == VoxelBVHBuildSource::GaussianFile)
+        {
+            return "'" + source_filepath + "'";
+        }
+        return std::string("(") + voxelbvh_source_label(source) + ")";
+    };
+
+    if (success && scene_token && name_token && s_pending_voxelbvh_scene_manager && result_array)
+    {
+        bool object_found = false;
+        s_pending_voxelbvh_scene_manager->with_object(
+            scene_token, name_token,
+            [&](pnanovdb_editor::SceneObject* obj)
+            {
+                if (!obj)
+                    return;
+                object_found = true;
+
+                std::shared_ptr<pnanovdb_compute_array_t> owner(
+                    result_array,
+                    [pending_compute](pnanovdb_compute_array_t* arr)
+                    {
+                        if (arr && pending_compute && pending_compute->destroy_array)
+                            pending_compute->destroy_array(arr);
+                    });
+                obj->nanovdb_array() = result_array;
+                obj->resources.nanovdb_array_owner = owner;
+                obj->process_dirty() = false;
+            });
+
+        if (object_found)
+        {
+            pnanovdb_editor::Console::getInstance().addLog("VoxelBVH build of %s was successful (%llu elements)",
+                                                           describe_input().c_str(),
+                                                           (unsigned long long)result_array->element_count);
+        }
+        else
+        {
+            if (pending_compute && pending_compute->destroy_array)
+                pending_compute->destroy_array(result_array);
+            pnanovdb_editor::Console::getInstance().addLog(
+                pnanovdb_editor::Console::LogLevel::Warning, "VoxelBVH build completed but scene object was removed");
+        }
+    }
+    else
+    {
+        if (success && !result_array)
+        {
+            pnanovdb_editor::Console::getInstance().addLog(pnanovdb_editor::Console::LogLevel::Error,
+                                                           "VoxelBVH build of %s returned null",
+                                                           describe_input().c_str());
+        }
+        else if (!success)
+        {
+            pnanovdb_editor::Console::getInstance().addLog(
+                pnanovdb_editor::Console::LogLevel::Error, "VoxelBVH build of %s failed", describe_input().c_str());
+        }
+        clear_dirty();
+    }
+
+    s_pending_voxelbvh_scene_token_id = 0;
+    s_pending_voxelbvh_name_token_id = 0;
+    s_pending_voxelbvh_scene_manager = nullptr;
+    s_pending_voxelbvh_compute = nullptr;
+    s_pending_voxelbvh_request = VoxelBVHBuildRequest{};
+    s_pending_voxelbvh_result = nullptr;
+    s_voxelbvh_enqueued = false;
+    s_voxelbvh_worker.removeCompletedTask(s_voxelbvh_task_id);
+
+    return true;
+}
+
+// ============================================================================
 // Rasterization Worker (file import -> Gaussian/NanoVDB)
 // ============================================================================
 
@@ -543,6 +856,31 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
         auto it = arrays.find(key);
         return it == arrays.end() ? nullptr : it->second;
     };
+    auto get_named_owner = [&](const char* key) -> std::shared_ptr<pnanovdb_compute_array_t>
+    {
+        auto& owners = scene_obj->resources.named_array_owners;
+        auto it = owners.find(key);
+        return it == owners.end() ? std::shared_ptr<pnanovdb_compute_array_t>{} : it->second;
+    };
+
+    auto* scene_manager = cast(ctx->scene_manager);
+    const bool async_available = ctx->compute_queue && ctx->compute_queue != ctx->queue && scene_manager;
+    auto try_start_async = [&](VoxelBVHBuildRequest&& req) -> pnanovdb_pipeline_result_t
+    {
+        if (!async_available)
+        {
+            return pnanovdb_pipeline_result_skipped;
+        }
+        if (is_voxelbvh_build_running())
+        {
+            return pnanovdb_pipeline_result_pending;
+        }
+        if (start_voxelbvh_build(scene_obj, scene_manager, ctx, std::move(req)))
+        {
+            return pnanovdb_pipeline_result_pending;
+        }
+        return pnanovdb_pipeline_result_skipped;
+    };
 
     switch (source_type)
     {
@@ -563,6 +901,15 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
             scene_obj->process_dirty() = false;
             return pnanovdb_pipeline_result_error;
         }
+
+        VoxelBVHBuildRequest req;
+        req.source = VoxelBVHBuildSource::GaussianFile;
+        req.integer_space_max = integer_space_max;
+        req.filepath = path;
+        const pnanovdb_pipeline_result_t async_result = try_start_async(std::move(req));
+        if (async_result == pnanovdb_pipeline_result_pending)
+            return pnanovdb_pipeline_result_pending;
+
         result = voxelbvh->nanovdb_from_gaussians_file(compute, queue, voxelbvh_ctx, path.c_str(), integer_space_max);
         break;
     }
@@ -603,6 +950,20 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
                 effective_inflation_radius = k_mesh_debug_voxel_multiplier * voxel_size;
         }
 
+        VoxelBVHBuildRequest req;
+        req.source = VoxelBVHBuildSource::Triangles;
+        req.integer_space_max = integer_space_max;
+        req.inflation_radius = effective_inflation_radius;
+        req.array_owners[0] = get_named_owner("indices");
+        req.array_owners[1] = get_named_owner("positions");
+        req.array_owners[2] = get_named_owner("colors");
+        req.array_ptrs[0] = indices;
+        req.array_ptrs[1] = positions;
+        req.array_ptrs[2] = colors;
+        const pnanovdb_pipeline_result_t async_result = try_start_async(std::move(req));
+        if (async_result == pnanovdb_pipeline_result_pending)
+            return pnanovdb_pipeline_result_pending;
+
         result = voxelbvh->nanovdb_from_triangles_array(
             compute, queue, voxelbvh_ctx, indices, positions, colors, effective_inflation_radius, integer_space_max);
         break;
@@ -633,11 +994,6 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
             scene_obj->process_dirty() = false;
             return pnanovdb_pipeline_result_error;
         }
-
-        // When the user leaves inflation_radius at 0 (e.g. Import Mesh -> Lines on
-        // a triangle PLY), pick a per-voxel default so the resulting line tubes
-        // are visible. Matches TestVoxelBVH.cpp which uses a non-zero
-        // inflation_radius for its lines case.
         const bool auto_inflation = (user_inflation_radius == 0.f);
         if (auto_inflation && integer_space_max > 0u)
         {
@@ -645,6 +1001,20 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
             if (voxel_size > 0.f)
                 effective_inflation_radius = k_mesh_lines_voxel_multiplier * voxel_size;
         }
+
+        VoxelBVHBuildRequest req;
+        req.source = VoxelBVHBuildSource::Lines;
+        req.integer_space_max = integer_space_max;
+        req.inflation_radius = effective_inflation_radius;
+        req.array_owners[0] = get_named_owner("indices");
+        req.array_owners[1] = get_named_owner("positions");
+        req.array_owners[2] = get_named_owner("colors");
+        req.array_ptrs[0] = indices;
+        req.array_ptrs[1] = positions;
+        req.array_ptrs[2] = colors;
+        const pnanovdb_pipeline_result_t async_result = try_start_async(std::move(req));
+        if (async_result == pnanovdb_pipeline_result_pending)
+            return pnanovdb_pipeline_result_pending;
 
         result = voxelbvh->nanovdb_from_lines_array(
             compute, queue, voxelbvh_ctx, indices, positions, colors, effective_inflation_radius, integer_space_max);
@@ -673,6 +1043,19 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
             scene_obj->process_dirty() = false;
             return pnanovdb_pipeline_result_error;
         }
+
+        VoxelBVHBuildRequest req;
+        req.source = VoxelBVHBuildSource::GaussianArrays;
+        req.integer_space_max = integer_space_max;
+        for (int i = 0; i < 6; ++i)
+        {
+            req.array_owners[i] = get_named_owner(gaussian_keys[i]);
+            req.array_ptrs[i] = gaussian_arrays[i];
+        }
+        const pnanovdb_pipeline_result_t async_result = try_start_async(std::move(req));
+        if (async_result == pnanovdb_pipeline_result_pending)
+            return pnanovdb_pipeline_result_pending;
+
         result =
             voxelbvh->nanovdb_from_gaussians_array(compute, queue, voxelbvh_ctx, gaussian_arrays, 6u, integer_space_max);
         break;
@@ -1862,12 +2245,26 @@ bool pipeline_update_async_progress(EditorScene* editor_scene,
         return true;
     }
 
+    // VoxelBVH build (Gaussian file -> NanoVDB via BVH)
+    if (is_voxelbvh_build_completed())
+    {
+        handle_voxelbvh_build_completion();
+        progress_text.clear();
+        progress_value = 0.0f;
+        return false;
+    }
+    if (is_voxelbvh_build_running())
+    {
+        get_voxelbvh_build_progress(progress_text, progress_value);
+        return true;
+    }
+
     return false;
 }
 
 bool pipeline_is_async_running()
 {
-    return is_conversion_running();
+    return is_conversion_running() || is_voxelbvh_build_running();
 }
 
 bool pipeline_create_variant(EditorSceneManager* scene_manager,
