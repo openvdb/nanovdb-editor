@@ -57,6 +57,7 @@ enum shader
     voxelbvh_nanovdb_set_mask_ijkl_apply_slang,
     voxelbvh_nanovdb_set_mask_ijkl_slang,
     voxelbvh_nanovdb_set_value_ijkl_slang,
+    voxelbvh_nanovdb_to_bbox_slang,
     voxelbvh_scatter_range_headers_slang,
     voxelbvh_triangles_bbox_reduce1_slang,
     voxelbvh_triangles_bbox_reduce2_slang,
@@ -97,6 +98,7 @@ static const char* s_shader_names[shader_count] = {
     "raster/voxelbvh/voxelbvh_nanovdb_set_mask_ijkl_apply.slang",
     "raster/voxelbvh/voxelbvh_nanovdb_set_mask_ijkl.slang",
     "raster/voxelbvh/voxelbvh_nanovdb_set_value_ijkl.slang",
+    "raster/voxelbvh/voxelbvh_nanovdb_to_bbox.slang",
     "raster/voxelbvh/voxelbvh_scatter_range_headers.slang",
 
     "raster/voxelbvh/voxelbvh_triangles_bbox_reduce1.slang",
@@ -459,6 +461,7 @@ static void nanovdb_duplicate_topology(const pnanovdb_compute_t* compute,
                                        pnanovdb_compute_buffer_t* dst_nanovdb_inout,
                                        pnanovdb_uint64_t dst_nanovdb_word_count,
                                        pnanovdb_compute_buffer_t* src_nanovdb_in,
+                                       pnanovdb_uint32_t resolution,
                                        pnanovdb_uint32_t dst_grid_type)
 {
     auto ctx = cast(voxelbvh_context);
@@ -466,7 +469,63 @@ static void nanovdb_duplicate_topology(const pnanovdb_compute_t* compute,
     pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
     pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
 
-    // TODO
+    pnanovdb_compute_buffer_transient_t* dst_nanovdb_transient =
+        compute_interface->register_buffer_as_transient(context, dst_nanovdb_inout);
+    pnanovdb_compute_buffer_transient_t* src_nanovdb_transient =
+        compute_interface->register_buffer_as_transient(context, src_nanovdb_in);
+
+    pnanovdb_compute_buffer_desc_t buf_desc = {};
+    buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED;
+    buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+    buf_desc.structure_stride = 4u;
+    buf_desc.size_in_bytes = 6u * sizeof(float);
+    pnanovdb_compute_buffer_t* world_bbox_buffer =
+        compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+
+    pnanovdb_compute_buffer_transient_t* world_bbox_transient =
+        compute_interface->register_buffer_as_transient(context, world_bbox_buffer);
+
+    {
+        pnanovdb_compute_resource_t resources[2u] = {};
+        resources[0u].buffer_transient = src_nanovdb_transient;
+        resources[1u].buffer_transient = world_bbox_transient;
+
+        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_to_bbox_slang],
+                                 resources, 1u, 1u, 1u, "voxelbvh_nanovdb_to_bbox");
+    }
+
+    nanovdb_init(compute, queue, voxelbvh_context, dst_nanovdb_inout, dst_nanovdb_word_count, world_bbox_buffer, resolution, dst_grid_type);
+
+    compute_interface->destroy_buffer(context, world_bbox_buffer);
+
+#if 0
+    for (pnanovdb_uint32_t pass_id = 0u; pass_id < 4u; pass_id++)
+    {
+        {
+            pnanovdb_compute_resource_t resources[5u] = {};
+            resources[0u].buffer_transient = constant_transient;
+            resources[1u].buffer_transient = ijkl_transient;
+            resources[2u].buffer_transient = range_transient;
+            resources[3u].buffer_transient = nanovdb_transient;
+            resources[4u].buffer_transient = range_scratch_transient;
+
+            pnanovdb_uint32_t workgroup_count = (range_count + 255u) / 256u;
+
+            compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_set_mask_ijkl_slang],
+                                     resources, workgroup_count, 1u, 1u, "voxelbvh_nanovdb_set_mask_ijkl");
+            compute->dispatch_shader(compute_interface, context,
+                                     ctx->shader_ctx[voxelbvh_nanovdb_set_mask_ijkl_apply_slang], resources,
+                                     workgroup_count, 1u, 1u, "voxelbvh_nanovdb_set_mask_ijkl_apply");
+        }
+
+        if (pass_id == 3u)
+        {
+            break;
+        }
+
+        nanovdb_add_nodes(compute, queue, voxelbvh_context, nanovdb_inout, nanovdb_word_count);
+    }
+#endif
 }
 
 static void nanovdb_add_nodes(const pnanovdb_compute_t* compute,

@@ -170,6 +170,7 @@ typedef struct pnanovdb_voxelbvh_t
                                                    pnanovdb_compute_buffer_t* dst_nanovdb_inout,
                                                    pnanovdb_uint64_t dst_nanovdb_word_count,
                                                    pnanovdb_compute_buffer_t* src_nanovdb_in,
+                                                   pnanovdb_uint32_t resolution,
                                                    pnanovdb_uint32_t dst_grid_type);
 
 } pnanovdb_voxelbvh_t;
