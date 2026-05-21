@@ -137,21 +137,30 @@ bool mesh(EditorScene& editor_scene,
     std::string view_name = fs_path.stem().string();
     pnanovdb_editor_token_t* name_token = EditorToken::getInstance().getToken(view_name.c_str());
 
-    pnanovdb_pipeline_type_t effective_render_pipeline = options.render_pipeline;
-    if (is_line_indices && effective_render_pipeline != pnanovdb_pipeline_type_voxelbvh_lines_render)
+    pnanovdb_pipeline_type_t effective_render_pipeline;
+    if (is_line_indices)
     {
-        Console::getInstance().addLog(
-            "Import Mesh: '%s' is a line PLY; switching render to voxelbvh_lines_render", filepath);
         effective_render_pipeline = pnanovdb_pipeline_type_voxelbvh_lines_render;
+        if (options.show_debug)
+        {
+            Console::getInstance().addLog(
+                "Import Mesh: '%s' is a line PLY; the lines render pipeline has no debug variant, "
+                "Show Debug is ignored",
+                filepath);
+        }
+    }
+    else
+    {
+        effective_render_pipeline = options.show_debug ? pnanovdb_pipeline_type_voxelbvh_triangles_debug_render :
+                                                         pnanovdb_pipeline_type_voxelbvh_triangles_render;
     }
 
     scene_manager.add_mesh(scene, name_token, indices, positions, colors, compute,
                            pnanovdb_pipeline_type_voxelbvh_build, effective_render_pipeline);
 
-    const pnanovdb_pipeline_voxelbvh_source_t source_type =
-        (is_line_indices || effective_render_pipeline == pnanovdb_pipeline_type_voxelbvh_lines_render) ?
-            pnanovdb_pipeline_voxelbvh_source_lines :
-            pnanovdb_pipeline_voxelbvh_source_triangles;
+    const pnanovdb_pipeline_voxelbvh_source_t source_type = is_line_indices ?
+                                                                pnanovdb_pipeline_voxelbvh_source_lines :
+                                                                pnanovdb_pipeline_voxelbvh_source_triangles;
 
     scene_manager.with_object(
         scene, name_token,

@@ -1055,27 +1055,6 @@ static bool meshImportSidePane(const char* /*vFilter*/, IGFDUserDatas vUserDatas
     return true;
 }
 
-static bool nanovdbImportSidePane(const char* /*vFilter*/, IGFDUserDatas vUserDatas, bool* /*cantContinue*/)
-{
-    auto* ptr = static_cast<imgui_instance_user::Instance*>(vUserDatas);
-    if (!ptr)
-        return false;
-
-    ImGui::Text("Load Options:");
-    ImGui::Separator();
-
-    ImGui::Checkbox("Use VoxelBVH Render", &ptr->nanovdb_use_voxelbvh_render);
-    if (ImGui::IsItemHovered())
-    {
-        ImGui::SetTooltip(
-            "Render the loaded NanoVDB with the VoxelBVH render pipeline.\n"
-            "Requires a NanoVDB that contains BVH blind metadata\n"
-            "(e.g. produced by the VoxelBVH build pipeline).");
-    }
-
-    return true;
-}
-
 void showFileDialogs(imgui_instance_user::Instance* ptr)
 {
     if (ptr->pending.open_file)
@@ -1084,10 +1063,6 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
 
         IGFD::FileDialogConfig config;
         config.path = ".";
-        config.sidePane = nanovdbImportSidePane;
-        config.sidePaneWidth = 250.0f * getDialogDpiScale();
-        config.flags = ImGuiFileDialogFlags_None;
-        config.userDatas = ptr;
 
         ImGuiFileDialog::Instance()->OpenDialog(
             "OpenNvdbFileDlgKey", "Open NanoVDB File", "NanoVDB Files (*.nvdb){.nvdb}", config);
@@ -1148,17 +1123,15 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
             if (ImGuiFileDialog::Instance()->IsOk())
             {
                 ptr->nanovdb_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
-                const pnanovdb_pipeline_type_t nanovdb_render_pipeline = ptr->nanovdb_use_voxelbvh_render ?
-                                                                             pnanovdb_pipeline_type_voxelbvh_render :
-                                                                             pnanovdb_pipeline_type_nanovdb_render;
-                pnanovdb_editor::Console::getInstance().addLog(
-                    "Opening file '%s'%s", ptr->nanovdb_filepath.c_str(),
-                    ptr->nanovdb_use_voxelbvh_render ? " (VoxelBVH render)" : "");
+                pnanovdb_editor::Console::getInstance().addLog("Opening file '%s'", ptr->nanovdb_filepath.c_str());
 
                 if (ptr->editor_scene)
                 {
                     pnanovdb_editor_token_t* scene = ptr->editor_scene->get_current_scene_token();
-                    ptr->editor_scene->load_nanovdb_file(scene, ptr->nanovdb_filepath.c_str(), nanovdb_render_pipeline);
+                    // try VoxelBVH render first; NanoVDBImport falls back to standard
+                    // nanovdb_render automatically if the file lacks BVH blind metadata.
+                    ptr->editor_scene->load_nanovdb_file(
+                        scene, ptr->nanovdb_filepath.c_str(), pnanovdb_pipeline_type_voxelbvh_render);
                 }
             }
             ImGuiFileDialog::Instance()->Close();
@@ -1209,20 +1182,10 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
                 ptr->mesh_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
 
                 pnanovdb_editor::mesh_import::Options options;
-                const char* display_label;
-                if (ptr->mesh_import_show_debug)
-                {
-                    options.render_pipeline = pnanovdb_pipeline_type_voxelbvh_triangles_debug_render;
-                    display_label = "Triangles (Debug)";
-                }
-                else
-                {
-                    options.render_pipeline = pnanovdb_pipeline_type_voxelbvh_triangles_render;
-                    display_label = "Triangles";
-                }
+                options.show_debug = ptr->mesh_import_show_debug;
 
                 pnanovdb_editor::Console::getInstance().addLog(
-                    "Importing mesh '%s' (display=%s)", ptr->mesh_filepath.c_str(), display_label);
+                    "Importing mesh '%s'%s", ptr->mesh_filepath.c_str(), options.show_debug ? " (debug)" : "");
 
                 if (ptr->editor_scene)
                 {

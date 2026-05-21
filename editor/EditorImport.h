@@ -26,7 +26,7 @@ namespace mesh_import
 
 struct Options
 {
-    pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_voxelbvh_triangles_render;
+    bool show_debug = false;
     float inflation_radius = 0.f; //!< 0 = auto for line-based renders
     pnanovdb_uint32_t integer_space_max = 511u; //!< 1..4095
 };
