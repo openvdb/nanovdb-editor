@@ -16,10 +16,15 @@
 
 #include <nanovdb/PNanoVDB.h>
 
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
+#include <string>
 #include <vector>
 
 namespace
@@ -122,6 +127,24 @@ bool dragon_ply_available()
     return std::filesystem::exists("./data/xyzrgb_dragon.ply");
 }
 
+bool is_software_renderer_name(const char* name)
+{
+    if (!name || name[0] == '\0')
+    {
+        return false;
+    }
+    std::string lowered(name);
+    std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) { return std::tolower(c); });
+    return lowered.find("lavapipe") != std::string::npos || lowered.find("llvmpipe") != std::string::npos ||
+           lowered.find("swiftshader") != std::string::npos;
+}
+
+bool software_voxelbvh_tests_force_enabled()
+{
+    const char* env = std::getenv("PNANOVDB_ENABLE_SOFTWARE_VOXELBVH_TESTS");
+    return env && env[0] != '\0' && std::strcmp(env, "0") != 0;
+}
+
 // TODO: make common function for a cpp test
 bool save_wireframe_lines_ply(
     const std::string& path, uint32_t width, uint32_t height, uint64_t* out_vertex_count, uint64_t* out_edge_count)
@@ -216,6 +239,8 @@ struct VoxelBVHRuntime
     pnanovdb_voxelbvh_context_t* voxelbvh_ctx = nullptr;
     bool initialized = false;
     bool voxelbvh_unsupported = false;
+    bool software_renderer = false;
+    std::string device_name;
 
     bool init()
     {
@@ -240,6 +265,12 @@ struct VoxelBVHRuntime
         pnanovdb_compute_physical_device_desc_t phys_desc{};
         if (!compute.device_interface.enumerate_devices(device_manager, 0u, &phys_desc))
         {
+            return false;
+        }
+        device_name = phys_desc.device_name;
+        if (is_software_renderer_name(phys_desc.device_name) && !software_voxelbvh_tests_force_enabled())
+        {
+            software_renderer = true;
             return false;
         }
         pnanovdb_compute_device_desc_t device_desc{};
@@ -296,6 +327,8 @@ protected:
     static VoxelBVHRuntime* s_rt;
     static bool s_device_unavailable;
     static bool s_voxelbvh_unsupported;
+    static bool s_software_renderer;
+    static std::string s_software_renderer_name;
 
     static void SetUpTestSuite()
     {
@@ -304,6 +337,11 @@ protected:
         {
             s_device_unavailable = (!s_rt->device_manager || !s_rt->device);
             s_voxelbvh_unsupported = s_rt->voxelbvh_unsupported;
+            s_software_renderer = s_rt->software_renderer;
+            if (s_software_renderer)
+            {
+                s_software_renderer_name = s_rt->device_name;
+            }
         }
     }
 
@@ -315,6 +353,12 @@ protected:
 
     void SetUp() override
     {
+        if (s_software_renderer)
+        {
+            GTEST_SKIP() << "Software Vulkan driver detected ('" << s_software_renderer_name
+                         << "'); VoxelBVH shaders are too slow to test there. Set "
+                            "PNANOVDB_ENABLE_SOFTWARE_VOXELBVH_TESTS=1 to override.";
+        }
         if (s_device_unavailable)
         {
             GTEST_SKIP() << "No Vulkan-compatible device available on this machine";
@@ -336,6 +380,8 @@ protected:
 VoxelBVHRuntime* VoxelBVHBuildPipelineTest::s_rt = nullptr;
 bool VoxelBVHBuildPipelineTest::s_device_unavailable = false;
 bool VoxelBVHBuildPipelineTest::s_voxelbvh_unsupported = false;
+bool VoxelBVHBuildPipelineTest::s_software_renderer = false;
+std::string VoxelBVHBuildPipelineTest::s_software_renderer_name;
 
 TEST_F(VoxelBVHBuildPipelineTest, LinesSynthetic)
 {
