@@ -71,6 +71,7 @@ struct SceneObjectResources
     std::shared_ptr<pnanovdb_raster_gaussian_data_t> gaussian_data_owner;
     std::shared_ptr<pnanovdb_camera_view_t> camera_view_owner;
     std::shared_ptr<pnanovdb_compute_array_t> converted_nanovdb_owner;
+    std::map<std::string, std::shared_ptr<pnanovdb_compute_array_t>> named_array_owners;
 };
 
 struct ShaderNameStorage
@@ -581,6 +582,53 @@ public:
               its states and configs arrays on removal
     */
     void add_camera(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name, pnanovdb_camera_view_t* camera_view);
+
+    /*!
+        \brief Add a mesh (triangle or line) object backed by named arrays.
+
+        Creates an Array-typed SceneObject whose named_arrays map holds the
+        provided positions/indices/colors.
+
+        \param scene Scene token
+        \param name Object name token
+        \param indices uint32 face/edge indices (3*N for triangles, 2*N for lines)
+        \param positions float vertex positions (3*V floats)
+        \param colors float vertex colors (3*V floats); pass nullptr to skip ownership
+                      (the build pipeline will synthesize white colors when missing)
+        \param compute Compute interface used to destroy the arrays on cleanup
+        \param process_pipeline Initial process pipeline
+        \param render_pipeline Initial render pipeline
+
+        \note Thread-safe
+    */
+    void add_mesh(pnanovdb_editor_token_t* scene,
+                  pnanovdb_editor_token_t* name,
+                  pnanovdb_compute_array_t* indices,
+                  pnanovdb_compute_array_t* positions,
+                  pnanovdb_compute_array_t* colors,
+                  const pnanovdb_compute_t* compute,
+                  pnanovdb_pipeline_type_t process_pipeline,
+                  pnanovdb_pipeline_type_t render_pipeline);
+
+    /*!
+        \brief Add an Array-typed scene object that will be filled by a
+               file-backed process pipeline (e.g. voxelbvh build from a
+               Gaussian .ply/.npy/.npz).
+
+        \param scene Scene token
+        \param name Object name token
+        \param compute Compute interface
+        \param process_pipeline Initial process pipeline (typically
+                                pnanovdb_pipeline_type_voxelbvh_build)
+        \param render_pipeline Initial render pipeline
+
+        \note Thread-safe
+    */
+    void add_file_object(pnanovdb_editor_token_t* scene,
+                         pnanovdb_editor_token_t* name,
+                         const pnanovdb_compute_t* compute,
+                         pnanovdb_pipeline_type_t process_pipeline,
+                         pnanovdb_pipeline_type_t render_pipeline);
 
     /*!
         \brief Register an existing camera with shared ownership

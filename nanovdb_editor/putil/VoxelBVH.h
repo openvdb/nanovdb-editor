@@ -173,6 +173,38 @@ typedef struct pnanovdb_voxelbvh_t
                                                    pnanovdb_uint32_t resolution,
                                                    pnanovdb_uint32_t dst_grid_type);
 
+    pnanovdb_compute_array_t*(PNANOVDB_ABI* nanovdb_from_gaussians_file)(const pnanovdb_compute_t* compute,
+                                                                         pnanovdb_compute_queue_t* queue,
+                                                                         pnanovdb_voxelbvh_context_t* context,
+                                                                         const char* filename,
+                                                                         pnanovdb_uint32_t resolution);
+
+    pnanovdb_compute_array_t*(PNANOVDB_ABI* nanovdb_from_gaussians_array)(
+        const pnanovdb_compute_t* compute,
+        pnanovdb_compute_queue_t* queue,
+        pnanovdb_voxelbvh_context_t* context,
+        pnanovdb_compute_array_t** gaussian_arrays, // [means, opacities, quaternions, scales, sh_0, sh_n]
+        pnanovdb_uint32_t gaussian_array_count, // must be 6
+        pnanovdb_uint32_t resolution);
+
+    pnanovdb_compute_array_t*(PNANOVDB_ABI* nanovdb_from_triangles_array)(const pnanovdb_compute_t* compute,
+                                                                          pnanovdb_compute_queue_t* queue,
+                                                                          pnanovdb_voxelbvh_context_t* context,
+                                                                          pnanovdb_compute_array_t* indices_array,
+                                                                          pnanovdb_compute_array_t* positions_array,
+                                                                          pnanovdb_compute_array_t* colors_array,
+                                                                          float inflation_radius,
+                                                                          pnanovdb_uint32_t resolution);
+
+    pnanovdb_compute_array_t*(PNANOVDB_ABI* nanovdb_from_lines_array)(const pnanovdb_compute_t* compute,
+                                                                      pnanovdb_compute_queue_t* queue,
+                                                                      pnanovdb_voxelbvh_context_t* context,
+                                                                      pnanovdb_compute_array_t* indices_array,
+                                                                      pnanovdb_compute_array_t* positions_array,
+                                                                      pnanovdb_compute_array_t* colors_array,
+                                                                      float inflation_radius,
+                                                                      pnanovdb_uint32_t resolution);
+
 } pnanovdb_voxelbvh_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_voxelbvh_t
@@ -194,6 +226,10 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(ijkl_from_lines_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(ijkl_from_triangles, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(ijkl_from_triangles_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_duplicate_topology, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_from_gaussians_file, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_from_gaussians_array, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_from_triangles_array, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_from_lines_array, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE

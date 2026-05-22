@@ -1,4 +1,4 @@
-// voxelbvh_triangle_lines.slang
+// voxelbvh_triangles_debug.slang
 #define PNANOVDB_HLSL
 #define PNANOVDB_ADDRESS_64
 #define PNANOVDB_BUF_HLSL_64

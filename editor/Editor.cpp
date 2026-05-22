@@ -157,6 +157,10 @@ void init(pnanovdb_editor_t* editor)
     editor->impl->raster = new pnanovdb_raster_t();
     pnanovdb_raster_load(editor->impl->raster, editor->impl->compute);
 
+    editor->impl->voxelbvh = new pnanovdb_voxelbvh_t();
+    pnanovdb_voxelbvh_load(editor->impl->voxelbvh, editor->impl->compute);
+    editor->impl->voxelbvh_ctx = nullptr;
+
     editor->impl->camera = new pnanovdb_camera_t();
     pnanovdb_camera_init(editor->impl->camera);
     pnanovdb_camera_state_default(&editor->impl->camera->state, PNANOVDB_TRUE);
@@ -197,6 +201,12 @@ void shutdown(pnanovdb_editor_t* editor)
         pnanovdb_raster_free(editor->impl->raster);
         delete editor->impl->raster;
         editor->impl->raster = nullptr;
+    }
+    if (editor->impl->voxelbvh)
+    {
+        pnanovdb_voxelbvh_free(editor->impl->voxelbvh);
+        delete editor->impl->voxelbvh;
+        editor->impl->voxelbvh = nullptr;
     }
     if (editor->impl->camera)
     {
@@ -529,6 +539,11 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     {
         editor->impl->raster_ctx = editor->impl->raster->create_context(editor->impl->raster->compute, device_queue);
     }
+    if (!editor->impl->voxelbvh_ctx && editor->impl->voxelbvh && editor->impl->voxelbvh->create_context)
+    {
+        editor->impl->voxelbvh_ctx =
+            editor->impl->voxelbvh->create_context(editor->impl->voxelbvh->compute, device_queue);
+    }
 
     // Skip default scene creation on viewer profile
     bool is_viewer_profile =
@@ -610,6 +625,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         raster_init_ctx.compute_queue = compute_queue;
         raster_init_ctx.raster = editor->impl->raster;
         raster_init_ctx.raster_ctx = editor->impl->raster_ctx;
+        raster_init_ctx.voxelbvh = editor->impl->voxelbvh;
+        raster_init_ctx.voxelbvh_ctx = editor->impl->voxelbvh_ctx;
         raster_init_ctx.renderer = editor->impl->renderer;
         raster_init_ctx.scene_manager = editor->impl->scene_manager;
         pnanovdb_editor::pipeline_init_rasterizer(raster_init_ctx);
@@ -690,6 +707,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             pipeline_ctx.compute_queue = compute_queue;
             pipeline_ctx.raster = editor->impl->raster;
             pipeline_ctx.raster_ctx = editor->impl->raster_ctx;
+            pipeline_ctx.voxelbvh = editor->impl->voxelbvh;
+            pipeline_ctx.voxelbvh_ctx = editor->impl->voxelbvh_ctx;
             pipeline_ctx.renderer = editor->impl->renderer;
             pipeline_ctx.scene_manager = editor->impl->scene_manager;
             pnanovdb_editor::pipeline_execute_pending(editor->impl->scene_manager, pipeline_ctx);
@@ -874,6 +893,11 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     {
         editor->impl->raster->destroy_context(editor->impl->compute, device_queue, editor->impl->raster_ctx);
         editor->impl->raster_ctx = nullptr;
+    }
+    if (editor->impl->voxelbvh_ctx && editor->impl->voxelbvh && editor->impl->voxelbvh->destroy_context)
+    {
+        editor->impl->voxelbvh->destroy_context(editor->impl->compute, device_queue, editor->impl->voxelbvh_ctx);
+        editor->impl->voxelbvh_ctx = nullptr;
     }
 
     if (enabled_sigint)

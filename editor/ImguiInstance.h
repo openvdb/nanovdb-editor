@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "EditorImport.h"
 #include "ShaderParams.h"
 #include "imgui/ImguiWindow.h"
 
@@ -64,17 +65,6 @@ enum class ShaderSelectionMode : int
     UseShaderGroup,
 };
 
-} // namespace imgui_instance_user
-
-// Forward declaration
-namespace pnanovdb_editor
-{
-class EditorScene;
-}
-
-namespace imgui_instance_user
-{
-
 struct PendingState
 {
     std::atomic<bool> update_shader = true; // needs to be initialized with true to map the shader after init
@@ -83,6 +73,7 @@ struct PendingState
     bool load_nvdb = false;
     bool save_nanovdb = false;
     bool find_raster_file = false;
+    bool find_mesh_file = false;
     bool find_callable_file = false;
     bool open_file = false;
     bool save_file = false;
@@ -148,8 +139,10 @@ struct Instance
 
     std::string nanovdb_filepath = ""; // filename selected in the ImGuiFileDialog
     std::string raster_filepath = "";
+    std::string mesh_filepath = "";
     float raster_voxels_per_unit = 128.f;
-    bool raster_to_nanovdb = false; // User choice: false=raster2d, true=raster3d
+    int gaussian_import_mode = static_cast<int>(pnanovdb_editor::gaussian_import::Mode::Raster2D);
+    bool mesh_import_show_debug = false;
 
     // shader params window selection
     std::string shader_group = "";

@@ -738,6 +738,127 @@ void EditorSceneManager::add_camera(pnanovdb_editor_token_t* scene,
                                                                               });
 }
 
+namespace
+{
+void configure_array_object_pipelines(SceneObject& obj,
+                                      uint64_t key,
+                                      pnanovdb_editor_token_t* scene,
+                                      pnanovdb_editor_token_t* name,
+                                      const pnanovdb_compute_t* compute,
+                                      pnanovdb_pipeline_type_t process_pipeline,
+                                      pnanovdb_pipeline_type_t render_pipeline,
+                                      EditorSceneManager& manager)
+{
+    obj.type = SceneObjectType::Array;
+    obj.scene_token = scene;
+    obj.name_token = name;
+
+    if (!obj.params.shader_name_storage)
+    {
+        obj.params.shader_name_storage = std::make_shared<ShaderNameStorage>();
+    }
+    obj.params.shader_name_storage->object_key = key;
+
+    obj.process_pipeline() = process_pipeline;
+    obj.render_pipeline() = render_pipeline;
+    pnanovdb_pipeline_get_default_params(obj.process_pipeline(), &obj.process_params());
+    pnanovdb_pipeline_get_default_params(obj.render_pipeline(), &obj.render_params());
+    obj.process_dirty() = true;
+
+    const pnanovdb_pipeline_descriptor_t* render_desc = pnanovdb_pipeline_get_descriptor(render_pipeline);
+    const char* render_shader_name = (render_desc && render_desc->shader_count > 0u && render_desc->shaders) ?
+                                         render_desc->shaders[0].shader_name :
+                                         nullptr;
+    if (render_shader_name)
+    {
+        obj.shader_name() = EditorToken::getInstance().getToken(render_shader_name);
+
+        pnanovdb_compute_array_t* params_array = manager.create_initialized_shader_params(
+            compute, render_shader_name, nullptr, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
+        if (params_array)
+        {
+            obj.params.shader_params_array = params_array;
+            obj.shader_params() = params_array->data;
+            obj.params.shader_params_array_owner = std::shared_ptr<pnanovdb_compute_array_t>(
+                params_array,
+                [destroy_fn = compute->destroy_array](pnanovdb_compute_array_t* ptr)
+                {
+                    if (ptr)
+                        destroy_fn(ptr);
+                });
+        }
+    }
+    else
+    {
+        obj.shader_name() = nullptr;
+    }
+}
+} // namespace
+
+void EditorSceneManager::add_mesh(pnanovdb_editor_token_t* scene,
+                                  pnanovdb_editor_token_t* name,
+                                  pnanovdb_compute_array_t* indices,
+                                  pnanovdb_compute_array_t* positions,
+                                  pnanovdb_compute_array_t* colors,
+                                  const pnanovdb_compute_t* compute,
+                                  pnanovdb_pipeline_type_t process_pipeline,
+                                  pnanovdb_pipeline_type_t render_pipeline)
+{
+    if (!indices || !positions || !compute)
+    {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    uint64_t key = make_key(scene, name);
+
+    auto& obj = m_objects[key];
+    configure_array_object_pipelines(obj, key, scene, name, compute, process_pipeline, render_pipeline, *this);
+
+    auto compute_destroyer = [compute](pnanovdb_compute_array_t* arr)
+    {
+        if (arr && compute && compute->destroy_array)
+            compute->destroy_array(arr);
+    };
+
+    obj.named_arrays().clear();
+    obj.resources.named_array_owners.clear();
+
+    obj.named_arrays()["indices"] = indices;
+    obj.resources.named_array_owners["indices"] = std::shared_ptr<pnanovdb_compute_array_t>(indices, compute_destroyer);
+
+    obj.named_arrays()["positions"] = positions;
+    obj.resources.named_array_owners["positions"] =
+        std::shared_ptr<pnanovdb_compute_array_t>(positions, compute_destroyer);
+
+    if (colors)
+    {
+        obj.named_arrays()["colors"] = colors;
+        obj.resources.named_array_owners["colors"] = std::shared_ptr<pnanovdb_compute_array_t>(colors, compute_destroyer);
+    }
+}
+
+void EditorSceneManager::add_file_object(pnanovdb_editor_token_t* scene,
+                                         pnanovdb_editor_token_t* name,
+                                         const pnanovdb_compute_t* compute,
+                                         pnanovdb_pipeline_type_t process_pipeline,
+                                         pnanovdb_pipeline_type_t render_pipeline)
+{
+    if (!compute)
+    {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    uint64_t key = make_key(scene, name);
+
+    auto& obj = m_objects[key];
+    configure_array_object_pipelines(obj, key, scene, name, compute, process_pipeline, render_pipeline, *this);
+
+    obj.named_arrays().clear();
+    obj.resources.named_array_owners.clear();
+}
+
 void EditorSceneManager::register_camera(pnanovdb_editor_token_t* scene,
                                          pnanovdb_editor_token_t* name,
                                          std::shared_ptr<pnanovdb_camera_view_t> camera_view_owner)

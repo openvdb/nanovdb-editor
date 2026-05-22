@@ -14,6 +14,7 @@
 #include "nanovdb_editor/putil/Editor.h"
 #include "nanovdb_editor/putil/Reflect.h"
 #include "nanovdb_editor/putil/Raster.h"
+#include "nanovdb_editor/putil/VoxelBVH.h"
 #include "PipelineTypes.h"
 #include <memory>
 #include <string>
@@ -30,6 +31,8 @@ typedef struct pnanovdb_pipeline_param_field_t
     float min_value;
     float max_value;
     float step;
+    const char* const* enum_labels;
+    pnanovdb_uint32_t enum_count;
 } pnanovdb_pipeline_param_field_t;
 
 // Opaque types for pipeline context (internal editor types)
@@ -47,6 +50,8 @@ struct pnanovdb_pipeline_context_t
     pnanovdb_compute_queue_t* compute_queue;
     pnanovdb_raster_t* raster;
     pnanovdb_raster_context_t* raster_ctx;
+    pnanovdb_voxelbvh_t* voxelbvh;
+    pnanovdb_voxelbvh_context_t* voxelbvh_ctx;
     pnanovdb_renderer_t* renderer;
     pnanovdb_scene_manager_t* scene_manager;
 };
@@ -66,6 +71,20 @@ const char* pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_t type);
 const char* pnanovdb_pipeline_get_shader_group(pnanovdb_pipeline_type_t type);
 const pnanovdb_pipeline_descriptor_t* pnanovdb_pipeline_get_descriptor(pnanovdb_pipeline_type_t type);
 void pnanovdb_pipeline_get_default_params(pnanovdb_pipeline_type_t type, pnanovdb_pipeline_params_t* params);
+
+typedef enum pnanovdb_pipeline_voxelbvh_source_enum_t
+{
+    pnanovdb_pipeline_voxelbvh_source_gaussian_file = 0,
+    pnanovdb_pipeline_voxelbvh_source_triangles = 1,
+    pnanovdb_pipeline_voxelbvh_source_lines = 2,
+    pnanovdb_pipeline_voxelbvh_source_gaussian_arrays = 3,
+} pnanovdb_pipeline_voxelbvh_source_t;
+
+bool pnanovdb_pipeline_voxelbvh_build_params_set_source_type(pnanovdb_pipeline_params_t* params,
+                                                             pnanovdb_pipeline_voxelbvh_source_t source);
+bool pnanovdb_pipeline_voxelbvh_build_params_set_inflation_radius(pnanovdb_pipeline_params_t* params, float radius);
+bool pnanovdb_pipeline_voxelbvh_build_params_set_resolution(pnanovdb_pipeline_params_t* params,
+                                                                   pnanovdb_uint32_t resolution);
 
 // Execute pipeline using registered function pointers
 pnanovdb_pipeline_result_t pnanovdb_pipeline_execute(pnanovdb_pipeline_type_t type,
@@ -132,6 +151,8 @@ struct PipelineContext
     pnanovdb_compute_queue_t* compute_queue = nullptr;
     pnanovdb_raster_t* raster = nullptr;
     pnanovdb_raster_context_t* raster_ctx = nullptr;
+    pnanovdb_voxelbvh_t* voxelbvh = nullptr;
+    pnanovdb_voxelbvh_context_t* voxelbvh_ctx = nullptr;
     Renderer* renderer = nullptr;
     EditorSceneManager* scene_manager = nullptr;
 };

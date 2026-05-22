@@ -14,6 +14,7 @@
 #include "SceneView.h"
 #include "nanovdb_editor/putil/Editor.h"
 #include "PipelineTypes.h"
+#include "EditorImport.h"
 #include "imgui/ImguiWindow.h"
 
 #include <string>
@@ -218,7 +219,8 @@ public:
 
     void handle_nanovdb_data_load(pnanovdb_editor_token_t* scene,
                                   pnanovdb_compute_array_t* nanovdb_array,
-                                  const char* filename);
+                                  const char* filename,
+                                  pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_nanovdb_render);
 
     void handle_gaussian_data_load(pnanovdb_editor_token_t* scene,
                                    pnanovdb_raster_gaussian_data_t* gaussian_data,
@@ -228,6 +230,16 @@ public:
                                    pnanovdb_pipeline_type_t process_pipeline = pnanovdb_pipeline_type_noop,
                                    pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_raster2d,
                                    const pnanovdb_pipeline_params_t* process_params = nullptr);
+
+    void handle_mesh_data_load(pnanovdb_editor_token_t* scene,
+                               pnanovdb_compute_array_t* indices,
+                               pnanovdb_compute_array_t* positions,
+                               pnanovdb_compute_array_t* colors,
+                               const char* filename,
+                               pnanovdb_pipeline_type_t render_pipeline,
+                               bool is_line_indices,
+                               float inflation_radius = 0.f,
+                               pnanovdb_uint32_t resolution = 511u);
 
     // Remove object from scene (UI, loaded data, renderer state, selection)
     bool remove_object(pnanovdb_editor_token_t* scene_token, const char* name);
@@ -292,12 +304,18 @@ public:
     }
 
     void select_render_view(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
-    bool load_nanovdb_file(pnanovdb_editor_token_t* scene, const char* filepath);
+    bool load_nanovdb_file(pnanovdb_editor_token_t* scene,
+                           const char* filepath,
+                           pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_nanovdb_render);
     bool save_nanovdb_file(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name, const char* filepath);
     bool load_gaussian_file(const char* filepath,
                             pnanovdb_pipeline_type_t process_pipeline,
                             pnanovdb_pipeline_type_t render_pipeline,
                             float voxels_per_unit);
+
+    bool load_mesh_file(pnanovdb_editor_token_t* scene,
+                        const char* filepath,
+                        const pnanovdb_editor::mesh_import::Options& options = {});
 
 private:
     void copy_shader_params(pnanovdb_pipeline_render_method_t render_method,
