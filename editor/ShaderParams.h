@@ -177,8 +177,8 @@ public:
 
     PNANOVDB_SHADER_PARAMS_EXPORT_CXX void set_compute_array_for_shader(const std::string& shader_name,
                                                                         pnanovdb_compute_array_t* array);
-    pnanovdb_compute_array_t* get_compute_array_for_shader(const std::string& shader_name,
-                                                           const pnanovdb_compute_t* compute);
+    PNANOVDB_SHADER_PARAMS_EXPORT_CXX pnanovdb_compute_array_t* get_compute_array_for_shader(
+        const std::string& shader_name, const pnanovdb_compute_t* compute);
     void clear_pending_array_for_shader(const std::string& shader_name);
 
 private:
