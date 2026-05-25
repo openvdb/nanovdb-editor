@@ -13,11 +13,13 @@
 #include "editor/EditorSceneManager.h"
 #include "editor/ShaderParams.h"
 #include "EditorTestSupport.h"
+#include "GpuTestSupport.h"
 
 #include <array>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <string>
 #include <thread>
 
 namespace
@@ -65,6 +67,16 @@ TEST(StreamingUiToViewSync, PoolMutationPropagatesToObjectBufferEachFrame)
         pnanovdb_compute_free(&compute);
         pnanovdb_compiler_free(&compiler);
         GTEST_SKIP() << "No Vulkan-compatible device available on this machine";
+    }
+
+    if (pnanovdb_editor_test::should_skip_on_software_renderer(phys_desc.device_name))
+    {
+        const std::string skip_reason = pnanovdb_editor_test::software_renderer_skip_reason(
+            phys_desc.device_name, "streaming UI-sync test (headless editor worker races teardown)");
+        compute.device_interface.destroy_device_manager(device_manager);
+        pnanovdb_compute_free(&compute);
+        pnanovdb_compiler_free(&compiler);
+        GTEST_SKIP() << skip_reason;
     }
 
     pnanovdb_compute_device_desc_t device_desc{};

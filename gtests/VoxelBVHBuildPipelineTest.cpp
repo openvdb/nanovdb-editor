@@ -16,12 +16,11 @@
 
 #include <nanovdb/PNanoVDB.h>
 
-#include <algorithm>
-#include <cctype>
+#include "GpuTestSupport.h"
+
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <string>
@@ -125,24 +124,6 @@ bool build_heightfield_mesh(const pnanovdb_compute_t& compute,
 bool dragon_ply_available()
 {
     return std::filesystem::exists("./data/xyzrgb_dragon.ply");
-}
-
-bool is_software_renderer_name(const char* name)
-{
-    if (!name || name[0] == '\0')
-    {
-        return false;
-    }
-    std::string lowered(name);
-    std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) { return std::tolower(c); });
-    return lowered.find("lavapipe") != std::string::npos || lowered.find("llvmpipe") != std::string::npos ||
-           lowered.find("swiftshader") != std::string::npos;
-}
-
-bool software_voxelbvh_tests_force_enabled()
-{
-    const char* env = std::getenv("PNANOVDB_ENABLE_SOFTWARE_VOXELBVH_TESTS");
-    return env && env[0] != '\0' && std::strcmp(env, "0") != 0;
 }
 
 // TODO: make common function for a cpp test
@@ -267,8 +248,8 @@ struct VoxelBVHRuntime
         {
             return false;
         }
-        device_name = phys_desc.device_name;
-        if (is_software_renderer_name(phys_desc.device_name) && !software_voxelbvh_tests_force_enabled())
+        device_name = phys_desc.device_name ? phys_desc.device_name : "";
+        if (pnanovdb_editor_test::should_skip_on_software_renderer(phys_desc.device_name))
         {
             software_renderer = true;
             return false;
@@ -355,9 +336,8 @@ protected:
     {
         if (s_software_renderer)
         {
-            GTEST_SKIP() << "Software Vulkan driver detected ('" << s_software_renderer_name
-                         << "'); VoxelBVH shaders are too slow to test there. Set "
-                            "PNANOVDB_ENABLE_SOFTWARE_VOXELBVH_TESTS=1 to override.";
+            GTEST_SKIP() << pnanovdb_editor_test::software_renderer_skip_reason(
+                s_software_renderer_name.c_str(), "VoxelBVH build pipeline tests");
         }
         if (s_device_unavailable)
         {
