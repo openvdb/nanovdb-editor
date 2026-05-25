@@ -84,7 +84,7 @@ bool pnanovdb_pipeline_voxelbvh_build_params_set_source_type(pnanovdb_pipeline_p
                                                              pnanovdb_pipeline_voxelbvh_source_t source);
 bool pnanovdb_pipeline_voxelbvh_build_params_set_inflation_radius(pnanovdb_pipeline_params_t* params, float radius);
 bool pnanovdb_pipeline_voxelbvh_build_params_set_resolution(pnanovdb_pipeline_params_t* params,
-                                                                   pnanovdb_uint32_t resolution);
+                                                            pnanovdb_uint32_t resolution);
 
 // Execute pipeline using registered function pointers
 pnanovdb_pipeline_result_t pnanovdb_pipeline_execute(pnanovdb_pipeline_type_t type,

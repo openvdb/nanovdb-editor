@@ -15,7 +15,7 @@
 // #define TEST_RASTER_2D
 // #define TEST_CAMERA
 // #define TEST_NVDB
-#define TEST_IMAGE2D
+// #define TEST_IMAGE2D
 // #define TEST_FILE_FORMAT
 // #define FORMAT_INGP
 #define FORMAT_PLY

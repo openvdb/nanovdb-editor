@@ -513,8 +513,7 @@ bool start_voxelbvh_build(pnanovdb_editor::SceneObject* scene_obj,
                 pnanovdb_compute_array_t* arrays[6] = { r.array_ptrs[0], r.array_ptrs[1], r.array_ptrs[2],
                                                         r.array_ptrs[3], r.array_ptrs[4], r.array_ptrs[5] };
                 s_pending_voxelbvh_result = s_voxelbvh_iface->nanovdb_from_gaussians_array(
-                    s_pending_voxelbvh_compute, s_voxelbvh_worker_queue, s_voxelbvh_worker_ctx, arrays, 6u,
-                    r.resolution);
+                    s_pending_voxelbvh_compute, s_voxelbvh_worker_queue, s_voxelbvh_worker_ctx, arrays, 6u, r.resolution);
                 break;
             }
             }
@@ -1056,8 +1055,7 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
         if (async_result == pnanovdb_pipeline_result_pending)
             return pnanovdb_pipeline_result_pending;
 
-        result =
-            voxelbvh->nanovdb_from_gaussians_array(compute, queue, voxelbvh_ctx, gaussian_arrays, 6u, resolution);
+        result = voxelbvh->nanovdb_from_gaussians_array(compute, queue, voxelbvh_ctx, gaussian_arrays, 6u, resolution);
         break;
     }
     default:
@@ -1745,7 +1743,7 @@ bool pnanovdb_pipeline_voxelbvh_build_params_set_inflation_radius(pnanovdb_pipel
 }
 
 bool pnanovdb_pipeline_voxelbvh_build_params_set_resolution(pnanovdb_pipeline_params_t* params,
-                                                                   pnanovdb_uint32_t resolution)
+                                                            pnanovdb_uint32_t resolution)
 {
     if (!ensure_voxelbvh_build_params(params))
         return false;

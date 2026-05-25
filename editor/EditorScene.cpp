@@ -572,18 +572,15 @@ void EditorScene::sync_shader_params_from_editor()
 {
     if (m_editor->impl->editor_worker)
     {
-        // Only lock if params are dirty
-        if (m_editor->impl->editor_worker->params_dirty.load())
-        {
-            std::lock_guard<std::recursive_mutex> lock(m_editor->impl->editor_worker->shader_params_mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_editor->impl->editor_worker->shader_params_mutex);
 
-            // Check again after acquiring lock (double-check pattern)
-            if (m_editor->impl->editor_worker->params_dirty.exchange(false))
-            {
-                // Sync editor params to UI
-                sync_current_view_state(SyncDirection::EditorToUI);
-            }
+        if (m_editor->impl->editor_worker->params_dirty.exchange(false))
+        {
+            // Sync editor params to UI
+            sync_current_view_state(SyncDirection::EditorToUI);
         }
+
+        sync_current_view_state(SyncDirection::UiToView);
     }
     else
     {
