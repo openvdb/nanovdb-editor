@@ -32,8 +32,22 @@ using namespace imgui_instance_user;
 
 const float EPSILON = 1e-6f;
 
-static constexpr float k_property_field_width = 100.0f;
+static constexpr float k_property_field_width = 140.0f;
 static constexpr float k_property_combo_width = 200.0f;
+
+static const char* pick_float_format(float step)
+{
+    float s = std::fabs(step);
+    if (s >= 1.0f - EPSILON || s < EPSILON)
+        return "%.0f";
+    if (s >= 0.1f - EPSILON)
+        return "%.1f";
+    if (s >= 0.01f - EPSILON)
+        return "%.2f";
+    if (s >= 0.001f - EPSILON)
+        return "%.3f";
+    return "%.4f";
+}
 
 static void renderPipelineProcessParams(EditorSceneManager* scene_manager,
                                         pnanovdb_editor_token_t* scene_token,
@@ -128,7 +142,7 @@ static void renderPipelineProcessParams(EditorSceneManager* scene_manager,
         }
 
         ImGui::SetNextItemWidth(k_property_field_width);
-        ImGui::InputFloat(id_buf, &field_values[i], field.step, field.step * 10.0f, "%.1f");
+        ImGui::InputFloat(id_buf, &field_values[i], field.step, field.step * 10.0f, pick_float_format(field.step));
         if (ImGui::IsItemHovered() && field.tooltip)
             ImGui::SetTooltip("%s", field.tooltip);
 

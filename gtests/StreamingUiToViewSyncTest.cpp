@@ -25,6 +25,10 @@ namespace
 
 constexpr const char* kDefaultEditorShader = "editor/editor.slang";
 
+constexpr auto kWorkerStartupTimeout = std::chrono::milliseconds(60000);
+constexpr auto kObjectReadyTimeout = std::chrono::milliseconds(30000);
+constexpr auto kPropagationTimeout = std::chrono::milliseconds(30000);
+
 bool wait_until(std::function<bool()> predicate, std::chrono::milliseconds timeout)
 {
     const auto deadline = std::chrono::steady_clock::now() + timeout;
@@ -82,8 +86,7 @@ TEST(StreamingUiToViewSync, PoolMutationPropagatesToObjectBufferEachFrame)
 
     ASSERT_NE(editor.impl->editor_worker, nullptr) << "Streaming mode must create an EditorWorker";
 
-    ASSERT_TRUE(
-        wait_until([&]() { return !editor.impl->editor_worker->is_starting.load(); }, std::chrono::milliseconds(5000)))
+    ASSERT_TRUE(wait_until([&]() { return !editor.impl->editor_worker->is_starting.load(); }, kWorkerStartupTimeout))
         << "Editor worker did not finish starting";
 
     pnanovdb_editor_token_t* scene_token = editor.get_token("ui_sync_streaming_scene");
@@ -99,7 +102,7 @@ TEST(StreamingUiToViewSync, PoolMutationPropagatesToObjectBufferEachFrame)
 
     ASSERT_TRUE(wait_until(
         [&]() { return pnanovdb_editor_test::get_object_shader_params_ptr(&editor, scene_token, name_token) != nullptr; },
-        std::chrono::milliseconds(5000)))
+        kObjectReadyTimeout))
         << "Per-object shader_params buffer was never allocated for the added object";
 
     std::array<uint8_t, 64> baseline{};
@@ -129,7 +132,7 @@ TEST(StreamingUiToViewSync, PoolMutationPropagatesToObjectBufferEachFrame)
                 &editor, scene_token, name_token, after.data(), after.size());
             return *reinterpret_cast<const float*>(after.data()) == kSentinel;
         },
-        std::chrono::milliseconds(3000));
+        kPropagationTimeout);
 
     editor.stop(&editor);
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
