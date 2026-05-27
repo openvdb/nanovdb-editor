@@ -1911,7 +1911,11 @@ void unmap_params(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pna
     }
 }
 
-static thread_local int s_pipeline_params_map_lock_depth = 0;
+static int& pipeline_params_map_lock_depth(pnanovdb_editor_t* editor)
+{
+    thread_local std::unordered_map<pnanovdb_editor_t*, int> s_depths;
+    return s_depths[editor];
+}
 
 /*!
     \brief Map pipeline stage parameters for read/write access
@@ -2005,7 +2009,7 @@ pnanovdb_pipeline_params_t* map_pipeline_params(pnanovdb_editor_t* editor,
         return nullptr;
     }
 
-    s_pipeline_params_map_lock_depth++;
+    pipeline_params_map_lock_depth(editor)++;
     return result;
 }
 
@@ -2057,12 +2061,13 @@ void unmap_pipeline_params(pnanovdb_editor_t* editor,
                                                  });
     }
 
-    // Unlock mutex only if this thread owns a successful map lock.
+    // Unlock mutex only if this thread owns a successful map lock for this editor.
     if (editor->impl->editor_worker)
     {
-        if (s_pipeline_params_map_lock_depth > 0)
+        int& depth = pipeline_params_map_lock_depth(editor);
+        if (depth > 0)
         {
-            s_pipeline_params_map_lock_depth--;
+            depth--;
             editor->impl->editor_worker->pipeline_params_mutex.unlock();
             // Signal editor thread that pipeline params were modified
             editor->impl->editor_worker->pipeline_params_dirty.store(true);

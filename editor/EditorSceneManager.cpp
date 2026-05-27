@@ -327,11 +327,7 @@ void EditorSceneManager::add_nanovdb_impl(pnanovdb_editor_token_t* scene,
     obj.params.shader_params_array = params_array;
     obj.shader_params() = params_array ? params_array->data : nullptr;
     obj.shader_params_data_type() = nullptr;
-    if (!obj.params.shader_name_storage)
-    {
-        obj.params.shader_name_storage = std::make_shared<ShaderNameStorage>();
-    }
-    obj.params.shader_name_storage->object_key = key;
+    obj.ensure_shader_name_storage().object_key = key;
     obj.shader_name() = shader_name;
 
     // Set pipelines (using provided values, not hardcoded defaults)
@@ -539,36 +535,8 @@ void EditorSceneManager::add_gaussian_data_impl(pnanovdb_editor_token_t* scene,
     obj.params.shader_params_array = params_array;
     obj.shader_params() = params_array ? params_array->data : nullptr;
     obj.shader_params_data_type() = shader_params_data_type;
-    if (!obj.params.shader_name_storage)
-    {
-        obj.params.shader_name_storage = std::make_shared<ShaderNameStorage>();
-    }
-    obj.params.shader_name_storage->object_key = key;
+    obj.ensure_shader_name_storage().object_key = key;
     obj.shader_name() = EditorToken::getInstance().getToken(shader_name);
-
-    // Register gaussian internal arrays as named arrays
-    if (gaussian_data)
-    {
-        auto* gd = pnanovdb_raster::cast(gaussian_data);
-        if (gd)
-        {
-            obj.named_arrays().clear();
-            if (gd->means_cpu_array)
-                obj.named_arrays()["means"] = gd->means_cpu_array;
-            if (gd->opacities_cpu_array)
-                obj.named_arrays()["opacities"] = gd->opacities_cpu_array;
-            if (gd->quaternions_cpu_array)
-                obj.named_arrays()["quaternions"] = gd->quaternions_cpu_array;
-            if (gd->scales_cpu_array)
-                obj.named_arrays()["scales"] = gd->scales_cpu_array;
-            if (gd->sh_0_cpu_array)
-                obj.named_arrays()["sh_0"] = gd->sh_0_cpu_array;
-            if (gd->sh_n_cpu_array)
-                obj.named_arrays()["sh_n"] = gd->sh_n_cpu_array;
-            if (gd->colors_cpu_array)
-                obj.named_arrays()["colors"] = gd->colors_cpu_array;
-        }
-    }
 
     // Set pipelines (using provided values, not hardcoded defaults)
     obj.process_pipeline() = process_pipeline;
@@ -619,6 +587,35 @@ void EditorSceneManager::add_gaussian_data_impl(pnanovdb_editor_token_t* scene,
                 });
             SCENEMANAGER_LOG("[SceneManager] Created new owner for gaussian data %p, ref_count %ld\n",
                              (void*)gaussian_data, obj.resources.gaussian_data_owner.use_count());
+        }
+    }
+
+    // Register the gaussian's internal CPU arrays as named arrays
+    obj.named_arrays().clear();
+    obj.resources.named_array_owners.clear();
+    if (gaussian_data)
+    {
+        auto* gd = pnanovdb_raster::cast(gaussian_data);
+        if (gd)
+        {
+            const auto& owner = obj.resources.gaussian_data_owner;
+            auto register_named = [&obj, &owner](const char* nm, pnanovdb_compute_array_t* arr)
+            {
+                if (!arr)
+                    return;
+                obj.named_arrays()[nm] = arr;
+                if (owner)
+                {
+                    obj.resources.named_array_owners[nm] = std::shared_ptr<pnanovdb_compute_array_t>(owner, arr);
+                }
+            };
+            register_named("means", gd->means_cpu_array);
+            register_named("opacities", gd->opacities_cpu_array);
+            register_named("quaternions", gd->quaternions_cpu_array);
+            register_named("scales", gd->scales_cpu_array);
+            register_named("sh_0", gd->sh_0_cpu_array);
+            register_named("sh_n", gd->sh_n_cpu_array);
+            register_named("colors", gd->colors_cpu_array);
         }
     }
 
@@ -753,11 +750,7 @@ void configure_array_object_pipelines(SceneObject& obj,
     obj.scene_token = scene;
     obj.name_token = name;
 
-    if (!obj.params.shader_name_storage)
-    {
-        obj.params.shader_name_storage = std::make_shared<ShaderNameStorage>();
-    }
-    obj.params.shader_name_storage->object_key = key;
+    obj.ensure_shader_name_storage().object_key = key;
 
     obj.process_pipeline() = process_pipeline;
     obj.render_pipeline() = render_pipeline;
@@ -950,7 +943,7 @@ bool EditorSceneManager::rename_scene(pnanovdb_editor_token_t* old_scene, pnanov
         {
             node.key() = new_key;
             node.mapped().scene_token = new_scene;
-            node.mapped().shader_name_storage().object_key = new_key;
+            node.mapped().ensure_shader_name_storage().object_key = new_key;
             m_objects.insert(std::move(node));
         }
     }

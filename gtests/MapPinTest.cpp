@@ -12,8 +12,11 @@
 #include "EditorTestSupport.h"
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <thread>
+#include <vector>
 
 namespace
 {
@@ -204,6 +207,119 @@ TEST_F(MapPinTest, FailedMapLeavesStackUntouched)
     editor.unmap_params(&editor, scene_token, name_token);
     EXPECT_EQ(pnanovdb_editor::shader_name_map_ref_count(&editor, scene_token, name_token), 1u);
     editor.unmap_params(&editor, scene_token, name_token);
+    EXPECT_EQ(pnanovdb_editor::shader_name_map_ref_count(&editor, scene_token, name_token), 0u);
+    EXPECT_EQ(pnanovdb_editor::param_map_stack_depth(&editor), 0u);
+}
+
+TEST_F(MapPinTest, ConcurrentShaderNameMapsAreThreadSafe)
+{
+    const pnanovdb_reflect_data_type_t* name_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t);
+
+    constexpr int kThreadCount = 8;
+    std::atomic<int> mapped_count{ 0 };
+    std::atomic<bool> release_gate{ false };
+
+    auto worker = [&]()
+    {
+        // Each worker independently maps the shader-name pin.
+        void* ptr = editor.map_params(&editor, scene_token, name_token, name_type);
+        EXPECT_NE(ptr, nullptr);
+        // The map-call frame stack is per-thread, so each worker sees depth 1.
+        EXPECT_EQ(pnanovdb_editor::param_map_stack_depth(&editor), 1u);
+
+        mapped_count.fetch_add(1, std::memory_order_acq_rel);
+
+        // Hold the pin until the main thread observes the peak ref-count.
+        while (!release_gate.load(std::memory_order_acquire))
+        {
+            std::this_thread::yield();
+        }
+
+        editor.unmap_params(&editor, scene_token, name_token);
+        EXPECT_EQ(pnanovdb_editor::param_map_stack_depth(&editor), 0u);
+    };
+
+    std::vector<std::thread> threads;
+    threads.reserve(kThreadCount);
+    for (int i = 0; i < kThreadCount; ++i)
+    {
+        threads.emplace_back(worker);
+    }
+
+    // Wait for every worker to acquire its pin, then observe peak ref-count.
+    while (mapped_count.load(std::memory_order_acquire) < kThreadCount)
+    {
+        std::this_thread::yield();
+    }
+    EXPECT_EQ(
+        pnanovdb_editor::shader_name_map_ref_count(&editor, scene_token, name_token), static_cast<size_t>(kThreadCount))
+        << "ref-count must reflect contributions from every thread holding the pin";
+    // The main thread never called map_params, so its own per-thread stack is empty.
+    EXPECT_EQ(pnanovdb_editor::param_map_stack_depth(&editor), 0u);
+
+    release_gate.store(true, std::memory_order_release);
+    for (auto& t : threads)
+    {
+        t.join();
+    }
+
+    EXPECT_EQ(pnanovdb_editor::shader_name_map_ref_count(&editor, scene_token, name_token), 0u);
+    EXPECT_EQ(pnanovdb_editor::param_map_stack_depth(&editor), 0u);
+}
+
+TEST_F(MapPinTest, CrossThreadUnmapDoesNotReleaseOtherThreadsPin)
+{
+    const pnanovdb_reflect_data_type_t* name_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t);
+
+    std::atomic<bool> a_mapped{ false };
+    std::atomic<bool> b_finished{ false };
+
+    std::thread thread_a(
+        [&]()
+        {
+            void* ptr = editor.map_params(&editor, scene_token, name_token, name_type);
+            EXPECT_NE(ptr, nullptr);
+            EXPECT_EQ(pnanovdb_editor::param_map_stack_depth(&editor), 1u);
+            a_mapped.store(true, std::memory_order_release);
+
+            // Wait for thread B's stray unmap_params() to complete.
+            while (!b_finished.load(std::memory_order_acquire))
+            {
+                std::this_thread::yield();
+            }
+
+            // The cross-thread unmap on thread B must not have torn down A's frame.
+            EXPECT_EQ(pnanovdb_editor::param_map_stack_depth(&editor), 1u)
+                << "A's per-thread frame stack must survive a stray unmap_params() on another thread";
+            EXPECT_EQ(pnanovdb_editor::shader_name_map_ref_count(&editor, scene_token, name_token), 1u)
+                << "Cross-thread unmap_params() must not release a pin owned by another thread";
+
+            editor.unmap_params(&editor, scene_token, name_token);
+            EXPECT_EQ(pnanovdb_editor::param_map_stack_depth(&editor), 0u);
+        });
+
+    while (!a_mapped.load(std::memory_order_acquire))
+    {
+        std::this_thread::yield();
+    }
+    ASSERT_EQ(pnanovdb_editor::shader_name_map_ref_count(&editor, scene_token, name_token), 1u);
+
+    std::thread thread_b(
+        [&]()
+        {
+            // Thread B has an empty per-thread frame stack; unmap_params() is a silent no-op.
+            EXPECT_EQ(pnanovdb_editor::param_map_stack_depth(&editor), 0u);
+            editor.unmap_params(&editor, scene_token, name_token);
+            EXPECT_EQ(pnanovdb_editor::param_map_stack_depth(&editor), 0u);
+        });
+    thread_b.join();
+
+    // From the main thread we can also confirm the pin is still held by A.
+    EXPECT_EQ(pnanovdb_editor::shader_name_map_ref_count(&editor, scene_token, name_token), 1u);
+
+    b_finished.store(true, std::memory_order_release);
+    thread_a.join();
+
     EXPECT_EQ(pnanovdb_editor::shader_name_map_ref_count(&editor, scene_token, name_token), 0u);
     EXPECT_EQ(pnanovdb_editor::param_map_stack_depth(&editor), 0u);
 }

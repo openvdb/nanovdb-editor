@@ -74,6 +74,9 @@ struct SceneObjectResources
     std::map<std::string, std::shared_ptr<pnanovdb_compute_array_t>> named_array_owners;
 };
 
+/*!
+    \brief Mutable storage for a SceneObject's shader name
+*/
 struct ShaderNameStorage
 {
     uint64_t object_key = 0;
@@ -328,12 +331,12 @@ struct SceneObject
     {
         return params.shader_name_storage->value.shader_name;
     }
-    ShaderNameStorage& shader_name_storage()
+    ShaderNameStorage& ensure_shader_name_storage()
     {
-        return *params.shader_name_storage;
-    }
-    const ShaderNameStorage& shader_name_storage() const
-    {
+        if (!params.shader_name_storage)
+        {
+            params.shader_name_storage = std::make_shared<ShaderNameStorage>();
+        }
         return *params.shader_name_storage;
     }
 
