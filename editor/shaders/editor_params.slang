@@ -1,22 +1,10 @@
 struct EditorParams
 {
-    float4 view_inv_x;
-    float4 view_inv_y;
-    float4 view_inv_z;
-    float4 view_inv_w;
-    float4 projection_inv_x;
-    float4 projection_inv_y;
-    float4 projection_inv_z;
-    float4 projection_inv_w;
+    float4x4 view_inv;
+    float4x4 projection_inv;
 
-    float4 view_x;
-    float4 view_y;
-    float4 view_z;
-    float4 view_w;
-    float4 projection_x;
-    float4 projection_y;
-    float4 projection_z;
-    float4 projection_w;
+    float4x4 view;
+    float4x4 projection;
 
     uint width;
     uint height;
