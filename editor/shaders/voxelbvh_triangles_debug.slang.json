@@ -32,7 +32,7 @@
             "step": 1
         },
         "show_first_active_level": {
-            "value": 0,
+            "value": 1,
             "min": 0,
             "max": 1,
             "step": 1,
