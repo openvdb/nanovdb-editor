@@ -1085,10 +1085,27 @@ void swapchain_initSwapchain(Swapchain* ptr)
     auto instanceLoader = &ptr->deviceQueue->device->deviceManager->loader;
     auto deviceLoader = &ptr->deviceQueue->device->loader;
 
-    // If we are recreating after an out-of-date event, we may still hold stale swapchain handles
-    // Clean them up here without a queue-wide wait to avoid resize-path stalls
+    // Destroy handles deferred from a previous out-of-date event. Wait only on the last in-flight
+    // frame that referenced these textures, avoiding the queue-wide vkQueueWaitIdle resize stall.
     if (ptr->swapchainVulkan != VK_NULL_HANDLE)
     {
+        pnanovdb_uint64_t waitFenceValue = 0u;
+        for (pnanovdb_uint32_t idx = 0; idx < ptr->numSwapchainImages; idx++)
+        {
+            if (ptr->textures[idx])
+            {
+                pnanovdb_uint64_t textureLastActive = cast(ptr->textures[idx])->lastActive;
+                if (textureLastActive > waitFenceValue)
+                {
+                    waitFenceValue = textureLastActive;
+                }
+            }
+        }
+        if (waitFenceValue > 0u)
+        {
+            waitForFrame(cast(ptr->deviceQueue), waitFenceValue);
+        }
+
         for (pnanovdb_uint32_t idx = 0; idx < ptr->numSwapchainImages; idx++)
         {
             if (ptr->textures[idx])
@@ -1254,7 +1271,8 @@ void resizeSwapchain(pnanovdb_compute_swapchain_t* swapchain, pnanovdb_uint32_t 
     {
         if (width != ptr->width || height != ptr->height)
         {
-            swapchain_destroySwapchain(ptr);
+            // Defer destroy to swapchain_initSwapchain() so it can do a targeted per-frame fence
+            // wait instead of a queue-wide vkQueueWaitIdle
             ptr->valid = PNANOVDB_FALSE;
         }
     }
@@ -1298,8 +1316,8 @@ int presentSwapchain(pnanovdb_compute_swapchain_t* swapchain, pnanovdb_bool_t vs
 
     if (result != VK_SUCCESS || ptr->vsync != vsync)
     {
+        // Defer destroy to next frame's swapchain_initSwapchain() (targeted fence wait)
         ptr->vsync = vsync;
-        swapchain_destroySwapchain(ptr);
         ptr->valid = PNANOVDB_FALSE;
     }
 
@@ -1311,7 +1329,6 @@ int presentSwapchain(pnanovdb_compute_swapchain_t* swapchain, pnanovdb_bool_t vs
 
         if (compWidth != ptr->width || compHeight != ptr->height)
         {
-            swapchain_destroySwapchain(ptr);
             ptr->valid = PNANOVDB_FALSE;
         }
     }
@@ -1345,21 +1362,11 @@ pnanovdb_compute_texture_t* getSwapchainFrontTexture(pnanovdb_compute_swapchain_
                                                     ptr->deviceQueue->currentBeginFrameSemaphore, VK_NULL_HANDLE,
                                                     &ptr->currentSwapchainIdx);
 
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
-    {
-        // Defer swapchain recreation to the next frame's resize path
-        // Do not destroy here: swapchain_destroySwapchain() waits for idle and can stall during resize churn
-        // Clear begin semaphore so subsequent submit doesn't wait on an unsignaled acquire semaphore
-        ptr->deviceQueue->currentBeginFrameSemaphore = VK_NULL_HANDLE;
-        ptr->valid = PNANOVDB_FALSE;
-        return nullptr;
-    }
-
     if (result != VK_SUCCESS)
     {
-        // Acquire failed: clear begin semaphore to avoid waiting on it in later flush/submit
+        // Defer destroy to next frame's swapchain_initSwapchain() (targeted fence wait).
+        // Clear begin semaphore so subsequent submit doesn't wait on an unsignaled acquire semaphore.
         ptr->deviceQueue->currentBeginFrameSemaphore = VK_NULL_HANDLE;
-        swapchain_destroySwapchain(ptr);
         ptr->valid = PNANOVDB_FALSE;
         return nullptr;
     }
