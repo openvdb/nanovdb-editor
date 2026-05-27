@@ -113,6 +113,10 @@ struct Window
     float key_translation_rate_base = 1.f;
     float camera_speed_multiplier = 1.f;
     float shift_speed_multiplier = 10.f;
+
+    pnanovdb_compute_swapchain_t* last_swapchain = nullptr;
+    pnanovdb_uint32_t last_swapchain_width = 0;
+    pnanovdb_uint32_t last_swapchain_height = 0;
 };
 
 PNANOVDB_CAST_PAIR(pnanovdb_imgui_window_t, Window)
@@ -502,20 +506,16 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
     {
         // Keep swapchain synchronized with current framebuffer size in the frame loop,
         // but avoid redundant resize calls when the size has not changed.
-        static pnanovdb_compute_swapchain_t* s_last_swapchain = nullptr;
-        static pnanovdb_uint32_t s_last_swapchain_width = 0;
-        static pnanovdb_uint32_t s_last_swapchain_height = 0;
-
         const pnanovdb_uint32_t current_width = static_cast<pnanovdb_uint32_t>(ptr->width);
         const pnanovdb_uint32_t current_height = static_cast<pnanovdb_uint32_t>(ptr->height);
 
-        if (swapchain != s_last_swapchain || current_width != s_last_swapchain_width ||
-            current_height != s_last_swapchain_height)
+        if (swapchain != ptr->last_swapchain || current_width != ptr->last_swapchain_width ||
+            current_height != ptr->last_swapchain_height)
         {
             ptr->device_interface.resize_swapchain(swapchain, current_width, current_height);
-            s_last_swapchain = swapchain;
-            s_last_swapchain_width = current_width;
-            s_last_swapchain_height = current_height;
+            ptr->last_swapchain = swapchain;
+            ptr->last_swapchain_width = current_width;
+            ptr->last_swapchain_height = current_height;
         }
         swapchain_texture = ptr->device_interface.get_swapchain_front_texture(swapchain);
     }
