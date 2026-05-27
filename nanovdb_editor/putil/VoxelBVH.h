@@ -170,8 +170,19 @@ typedef struct pnanovdb_voxelbvh_t
                                                    pnanovdb_compute_buffer_t* dst_nanovdb_inout,
                                                    pnanovdb_uint64_t dst_nanovdb_word_count,
                                                    pnanovdb_compute_buffer_t* src_nanovdb_in,
+                                                   pnanovdb_uint64_t src_nanovdb_word_count,
                                                    pnanovdb_uint32_t resolution,
-                                                   pnanovdb_uint32_t dst_grid_type);
+                                                   pnanovdb_uint32_t dst_grid_type,
+                                                   pnanovdb_bool_t upsample);
+
+    void(PNANOVDB_ABI* nanovdb_duplicate_topology_array)(const pnanovdb_compute_t* compute,
+                                                         pnanovdb_compute_queue_t* queue,
+                                                         pnanovdb_voxelbvh_context_t* context,
+                                                         pnanovdb_compute_array_t** dst_nanovdb_out,
+                                                         pnanovdb_compute_array_t* src_nanovdb_in,
+                                                         pnanovdb_uint32_t resolution,
+                                                         pnanovdb_uint32_t dst_grid_type,
+                                                         pnanovdb_bool_t upsample);
 
 } pnanovdb_voxelbvh_t;
 
@@ -194,6 +205,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(ijkl_from_lines_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(ijkl_from_triangles, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(ijkl_from_triangles_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_duplicate_topology, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_duplicate_topology_array, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE
