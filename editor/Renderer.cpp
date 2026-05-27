@@ -258,6 +258,10 @@ ShaderDispatchResult Renderer::dispatch_nanovdb_shader(pnanovdb_compute_array_t*
     editor_params.width = image_width;
     editor_params.height = image_height;
 
+    static uint32_t frame_id = 0;
+    editor_params.frame_id = frame_id;
+    frame_id++;
+
     // Upload editor parameters
     EditorParams* mapped = (EditorParams*)pnanovdb_compute_upload_buffer_map(
         compute_context, &m_compute_upload_buffer, sizeof(EditorParams));

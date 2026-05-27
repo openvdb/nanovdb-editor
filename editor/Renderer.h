@@ -247,7 +247,7 @@ private:
         pnanovdb_camera_mat_t projection;
         uint32_t width;
         uint32_t height;
-        uint32_t pad1;
+        uint32_t frame_id;
         uint32_t pad2;
     };
 

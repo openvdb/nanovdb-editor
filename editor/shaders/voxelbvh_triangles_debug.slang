@@ -17,7 +17,7 @@ struct EditorParams
 
     uint width;
     uint height;
-    uint pad1;
+    uint frame_id;
     uint pad2;
 };
 
@@ -322,7 +322,10 @@ void ray_debug_plane(
     inout float4 sum,
     inout float nominalT)
 {
-    float3 slice_point = (1.f - shader_params.slice_plane_z) * bbox_minf + shader_params.slice_plane_z * bbox_maxf;
+    float slice_plane_z = shader_params.slice_plane_z;
+    float anim_t = (1.f / 900.f) * float(editor_params.frame_id % 900);
+    slice_plane_z += 0.1f * (1.f - 2.f * abs(anim_t - 0.5f));
+    float3 slice_point = (1.f - slice_plane_z) * bbox_minf + slice_plane_z * bbox_maxf;
     float3 normal = float3(
         shader_params.slice_plane_axis == 0u ? 1.f : 0.f,
         shader_params.slice_plane_axis == 1u ? 1.f : 0.f,
