@@ -412,6 +412,48 @@ void ShaderParams::clear_pending_array_for_shader(const std::string& shader_name
     pending_arrays_data_.erase(shader_name);
 }
 
+size_t ShaderParams::copy_params_to_buffer(const std::string& shader_name, void* dst, size_t dst_size)
+{
+    if (!dst || dst_size == 0)
+    {
+        return 0;
+    }
+
+    bool hasParams = load(shader_name, false);
+    if (!hasParams)
+    {
+        return 0;
+    }
+    std::vector<ShaderParam>& shader_params = *get(shader_name);
+
+    char* write_ptr = reinterpret_cast<char*>(dst);
+    size_t write_offset = 0;
+
+    // build the combined data structure using pool arrays
+    for (auto& shader_param : shader_params)
+    {
+        getAllocatedPoolArray(shader_param);
+        assert(shader_param.pool_index != SIZE_MAX && shader_param.pool_index < shader_params_pool_.size());
+
+        auto& pool_array = shader_params_pool_[shader_param.pool_index];
+        if (!pool_array.empty())
+        {
+            size_t shader_param_size = shader_param.num_elements * shader_param.size;
+            if (write_offset + shader_param_size <= dst_size)
+            {
+                std::memcpy(write_ptr + write_offset, pool_array.data(), shader_param_size);
+                write_offset += shader_param_size;
+            }
+            else
+            {
+                break;
+            }
+        }
+    }
+
+    return write_offset;
+}
+
 pnanovdb_compute_array_t* ShaderParams::get_compute_array_for_shader(const std::string& shader_name,
                                                                      const pnanovdb_compute_t* compute)
 {
@@ -425,32 +467,11 @@ pnanovdb_compute_array_t* ShaderParams::get_compute_array_for_shader(const std::
     {
         return nullptr;
     }
-    std::vector<ShaderParam>& shader_params = *get(shader_name);
 
-    // make constant array at 64KB limit of constant buffer
     pnanovdb_compute_array_t* constant_array =
         compute->create_array(sizeof(char), PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE, nullptr);
 
-    char* shader_param_write_ptr = reinterpret_cast<char*>(constant_array->data);
-    size_t shader_param_write_offset = 0;
-
-    // build the combined data structure using pool arrays
-    for (auto& shader_param : shader_params)
-    {
-        getAllocatedPoolArray(shader_param);
-        assert(shader_param.pool_index != SIZE_MAX && shader_param.pool_index < shader_params_pool_.size());
-
-        auto& pool_array = shader_params_pool_[shader_param.pool_index];
-        if (!pool_array.empty())
-        {
-            size_t shader_param_size = shader_param.num_elements * shader_param.size;
-            if (shader_param_write_offset + shader_param_size <= PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE)
-            {
-                std::memcpy(shader_param_write_ptr + shader_param_write_offset, pool_array.data(), shader_param_size);
-            }
-            shader_param_write_offset += shader_param_size;
-        }
-    }
+    copy_params_to_buffer(shader_name, constant_array->data, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
 
     return constant_array;
 }

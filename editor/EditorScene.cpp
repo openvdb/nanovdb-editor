@@ -207,39 +207,12 @@ void EditorScene::copy_editor_shader_params_to_ui(SceneShaderParams* params)
 
 void EditorScene::copy_shader_params_from_ui_to_view(SceneShaderParams* params, void* view_params)
 {
-    if (!params || !view_params)
+    if (!params || !view_params || params->size == 0)
     {
         return;
     }
 
-    // Avoid locking SceneManager inside a SceneManager callback. Just produce a fresh array and copy.
-    auto* old_array = params->current_array;
-    pnanovdb_compute_array_t* new_array =
-        m_scene_manager.shader_params.get_compute_array_for_shader(params->shader_name, m_compute);
-
-    if (!new_array || !new_array->data)
-    {
-        return;
-    }
-
-    // If view_params points to the same buffer as the old array, update in place
-    if (old_array && view_params == old_array->data)
-    {
-        std::memcpy(old_array->data, new_array->data, params->size);
-        m_compute->destroy_array(new_array);
-        return;
-    }
-
-    // Otherwise, switch to the new array and copy to the external target
-    auto* to_destroy = old_array;
-    params->current_array = new_array;
-    std::memcpy(view_params, new_array->data, params->size);
-
-    if (to_destroy && to_destroy != params->default_array)
-    {
-        m_compute->destroy_array(to_destroy);
-        // Note: to_destroy is a copy of old_array, so we don't need to set it to nullptr
-    }
+    m_scene_manager.shader_params.copy_params_to_buffer(params->shader_name, view_params, params->size);
 }
 
 void EditorScene::copy_ui_shader_params_from_to_editor(SceneShaderParams* params)
@@ -889,6 +862,8 @@ void snapshot_object_shader_params_readonly(EditorSceneManager& scene_manager,
                                             pnanovdb_editor_token_t* name_token,
                                             size_t raster2d_params_size,
                                             size_t nanovdb_params_size,
+                                            const void* raster2d_default_data,
+                                            const void* nanovdb_default_data,
                                             void* shader_params_data)
 {
     if (!shader_params_data || !scene_token || !name_token)
@@ -899,19 +874,30 @@ void snapshot_object_shader_params_readonly(EditorSceneManager& scene_manager,
     scene_manager.with_object(scene_token, name_token,
                               [&](SceneObject* scene_obj)
                               {
-                                  if (!scene_obj || !scene_obj->shader_params())
+                                  if (!scene_obj)
                                   {
                                       return;
                                   }
 
                                   auto render_method = pipeline_get_render_method(scene_obj->render_pipeline());
-                                  const size_t copy_size = (render_method == pnanovdb_pipeline_render_method_raster2d) ?
-                                                               raster2d_params_size :
-                                                               nanovdb_params_size;
-                                  if (copy_size > 0)
+                                  const bool is_raster2d = (render_method == pnanovdb_pipeline_render_method_raster2d);
+                                  const size_t copy_size = is_raster2d ? raster2d_params_size : nanovdb_params_size;
+                                  if (copy_size == 0)
                                   {
-                                      std::memcpy(shader_params_data, scene_obj->shader_params(), copy_size);
+                                      return;
                                   }
+
+                                  // Per-object buffer takes priority
+                                  const void* src = scene_obj->shader_params();
+                                  if (!src)
+                                  {
+                                      src = is_raster2d ? raster2d_default_data : nanovdb_default_data;
+                                  }
+                                  if (!src)
+                                  {
+                                      return;
+                                  }
+                                  std::memcpy(shader_params_data, src, copy_size);
                               });
 }
 
@@ -919,8 +905,14 @@ void EditorScene::get_shader_params_for_object(pnanovdb_editor_token_t* scene_to
                                                pnanovdb_editor_token_t* name_token,
                                                void* shader_params_data)
 {
-    snapshot_object_shader_params_readonly(
-        m_scene_manager, scene_token, name_token, m_raster2d_params.size, m_nanovdb_params.size, shader_params_data);
+    const void* raster2d_default = (m_raster2d_params.default_array && m_raster2d_params.default_array->data) ?
+                                       m_raster2d_params.default_array->data :
+                                       nullptr;
+    const void* nanovdb_default = (m_nanovdb_params.default_array && m_nanovdb_params.default_array->data) ?
+                                      m_nanovdb_params.default_array->data :
+                                      nullptr;
+    snapshot_object_shader_params_readonly(m_scene_manager, scene_token, name_token, m_raster2d_params.size,
+                                           m_nanovdb_params.size, raster2d_default, nanovdb_default, shader_params_data);
 }
 
 void EditorScene::update_scene_tree_after_conversion(pnanovdb_editor_token_t* scene_token,

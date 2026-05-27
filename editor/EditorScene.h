@@ -383,6 +383,8 @@ PNANOVDB_EDITOR_EXPORT_CXX void snapshot_object_shader_params_readonly(EditorSce
                                                                        pnanovdb_editor_token_t* name_token,
                                                                        size_t raster2d_params_size,
                                                                        size_t nanovdb_params_size,
+                                                                       const void* raster2d_default_data,
+                                                                       const void* nanovdb_default_data,
                                                                        void* shader_params_data);
 
 } // namespace pnanovdb_editor

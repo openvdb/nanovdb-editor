@@ -46,7 +46,7 @@ size_t snapshot_object_shader_params(pnanovdb_editor_t* editor,
         return 0u;
     }
     pnanovdb_editor::snapshot_object_shader_params_readonly(
-        *editor->impl->scene_manager, scene, name, out_buf_size, out_buf_size, out_buf);
+        *editor->impl->scene_manager, scene, name, out_buf_size, out_buf_size, nullptr, nullptr, out_buf);
     return out_buf_size;
 }
 
