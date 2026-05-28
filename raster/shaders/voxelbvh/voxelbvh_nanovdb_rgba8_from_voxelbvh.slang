@@ -7,6 +7,13 @@ struct user_state_t
 
 #include "voxelbvh_nanovdb_iterate.slang"
 
+struct constants2_t
+{
+    uint pass_id;
+};
+
+ConstantBuffer<constants2_t> constants2;
+
 float3 cross_product(float3 a, float3 b)
 {
     return float3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
@@ -288,6 +295,10 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     int4 ijkw = int4(ijk, 0);
 
     bool this_thread_active = !pnanovdb_address_is_null(val_addr);
+
+    // Spreading load over 256 dispatches
+    this_thread_active = this_thread_active && thread_idx == constants2.pass_id;
+
     if (this_thread_active)
     {
         float4 color = float4(0.f, 0.f, 0.f, 0.f);
@@ -327,13 +338,10 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     GroupMemoryBarrierWithGroupSync();
 
     float4 sum = float4(0.f, 0.f, 0.f, 0.f);
-    for (uint s_idx = 0u; s_idx < 256u; s_idx++)
+    // Spreading load over 256 dispatches
+    uint s_idx = constants2.pass_id;
+    if (s_voxel_val[s_idx] != 0u)
     {
-        if (s_voxel_val[s_idx] == 0u)
-        {
-            continue;
-        }
-
         ijkw = s_ijkw[s_idx];
 
         for (uint face_id = 0u; face_id < 6u; face_id++)

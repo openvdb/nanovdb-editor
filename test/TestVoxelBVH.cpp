@@ -663,16 +663,16 @@ void voxelbvh_test()
     pnanovdb_compute_array_t* nanovdb_rgba8_2x = nullptr;
     voxel_bvh.nanovdb_duplicate_topology_array(
         &compute, queue, voxelbvh_ctx, &nanovdb_rgba8_2x, nanovdb_meta, resolution, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE);
-    //pnanovdb_compute_array_t* nanovdb_rgba8_4x = nullptr;
-    //voxel_bvh.nanovdb_duplicate_topology_array(
-    //    &compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_rgba8_2x, resolution, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE);
+    pnanovdb_compute_array_t* nanovdb_rgba8_4x = nullptr;
+    voxel_bvh.nanovdb_duplicate_topology_array(
+        &compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_rgba8_2x, 2u * resolution, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE);
 
-    voxel_bvh.nanovdb_rgba8_from_voxelbvh_array(&compute, queue, voxelbvh_ctx, nanovdb_rgba8_2x, nanovdb_meta);
+    voxel_bvh.nanovdb_rgba8_from_voxelbvh_array(&compute, queue, voxelbvh_ctx, nanovdb_rgba8_4x, nanovdb_meta);
 
-    compute.save_nanovdb(nanovdb_rgba8_2x, "./data/test_rgba8.nvdb");
+    compute.save_nanovdb(nanovdb_rgba8_4x, "./data/test_rgba8.nvdb");
 
     compute.destroy_array(nanovdb_rgba8_2x);
-    //compute.destroy_array(nanovdb_rgba8_4x);
+    compute.destroy_array(nanovdb_rgba8_4x);
 
     compute.destroy_array(nanovdb_meta);
     for (uint32_t idx = 0u; idx < prim_meta_count; idx++)

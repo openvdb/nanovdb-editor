@@ -1971,12 +1971,6 @@ void nanovdb_rgba8_from_voxelbvh(const pnanovdb_compute_t* compute,
     pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
     pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
 
-    // nanovdb transients
-    pnanovdb_compute_buffer_transient_t* dst_nanovdb_transient =
-        compute_interface->register_buffer_as_transient(context, dst_nanovdb_inout);
-    pnanovdb_compute_buffer_transient_t* src_nanovdb_transient =
-        compute_interface->register_buffer_as_transient(context, src_nanovdb_in);
-
     // generate mask to allow iteration of dst NanoVDB
     uint64_t dst_buf_size = dst_nanovdb_word_count * 4u;
     uint64_t node_mask_size = (dst_buf_size + 63u) / 64u;
@@ -1992,9 +1986,6 @@ void nanovdb_rgba8_from_voxelbvh(const pnanovdb_compute_t* compute,
 
     nanovdb_generate_node_mask(compute, queue, voxelbvh_context, dst_nanovdb_inout, dst_nanovdb_word_count,
                                node_mask_buffer, node_mask_uint64_count);
-
-    pnanovdb_compute_buffer_transient_t* node_mask_transient =
-        compute_interface->register_buffer_as_transient(context, node_mask_buffer);
 
     struct constants_t
     {
@@ -2024,18 +2015,56 @@ void nanovdb_rgba8_from_voxelbvh(const pnanovdb_compute_t* compute,
     memcpy(mapped_constants, &constants, sizeof(constants_t));
     compute_interface->unmap_buffer(context, constant_buffer);
 
-    pnanovdb_compute_buffer_transient_t* constant_transient =
-        compute_interface->register_buffer_as_transient(context, constant_buffer);
-
+    for (pnanovdb_uint32_t pass_id = 0u; pass_id < 256u; pass_id++)
     {
-        pnanovdb_compute_resource_t resources[4u] = {};
+        pnanovdb_compute_buffer_transient_t* constant_transient =
+            compute_interface->register_buffer_as_transient(context, constant_buffer);
+        pnanovdb_compute_buffer_transient_t* dst_nanovdb_transient =
+            compute_interface->register_buffer_as_transient(context, dst_nanovdb_inout);
+        pnanovdb_compute_buffer_transient_t* node_mask_transient =
+            compute_interface->register_buffer_as_transient(context, node_mask_buffer);
+        pnanovdb_compute_buffer_transient_t* src_nanovdb_transient =
+            compute_interface->register_buffer_as_transient(context, src_nanovdb_in);
+
+        struct constants2_t
+        {
+            pnanovdb_uint32_t pass_id;
+        };
+        constants2_t constants2 = {};
+        constants2.pass_id = pass_id;
+
+        // constants
+        buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT;
+        buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+        buf_desc.structure_stride = 0u;
+        buf_desc.size_in_bytes = sizeof(constants2_t);
+        pnanovdb_compute_buffer_t* constant2_buffer =
+            compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &buf_desc);
+
+        // copy constants
+        void* mapped_constants2 = compute_interface->map_buffer(context, constant2_buffer);
+        memcpy(mapped_constants2, &constants2, sizeof(constants2_t));
+        compute_interface->unmap_buffer(context, constant2_buffer);
+
+        pnanovdb_compute_buffer_transient_t* constant2_transient =
+            compute_interface->register_buffer_as_transient(context, constant2_buffer);
+
+        pnanovdb_compute_resource_t resources[5u] = {};
         resources[0u].buffer_transient = constant_transient;
         resources[1u].buffer_transient = dst_nanovdb_transient;
         resources[2u].buffer_transient = node_mask_transient;
         resources[3u].buffer_transient = src_nanovdb_transient;
+        resources[4u].buffer_transient = constant2_transient;
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_rgba8_from_voxelbvh_slang],
                                     resources, 256u, 1u, 1u, "voxelbvh_nanovdb_rgba8_from_voxelbvh");
+
+        compute_interface->destroy_buffer(context, constant2_buffer);
+
+        pnanovdb_uint64_t flushed_frame = 0llu;
+        compute->device_interface.flush(queue, &flushed_frame, nullptr, nullptr);
+
+        printf("nanovdb_rgba8_from_voxelbvh() step %d of 256\n", pass_id);
     }
 
     compute_interface->destroy_buffer(context, constant_buffer);
