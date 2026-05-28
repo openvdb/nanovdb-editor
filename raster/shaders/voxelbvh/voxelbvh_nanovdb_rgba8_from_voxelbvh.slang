@@ -39,9 +39,9 @@ void workgroup_voxelbvh_iterator_init(
         pnanovdb_uint64_t range = {};
         if (thread_idx < iter.active_level_count)
         {
-            pnanovdb_address_t range_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 0u);
+            pnanovdb_address_t range_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf_scratch, grid, 0u);
             range_addr = pnanovdb_address_offset_product(range_addr, 8u, list_begin_idx);
-            range = pnanovdb_read_uint64(buf, pnanovdb_address_offset(range_addr, 8u * thread_idx));
+            range = pnanovdb_read_uint64(buf_scratch, pnanovdb_address_offset(range_addr, 8u * thread_idx));
         }
         s_range[thread_idx] = range;
     }
@@ -272,60 +272,43 @@ void workgroup_triangle_process(uint thread_idx,
     }
 }
 
+groupshared int4 s_ijkw[256u];
+
+groupshared float4 s_sum[256u];
+
 void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint level, uint n,
                   pnanovdb_coord_t ijk, inout user_state_t user_state)
 {
+    uint thread_idx = n & 255;
+
     // assuming single grid for now
     pnanovdb_grid_handle_t grid = {};
 
-    float3 worldRayOrigin = {};
-    float3 worldRayDir = {};
-    float3 worldRayDirInv = {};
-    float worldTmin = 0.f;
-    float worldTmax = 0.f;
     uint64_t voxel_val_raw = 0llu;
+    int4 ijkw = int4(ijk, 0);
 
     bool this_thread_active = !pnanovdb_address_is_null(val_addr);
     if (this_thread_active)
     {
         float4 color = float4(0.f, 0.f, 0.f, 0.f);
-        int3 ijk_min = ijk;
-        int3 ijk_max = ijk;
         if (level == 3)
         {
-            ijk_max += 4096u;
+            ijkw.w = 4096;
         }
         if (level == 2)
         {
-            ijk_max += 128u;
+            ijkw.w = 128;
         }
         if (level == 1)
         {
-            ijk_max += 8u;
+            ijkw.w = 8;
         }
         if (level == 0)
         {
-            ijk_max += 1u;
+            ijkw.w = 1;
         }
 
-        float3 ijkf = 0.5f * float3(ijk_min) + 0.5f * float3(ijk_max);
-
-        worldRayOrigin = ijkf;
-        worldRayOrigin.x = float(ijk_max.x);
-        worldRayDir = float3(-1.f, 0.f, 0.f);
-        worldTmin = 0.f;
-        worldTmax = float(ijk_max.x) - float(ijk_min.x);
-
-        worldRayOrigin = pnanovdb_grid_index_to_worldf(buf, grid, worldRayOrigin);
-        worldRayDir = pnanovdb_grid_index_to_world_dirf(buf, grid, worldRayDir);
-        float rayDirMagn = length(worldRayDir);
-        if (rayDirMagn > 0.f)
-        {
-            worldRayDir /= rayDirMagn;
-            worldTmin *= rayDirMagn;
-            worldTmax *= rayDirMagn;
-        }
-        worldRayDirInv = float3(1.f, 1.f, 1.f) / worldRayDir;
+        float3 ijkf = 0.5f * float3(ijkw.xyz) + 0.5f * float3(ijkw.xyz + ijkw.w);
 
         pnanovdb_grid_handle_t src_grid = {};
         pnanovdb_tree_handle_t src_tree = pnanovdb_grid_get_tree(buf_scratch, src_grid);
@@ -336,35 +319,153 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
         voxel_val_raw = pnanovdb_read_uint64(buf_scratch, src_addr);
     }
 
-    s_voxel_val[n & 255] = voxel_val_raw;
+    s_voxel_val[thread_idx] = voxel_val_raw;
+    s_ijkw[thread_idx] = ijkw;
 
     GroupMemoryBarrierWithGroupSync();
 
-    float4 sum = float4(0.f, 0.f, 0.f, 1.f);
-    float nominalT = 0.f;
+    float4 sum = float4(0.f, 0.f, 0.f, 0.f);
     for (uint s_idx = 0u; s_idx < 256u; s_idx++)
     {
-        workgroup_triangle_process(n & 255,
-                                this_thread_active && s_idx == (n & 255),
-                                grid,
-                                worldRayOrigin,
-                                worldRayDir,
-                                worldRayDirInv,
-                                worldTmin,
-                                worldTmax,
-                                s_voxel_val[s_idx],
-                                sum,
-                                nominalT);
+        if (s_voxel_val[s_idx] == 0u)
+        {
+            continue;
+        }
+
+        ijkw = s_ijkw[s_idx];
+
+        for (uint face_id = 0u; face_id < 6u; face_id++)
+        {
+            int3 ijk_min = ijkw.xyz;
+            int3 ijk_max = ijkw.xyz + ijkw.w;
+
+            float3 uvw = {};
+            float3 worldRayDir = {};
+            if (face_id == 0)
+            {
+                uvw = float3(
+                    0.f,
+                    (1.f / 15.f) * (thread_idx >> 4),
+                    (1.f / 15.f) * (thread_idx & 15));
+                worldRayDir = float3(1.f, 0.f, 0.f);
+            }
+            if (face_id == 1)
+            {
+                uvw = float3(
+                    1.f,
+                    (1.f / 15.f) * (thread_idx >> 4),
+                    (1.f / 15.f) * (thread_idx & 15));
+                worldRayDir = float3(-1.f, 0.f, 0.f);
+            }
+            if (face_id == 2)
+            {
+                uvw = float3(
+                    (1.f / 15.f) * (thread_idx >> 4),
+                    0.f,
+                    (1.f / 15.f) * (thread_idx & 15));
+                worldRayDir = float3(0.f, 1.f, 0.f);
+            }
+            if (face_id == 3)
+            {
+                uvw = float3(
+                    (1.f / 15.f) * (thread_idx >> 4),
+                    1.f,
+                    (1.f / 15.f) * (thread_idx & 15));
+                worldRayDir = float3(0.f, -1.f, 0.f);
+            }
+            if (face_id == 4)
+            {
+                uvw = float3(
+                    (1.f / 15.f) * (thread_idx >> 4),
+                    (1.f / 15.f) * (thread_idx & 15),
+                    0.f);
+                worldRayDir = float3(0.f, 0.f, 1.f);
+            }
+            if (face_id == 5)
+            {
+                uvw = float3(
+                    (1.f / 15.f) * (thread_idx >> 4),
+                    (1.f / 15.f) * (thread_idx & 15),
+                    1.f);
+                worldRayDir = float3(0.f, 0.f, -1.f);
+            }
+            float3 ijkf = (1.f - uvw) * float3(ijk_min) + uvw * float3(ijk_max);
+
+            float3 worldRayOrigin = ijkf;
+            float worldTmin = 0.f;
+            float worldTmax = float(ijkw.w);
+
+            worldRayOrigin = pnanovdb_grid_index_to_worldf(buf, grid, worldRayOrigin);
+            worldRayDir = pnanovdb_grid_index_to_world_dirf(buf, grid, worldRayDir);
+            float rayDirMagn = length(worldRayDir);
+            if (rayDirMagn > 0.f)
+            {
+                worldRayDir /= rayDirMagn;
+                worldTmin *= rayDirMagn;
+                worldTmax *= rayDirMagn;
+            }
+            float3 worldRayDirInv = float3(1.f, 1.f, 1.f) / worldRayDir;
+
+            float4 sum_local = float4(0.f, 0.f, 0.f, 1.f);
+            float nominalT_local = 0.f;
+            workgroup_triangle_process(thread_idx,
+                                    true,
+                                    grid,
+                                    worldRayOrigin,
+                                    worldRayDir,
+                                    worldRayDirInv,
+                                    worldTmin,
+                                    worldTmax,
+                                    s_voxel_val[s_idx],
+                                    sum_local,
+                                    nominalT_local);
+
+            s_sum[thread_idx] = sum_local;
+
+            GroupMemoryBarrierWithGroupSync();
+            if (thread_idx < 64u)
+            {
+                sum_local += s_sum[thread_idx + 64u];
+                sum_local += s_sum[thread_idx + 128u];
+                sum_local += s_sum[thread_idx + 192u];
+                sum_local *= 0.25f;
+            }
+            GroupMemoryBarrierWithGroupSync();
+            s_sum[thread_idx] = sum_local;
+
+            GroupMemoryBarrierWithGroupSync();
+            if (thread_idx < 16u)
+            {
+                sum_local += s_sum[thread_idx + 16u];
+                sum_local += s_sum[thread_idx + 32u];
+                sum_local += s_sum[thread_idx + 48u];
+                sum_local *= 0.25f;
+            }
+            GroupMemoryBarrierWithGroupSync();
+            s_sum[thread_idx] = sum_local;
+
+            GroupMemoryBarrierWithGroupSync();
+            if (thread_idx < 4u)
+            {
+                sum_local += s_sum[thread_idx + 4u];
+                sum_local += s_sum[thread_idx + 8u];
+                sum_local += s_sum[thread_idx + 12u];
+                sum_local *= 0.25f;
+            }
+            GroupMemoryBarrierWithGroupSync();
+            s_sum[thread_idx] = sum_local;
+
+            GroupMemoryBarrierWithGroupSync();
+            if (thread_idx == s_idx)
+            {
+                sum += (1.f / 6.f) * 0.25f * (s_sum[0] + s_sum[1] + s_sum[2] + s_sum[3]);
+            }
+            GroupMemoryBarrierWithGroupSync();
+        }
     }
 
     if (this_thread_active)
     {
-        if (voxel_val_raw != 0)
-        {
-            sum.b += 0.5f;
-            sum.a = 0.5f;
-        }
-
         float4 color = float4(sum.rgb, 1.f - sum.a);
         uint rgba_raw = uint(255.f * max(0.f, min(1.f, color.x))) | (uint(255.f * max(0.f, min(1.f, color.y))) << 8u) |
                         (uint(255.f * max(0.f, min(1.f, color.z))) << 16u) |
