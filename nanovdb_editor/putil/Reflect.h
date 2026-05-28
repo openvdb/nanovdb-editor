@@ -84,6 +84,7 @@ typedef pnanovdb_uint32_t pnanovdb_reflect_type_t;
 #define PNANOVDB_REFLECT_TYPE_UINT64 10
 #define PNANOVDB_REFLECT_TYPE_CHAR 11
 #define PNANOVDB_REFLECT_TYPE_DOUBLE 12
+#define PNANOVDB_REFLECT_TYPE_INT64 13
 
 PNANOVDB_INLINE int pnanovdb_reflect_string_compare(const char* a, const char* b)
 {
@@ -131,6 +132,8 @@ PNANOVDB_INLINE const char* pnanovdb_reflect_type_to_string(pnanovdb_uint32_t ty
         return "char";
     case PNANOVDB_REFLECT_TYPE_DOUBLE:
         return "double";
+    case PNANOVDB_REFLECT_TYPE_INT64:
+        return "int64";
     default:
         return "unknown";
     }
@@ -189,6 +192,10 @@ PNANOVDB_INLINE pnanovdb_uint32_t pnanovdb_reflect_type_from_string(const char* 
     else if (pnanovdb_reflect_string_compare(name, "double") == 0)
     {
         return PNANOVDB_REFLECT_TYPE_DOUBLE;
+    }
+    else if (pnanovdb_reflect_string_compare(name, "int64") == 0)
+    {
+        return PNANOVDB_REFLECT_TYPE_INT64;
     }
     else
         return PNANOVDB_REFLECT_TYPE_UNKNOWN;
@@ -473,6 +480,7 @@ PNANOVDB_REFLECT_BUILTIN_IMPL(PNANOVDB_REFLECT_TYPE_UINT16, pnanovdb_uint16_t)
 PNANOVDB_REFLECT_BUILTIN_IMPL(PNANOVDB_REFLECT_TYPE_UINT64, pnanovdb_uint64_t)
 PNANOVDB_REFLECT_BUILTIN_IMPL(PNANOVDB_REFLECT_TYPE_CHAR, char)
 PNANOVDB_REFLECT_BUILTIN_IMPL(PNANOVDB_REFLECT_TYPE_DOUBLE, double)
+PNANOVDB_REFLECT_BUILTIN_IMPL(PNANOVDB_REFLECT_TYPE_INT64, pnanovdb_int64_t)
 
 #if defined(__cplusplus)
 #    define PNANOVDB_REFLECT_SIZE_OFFSET(name_size)                                                                    \

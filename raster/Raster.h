@@ -112,7 +112,8 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
                         pnanovdb_uint32_t image_height,
                         const pnanovdb_camera_mat_t* view,
                         const pnanovdb_camera_mat_t* projection,
-                        const pnanovdb_raster_shader_params_t* shader_params);
+                        const pnanovdb_raster_shader_params_t* shader_params,
+                        pnanovdb_uint32_t composite);
 
 void raster_gaussian_3d(const pnanovdb_compute_t* compute,
                         pnanovdb_compute_queue_t* queue,

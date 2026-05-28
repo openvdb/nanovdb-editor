@@ -426,16 +426,25 @@ void windowSizeCallback(GLFWwindow* win, int width, int height)
         return;
     }
 
-    // resize swapchain
-    ptr->device_interface->resize_swapchain(ptr->swapchain, (pnanovdb_uint32_t)width, (pnanovdb_uint32_t)height);
+    // Use framebuffer dimensions for rendering/swapchain sizing
+    // GLFW window-size callback parameters can be logical window units on HiDPI platforms
+    int fb_width = width;
+    int fb_height = height;
+    if (ptr->p_glfwGetFramebufferSize && ptr->window)
+    {
+        ptr->p_glfwGetFramebufferSize(ptr->window, &fb_width, &fb_height);
+    }
 
-    if (width == 0 || height == 0)
+    if (fb_width <= 0 || fb_height <= 0)
     {
         return;
     }
 
-    ptr->width = width;
-    ptr->height = height;
+    // Defer swapchain resize to the main render/update loop.
+    // Resizing from callback can race with in-flight acquire/present work.
+
+    ptr->width = (pnanovdb_uint32_t)fb_width;
+    ptr->height = (pnanovdb_uint32_t)fb_height;
     resizeWindow(ptr->window_parent, ptr->width, ptr->height);
 }
 

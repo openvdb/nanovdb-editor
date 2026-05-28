@@ -210,6 +210,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
 
     uint64_t vertex_count = 0llu;
     uint64_t face_count = 0llu;
+    uint64_t edge_count = 0llu;
     bool vertex_push_enabled = false;
     bool is_fvdb_gs = false;
     bool is_big_endian = false;
@@ -238,6 +239,12 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
         {
             std::string count_str = line.substr(sizeof("element face"));
             face_count = (uint64_t)std::stoll(count_str);
+            vertex_push_enabled = false;
+        }
+        else if (line.find("element edge") != std::string::npos)
+        {
+            std::string count_str = line.substr(sizeof("element edge"));
+            edge_count = (uint64_t)std::stoll(count_str);
             vertex_push_enabled = false;
         }
         else if (line.find("element") != std::string::npos)
@@ -311,7 +318,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
             for (size_t idx = 0u; idx < element.size(); idx++)
             {
                 uint32_t val = *((uint32_t*)&element[idx]);
-                uint32_t val_new = (((val) & 0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) |
+                uint32_t val_new = (((val)&0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) |
                                    (((val >> 16u) & 0xFF) << 8u) | (((val >> 24u) & 0xFF) << 0u);
                 *((uint32_t*)&element[idx]) = val_new;
             }
@@ -413,6 +420,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
     }
 
     std::vector<uint32_t> arr_indices;
+    std::vector<uint32_t> arr_line_indices; // packed as (v0,v1,v0,v1,...)
     uint64_t face_idx = 0u;
     if (face_count != 0u)
     {
@@ -426,6 +434,12 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
             if (face_vert_count != 3u)
             {
                 printf("dropped face(%zu) count(%d)\n", face_idx, (int)face_vert_count);
+
+                // still consume the index payload to keep the file stream aligned
+                if (face_vert_count > 0u && fseek(file, (long)face_vert_count * 4, SEEK_CUR) != 0)
+                {
+                    read_count = 0u;
+                }
             }
             else // only capture triangles for now
             {
@@ -435,7 +449,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
                     read_count += fread(&id, 1u, 4u, file);
                     if (is_big_endian)
                     {
-                        uint32_t id_new = (((id) & 0xFF) << 24u) | (((id >> 8u) & 0xFF) << 16u) |
+                        uint32_t id_new = (((id)&0xFF) << 24u) | (((id >> 8u) & 0xFF) << 16u) |
                                           (((id >> 16u) & 0xFF) << 8u) | (((id >> 24u) & 0xFF) << 0u);
                         id = id_new;
                     }
@@ -444,6 +458,31 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
             }
             face_idx++;
         } while (read_count != 0u && face_idx < face_count);
+    }
+
+    if (edge_count != 0u)
+    {
+        for (uint64_t edge_idx = 0u; edge_idx < edge_count; edge_idx++)
+        {
+            uint32_t v[2] = { 0u, 0u };
+            size_t got = fread(v, 1u, sizeof(v), file);
+            if (got != sizeof(v))
+            {
+                printf("dropped edge(%zu): short read (%zu/%zu bytes)\n", edge_idx, got, sizeof(v));
+                break;
+            }
+            if (is_big_endian)
+            {
+                for (int k = 0; k < 2; k++)
+                {
+                    uint32_t val = v[k];
+                    v[k] = (((val)&0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) | (((val >> 16u) & 0xFF) << 8u) |
+                           (((val >> 24u) & 0xFF) << 0u);
+                }
+            }
+            arr_line_indices.push_back(v[0]);
+            arr_line_indices.push_back(v[1]);
+        }
     }
 
     fclose(file);
@@ -481,12 +520,26 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
         }
         else if (strcmp(array_name, "indices") == 0)
         {
-            source_array_uint32 = &arr_indices;
+            // prefer triangle indices when faces are present, otherwise use edge indices
+            if (!arr_indices.empty() || arr_line_indices.empty())
+            {
+                source_array_uint32 = &arr_indices;
+            }
+            else
+            {
+                source_array_uint32 = &arr_line_indices;
+            }
+        }
+        else if (strcmp(array_name, "line_indices") == 0)
+        {
+            source_array_uint32 = &arr_line_indices;
         }
         else if (strcmp(array_name, "colors") == 0)
         {
             source_array = &arr_colors;
         }
+
+        const bool is_line_indices = (source_array_uint32 == &arr_line_indices);
 
         if (source_array && !source_array->empty())
         {
@@ -499,8 +552,16 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
         else if (source_array_uint32 && !source_array_uint32->empty())
         {
             out_arrays[i] = new pnanovdb_compute_array_t();
-            out_arrays[i]->element_count = source_array_uint32->size();
-            out_arrays[i]->element_size = sizeof(uint32_t);
+            if (is_line_indices)
+            {
+                out_arrays[i]->element_count = source_array_uint32->size() / 2u;
+                out_arrays[i]->element_size = 2u * sizeof(uint32_t);
+            }
+            else
+            {
+                out_arrays[i]->element_count = source_array_uint32->size();
+                out_arrays[i]->element_size = sizeof(uint32_t);
+            }
             out_arrays[i]->data = new uint32_t[source_array_uint32->size()];
             memcpy(out_arrays[i]->data, source_array_uint32->data(), source_array_uint32->size() * sizeof(uint32_t));
         }

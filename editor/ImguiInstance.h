@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "EditorImport.h"
 #include "ShaderParams.h"
 #include "imgui/ImguiWindow.h"
 
@@ -42,8 +43,8 @@
 
 namespace imgui_instance_user
 {
-static const char* s_render_settings_default = "default";
-static const char* s_viewer_profile_name = "viewer";
+inline constexpr const char* s_render_settings_default = "default";
+inline constexpr const char* s_viewer_profile_name = "viewer";
 
 // UI labels
 static const char* RENDER_SETTINGS = "Settings";
@@ -54,6 +55,7 @@ static const char* CONSOLE = "Log";
 static const char* SHADER_PARAMS = "Shader Params";
 static const char* FILE_HEADER = "File Header";
 static const char* SCENE = "Scenes";
+static const char* SCENE_PARAMS = "Params";
 static const char* PROPERTIES = "Properties";
 
 enum class ShaderSelectionMode : int
@@ -63,17 +65,6 @@ enum class ShaderSelectionMode : int
     UseShaderGroup,
 };
 
-} // namespace imgui_instance_user
-
-// Forward declaration
-namespace pnanovdb_editor
-{
-class EditorScene;
-}
-
-namespace imgui_instance_user
-{
-
 struct PendingState
 {
     std::atomic<bool> update_shader = true; // needs to be initialized with true to map the shader after init
@@ -82,13 +73,13 @@ struct PendingState
     bool load_nvdb = false;
     bool save_nanovdb = false;
     bool find_raster_file = false;
+    bool find_mesh_file = false;
     bool find_callable_file = false;
     bool open_file = false;
     bool save_file = false;
     std::string viewport_gaussian_view = "";
     std::string viewport_nanovdb_array = "";
     bool update_memory_stats = false;
-    bool update_raster = false;
     bool find_shader_directory = false;
     ShaderSelectionMode shader_selection_mode = ShaderSelectionMode::UseViewportShader;
 };
@@ -120,6 +111,7 @@ struct WindowState
     bool show_shader_params = true;
     bool show_file_header = false;
     bool show_scene = true;
+    bool show_scene_params = false;
     bool show_scene_properties = true;
     bool show_about = false;
 };
@@ -147,8 +139,10 @@ struct Instance
 
     std::string nanovdb_filepath = ""; // filename selected in the ImGuiFileDialog
     std::string raster_filepath = "";
+    std::string mesh_filepath = "";
     float raster_voxels_per_unit = 128.f;
-    bool raster_to_nanovdb = false; // User choice: false=raster2d, true=raster3d
+    int gaussian_import_mode = static_cast<int>(pnanovdb_editor::gaussian_import::Mode::Raster2D);
+    bool mesh_import_show_debug = false;
 
     // shader params window selection
     std::string shader_group = "";

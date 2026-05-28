@@ -1085,13 +1085,44 @@ void swapchain_initSwapchain(Swapchain* ptr)
     auto instanceLoader = &ptr->deviceQueue->device->deviceManager->loader;
     auto deviceLoader = &ptr->deviceQueue->device->loader;
 
+    // Destroy handles deferred from a previous out-of-date event. Wait only on the last in-flight
+    // frame that referenced these textures, avoiding the queue-wide vkQueueWaitIdle resize stall.
+    if (ptr->swapchainVulkan != VK_NULL_HANDLE)
+    {
+        pnanovdb_uint64_t waitFenceValue = 0u;
+        for (pnanovdb_uint32_t idx = 0; idx < ptr->numSwapchainImages; idx++)
+        {
+            if (ptr->textures[idx])
+            {
+                pnanovdb_uint64_t textureLastActive = cast(ptr->textures[idx])->lastActive;
+                if (textureLastActive > waitFenceValue)
+                {
+                    waitFenceValue = textureLastActive;
+                }
+            }
+        }
+        if (waitFenceValue > 0u)
+        {
+            waitForFrame(cast(ptr->deviceQueue), waitFenceValue);
+        }
+
+        for (pnanovdb_uint32_t idx = 0; idx < ptr->numSwapchainImages; idx++)
+        {
+            if (ptr->textures[idx])
+            {
+                destroyTexture(cast(ptr->deviceQueue->context), ptr->textures[idx]);
+                ptr->textures[idx] = nullptr;
+            }
+            ptr->swapchainImages[idx] = VK_NULL_HANDLE;
+        }
+        ptr->numSwapchainImages = 0u;
+        deviceLoader->vkDestroySwapchainKHR(device->vulkanDevice, ptr->swapchainVulkan, nullptr);
+        ptr->swapchainVulkan = VK_NULL_HANDLE;
+    }
+
     pnanovdb_uint32_t width = 0u;
     pnanovdb_uint32_t height = 0u;
     swapchain_getWindowSize(ptr, &width, &height);
-
-    VkExtent2D imageExtent = {};
-    imageExtent.width = width;
-    imageExtent.height = height;
 
     ptr->width = width;
     ptr->height = height;
@@ -1123,6 +1154,10 @@ void swapchain_initSwapchain(Swapchain* ptr)
     {
         ptr->height = surfaceCaps.maxImageExtent.height;
     }
+
+    VkExtent2D imageExtent = {};
+    imageExtent.width = ptr->width;
+    imageExtent.height = ptr->height;
 
     VkPresentModeKHR presentModes[8u] = {};
     uint32_t numPresentModes = 0u;
@@ -1236,7 +1271,8 @@ void resizeSwapchain(pnanovdb_compute_swapchain_t* swapchain, pnanovdb_uint32_t 
     {
         if (width != ptr->width || height != ptr->height)
         {
-            swapchain_destroySwapchain(ptr);
+            // Defer destroy to swapchain_initSwapchain() so it can do a targeted per-frame fence
+            // wait instead of a queue-wide vkQueueWaitIdle
             ptr->valid = PNANOVDB_FALSE;
         }
     }
@@ -1280,8 +1316,8 @@ int presentSwapchain(pnanovdb_compute_swapchain_t* swapchain, pnanovdb_bool_t vs
 
     if (result != VK_SUCCESS || ptr->vsync != vsync)
     {
+        // Defer destroy to next frame's swapchain_initSwapchain() (targeted fence wait)
         ptr->vsync = vsync;
-        swapchain_destroySwapchain(ptr);
         ptr->valid = PNANOVDB_FALSE;
     }
 
@@ -1293,7 +1329,6 @@ int presentSwapchain(pnanovdb_compute_swapchain_t* swapchain, pnanovdb_bool_t vs
 
         if (compWidth != ptr->width || compHeight != ptr->height)
         {
-            swapchain_destroySwapchain(ptr);
             ptr->valid = PNANOVDB_FALSE;
         }
     }
@@ -1315,6 +1350,8 @@ pnanovdb_compute_texture_t* getSwapchainFrontTexture(pnanovdb_compute_swapchain_
 
     if (ptr->valid == PNANOVDB_FALSE)
     {
+        // Ensure we don't keep a stale wait semaphore when acquire path is skipped
+        ptr->deviceQueue->currentBeginFrameSemaphore = VK_NULL_HANDLE;
         return nullptr;
     }
 
@@ -1327,7 +1364,9 @@ pnanovdb_compute_texture_t* getSwapchainFrontTexture(pnanovdb_compute_swapchain_
 
     if (result != VK_SUCCESS)
     {
-        swapchain_destroySwapchain(ptr);
+        // Defer destroy to next frame's swapchain_initSwapchain() (targeted fence wait).
+        // Clear begin semaphore so subsequent submit doesn't wait on an unsignaled acquire semaphore.
+        ptr->deviceQueue->currentBeginFrameSemaphore = VK_NULL_HANDLE;
         ptr->valid = PNANOVDB_FALSE;
         return nullptr;
     }
