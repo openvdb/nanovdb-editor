@@ -309,13 +309,15 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
         }
 
         float3 ijkf = 0.5f * float3(ijkw.xyz) + 0.5f * float3(ijkw.xyz + ijkw.w);
+        float3 worldPos = pnanovdb_grid_index_to_worldf(buf, grid, ijkf);
 
         pnanovdb_grid_handle_t src_grid = {};
+        float3 bvh_ijkf = pnanovdb_grid_world_to_indexf(buf_scratch, src_grid, worldPos);
         pnanovdb_tree_handle_t src_tree = pnanovdb_grid_get_tree(buf_scratch, src_grid);
         pnanovdb_root_handle_t src_root = pnanovdb_tree_get_root(buf_scratch, src_tree);
         pnanovdb_uint32_t src_grid_type = pnanovdb_grid_get_grid_type(buf_scratch, src_grid);
-        int3 ijk_center = int3(floor(ijkf));
-        pnanovdb_address_t src_addr = pnanovdb_root_get_value_address(src_grid_type, buf_scratch, src_root, ijk_center);
+        int3 bvh_ijk_center = int3(floor(bvh_ijkf));
+        pnanovdb_address_t src_addr = pnanovdb_root_get_value_address(src_grid_type, buf_scratch, src_root, bvh_ijk_center);
         voxel_val_raw = pnanovdb_read_uint64(buf_scratch, src_addr);
     }
 
