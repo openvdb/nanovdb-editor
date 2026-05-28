@@ -1,4 +1,4 @@
-// voxelbvh_triangle_lines.slang
+// voxelbvh_triangles_debug.slang
 #define PNANOVDB_HLSL
 #define PNANOVDB_ADDRESS_64
 #define PNANOVDB_BUF_HLSL_64
@@ -7,19 +7,7 @@
 #include "workgroup_hdda.slang"
 #include "workgroup_voxelbvh.slang"
 
-struct EditorParams
-{
-    float4x4 view_inv;
-    float4x4 projection_inv;
-
-    float4x4 view;
-    float4x4 projection;
-
-    uint width;
-    uint height;
-    uint pad1;
-    uint pad2;
-};
+#include "editor_params.slang"
 
 struct shader_params_t
 {

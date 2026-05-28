@@ -31,6 +31,7 @@
 #include <ImGuiFileDialog.h>
 
 #include <cmath>
+#include <memory>
 #include <string>
 #include <filesystem>
 #include <type_traits>
@@ -42,6 +43,20 @@
 namespace pnanovdb_editor
 {
 const float EPSILON = 1e-6f;
+
+static inline float getDialogDpiScale()
+{
+    ImGuiIO& io = ImGui::GetIO();
+    const float sx = io.DisplayFramebufferScale.x > 0.f ? io.DisplayFramebufferScale.x : 1.f;
+    const float sy = io.DisplayFramebufferScale.y > 0.f ? io.DisplayFramebufferScale.y : 1.f;
+    return std::max(1.f, std::max(sx, sy));
+}
+
+static inline ImVec2 scaleDialogSize(const ImVec2& size)
+{
+    const float scale = getDialogDpiScale();
+    return ImVec2(size.x * scale, size.y * scale);
+}
 
 static inline void logRecordingSavedOnStop(bool wasRecording, pnanovdb_imgui_settings_render_t* settings)
 {
@@ -108,8 +123,9 @@ void createMenu(imgui_instance_user::Instance* ptr)
         if (!isViewerProfile && ImGui::BeginMenu("File"))
         {
             ImGui::MenuItem("Load NanoVDB...", "", &ptr->pending.open_file);
-            ImGui::MenuItem("Import Gaussian...", "", &ptr->pending.find_raster_file);
             ImGui::MenuItem("Save NanoVDB...", "", &ptr->pending.save_file);
+            ImGui::MenuItem("Import Gaussian...", "", &ptr->pending.find_raster_file);
+            ImGui::MenuItem("Import Mesh...", "", &ptr->pending.find_mesh_file);
             ImGui::Separator();
             if (ImGui::MenuItem("Save INI"))
             {
@@ -129,6 +145,7 @@ void createMenu(imgui_instance_user::Instance* ptr)
                 ImGui::MenuItem(COMPILER_SETTINGS, "", &ptr->window.show_compiler_settings);
             }
             ImGui::MenuItem(SCENE, "", &ptr->window.show_scene);
+            ImGui::MenuItem(SCENE_PARAMS, "", &ptr->window.show_scene_params);
             ImGui::MenuItem(PROPERTIES, "", &ptr->window.show_scene_properties);
             ImGui::MenuItem(PROFILER, "", &ptr->window.show_profiler);
             ImGui::MenuItem(CODE_EDITOR, "", &ptr->window.show_code_editor);
@@ -279,6 +296,47 @@ void showSceneWindow(imgui_instance_user::Instance* ptr)
     }
 
     SceneTree::getInstance().render(ptr);
+}
+
+void showSceneParamsWindow(imgui_instance_user::Instance* ptr)
+{
+    if (!ptr->window.show_scene_params)
+    {
+        return;
+    }
+
+    if (!ImGui::Begin(SCENE_PARAMS, &ptr->window.show_scene_params))
+    {
+        ImGui::End();
+        return;
+    }
+
+    if (!ptr->editor_scene)
+    {
+        ImGui::TextDisabled("Scene params are unavailable.");
+        ImGui::End();
+        return;
+    }
+
+    auto* scene_token = ptr->editor_scene->get_current_scene_token();
+    auto* scene_manager = ptr->editor_scene->get_scene_manager();
+    if (!scene_token || !scene_manager)
+    {
+        ImGui::TextDisabled("Select or create a scene to edit scene params.");
+        ImGui::End();
+        return;
+    }
+
+    std::shared_ptr<CustomSceneParams> custom_params = scene_manager->get_custom_scene_params(scene_token);
+    if (!custom_params || custom_params->empty())
+    {
+        ImGui::TextDisabled("No custom scene params loaded for this scene.");
+        ImGui::End();
+        return;
+    }
+
+    custom_params->render();
+    ImGui::End();
 }
 
 void showPropertiesWindow(imgui_instance_user::Instance* ptr)
@@ -783,6 +841,24 @@ void showShaderParamsWindow(imgui_instance_user::Instance* ptr)
                         }
                     }
                 }
+                ImGui::SameLine();
+                if (ImGui::Button("Reset"))
+                {
+                    const bool ok =
+                        is_group_mode ?
+                            scene_manager->reset_group_params_to_defaults(ptr->compute, target_name.c_str()) :
+                            scene_manager->reset_shader_params_to_defaults(ptr->compute, target_name.c_str());
+                    if (ok)
+                    {
+                        pnanovdb_editor::Console::getInstance().addLog(
+                            "Shader params for '%s' reset to defaults", target_name.c_str());
+                    }
+                    else
+                    {
+                        pnanovdb_editor::Console::getInstance().addLog(
+                            "Failed to reset shader params for '%s'", target_name.c_str());
+                    }
+                }
             }
             else
             {
@@ -870,8 +946,9 @@ void showCodeEditorWindow(imgui_instance_user::Instance* ptr)
         return;
     }
 
+    ImVec2 scaledDialogSize = scaleDialogSize(ptr->dialog_size);
     pnanovdb_editor::CodeEditor::getInstance().setup(
-        &ptr->editor_shader_name, &ptr->pending.update_shader, ptr->dialog_size, ptr->run_shader, ptr->is_viewer());
+        &ptr->editor_shader_name, &ptr->pending.update_shader, scaledDialogSize, ptr->run_shader, ptr->is_viewer());
 
     if (ImGui::Begin(CODE_EDITOR, &ptr->window.show_code_editor, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_MenuBar))
     {
@@ -943,14 +1020,14 @@ static bool gaussianImportSidePane(const char* /*vFilter*/, IGFDUserDatas vUserD
     ImGui::Text("Import Options:");
     ImGui::Separator();
 
-    int rasterMode = ptr->raster_to_nanovdb ? 1 : 0;
-    ImGui::RadioButton("Raster2D (Gaussian Splatting)", &rasterMode, 0);
-    ImGui::RadioButton("Raster3D (Convert to NanoVDB)", &rasterMode, 1);
-    ptr->raster_to_nanovdb = (rasterMode == 1);
+    using pnanovdb_editor::gaussian_import::Mode;
+    ImGui::RadioButton("Raster2D (Gaussian Splatting)", &ptr->gaussian_import_mode, static_cast<int>(Mode::Raster2D));
+    ImGui::RadioButton("Raster3D (Convert to NanoVDB)", &ptr->gaussian_import_mode, static_cast<int>(Mode::Raster3D));
+    ImGui::RadioButton("VoxelBVH (NanoVDB via BVH build)", &ptr->gaussian_import_mode, static_cast<int>(Mode::VoxelBVH));
 
     ImGui::Spacing();
 
-    if (ptr->raster_to_nanovdb)
+    if (static_cast<Mode>(ptr->gaussian_import_mode) == Mode::Raster3D)
     {
         ImGui::Text("Voxel Size:");
         ImGui::SetNextItemWidth(150.0f);
@@ -960,6 +1037,20 @@ static bool gaussianImportSidePane(const char* /*vFilter*/, IGFDUserDatas vUserD
             ImGui::SetTooltip("Voxels per unit (higher = finer resolution)");
         }
     }
+
+    return true;
+}
+
+static bool meshImportSidePane(const char* /*vFilter*/, IGFDUserDatas vUserDatas, bool* /*cantContinue*/)
+{
+    auto* ptr = static_cast<imgui_instance_user::Instance*>(vUserDatas);
+    if (!ptr)
+        return false;
+
+    ImGui::Text("Load Options:");
+    ImGui::Separator();
+
+    ImGui::Checkbox("Show Debug", &ptr->mesh_import_show_debug);
 
     return true;
 }
@@ -1003,24 +1094,45 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
         IGFD::FileDialogConfig config;
         config.path = ".";
         config.sidePane = gaussianImportSidePane;
-        config.sidePaneWidth = 250.0f;
+        config.sidePaneWidth = 250.0f * getDialogDpiScale();
         config.flags = ImGuiFileDialogFlags_None;
         config.userDatas = ptr;
 
         ImGuiFileDialog::Instance()->OpenDialog(
             "OpenRasterFileDlgKey", "Open Gaussian File", "Gaussian Files (*.npy *.npz *.ply){.npy,.npz,.ply}", config);
     }
+    if (ptr->pending.find_mesh_file)
+    {
+        ptr->pending.find_mesh_file = false;
+
+        IGFD::FileDialogConfig config;
+        config.path = ".";
+        config.sidePane = meshImportSidePane;
+        config.sidePaneWidth = 250.0f * getDialogDpiScale();
+        config.flags = ImGuiFileDialogFlags_None;
+        config.userDatas = ptr;
+
+        ImGuiFileDialog::Instance()->OpenDialog("OpenMeshFileDlgKey", "Import Mesh", "Mesh Files (*.ply){.ply}", config);
+    }
 
     if (ImGuiFileDialog::Instance()->IsOpened())
     {
-        ImGui::SetNextWindowSize(ptr->dialog_size, ImGuiCond_Appearing);
+        ImGui::SetNextWindowSize(scaleDialogSize(ptr->dialog_size), ImGuiCond_Appearing);
         if (ImGuiFileDialog::Instance()->Display("OpenNvdbFileDlgKey"))
         {
             if (ImGuiFileDialog::Instance()->IsOk())
             {
                 ptr->nanovdb_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
                 pnanovdb_editor::Console::getInstance().addLog("Opening file '%s'", ptr->nanovdb_filepath.c_str());
-                ptr->pending.load_nvdb = true;
+
+                if (ptr->editor_scene)
+                {
+                    pnanovdb_editor_token_t* scene = ptr->editor_scene->get_current_scene_token();
+                    // try VoxelBVH render first; NanoVDBImport falls back to standard
+                    // nanovdb_render automatically if the file lacks BVH blind metadata.
+                    ptr->editor_scene->load_nanovdb_file(
+                        scene, ptr->nanovdb_filepath.c_str(), pnanovdb_pipeline_type_voxelbvh_render);
+                }
             }
             ImGuiFileDialog::Instance()->Close();
         }
@@ -1029,14 +1141,57 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
             if (ImGuiFileDialog::Instance()->IsOk())
             {
                 ptr->raster_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
+
+                pnanovdb_pipeline_type_t convert = pnanovdb_pipeline_type_noop;
+                pnanovdb_pipeline_type_t render = pnanovdb_pipeline_type_raster2d;
+                const char* mode_label = "Raster2D";
+                std::string voxel_info;
+                using pnanovdb_editor::gaussian_import::Mode;
+                switch (static_cast<Mode>(ptr->gaussian_import_mode))
+                {
+                case Mode::Raster3D:
+                    convert = pnanovdb_pipeline_type_raster3d;
+                    render = pnanovdb_pipeline_type_nanovdb_render;
+                    mode_label = "Raster3D";
+                    voxel_info = " (voxel size: " + std::to_string(ptr->raster_voxels_per_unit) + ")";
+                    break;
+                case Mode::VoxelBVH:
+                    convert = pnanovdb_pipeline_type_voxelbvh_build;
+                    render = pnanovdb_pipeline_type_voxelbvh_render;
+                    mode_label = "VoxelBVH";
+                    break;
+                case Mode::Raster2D:
+                    break;
+                }
                 pnanovdb_editor::Console::getInstance().addLog(
-                    "Importing Gaussian file '%s' as %s%s", ptr->raster_filepath.c_str(),
-                    ptr->raster_to_nanovdb ? "Raster3D" : "Raster2D",
-                    ptr->raster_to_nanovdb ?
-                        (" (voxel size: " + std::to_string(ptr->raster_voxels_per_unit) + ")").c_str() :
-                        "");
-                ptr->pending.update_raster = true;
+                    "Importing Gaussian file '%s' as %s%s", ptr->raster_filepath.c_str(), mode_label, voxel_info.c_str());
+
+                if (ptr->editor_scene)
+                {
+                    ptr->editor_scene->load_gaussian_file(
+                        ptr->raster_filepath.c_str(), convert, render, ptr->raster_voxels_per_unit);
+                }
                 ptr->pending.find_raster_file = false;
+            }
+            ImGuiFileDialog::Instance()->Close();
+        }
+        else if (ImGuiFileDialog::Instance()->Display("OpenMeshFileDlgKey"))
+        {
+            if (ImGuiFileDialog::Instance()->IsOk())
+            {
+                ptr->mesh_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
+
+                pnanovdb_editor::mesh_import::Options options;
+                options.show_debug = ptr->mesh_import_show_debug;
+
+                pnanovdb_editor::Console::getInstance().addLog(
+                    "Importing mesh '%s'%s", ptr->mesh_filepath.c_str(), options.show_debug ? " (debug)" : "");
+
+                if (ptr->editor_scene)
+                {
+                    pnanovdb_editor_token_t* scene = ptr->editor_scene->get_current_scene_token();
+                    ptr->editor_scene->load_mesh_file(scene, ptr->mesh_filepath.c_str(), options);
+                }
             }
             ImGuiFileDialog::Instance()->Close();
         }
@@ -1046,7 +1201,16 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
             {
                 ptr->nanovdb_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
                 pnanovdb_editor::Console::getInstance().addLog("Saving file '%s'...", ptr->nanovdb_filepath.c_str());
-                ptr->pending.save_nanovdb = true;
+
+                if (ptr->editor_scene)
+                {
+                    pnanovdb_editor_token_t* scene = ptr->editor_scene->get_current_scene_token();
+                    auto selection = ptr->editor_scene->get_render_view_selection();
+                    if (selection.is_valid())
+                    {
+                        ptr->editor_scene->save_nanovdb_file(scene, selection.name_token, ptr->nanovdb_filepath.c_str());
+                    }
+                }
             }
             ImGuiFileDialog::Instance()->Close();
         }
@@ -1070,7 +1234,7 @@ void showAboutWindow(imgui_instance_user::Instance* ptr)
 
     // Center the window on first use
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(400, 200), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize(scaleDialogSize(ImVec2(400.f, 200.f)), ImGuiCond_Appearing);
 
     if (ImGui::Begin("About", &ptr->window.show_about, ImGuiWindowFlags_NoResize))
     {

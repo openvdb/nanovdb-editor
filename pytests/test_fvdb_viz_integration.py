@@ -462,6 +462,7 @@ finally:
         sys.stderr.flush()
     if result.returncode != 0:
         import re
+
         # The fvdb C++ viewer server's background threads can crash during
         # interpreter shutdown, producing a non-zero exit code even when all
         # tests pass.  Trust the pytest summary line over the exit code.

@@ -35,6 +35,7 @@ static const char* FIELD_SHOW_COMPILER_SETTINGS = "ShowCompilerSettings";
 static const char* FIELD_SHOW_SHADER_PARAMS = "ShowShaderParams";
 static const char* FIELD_SHOW_FILE_HEADER = "ShowFileHeader";
 static const char* FIELD_SHOW_SCENE = "ShowScene";
+static const char* FIELD_SHOW_SCENE_PARAMS = "ShowSceneParams";
 static const char* FIELD_SHOW_SCENE_PROPERTIES = "ShowSceneProperties";
 static const char* FIELD_SHOW_ABOUT = "ShowAbout";
 
@@ -137,6 +138,10 @@ static void ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* ent
             {
                 instance->window.show_scene = (value != 0);
             }
+            else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_SHOW_SCENE_PARAMS), sscanf(line, fmt, &value) == 1)
+            {
+                instance->window.show_scene_params = (value != 0);
+            }
             else if (snprintf(fmt, sizeof(fmt), "%s=%%d", FIELD_SHOW_SCENE_PROPERTIES), sscanf(line, fmt, &value) == 1)
             {
                 instance->window.show_scene_properties = (value != 0);
@@ -173,6 +178,7 @@ static void WriteAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler, ImGuiText
     buf->appendf("%s=%d\n", FIELD_SHOW_SHADER_PARAMS, instance->window.show_shader_params ? 1 : 0);
     buf->appendf("%s=%d\n", FIELD_SHOW_FILE_HEADER, instance->window.show_file_header ? 1 : 0);
     buf->appendf("%s=%d\n", FIELD_SHOW_SCENE, instance->window.show_scene ? 1 : 0);
+    buf->appendf("%s=%d\n", FIELD_SHOW_SCENE_PARAMS, instance->window.show_scene_params ? 1 : 0);
     buf->appendf("%s=%d\n", FIELD_SHOW_SCENE_PROPERTIES, instance->window.show_scene_properties ? 1 : 0);
     buf->appendf("%s=%d\n", FIELD_SHOW_ABOUT, instance->window.show_about ? 1 : 0);
 

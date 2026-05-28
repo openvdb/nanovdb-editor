@@ -42,6 +42,7 @@ static const char* JSON_EXT = ".json";
 static const char* SHADER_DESC_VERSION = "0.3";
 
 static const char* SHADER_PARAM_JSON = "ShaderParams";
+static const char* GENERATED_SHADER_PARAM_JSON = "shaderParams";
 static const char* SHADER_PARAM_SLANG = "shader_params_t";
 
 typedef std::shared_ptr<char[]> ByteCodePtr;
@@ -409,7 +410,7 @@ struct ShaderData
         {
             shaderParamsJson[param.first] = param.second;
         }
-        json["shaderParams"] = shaderParamsJson;
+        json[SHADER_PARAM_JSON] = shaderParamsJson;
         json["parameters"] = shader.parameters;
         json["computeShader"] = shader.computeShader;
     }
@@ -422,7 +423,8 @@ struct ShaderData
         std::string version = json["version"].get<std::string>();
         if (version > "0.2")
         {
-            const auto& userParamsJson = json["shaderParams"];
+            const auto& userParamsJson =
+                json.contains(SHADER_PARAM_JSON) ? json[SHADER_PARAM_JSON] : json[GENERATED_SHADER_PARAM_JSON];
             shader.shaderParameters.clear();
             for (auto it = userParamsJson.begin(); it != userParamsJson.end(); ++it)
             {

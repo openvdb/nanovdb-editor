@@ -26,7 +26,8 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 
     if (pixel_in_image)
     {
-        float3 background = float3(0.f, 0.f, 0.f);
-        color_2d_out[int2(global_j, constants.image_height - 1u - global_i)] = float4(background, 1.f);
+        int2 pix = int2(global_j, constants.image_height - 1u - global_i);
+        float4 background = (constants.composite != 0u) ? color_2d_out[pix] : float4(0.f, 0.f, 0.f, 1.f);
+        color_2d_out[pix] = background;
     }
 }

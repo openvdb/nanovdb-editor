@@ -48,7 +48,7 @@ struct NanoVDBContext
 struct GaussianDataContext
 {
     std::shared_ptr<pnanovdb_raster_gaussian_data_t> gaussian_data;
-    pnanovdb_raster_shader_params_t* shader_params = nullptr; // Points into gaussian_data
+    pnanovdb_raster_shader_params_t* shader_params = nullptr; // Non-owning pointer, typically into params array data
 };
 
 // Scene view data for a specific scene ID - holds all views in that scene
@@ -61,6 +61,9 @@ struct SceneViewData
     uint64_t current_view_token_id = 0; // Current view token ID selected in this scene
     std::atomic<uint64_t> current_view_epoch{ 0 };
     int unnamed_counter = 0;
+
+    // Global render order for scene objects (NanoVDB + Gaussian), back-to-front.
+    std::vector<uint64_t> renderable_order;
 
     // ID of the camera that is currently used as the viewport camera for this scene
     uint64_t viewport_camera_token_id = 0;
@@ -114,6 +117,9 @@ public:
     void add_camera(pnanovdb_editor_token_t* scene_token,
                     pnanovdb_editor_token_t* name_token,
                     const CameraViewContext& camera);
+    void sync_camera_owner(pnanovdb_editor_token_t* scene_token,
+                           pnanovdb_editor_token_t* name_token,
+                           const std::shared_ptr<pnanovdb_camera_view_t>& camera_view_owner);
     pnanovdb_camera_view_t* get_camera(pnanovdb_editor_token_t* name_token) const;
     pnanovdb_camera_view_t* get_camera(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token) const;
     const std::map<uint64_t, CameraViewContext>& get_cameras() const;
@@ -175,6 +181,19 @@ public:
 
     // Remove entire scene
     bool remove_scene(pnanovdb_editor_token_t* scene_token);
+    bool rename_scene(pnanovdb_editor_token_t* old_scene_token, pnanovdb_editor_token_t* new_scene_token);
+
+    // Ordered renderable views (NanoVDB + Gaussian) for a scene.
+    std::vector<pnanovdb_editor_token_t*> get_ordered_renderable_views(pnanovdb_editor_token_t* scene_token) const;
+    // Ordered views filtered by type, preserving global render order.
+    std::vector<pnanovdb_editor_token_t*> get_ordered_nanovdb_views(pnanovdb_editor_token_t* scene_token) const;
+    std::vector<pnanovdb_editor_token_t*> get_ordered_gaussian_views(pnanovdb_editor_token_t* scene_token) const;
+    // Move one item in global render order by +/-1.
+    bool move_renderable_order(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token, int direction);
+    // Move source before target in global render order.
+    bool move_renderable_before(pnanovdb_editor_token_t* scene_token,
+                                pnanovdb_editor_token_t* source_name_token,
+                                pnanovdb_editor_token_t* target_name_token);
 
     // Set current render settings so SceneView can derive is_y_up at scene creation time
     void set_render_settings(pnanovdb_imgui_settings_render_t* settings)

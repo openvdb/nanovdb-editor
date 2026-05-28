@@ -109,6 +109,7 @@ int main(int argc, char* argv[])
         pnanovdb_editor_t editor = {};
         pnanovdb_editor_load(&editor, &compute, &compiler);
 
+#if 1
         pnanovdb_compute_array_t* data_nanovdb = compute.load_nanovdb(file);
 
         pnanovdb_editor_token_t* scene_main = editor.get_token("main");
@@ -128,6 +129,7 @@ int main(int argc, char* argv[])
         }
 
         compute.destroy_array(data_nanovdb);
+#endif
 
         editor.show(&editor, device, &config);
 

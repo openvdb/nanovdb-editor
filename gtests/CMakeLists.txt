@@ -58,3 +58,10 @@ ConfigureTest(EditorViewportCameraSyncTest
   ../editor/SceneView.cpp
 )
 ConfigureTest(EditorSlangCompileSpeedTest EditorSlangCompileSpeedTest.cpp)
+ConfigureTest(CustomSceneParamsTest CustomSceneParamsTest.cpp ../editor/CustomSceneParams.cpp)
+ConfigureTest(MapPinTest MapPinTest.cpp EditorTestSupport.cpp)
+ConfigureTest(ShaderParamsReadOnlyTest ShaderParamsReadOnlyTest.cpp EditorTestSupport.cpp)
+ConfigureTest(ShaderNameSwapResetsParamsTest ShaderNameSwapResetsParamsTest.cpp EditorTestSupport.cpp)
+ConfigureTest(ShaderParamsResetToDefaultsTest ShaderParamsResetToDefaultsTest.cpp EditorTestSupport.cpp)
+ConfigureTest(VoxelBVHBuildPipelineTest VoxelBVHBuildPipelineTest.cpp GpuTestSupport.cpp)
+ConfigureTest(StreamingUiToViewSyncTest StreamingUiToViewSyncTest.cpp EditorTestSupport.cpp GpuTestSupport.cpp)

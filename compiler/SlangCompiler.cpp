@@ -440,12 +440,12 @@ bool SlangCompiler::compile(const pnanovdb_compiler_settings_t* settings,
 
     // Use layout to get shader params struct
     auto programLayout = composedProgram->getLayout();
-    auto shaderParams = programLayout->findTypeByName(pnanovdb_shader::SHADER_PARAM_SLANG);
-    if (shaderParams && shaderParams->getKind() == slang::TypeReflection::Kind::Struct)
+    auto shaderParamsLayout = programLayout->findTypeByName(pnanovdb_shader::SHADER_PARAM_SLANG);
+    if (shaderParamsLayout && shaderParamsLayout->getKind() == slang::TypeReflection::Kind::Struct)
     {
-        for (uint32_t i = 0; i < shaderParams->getFieldCount(); i++)
+        for (uint32_t i = 0; i < shaderParamsLayout->getFieldCount(); i++)
         {
-            auto member = shaderParams->getFieldByIndex(i);
+            auto member = shaderParamsLayout->getFieldByIndex(i);
             std::string name = member->getName();
             std::string typeName;
             size_t elementCount = 1u;

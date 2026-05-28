@@ -25,7 +25,7 @@ docker run --runtime=nvidia --net=host --gpus=all ...
 ```py
 import nanovdb_editor as nve
 
-editor, compute, compiler = nve.create_default(device_id=args.device)
+editor, compute, compiler = nve.create_default()
 
 config = nve.EditorConfig()
 
