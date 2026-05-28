@@ -198,6 +198,13 @@ float4 ray_march_nanovdb_leaf_fetch_float(pnanovdb_grid_type_t grid_type,
             color = levelset_to_color(value);
         }
     }
+    else if (grid_type == PNANOVDB_GRID_TYPE_RGBA8)
+    {
+        uint value_raw = pnanovdb_read_uint32(buf, address);
+        color = float4(
+            float((value_raw >> 0) & 255) * (1.f / 255.f), float((value_raw >> 8) & 255) * (1.f / 255.f),
+            float((value_raw >> 16) & 255) * (1.f / 255.f), float((value_raw >> 24) & 255) * (1.f / 255.f));
+    }
     else
     {
         float value = 0.f;

@@ -79,15 +79,6 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     uint upsample = constants.ijkl_count;
     uint pass_id = constants.range_count;
 
-    /*if (pass_id == 0 && level == 4u)
-    {
-        pnanovdb_grid_handle_t dst_grid = { pnanovdb_address_null() };
-        pnanovdb_tree_handle_t dst_tree = pnanovdb_grid_get_tree(buf_scratch, dst_grid);
-        pnanovdb_root_handle_t dst_root = pnanovdb_tree_get_root(buf_scratch, dst_tree);
-        pnanovdb_uint32_t tile_count = pnanovdb_root_get_tile_count(buf_scratch, dst_root);
-        pnanovdb_tree_set_node_count_leaf(buf_scratch, dst_tree, tile_count);
-    }*/
-
     bool src_child_is_active = false;
     if (level == 3u && pass_id == 0u) // root
     {

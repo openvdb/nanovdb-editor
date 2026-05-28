@@ -662,7 +662,9 @@ void voxelbvh_test()
 
     pnanovdb_compute_array_t* nanovdb_rgba8 = nullptr;
     voxel_bvh.nanovdb_duplicate_topology_array(
-        &compute, queue, voxelbvh_ctx, &nanovdb_rgba8, nanovdb_meta, resolution, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE);
+        &compute, queue, voxelbvh_ctx, &nanovdb_rgba8, nanovdb_meta, resolution, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_FALSE);
+
+    voxel_bvh.nanovdb_rgba8_from_voxelbvh_array(&compute, queue, voxelbvh_ctx, nanovdb_rgba8, nanovdb_meta);
 
     compute.save_nanovdb(nanovdb_rgba8, "./data/test_rgba8.nvdb");
 
