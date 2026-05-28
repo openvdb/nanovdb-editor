@@ -420,6 +420,9 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
                                     sum_local,
                                     nominalT_local);
 
+            // flip to alpha before averaging
+            sum_local.a = 1.f - sum_local.a;
+
             s_sum[thread_idx] = sum_local;
 
             GroupMemoryBarrierWithGroupSync();
@@ -458,7 +461,12 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
             GroupMemoryBarrierWithGroupSync();
             if (thread_idx == s_idx)
             {
-                sum += (1.f / 6.f) * 0.25f * (s_sum[0] + s_sum[1] + s_sum[2] + s_sum[3]);
+                sum_local = 0.25f * (s_sum[0] + s_sum[1] + s_sum[2] + s_sum[3]);
+
+                // normalize against misses
+                sum_local.rgb *= (1.f / sum_local.a);
+
+                sum = max(sum, sum_local);
             }
             GroupMemoryBarrierWithGroupSync();
         }
@@ -466,7 +474,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
 
     if (this_thread_active)
     {
-        float4 color = float4(sum.rgb, 1.f - sum.a);
+        float4 color = float4(sum.rgb, sum.a);
         uint rgba_raw = uint(255.f * max(0.f, min(1.f, color.x))) | (uint(255.f * max(0.f, min(1.f, color.y))) << 8u) |
                         (uint(255.f * max(0.f, min(1.f, color.z))) << 16u) |
                         (uint(255.f * max(0.f, min(1.f, color.w))) << 24u);
