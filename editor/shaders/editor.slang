@@ -345,7 +345,7 @@ bool ray_march_nanovdb_leaf(pnanovdb_grid_type_t grid_type,
         for (int stepIdx = 0; stepIdx < numSteps; stepIdx++)
         {
             // linear interpolation
-#if 0
+#if 1
             float4 value = ray_march_nanovdb_leaf_fetch_float_trilinear(grid_type, buf, acc, pos, ijk_offset);
 #else
             int3 ijk000 = int3(floor(pos)) + ijk_offset;
