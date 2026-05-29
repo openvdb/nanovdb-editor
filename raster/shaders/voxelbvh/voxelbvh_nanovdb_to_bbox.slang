@@ -15,8 +15,9 @@ float convert_to_float(uint64_t raw)
     uint sign = uint((raw >> 63) & 1);
     uint exponent = uint((raw >> 52) & 0x7FF);
     uint mantissa_fp32 = uint(raw >> 29) & 0x7FFFFF;
+    uint exponent_fp32 = (exponent - 896) & 255;
     uint raw32 = (sign << 31) |
-                 (((exponent - 896) & 255) << 23) |
+                 (exponent_fp32 << 23) |
                  mantissa_fp32;
     return asfloat(raw32);
 }
