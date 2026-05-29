@@ -2406,11 +2406,11 @@ pnanovdb_voxelbvh_t* pnanovdb_get_voxelbvh()
     iface.ijkl_from_lines_array = ijkl_from_lines_array;
     iface.ijkl_from_triangles = ijkl_from_triangles;
     iface.ijkl_from_triangles_array = ijkl_from_triangles_array;
-    iface.nanovdb_duplicate_topology = nanovdb_duplicate_topology;
     iface.nanovdb_from_gaussians_file = nanovdb_from_gaussians_file;
     iface.nanovdb_from_gaussians_array = nanovdb_from_gaussians_array;
     iface.nanovdb_from_triangles_array = nanovdb_from_triangles_array;
     iface.nanovdb_from_lines_array = nanovdb_from_lines_array;
+    iface.nanovdb_duplicate_topology = nanovdb_duplicate_topology;
     iface.nanovdb_duplicate_topology_array = nanovdb_duplicate_topology_array;
     iface.nanovdb_rgba8_from_voxelbvh = nanovdb_rgba8_from_voxelbvh;
     iface.nanovdb_rgba8_from_voxelbvh_array = nanovdb_rgba8_from_voxelbvh_array;
