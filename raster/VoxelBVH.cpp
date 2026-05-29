@@ -136,7 +136,6 @@ static pnanovdb_voxelbvh_context_t* create_context(const pnanovdb_compute_t* com
             [compute, queue, ctx, idx, &compile_settings]() -> bool
             {
                 ctx->shader_ctx[idx] = compute->create_shader_context(s_shader_names[idx]);
-                printf("create_shader_context[%d] name(%s)\n", idx, s_shader_names[idx]);
                 return compute->init_shader(compute, queue, ctx->shader_ctx[idx], &compile_settings) == PNANOVDB_TRUE;
             });
         futures.push_back(std::move(future));
