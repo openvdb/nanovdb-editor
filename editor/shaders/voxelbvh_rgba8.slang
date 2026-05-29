@@ -88,6 +88,12 @@ void ray_hdda_nanovdb(uint thread_idx,
             float((value_raw >> 0) & 255) * (1.f / 255.f), float((value_raw >> 8) & 255) * (1.f / 255.f),
             float((value_raw >> 16) & 255) * (1.f / 255.f), float((value_raw >> 24) & 255) * (1.f / 255.f));
 
+        // path length correction
+        if (color.a < 1.f)
+        {
+            color.a = 1.f - pow(1.f - color.a, (hdda.tmax - hdda.tmin) / float(hdda_dim));
+        }
+
         color = max(float4(0.f, 0.f, 0.f, 0.f), color);
         color.a = min(1.f, color.a);
 

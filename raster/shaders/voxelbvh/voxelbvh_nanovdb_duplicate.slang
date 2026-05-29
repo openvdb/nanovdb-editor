@@ -108,6 +108,20 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
         {
             src_child_is_active = true;
         }
+#if 1
+        else if (grid_type == PNANOVDB_GRID_TYPE_INT64)
+        {
+            // Note: assuming VoxelBVH
+            // Add extra leaves for mid sized primitives
+            // Mask applied here is a heuristic
+            pnanovdb_uint64_t voxel_val_raw = pnanovdb_read_uint64(buf, val_addr);
+            uint active_level_mask = uint(voxel_val_raw) & 0xFFFF;
+            if ((active_level_mask & 0x1F) != 0u)
+            {
+                src_child_is_active = true;
+            }
+        }
+#endif
     }
     else if (level == 0u) // leaf
     {
