@@ -34,8 +34,9 @@ uint64_t convert_to_double(float v)
     uint sign = (raw >> 31) & 1;
     uint exponent = (raw >> 23) & 0xFF;
     uint mantissa = raw & 0x7FFFFF;
+    uint exponent_fp64 = exponent + 896;
     uint64_t raw64 = (uint64_t(sign) << 63) |
-                     (uint64_t(exponent + 896) << 52) |
+                     (uint64_t(exponent_fp64) << 52) |
                      (uint64_t(mantissa) << 29);
     return raw64;
 }
