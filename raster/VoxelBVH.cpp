@@ -624,7 +624,7 @@ static void nanovdb_duplicate_topology(const pnanovdb_compute_t* compute,
                                  1u, 1u, 1u, "voxelbvh_nanovdb_to_bbox");
     }
 
-    uint dst_resolution = upsample ? 2u * resolution : resolution;
+    pnanovdb_uint32_t dst_resolution = upsample ? 2u * resolution : resolution;
 
     nanovdb_init(compute, queue, voxelbvh_context, dst_nanovdb_inout, dst_nanovdb_word_count, world_bbox_buffer,
                  dst_resolution, dst_grid_type);
@@ -2335,7 +2335,7 @@ void nanovdb_rgba8_from_voxelbvh(const pnanovdb_compute_t* compute,
         resources[4u].buffer_transient = constant2_transient;
 
         compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_rgba8_from_voxelbvh_slang],
-                                    resources, 256u, 1u, 1u, "voxelbvh_nanovdb_rgba8_from_voxelbvh");
+                                 resources, 256u, 1u, 1u, "voxelbvh_nanovdb_rgba8_from_voxelbvh");
 
         compute_interface->destroy_buffer(context, constant2_buffer);
 
@@ -2369,8 +2369,8 @@ void nanovdb_rgba8_from_voxelbvh_array(const pnanovdb_compute_t* compute,
     pnanovdb_uint64_t src_word_count = (src_nanovdb_in->element_count * src_nanovdb_in->element_size) / 4u;
     pnanovdb_uint64_t dst_word_count = (dst_nanovdb_inout->element_count * dst_nanovdb_inout->element_size) / 4u;
 
-    nanovdb_rgba8_from_voxelbvh(compute, queue, voxelbvh_context, dst_nanovdb_gpu_array->device_buffer,
-                                dst_word_count, src_nanovdb_gpu_array->device_buffer, src_word_count);
+    nanovdb_rgba8_from_voxelbvh(compute, queue, voxelbvh_context, dst_nanovdb_gpu_array->device_buffer, dst_word_count,
+                                src_nanovdb_gpu_array->device_buffer, src_word_count);
 
     gpu_array_readback(compute, queue, dst_nanovdb_gpu_array, dst_nanovdb_inout);
 
