@@ -474,7 +474,10 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
                 sum_local = 0.25f * (s_sum[0] + s_sum[1] + s_sum[2] + s_sum[3]);
 
                 // normalize against misses
-                sum_local.rgb *= (1.f / sum_local.a);
+                if (sum_local.a != 0.f)
+                {
+                    sum_local.rgb *= (1.f / sum_local.a);
+                }
 
                 sum = max(sum, sum_local);
             }
