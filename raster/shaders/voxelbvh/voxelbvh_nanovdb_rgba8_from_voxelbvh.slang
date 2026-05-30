@@ -134,11 +134,8 @@ float3 intersect_triangle( in float3 ro, in float3 rd, in float3 v0, in float3 v
 
 void intersect_triangle(
     pnanovdb_grid_handle_t grid,
-    float3 pos_a,
     uint id_a,
-    float3 pos_b,
     uint id_b,
-    float3 pos_c,
     uint id_c,
     float3 rayOrigin,
     float tmin,
@@ -148,6 +145,11 @@ void intersect_triangle(
     inout float4 sum,
     inout float nominalT)
 {
+    pnanovdb_address_t pos_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf_scratch, grid, 3u);
+    float3 pos_a = pnanovdb_read_vec3(buf_scratch, pnanovdb_address_offset_product(pos_addr, 12u, id_a));
+    float3 pos_b = pnanovdb_read_vec3(buf_scratch, pnanovdb_address_offset_product(pos_addr, 12u, id_b));
+    float3 pos_c = pnanovdb_read_vec3(buf_scratch, pnanovdb_address_offset_product(pos_addr, 12u, id_c));
+
     float3 t_isect = intersect_triangle(rayOrigin, rayDir, pos_a, pos_b, pos_c);
 
     float alpha = 0.f;
@@ -195,11 +197,8 @@ groupshared uint64_t s_voxel_val[256u];
 
 struct prim_t
 {
-    float3 pos_a;
     uint id_a;
-    float3 pos_b;
     uint id_b;
-    float3 pos_c;
     uint id_c;
 };
 groupshared prim_t s_prims[256u];
@@ -232,16 +231,8 @@ void workgroup_triangle_process(uint thread_idx,
             pnanovdb_uint32_t id_b = pnanovdb_read_uint32(buf_scratch, pnanovdb_address_offset(index_addr, 12u * prim_id + 4u));
             pnanovdb_uint32_t id_c = pnanovdb_read_uint32(buf_scratch, pnanovdb_address_offset(index_addr, 12u * prim_id + 8u));
 
-            pnanovdb_address_t pos_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf_scratch, grid, 3u);
-            float3 pos_a = pnanovdb_read_vec3(buf_scratch, pnanovdb_address_offset_product(pos_addr, 12u, id_a));
-            float3 pos_b = pnanovdb_read_vec3(buf_scratch, pnanovdb_address_offset_product(pos_addr, 12u, id_b));
-            float3 pos_c = pnanovdb_read_vec3(buf_scratch, pnanovdb_address_offset_product(pos_addr, 12u, id_c));
-
-            s_prims[thread_idx].pos_a = pos_a;
             s_prims[thread_idx].id_a = id_a;
-            s_prims[thread_idx].pos_b = pos_b;
             s_prims[thread_idx].id_b = id_b;
-            s_prims[thread_idx].pos_c = pos_c;
             s_prims[thread_idx].id_c = id_c;
         }
 
@@ -256,11 +247,8 @@ void workgroup_triangle_process(uint thread_idx,
             {
                 intersect_triangle(
                     grid,
-                    s_prims[s_idx].pos_a,
                     s_prims[s_idx].id_a,
-                    s_prims[s_idx].pos_b,
                     s_prims[s_idx].id_b,
-                    s_prims[s_idx].pos_c,
                     s_prims[s_idx].id_c,
                     worldRayOrigin,
                     worldTmin,
