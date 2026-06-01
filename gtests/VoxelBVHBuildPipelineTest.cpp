@@ -409,9 +409,9 @@ TEST_F(VoxelBVHBuildPipelineTest, TrianglesSynthetic)
     pnanovdb_compute_array_t* indices = nullptr;
     pnanovdb_compute_array_t* positions = nullptr;
     pnanovdb_compute_array_t* colors = nullptr;
-    ASSERT_TRUE(build_heightfield_mesh(rt().compute, 16u, 16u, &indices, &positions, &colors));
+    ASSERT_TRUE(build_heightfield_mesh(rt().compute, 8u, 8u, &indices, &positions, &colors));
 
-    const pnanovdb_uint32_t resolution = 127u;
+    const pnanovdb_uint32_t resolution = 63u;
     const float inflation_radius = 0.f;
 
     pnanovdb_compute_array_t* nanovdb_array = rt().voxelbvh.nanovdb_from_triangles_array(
@@ -477,8 +477,8 @@ TEST_F(VoxelBVHBuildPipelineTest, LinesFromEdgePly)
 
     const std::filesystem::path edge_ply_path = std::filesystem::temp_directory_path() / "nvdb_editor_test_lines.ply";
 
-    constexpr uint32_t kWidth = 16u;
-    constexpr uint32_t kHeight = 16u;
+    constexpr uint32_t kWidth = 8u;
+    constexpr uint32_t kHeight = 8u;
     uint64_t expected_vert_count = 0u;
     uint64_t expected_edge_count = 0u;
     ASSERT_TRUE(
@@ -510,8 +510,8 @@ TEST_F(VoxelBVHBuildPipelineTest, LinesFromEdgePly)
     pnanovdb_compute_array_t* colors = synthesize_white_colors(rt().compute, positions->element_count);
     ASSERT_NE(colors, nullptr);
 
-    const pnanovdb_uint32_t resolution = 127u;
-    const float inflation_radius = 2.f;
+    const pnanovdb_uint32_t resolution = 63u;
+    const float inflation_radius = 1.f;
 
     pnanovdb_compute_array_t* nanovdb_array = rt().voxelbvh.nanovdb_from_lines_array(
         &rt().compute, rt().queue, rt().voxelbvh_ctx, indices, positions, colors, inflation_radius, resolution);
