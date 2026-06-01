@@ -1010,8 +1010,8 @@ static void nanovdb_add_nodes_from_ijkl_array(const pnanovdb_compute_t* compute,
     pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
     pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
 
-    // default to 2GB return for now
-    uint64_t buf_size = 2u * 1024llu * 1024llu * 1024llu;
+    // default to 1GB return for now
+    uint64_t buf_size = 1u * 1024llu * 1024llu * 1024llu;
     uint64_t nanovdb_uint64_count = (buf_size + 7u) / 8u;
 
     uint64_t ijkl_count = (ijkl_in->element_size * ijkl_in->element_count) / 8u;
