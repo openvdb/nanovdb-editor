@@ -248,7 +248,7 @@ struct VoxelBVHRuntime
         {
             return false;
         }
-        device_name = phys_desc.device_name ? phys_desc.device_name : "";
+        device_name = phys_desc.device_name;
         if (pnanovdb_editor_test::should_skip_on_software_renderer(phys_desc.device_name))
         {
             software_renderer = true;
@@ -389,7 +389,7 @@ TEST_F(VoxelBVHBuildPipelineTest, LinesSynthetic)
     ASSERT_NE(indices, nullptr);
     ASSERT_NE(colors, nullptr);
 
-    const pnanovdb_uint32_t resolution = 127u;
+    const pnanovdb_uint32_t resolution = 128u;
     const float inflation_radius = 1.0f;
 
     pnanovdb_compute_array_t* nanovdb_array = rt().voxelbvh.nanovdb_from_lines_array(
@@ -411,7 +411,7 @@ TEST_F(VoxelBVHBuildPipelineTest, TrianglesSynthetic)
     pnanovdb_compute_array_t* colors = nullptr;
     ASSERT_TRUE(build_heightfield_mesh(rt().compute, 8u, 8u, &indices, &positions, &colors));
 
-    const pnanovdb_uint32_t resolution = 63u;
+    const pnanovdb_uint32_t resolution = 64u;
     const float inflation_radius = 0.f;
 
     pnanovdb_compute_array_t* nanovdb_array = rt().voxelbvh.nanovdb_from_triangles_array(
@@ -457,7 +457,7 @@ TEST_F(VoxelBVHBuildPipelineTest, TrianglesFromDragonPly)
     pnanovdb_compute_array_t* colors = synthesize_white_colors(rt().compute, positions->element_count);
     ASSERT_NE(colors, nullptr);
 
-    const pnanovdb_uint32_t resolution = 511u;
+    const pnanovdb_uint32_t resolution = 512u;
     const float inflation_radius = 0.f;
 
     pnanovdb_compute_array_t* nanovdb_array = rt().voxelbvh.nanovdb_from_triangles_array(
@@ -510,7 +510,7 @@ TEST_F(VoxelBVHBuildPipelineTest, LinesFromEdgePly)
     pnanovdb_compute_array_t* colors = synthesize_white_colors(rt().compute, positions->element_count);
     ASSERT_NE(colors, nullptr);
 
-    const pnanovdb_uint32_t resolution = 63u;
+    const pnanovdb_uint32_t resolution = 64u;
     const float inflation_radius = 1.f;
 
     pnanovdb_compute_array_t* nanovdb_array = rt().voxelbvh.nanovdb_from_lines_array(
