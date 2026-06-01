@@ -255,6 +255,7 @@ struct VoxelBVHRuntime
             return false;
         }
         pnanovdb_compute_device_desc_t device_desc{};
+        device_desc.log_print = pnanovdb_editor_test::stderr_log_print;
         device = compute.device_interface.create_device(device_manager, &device_desc);
         if (!device)
         {

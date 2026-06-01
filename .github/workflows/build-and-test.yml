@@ -125,6 +125,10 @@ jobs:
           echo "DYLD_LIBRARY_PATH=${BREW_PREFIX}/lib:${DYLD_LIBRARY_PATH:-}" >> "${GITHUB_ENV}"
           echo "DYLD_FALLBACK_LIBRARY_PATH=${BREW_PREFIX}/lib:${DYLD_FALLBACK_LIBRARY_PATH:-}" >> "${GITHUB_ENV}"
 
+          echo "MVK_CONFIG_LOG_LEVEL=3" >> "${GITHUB_ENV}"
+          echo "MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=1" >> "${GITHUB_ENV}"
+          echo "MVK_CONFIG_DEBUG=1" >> "${GITHUB_ENV}"
+
       - name: Run OpenH264 regression build
         run: |
           set -euo pipefail
