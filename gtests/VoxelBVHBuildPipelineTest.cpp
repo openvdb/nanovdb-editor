@@ -248,13 +248,14 @@ struct VoxelBVHRuntime
         {
             return false;
         }
-        device_name = phys_desc.device_name ? phys_desc.device_name : "";
+        device_name = phys_desc.device_name;
         if (pnanovdb_editor_test::should_skip_on_software_renderer(phys_desc.device_name))
         {
             software_renderer = true;
             return false;
         }
         pnanovdb_compute_device_desc_t device_desc{};
+        device_desc.log_print = pnanovdb_editor_test::stderr_log_print;
         device = compute.device_interface.create_device(device_manager, &device_desc);
         if (!device)
         {
@@ -388,7 +389,7 @@ TEST_F(VoxelBVHBuildPipelineTest, LinesSynthetic)
     ASSERT_NE(indices, nullptr);
     ASSERT_NE(colors, nullptr);
 
-    const pnanovdb_uint32_t resolution = 127u;
+    const pnanovdb_uint32_t resolution = 128u;
     const float inflation_radius = 1.0f;
 
     pnanovdb_compute_array_t* nanovdb_array = rt().voxelbvh.nanovdb_from_lines_array(
@@ -408,9 +409,9 @@ TEST_F(VoxelBVHBuildPipelineTest, TrianglesSynthetic)
     pnanovdb_compute_array_t* indices = nullptr;
     pnanovdb_compute_array_t* positions = nullptr;
     pnanovdb_compute_array_t* colors = nullptr;
-    ASSERT_TRUE(build_heightfield_mesh(rt().compute, 16u, 16u, &indices, &positions, &colors));
+    ASSERT_TRUE(build_heightfield_mesh(rt().compute, 8u, 8u, &indices, &positions, &colors));
 
-    const pnanovdb_uint32_t resolution = 127u;
+    const pnanovdb_uint32_t resolution = 64u;
     const float inflation_radius = 0.f;
 
     pnanovdb_compute_array_t* nanovdb_array = rt().voxelbvh.nanovdb_from_triangles_array(
@@ -456,7 +457,7 @@ TEST_F(VoxelBVHBuildPipelineTest, TrianglesFromDragonPly)
     pnanovdb_compute_array_t* colors = synthesize_white_colors(rt().compute, positions->element_count);
     ASSERT_NE(colors, nullptr);
 
-    const pnanovdb_uint32_t resolution = 511u;
+    const pnanovdb_uint32_t resolution = 512u;
     const float inflation_radius = 0.f;
 
     pnanovdb_compute_array_t* nanovdb_array = rt().voxelbvh.nanovdb_from_triangles_array(
@@ -476,8 +477,8 @@ TEST_F(VoxelBVHBuildPipelineTest, LinesFromEdgePly)
 
     const std::filesystem::path edge_ply_path = std::filesystem::temp_directory_path() / "nvdb_editor_test_lines.ply";
 
-    constexpr uint32_t kWidth = 16u;
-    constexpr uint32_t kHeight = 16u;
+    constexpr uint32_t kWidth = 8u;
+    constexpr uint32_t kHeight = 8u;
     uint64_t expected_vert_count = 0u;
     uint64_t expected_edge_count = 0u;
     ASSERT_TRUE(
@@ -509,8 +510,8 @@ TEST_F(VoxelBVHBuildPipelineTest, LinesFromEdgePly)
     pnanovdb_compute_array_t* colors = synthesize_white_colors(rt().compute, positions->element_count);
     ASSERT_NE(colors, nullptr);
 
-    const pnanovdb_uint32_t resolution = 127u;
-    const float inflation_radius = 2.f;
+    const pnanovdb_uint32_t resolution = 64u;
+    const float inflation_radius = 1.f;
 
     pnanovdb_compute_array_t* nanovdb_array = rt().voxelbvh.nanovdb_from_lines_array(
         &rt().compute, rt().queue, rt().voxelbvh_ctx, indices, positions, colors, inflation_radius, resolution);

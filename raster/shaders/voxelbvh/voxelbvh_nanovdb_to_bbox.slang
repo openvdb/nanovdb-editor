@@ -10,6 +10,22 @@ StructuredBuffer<uint2> buf;
 
 RWStructuredBuffer<float> world_bbox_out;
 
+float convert_to_float(uint64_t raw)
+{
+    uint sign = uint((raw >> 63) & 1);
+    uint exponent = uint((raw >> 52) & 0x7FF);
+    uint mantissa_fp32 = uint(raw >> 29) & 0x7FFFFF;
+    uint exponent_fp32 = (exponent - 896) & 255;
+    uint raw32 = (sign << 31) |
+                 (exponent_fp32 << 23) |
+                 mantissa_fp32;
+    return asfloat(raw32);
+}
+
+PNANOVDB_FORCE_INLINE uint64_t pnanovdb_grid_get_world_bbox_uint64(pnanovdb_buf_t buf, pnanovdb_grid_handle_t p, pnanovdb_uint32_t index) {
+    return pnanovdb_read_uint64(buf, pnanovdb_address_offset(p.address, PNANOVDB_GRID_OFF_WORLD_BBOX + 8u * index));
+}
+
 [shader("compute")][numthreads(32, 1, 1)]
 void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
@@ -20,6 +36,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 
     if (thread_idx.x < 6u)
     {
-        world_bbox_out[thread_idx.x] = float(pnanovdb_grid_get_world_bbox(buf, grid, thread_idx.x));
+        world_bbox_out[thread_idx.x] = convert_to_float(
+            pnanovdb_grid_get_world_bbox_uint64(buf, grid, thread_idx.x));
     }
 }
