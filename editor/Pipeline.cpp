@@ -1249,8 +1249,8 @@ PNANOVDB_DEFINE_PIPELINE_SHADERS(s_raster2d_shaders,
 PNANOVDB_DEFINE_PIPELINE_SHADERS(s_raster3d_shaders,
                                  PNANOVDB_PIPELINE_SHADER("raster/gaussian_frag_color.slang", nullptr, PNANOVDB_TRUE));
 
-PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_render_shaders,
-                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh.slang", nullptr, PNANOVDB_TRUE));
+PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_gaussians_shaders,
+                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_gaussians.slang", nullptr, PNANOVDB_TRUE));
 
 PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_lines_render_shaders,
                                  PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_lines.slang", nullptr, PNANOVDB_TRUE));
@@ -1353,11 +1353,11 @@ static const pnanovdb_pipeline_descriptor_t s_raster3d_descriptor = {
     map_raster3d_params, s_raster3d_param_fields, sizeof(s_raster3d_param_fields) / sizeof(s_raster3d_param_fields[0])
 };
 
-static const pnanovdb_pipeline_descriptor_t s_voxelbvh_render_descriptor = {
-    pnanovdb_pipeline_type_voxelbvh_render,
+static const pnanovdb_pipeline_descriptor_t s_voxelbvh_gaussians_render_descriptor = {
+    pnanovdb_pipeline_type_voxelbvh_gaussians_render,
     pnanovdb_pipeline_stage_render,
-    "Voxel BVH Render",
-    s_voxelbvh_render_shaders,
+    "Voxel BVH Gaussians",
+    s_voxelbvh_gaussians_shaders,
     1,
     sizeof(NanoVDBRenderParams),
     "NanoVDBRenderParams",
@@ -1891,7 +1891,7 @@ void pipeline_register_builtins()
     pnanovdb_pipeline_register(&s_nanovdb_surface_descriptor);
     pnanovdb_pipeline_register(&s_raster2d_descriptor);
     pnanovdb_pipeline_register(&s_raster3d_descriptor);
-    pnanovdb_pipeline_register(&s_voxelbvh_render_descriptor);
+    pnanovdb_pipeline_register(&s_voxelbvh_gaussians_render_descriptor);
     pnanovdb_pipeline_register(&s_voxelbvh_lines_render_descriptor);
     pnanovdb_pipeline_register(&s_voxelbvh_triangles_render_descriptor);
     pnanovdb_pipeline_register(&s_voxelbvh_triangles_debug_render_descriptor);
