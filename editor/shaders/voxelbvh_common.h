@@ -1,4 +1,13 @@
-// voxelbvh_common.h
+// Copyright Contributors to the OpenVDB Project
+// SPDX-License-Identifier: Apache-2.0
+
+/*!
+    \file   editor/shaders/voxelbvh_common.h
+
+    \author Andrew Reidmeyer
+
+    \brief
+*/
 
 #ifndef VOXELBVH_COMMON_SLANG
 #define VOXELBVH_COMMON_SLANG
