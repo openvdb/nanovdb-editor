@@ -263,14 +263,15 @@ bool render_surface(StructuredBuffer<uint2> buf, float3 worldRayOrigin, float3 w
     // offset is added back at every accessor/value lookup, so results are
     // identical to true-index-space traversal, just with better float precision.
     int3 ijk_offset = int3(0, 0, 0);
+    float3 origin_local = origin;
     if (shader_params.auto_center != 0u)
     {
         int3 bbox_min = pnanovdb_root_get_bbox_min(buf, root);
         int3 bbox_max = pnanovdb_root_get_bbox_max(buf, root);
         int3 bbox_ave = ((bbox_max + bbox_min) >> 1u);
         ijk_offset = (bbox_ave & ~4095);
+        origin_local = origin + float3(bbox_ave - ijk_offset);
     }
-    float3 origin_local = origin - float3(ijk_offset);
 
     float thit;
     if (!surface_zero_crossing(
