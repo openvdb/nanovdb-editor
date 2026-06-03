@@ -1238,6 +1238,9 @@ static void* map_voxelbvh_build_params(pnanovdb_scene_object_t* obj)
 PNANOVDB_DEFINE_PIPELINE_SHADERS(s_nanovdb_render_shaders,
                                  PNANOVDB_PIPELINE_SHADER("editor/editor.slang", nullptr, PNANOVDB_TRUE));
 
+PNANOVDB_DEFINE_PIPELINE_SHADERS(s_nanovdb_surface_shaders,
+                                 PNANOVDB_PIPELINE_SHADER("editor/editor_surface.slang", nullptr, PNANOVDB_TRUE));
+
 PNANOVDB_DEFINE_PIPELINE_SHADERS(s_raster2d_shaders,
                                  PNANOVDB_PIPELINE_SHADER("raster/gaussian_rasterize_2d.slang",
                                                           "raster/raster2d_group",
@@ -1298,6 +1301,22 @@ static const pnanovdb_pipeline_descriptor_t s_nanovdb_render_descriptor = {
     pnanovdb_pipeline_stage_render,
     "NanoVDB Render",
     s_nanovdb_render_shaders,
+    1,
+    sizeof(NanoVDBRenderParams),
+    "NanoVDBRenderParams",
+    init_nanovdb_render_params,
+    execute_nanovdb_render,
+    get_render_method_nanovdb,
+    map_nanovdb_render_params,
+    nullptr,
+    0 // param_fields
+};
+
+static const pnanovdb_pipeline_descriptor_t s_nanovdb_surface_descriptor = {
+    pnanovdb_pipeline_type_nanovdb_surface,
+    pnanovdb_pipeline_stage_render,
+    "NanoVDB Surface (SDF)",
+    s_nanovdb_surface_shaders,
     1,
     sizeof(NanoVDBRenderParams),
     "NanoVDBRenderParams",
@@ -1869,6 +1888,7 @@ void pipeline_register_builtins()
 {
     pnanovdb_pipeline_register(&s_noop_descriptor);
     pnanovdb_pipeline_register(&s_nanovdb_render_descriptor);
+    pnanovdb_pipeline_register(&s_nanovdb_surface_descriptor);
     pnanovdb_pipeline_register(&s_raster2d_descriptor);
     pnanovdb_pipeline_register(&s_raster3d_descriptor);
     pnanovdb_pipeline_register(&s_voxelbvh_render_descriptor);

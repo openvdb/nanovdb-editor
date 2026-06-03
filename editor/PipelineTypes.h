@@ -23,5 +23,6 @@ enum pnanovdb_pipeline_type_enum_t
     pnanovdb_pipeline_type_voxelbvh_triangles_debug_render = 7,
     pnanovdb_pipeline_type_voxelbvh_debug_render = 8,
     pnanovdb_pipeline_type_voxelbvh_build = 9,
+    pnanovdb_pipeline_type_nanovdb_surface = 10,
     pnanovdb_pipeline_type_count
 };
