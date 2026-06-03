@@ -1131,7 +1131,7 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
                     // try VoxelBVH render first; NanoVDBImport falls back to standard
                     // nanovdb_render automatically if the file lacks BVH blind metadata.
                     ptr->editor_scene->load_nanovdb_file(
-                        scene, ptr->nanovdb_filepath.c_str(), pnanovdb_pipeline_type_voxelbvh_render);
+                        scene, ptr->nanovdb_filepath.c_str(), pnanovdb_pipeline_type_voxelbvh_gaussians_render);
                 }
             }
             ImGuiFileDialog::Instance()->Close();
@@ -1157,7 +1157,7 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
                     break;
                 case Mode::VoxelBVH:
                     convert = pnanovdb_pipeline_type_voxelbvh_build;
-                    render = pnanovdb_pipeline_type_voxelbvh_render;
+                    render = pnanovdb_pipeline_type_voxelbvh_gaussians_render;
                     mode_label = "VoxelBVH";
                     break;
                 case Mode::Raster2D:

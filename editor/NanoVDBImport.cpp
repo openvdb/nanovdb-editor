@@ -31,7 +31,7 @@ pnanovdb_uint32_t required_blind_metadata_count(pnanovdb_pipeline_type_t render_
 {
     switch (render_pipeline)
     {
-    case pnanovdb_pipeline_type_voxelbvh_render:
+    case pnanovdb_pipeline_type_voxelbvh_gaussians_render:
         return 8u; // gaussian: range, prim_id, mean, opacity, quat, scale, sh0, shn
     case pnanovdb_pipeline_type_voxelbvh_lines_render:
     case pnanovdb_pipeline_type_voxelbvh_triangles_render:
