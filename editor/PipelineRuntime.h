@@ -32,7 +32,7 @@ class EditorSceneManager;
 class EditorScene;
 class PipelineRuntime;
 
-struct Raster3DParams
+struct GaussianVoxelizeParams
 {
     float voxels_per_unit = k_default_voxels_per_unit;
 };
@@ -44,7 +44,7 @@ struct MeshLoadParams
     pnanovdb_uint32_t show_debug = 0u; //!< nonzero -> triangles_debug_render
 };
 
-PNANOVDB_REFLECT_STRUCT_OPAQUE_IMPL(Raster3DParams)
+PNANOVDB_REFLECT_STRUCT_OPAQUE_IMPL(GaussianVoxelizeParams)
 PNANOVDB_REFLECT_STRUCT_OPAQUE_IMPL(MeshLoadParams)
 
 namespace detail
@@ -73,12 +73,12 @@ inline bool params_field_set(pnanovdb_pipeline_params_t* params, Field Params::*
 
 inline float pipeline_params_get_voxels_per_unit(const pnanovdb_pipeline_params_t* params)
 {
-    return detail::params_field_get(params, &Raster3DParams::voxels_per_unit, k_default_voxels_per_unit);
+    return detail::params_field_get(params, &GaussianVoxelizeParams::voxels_per_unit, k_default_voxels_per_unit);
 }
 
 inline bool pipeline_params_set_voxels_per_unit(pnanovdb_pipeline_params_t* params, float value)
 {
-    return detail::params_field_set(params, &Raster3DParams::voxels_per_unit, value);
+    return detail::params_field_set(params, &GaussianVoxelizeParams::voxels_per_unit, value);
 }
 
 inline float pipeline_params_get_mesh_load_inflation_radius(const pnanovdb_pipeline_params_t* params)
@@ -287,16 +287,16 @@ protected:
 };
 
 // ============================================================================
-// Raster3DWorker - Gaussian -> NanoVDB via raster_file (raster3d pipeline)
+// GaussianVoxelizeWorker - Gaussian -> NanoVDB via raster_file (gaussian_voxelize pipeline)
 // ============================================================================
 
-class Raster3DWorker : public AsyncWorker
+class GaussianVoxelizeWorker : public AsyncWorker
 {
 public:
-    static constexpr pnanovdb_pipeline_type_t kPipelineType = pnanovdb_pipeline_type_raster3d;
+    static constexpr pnanovdb_pipeline_type_t kPipelineType = pnanovdb_pipeline_type_gaussian_voxelize;
 
-    Raster3DWorker() = default;
-    ~Raster3DWorker() override;
+    GaussianVoxelizeWorker() = default;
+    ~GaussianVoxelizeWorker() override;
 
     pnanovdb_pipeline_type_t pipeline_type() const override
     {
@@ -358,16 +358,16 @@ private:
 };
 
 // ============================================================================
-// Raster2DWorker - file import -> Gaussian splats / NanoVDB (raster2d pipeline)
+// GaussianSplatWorker - file import -> Gaussian splats / NanoVDB (gaussian_splat pipeline)
 // ============================================================================
 
-class Raster2DWorker : public AsyncWorker
+class GaussianSplatWorker : public AsyncWorker
 {
 public:
-    static constexpr pnanovdb_pipeline_type_t kPipelineType = pnanovdb_pipeline_type_raster2d;
+    static constexpr pnanovdb_pipeline_type_t kPipelineType = pnanovdb_pipeline_type_gaussian_splat;
 
-    Raster2DWorker() = default;
-    ~Raster2DWorker() override;
+    GaussianSplatWorker() = default;
+    ~GaussianSplatWorker() override;
 
     pnanovdb_pipeline_type_t pipeline_type() const override
     {
@@ -413,7 +413,7 @@ private:
 
     // Pipeline config for pending import
     pnanovdb_pipeline_type_t m_pending_process_pipeline = pnanovdb_pipeline_type_noop;
-    pnanovdb_pipeline_type_t m_pending_render_pipeline = pnanovdb_pipeline_type_raster2d;
+    pnanovdb_pipeline_type_t m_pending_render_pipeline = pnanovdb_pipeline_type_gaussian_splat;
     pnanovdb_pipeline_params_t m_pending_process_params = {};
 
     RasterFileShaderParams m_shader_params;

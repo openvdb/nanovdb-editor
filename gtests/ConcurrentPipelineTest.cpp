@@ -156,8 +156,8 @@ TEST(NanoVDBEditor, ConcurrentPipelineRegistrationViaPublicApi)
                 desc.sh_0 = gaussian_pool[i].sh_0;
                 desc.sh_n = gaussian_pool[i].sh_n;
 
-                editor.add_gaussian_data_3(
-                    &editor, scene, name_tok, &desc, pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_raster2d);
+                editor.add_gaussian_data_3(&editor, scene, name_tok, &desc, pnanovdb_pipeline_type_noop,
+                                           pnanovdb_pipeline_type_gaussian_splat);
 
                 editor.set_visible(&editor, scene, name_tok, PNANOVDB_TRUE);
                 editor.mark_pipeline_dirty(&editor, scene, name_tok);
@@ -201,7 +201,7 @@ TEST(NanoVDBEditor, ConcurrentPipelineRegistrationViaPublicApi)
     for (int i = 0; i < 200 && !settled; ++i)
     {
         settled = (editor.get_pipeline(&editor, scene_g, last_g_tok, pnanovdb_pipeline_stage_render) ==
-                   pnanovdb_pipeline_type_raster2d) &&
+                   pnanovdb_pipeline_type_gaussian_splat) &&
                   (editor.get_pipeline(&editor, scene_n, last_n_tok, pnanovdb_pipeline_stage_render) ==
                    pnanovdb_pipeline_type_nanovdb_render);
         if (!settled)
@@ -219,7 +219,7 @@ TEST(NanoVDBEditor, ConcurrentPipelineRegistrationViaPublicApi)
         pnanovdb_editor_token_t* n_tok = editor.get_token(n_name.c_str());
 
         EXPECT_EQ(editor.get_pipeline(&editor, scene_g, g_tok, pnanovdb_pipeline_stage_render),
-                  pnanovdb_pipeline_type_raster2d)
+                  pnanovdb_pipeline_type_gaussian_splat)
             << "Gaussian object " << i << " has wrong render pipeline";
         EXPECT_EQ(editor.get_pipeline(&editor, scene_n, n_tok, pnanovdb_pipeline_stage_render),
                   pnanovdb_pipeline_type_nanovdb_render)

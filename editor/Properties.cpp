@@ -747,7 +747,7 @@ void Properties::render(imgui_instance_user::Instance* ptr)
 
                 std::string properties_shader_name;
                 pnanovdb_pipeline_type_t process_pipeline = pnanovdb_pipeline_type_noop;
-                pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_raster2d;
+                pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_gaussian_splat;
                 bool is_visible = true;
                 auto* scene_token = ptr->editor_scene->get_current_scene_token();
 

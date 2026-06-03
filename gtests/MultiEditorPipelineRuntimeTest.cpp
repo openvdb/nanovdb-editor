@@ -111,9 +111,10 @@ TEST(NanoVDBEditor, MultiEditorPipelineRuntimeIsolation)
         a.editor.get_pipeline(&a.editor, scene, only_in_b, pnanovdb_pipeline_stage_render), pnanovdb_pipeline_type_noop)
         << "Editor A must not see object only added to Editor B";
 
-    a.editor.set_pipeline(&a.editor, scene, only_in_a, pnanovdb_pipeline_stage_render, pnanovdb_pipeline_type_raster2d);
+    a.editor.set_pipeline(
+        &a.editor, scene, only_in_a, pnanovdb_pipeline_stage_render, pnanovdb_pipeline_type_gaussian_splat);
     EXPECT_EQ(a.editor.get_pipeline(&a.editor, scene, only_in_a, pnanovdb_pipeline_stage_render),
-              pnanovdb_pipeline_type_raster2d);
+              pnanovdb_pipeline_type_gaussian_splat);
     EXPECT_EQ(b.editor.get_pipeline(&b.editor, scene, only_in_b, pnanovdb_pipeline_stage_render),
               pnanovdb_pipeline_type_nanovdb_render)
         << "set_pipeline on Editor A must not leak into Editor B's per-object state";

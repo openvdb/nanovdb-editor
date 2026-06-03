@@ -1021,13 +1021,13 @@ static bool gaussianImportSidePane(const char* /*vFilter*/, IGFDUserDatas vUserD
     ImGui::Separator();
 
     using pnanovdb_editor::gaussian_import::Mode;
-    ImGui::RadioButton("Raster2D (Gaussian Splatting)", &ptr->gaussian_import_mode, static_cast<int>(Mode::Raster2D));
-    ImGui::RadioButton("Raster3D (Convert to NanoVDB)", &ptr->gaussian_import_mode, static_cast<int>(Mode::Raster3D));
+    ImGui::RadioButton("Raster2D (Gaussian Splatting)", &ptr->gaussian_import_mode, static_cast<int>(Mode::Splat));
+    ImGui::RadioButton("Raster3D (Convert to NanoVDB)", &ptr->gaussian_import_mode, static_cast<int>(Mode::Voxelize));
     ImGui::RadioButton("VoxelBVH (NanoVDB via BVH build)", &ptr->gaussian_import_mode, static_cast<int>(Mode::VoxelBVH));
 
     ImGui::Spacing();
 
-    if (static_cast<Mode>(ptr->gaussian_import_mode) == Mode::Raster3D)
+    if (static_cast<Mode>(ptr->gaussian_import_mode) == Mode::Voxelize)
     {
         ImGui::Text("Voxel Size:");
         ImGui::SetNextItemWidth(150.0f);
@@ -1143,14 +1143,14 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
                 ptr->raster_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
 
                 pnanovdb_pipeline_type_t convert = pnanovdb_pipeline_type_noop;
-                pnanovdb_pipeline_type_t render = pnanovdb_pipeline_type_raster2d;
+                pnanovdb_pipeline_type_t render = pnanovdb_pipeline_type_gaussian_splat;
                 const char* mode_label = "Raster2D";
                 std::string voxel_info;
                 using pnanovdb_editor::gaussian_import::Mode;
                 switch (static_cast<Mode>(ptr->gaussian_import_mode))
                 {
-                case Mode::Raster3D:
-                    convert = pnanovdb_pipeline_type_raster3d;
+                case Mode::Voxelize:
+                    convert = pnanovdb_pipeline_type_gaussian_voxelize;
                     render = pnanovdb_pipeline_type_nanovdb_render;
                     mode_label = "Raster3D";
                     voxel_info = " (voxel size: " + std::to_string(ptr->raster_voxels_per_unit) + ")";
@@ -1160,7 +1160,7 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
                     render = pnanovdb_pipeline_type_voxelbvh_render;
                     mode_label = "VoxelBVH";
                     break;
-                case Mode::Raster2D:
+                case Mode::Splat:
                     break;
                 }
                 pnanovdb_editor::Console::getInstance().addLog(

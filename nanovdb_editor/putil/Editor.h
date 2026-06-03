@@ -36,63 +36,8 @@ typedef struct pnanovdb_pipeline_params_t
     const pnanovdb_reflect_data_type_t* type;
 } pnanovdb_pipeline_params_t;
 
-// ------------------------------------------------ Pipeline Descriptors
-
-typedef struct pnanovdb_pipeline_shader_entry_t
-{
-    const char* shader_name;
-    const char* shader_group;
-    pnanovdb_bool_t overridable;
-} pnanovdb_pipeline_shader_entry_t;
 
 typedef struct pnanovdb_scene_object_t pnanovdb_scene_object_t;
-
-typedef enum pnanovdb_pipeline_result_t
-{
-    pnanovdb_pipeline_result_success = 0,
-    pnanovdb_pipeline_result_skipped = 1,
-    pnanovdb_pipeline_result_no_data = 2,
-    pnanovdb_pipeline_result_error = 3,
-    pnanovdb_pipeline_result_pending = 4
-} pnanovdb_pipeline_result_t;
-
-typedef enum pnanovdb_pipeline_render_method_t
-{
-    pnanovdb_pipeline_render_method_none = 0,
-    pnanovdb_pipeline_render_method_nanovdb = 1,
-    pnanovdb_pipeline_render_method_raster2d = 2
-} pnanovdb_pipeline_render_method_t;
-
-typedef struct pnanovdb_pipeline_context_t pnanovdb_pipeline_context_t;
-
-typedef void (*pnanovdb_pipeline_init_params_fn)(pnanovdb_pipeline_params_t* params);
-typedef pnanovdb_pipeline_result_t (*pnanovdb_pipeline_execute_fn)(pnanovdb_scene_object_t* obj,
-                                                                   pnanovdb_pipeline_context_t* ctx);
-typedef pnanovdb_pipeline_render_method_t (*pnanovdb_pipeline_get_render_method_fn)(void);
-typedef void* (*pnanovdb_pipeline_map_params_fn)(pnanovdb_scene_object_t* obj);
-
-typedef struct pnanovdb_pipeline_param_field_t pnanovdb_pipeline_param_field_t;
-
-typedef struct pnanovdb_pipeline_descriptor_t
-{
-    pnanovdb_pipeline_type_t type;
-    pnanovdb_pipeline_stage_t stage;
-    const char* name;
-
-    const pnanovdb_pipeline_shader_entry_t* shaders;
-    pnanovdb_uint32_t shader_count;
-
-    pnanovdb_uint64_t params_size;
-    const pnanovdb_reflect_data_type_t* params_data_type;
-
-    pnanovdb_pipeline_init_params_fn init_params;
-    pnanovdb_pipeline_execute_fn execute;
-    pnanovdb_pipeline_get_render_method_fn get_render_method;
-    pnanovdb_pipeline_map_params_fn map_params;
-
-    const pnanovdb_pipeline_param_field_t* param_fields;
-    pnanovdb_uint32_t param_field_count;
-} pnanovdb_pipeline_descriptor_t;
 
 struct pnanovdb_shader_params_desc_t
 {

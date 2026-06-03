@@ -188,9 +188,9 @@ struct PipelineLoadRequest
                          PipelineLoadRequest
     \return true if the load task was started successfully
 */
-bool pipeline_start_load(EditorSceneManager* scene_manager,
-                         pnanovdb_editor_token_t* scene_token,
-                         const PipelineLoadRequest& request);
+bool pipeline_load(EditorSceneManager* scene_manager,
+                   pnanovdb_editor_token_t* scene_token,
+                   const PipelineLoadRequest& request);
 
 /*!
     \brief Per-frame async update: poll progress and handle completion for

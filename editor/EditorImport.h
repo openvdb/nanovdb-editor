@@ -53,8 +53,8 @@ namespace gaussian_import
 {
 enum class Mode : int
 {
-    Raster2D = 0,
-    Raster3D = 1,
+    Splat = 0,
+    Voxelize = 1,
     VoxelBVH = 2,
 };
 

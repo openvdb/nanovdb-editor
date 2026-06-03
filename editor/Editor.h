@@ -35,7 +35,7 @@ class PipelineRuntime;
 // Shader constants
 constexpr const char* s_default_editor_shader = "editor/editor.slang";
 constexpr const char* s_raster2d_shader_group = "raster/raster2d_group";
-constexpr const char* s_raster2d_gaussian_shader = "raster/gaussian_rasterize_2d.slang";
+constexpr const char* s_gaussian_splat_shader = "raster/gaussian_rasterize_2d.slang";
 }
 
 // Thread Synchronization Model

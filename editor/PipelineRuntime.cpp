@@ -228,10 +228,10 @@ void AsyncWorker::finish_task()
 }
 
 // ============================================================================
-// Raster3DWorker - Gaussian -> NanoVDB conversion (raster3d pipeline)
+// GaussianVoxelizeWorker - Gaussian -> NanoVDB conversion (gaussian_voxelize pipeline)
 // ============================================================================
 
-Raster3DWorker::~Raster3DWorker()
+GaussianVoxelizeWorker::~GaussianVoxelizeWorker()
 {
     cancel_and_join();
 
@@ -239,20 +239,22 @@ Raster3DWorker::~Raster3DWorker()
     pipeline_params_release(&m_pending_params);
 }
 
-void Raster3DWorker::init(const PipelineContext& ctx, EditorScene* editor_scene)
+void GaussianVoxelizeWorker::init(const PipelineContext& ctx, EditorScene* editor_scene)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     (void)ctx;
     m_editor_scene = editor_scene;
 }
 
-float Raster3DWorker::get_running_voxels_per_unit()
+float GaussianVoxelizeWorker::get_running_voxels_per_unit()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return pipeline_params_get_voxels_per_unit(&m_pending_params);
 }
 
-bool Raster3DWorker::start(SceneObject* scene_obj, EditorSceneManager* scene_manager, const pnanovdb_pipeline_context_t* ctx)
+bool GaussianVoxelizeWorker::start(SceneObject* scene_obj,
+                                   EditorSceneManager* scene_manager,
+                                   const pnanovdb_pipeline_context_t* ctx)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -312,7 +314,7 @@ bool Raster3DWorker::start(SceneObject* scene_obj, EditorSceneManager* scene_man
     return true;
 }
 
-bool Raster3DWorker::handle_completion()
+bool GaussianVoxelizeWorker::handle_completion()
 {
     if (!is_completed())
         return false;
@@ -600,10 +602,10 @@ bool VoxelBVHWorker::handle_completion()
 }
 
 // ============================================================================
-// Raster2DWorker - file import -> Gaussian splats / NanoVDB (raster2d pipeline)
+// GaussianSplatWorker - file import -> Gaussian splats / NanoVDB (gaussian_splat pipeline)
 // ============================================================================
 
-Raster2DWorker::~Raster2DWorker()
+GaussianSplatWorker::~GaussianSplatWorker()
 {
     cancel_and_join();
 
@@ -612,7 +614,7 @@ Raster2DWorker::~Raster2DWorker()
     pipeline_params_release(&m_pending_process_params);
 }
 
-void Raster2DWorker::release_pending_resources()
+void GaussianSplatWorker::release_pending_resources()
 {
     release_compute_array(m_compute, m_pending_nanovdb_array);
 
@@ -632,7 +634,7 @@ void Raster2DWorker::release_pending_resources()
     }
 }
 
-void Raster2DWorker::init(const PipelineContext& ctx, EditorScene* editor_scene)
+void GaussianSplatWorker::init(const PipelineContext& ctx, EditorScene* editor_scene)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -643,20 +645,21 @@ void Raster2DWorker::init(const PipelineContext& ctx, EditorScene* editor_scene)
     m_editor_scene = editor_scene;
 }
 
-bool Raster2DWorker::start(const char* raster_filepath,
-                           float voxels_per_unit,
-                           bool rasterize_to_nanovdb,
-                           pnanovdb_pipeline_type_t process_pipeline,
-                           pnanovdb_pipeline_type_t render_pipeline,
-                           EditorSceneManager* scene_manager,
-                           pnanovdb_editor_token_t* scene_token)
+bool GaussianSplatWorker::start(const char* raster_filepath,
+                                float voxels_per_unit,
+                                bool rasterize_to_nanovdb,
+                                pnanovdb_pipeline_type_t process_pipeline,
+                                pnanovdb_pipeline_type_t render_pipeline,
+                                EditorSceneManager* scene_manager,
+                                pnanovdb_editor_token_t* scene_token)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
 
     if (!m_compute || !m_raster)
     {
         Console::getInstance().addLog(
-            Console::LogLevel::Error, "Raster2DWorker::start: not initialized -- pipeline_init must run before start()");
+            Console::LogLevel::Error,
+            "GaussianSplatWorker::start: not initialized -- pipeline_init must run before start()");
         return false;
     }
     if (!raster_filepath)
@@ -673,7 +676,7 @@ bool Raster2DWorker::start(const char* raster_filepath,
     m_pending_process_pipeline = process_pipeline;
     m_pending_render_pipeline = render_pipeline;
     pnanovdb_pipeline_get_default_params(process_pipeline, &m_pending_process_params);
-    if (process_pipeline == pnanovdb_pipeline_type_raster3d)
+    if (process_pipeline == pnanovdb_pipeline_type_gaussian_voxelize)
     {
         pipeline_params_set_voxels_per_unit(&m_pending_process_params, voxels_per_unit);
     }
@@ -694,9 +697,8 @@ bool Raster2DWorker::start(const char* raster_filepath,
     auto log_print = log_iface ? log_iface->get_log_print(log_ctx) : nullptr;
     if (log_print)
     {
-        log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO,
-                  "pipeline_start_load: worker_queue=%p (compute=%p device=%p) using_%s_queue", (void*)worker_queue,
-                  (void*)m_compute_queue, (void*)m_device_queue,
+        log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "pipeline_load: worker_queue=%p (compute=%p device=%p) using_%s_queue",
+                  (void*)worker_queue, (void*)m_compute_queue, (void*)m_device_queue,
                   (worker_queue == m_compute_queue) ? "compute" : "device");
     }
 
@@ -724,21 +726,21 @@ bool Raster2DWorker::start(const char* raster_filepath,
     return true;
 }
 
-bool Raster2DWorker::start_from_request(const PipelineLoadRequest& request,
-                                        EditorSceneManager* scene_manager,
-                                        pnanovdb_editor_token_t* scene_token)
+bool GaussianSplatWorker::start_from_request(const PipelineLoadRequest& request,
+                                             EditorSceneManager* scene_manager,
+                                             pnanovdb_editor_token_t* scene_token)
 {
-    if (request.load_pipeline != pnanovdb_pipeline_type_raster2d)
+    if (request.load_pipeline != pnanovdb_pipeline_type_gaussian_splat)
     {
         return false;
     }
     const float voxels_per_unit = pipeline_params_get_voxels_per_unit(request.load_params);
-    const bool rasterize_to_nanovdb = (request.process_pipeline == pnanovdb_pipeline_type_raster3d);
+    const bool rasterize_to_nanovdb = (request.process_pipeline == pnanovdb_pipeline_type_gaussian_voxelize);
     return start(request.source_filepath, voxels_per_unit, rasterize_to_nanovdb, request.process_pipeline,
                  request.render_pipeline, scene_manager, scene_token);
 }
 
-bool Raster2DWorker::handle_completion()
+bool GaussianSplatWorker::handle_completion()
 {
     if (!m_worker || !m_worker->isTaskCompleted(m_task_id))
     {
@@ -754,7 +756,7 @@ bool Raster2DWorker::handle_completion()
         {
             editor_scene->handle_nanovdb_data_load(scene_token, m_pending_nanovdb_array, m_pending_filepath.c_str());
 
-            if (m_pending_process_pipeline == pnanovdb_pipeline_type_raster3d)
+            if (m_pending_process_pipeline == pnanovdb_pipeline_type_gaussian_voxelize)
             {
                 std::filesystem::path fsPath(m_pending_filepath);
                 std::string view_name = fsPath.stem().string();
@@ -782,7 +784,7 @@ bool Raster2DWorker::handle_completion()
                             float pending_vpu = pipeline_params_get_voxels_per_unit(&m_pending_process_params);
                             Console::getInstance().addLog(
                                 Console::LogLevel::Debug,
-                                "Rasterization: set raster3d pipeline on '%s' (vpu=%.1f, filepath='%s')",
+                                "Rasterization: set gaussian_voxelize pipeline on '%s' (vpu=%.1f, filepath='%s')",
                                 view_name.c_str(), pending_vpu, m_pending_filepath.c_str());
                         });
                 }
@@ -805,7 +807,7 @@ bool Raster2DWorker::handle_completion()
     {
         Console::getInstance().addLog(
             Console::LogLevel::Error,
-            "Raster2DWorker::handle_completion: no EditorScene captured -- init() must run before handle_completion");
+            "GaussianSplatWorker::handle_completion: no EditorScene captured -- init() must run before handle_completion");
     }
     else
     {
@@ -1060,9 +1062,9 @@ bool MeshLoadWorker::handle_completion()
 // PipelineRuntime
 // ============================================================================
 
-PNANOVDB_REGISTER_WORKER(Raster2DWorker);
+PNANOVDB_REGISTER_WORKER(GaussianSplatWorker);
 PNANOVDB_REGISTER_WORKER(MeshLoadWorker);
-PNANOVDB_REGISTER_WORKER(Raster3DWorker);
+PNANOVDB_REGISTER_WORKER(GaussianVoxelizeWorker);
 PNANOVDB_REGISTER_WORKER(VoxelBVHWorker);
 
 PipelineRuntime::PipelineRuntime()

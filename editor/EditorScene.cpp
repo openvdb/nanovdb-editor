@@ -76,9 +76,9 @@ EditorScene::EditorScene(const EditorSceneConfig& config)
     // Initialize raster shader params arrays with defaults
     {
         m_raster_shader_params_data_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t);
-        m_raster2d_params.shader_name = pnanovdb_editor::s_raster2d_shader_group;
-        m_raster2d_params.size = m_raster_shader_params_data_type->element_size;
-        m_raster2d_params.default_array = m_scene_manager.create_initialized_shader_params(
+        m_gaussian_params.shader_name = pnanovdb_editor::s_raster2d_shader_group;
+        m_gaussian_params.size = m_raster_shader_params_data_type->element_size;
+        m_gaussian_params.default_array = m_scene_manager.create_initialized_shader_params(
             m_compute, nullptr, pnanovdb_editor::s_raster2d_shader_group,
             m_raster_shader_params_data_type->element_size, m_raster_shader_params_data_type);
     }
@@ -99,11 +99,11 @@ EditorScene::~EditorScene()
     }
     m_compute->destroy_array(m_nanovdb_params.default_array);
 
-    if (m_raster2d_params.current_array && m_raster2d_params.current_array != m_raster2d_params.default_array)
+    if (m_gaussian_params.current_array && m_gaussian_params.current_array != m_gaussian_params.default_array)
     {
-        m_compute->destroy_array(m_raster2d_params.current_array);
+        m_compute->destroy_array(m_gaussian_params.current_array);
     }
-    m_compute->destroy_array(m_raster2d_params.default_array);
+    m_compute->destroy_array(m_gaussian_params.default_array);
 }
 
 SceneObject* EditorScene::get_scene_object(pnanovdb_editor_token_t* view_name_token, ViewType view_type) const
@@ -232,11 +232,11 @@ void EditorScene::copy_shader_params(pnanovdb_pipeline_render_method_t render_me
     SceneShaderParams* params = nullptr;
     void* view_params = nullptr;
 
-    // Use render_method to determine which params struct to use (raster2d vs nanovdb)
-    if (render_method == pnanovdb_pipeline_render_method_raster2d)
+    // Use render_method to determine which params struct to use (gaussian vs nanovdb)
+    if (render_method == pnanovdb_pipeline_render_method_gaussian)
     {
-        params = &m_raster2d_params;
-        view_params = get_view_params_with_fallback(m_raster2d_params, obj_shader_params);
+        params = &m_gaussian_params;
+        view_params = get_view_params_with_fallback(m_gaussian_params, obj_shader_params);
     }
     else if (render_method == pnanovdb_pipeline_render_method_nanovdb)
     {
@@ -291,7 +291,7 @@ void EditorScene::load_view_into_editor_and_ui(SceneObject* scene_obj)
         m_editor->impl->shader_params = obj_shader_params;
         m_editor->impl->shader_params_data_type = nullptr;
     }
-    else if (render_method == pnanovdb_pipeline_render_method_raster2d)
+    else if (render_method == pnanovdb_pipeline_render_method_gaussian)
     {
         // Gaussian 2D splatting - load gaussian_data
         m_editor->impl->gaussian_data = scene_obj->gaussian_data();
@@ -616,7 +616,7 @@ void EditorScene::sync_views_from_scene_manager()
                     NanoVDBContext ctx{ owner, obj->shader_params(), obj->params.shader_params_array_owner };
                     m_scene_view.add_nanovdb(obj->scene_token, obj->name_token, ctx);
                 }
-                else if (render_method == pnanovdb_pipeline_render_method_raster2d && obj->gaussian_data() &&
+                else if (render_method == pnanovdb_pipeline_render_method_gaussian && obj->gaussian_data() &&
                          obj->resources.gaussian_data_owner)
                 {
                     GaussianDataContext ctx{ obj->resources.gaussian_data_owner,
@@ -714,7 +714,7 @@ void EditorScene::reload_shader_params_for_current_view()
     {
         if (m_render_view_selection.type == ViewType::GaussianScenes)
         {
-            render_method = pnanovdb_pipeline_render_method_raster2d;
+            render_method = pnanovdb_pipeline_render_method_gaussian;
         }
         else if (m_render_view_selection.type == ViewType::NanoVDBs)
         {
@@ -736,11 +736,11 @@ void EditorScene::reload_shader_params_for_current_view(pnanovdb_pipeline_render
         }
     };
 
-    if (render_method == pnanovdb_pipeline_render_method_raster2d)
+    if (render_method == pnanovdb_pipeline_render_method_gaussian)
     {
-        destroy_default_array(m_raster2d_params);
-        m_raster2d_params.default_array = m_scene_manager.create_initialized_shader_params(
-            m_compute, nullptr, pnanovdb_editor::s_raster2d_shader_group, m_raster2d_params.size,
+        destroy_default_array(m_gaussian_params);
+        m_gaussian_params.default_array = m_scene_manager.create_initialized_shader_params(
+            m_compute, nullptr, pnanovdb_editor::s_raster2d_shader_group, m_gaussian_params.size,
             m_raster_shader_params_data_type);
     }
     else if (render_method == pnanovdb_pipeline_render_method_nanovdb)
@@ -846,7 +846,7 @@ void EditorScene::get_shader_params_for_current_view(void* shader_params_data)
             std::string obj_shader_name = shader ? shader : "";
 
             void* view_params = nullptr;
-            size_t copy_size = (render_method == pnanovdb_pipeline_render_method_raster2d) ? m_raster2d_params.size :
+            size_t copy_size = (render_method == pnanovdb_pipeline_render_method_gaussian) ? m_gaussian_params.size :
                                                                                              m_nanovdb_params.size;
             copy_shader_params(render_method, obj_shader_params, obj_shader_name, SyncDirection::UiToView, &view_params);
 
@@ -860,9 +860,9 @@ void EditorScene::get_shader_params_for_current_view(void* shader_params_data)
 void snapshot_object_shader_params_readonly(EditorSceneManager& scene_manager,
                                             pnanovdb_editor_token_t* scene_token,
                                             pnanovdb_editor_token_t* name_token,
-                                            size_t raster2d_params_size,
+                                            size_t gaussian_params_size,
                                             size_t nanovdb_params_size,
-                                            const void* raster2d_default_data,
+                                            const void* gaussian_default_data,
                                             const void* nanovdb_default_data,
                                             void* shader_params_data)
 {
@@ -880,8 +880,8 @@ void snapshot_object_shader_params_readonly(EditorSceneManager& scene_manager,
                                   }
 
                                   auto render_method = pipeline_get_render_method(scene_obj->render_pipeline());
-                                  const bool is_raster2d = (render_method == pnanovdb_pipeline_render_method_raster2d);
-                                  const size_t copy_size = is_raster2d ? raster2d_params_size : nanovdb_params_size;
+                                  const bool is_gaussian = (render_method == pnanovdb_pipeline_render_method_gaussian);
+                                  const size_t copy_size = is_gaussian ? gaussian_params_size : nanovdb_params_size;
                                   if (copy_size == 0)
                                   {
                                       return;
@@ -891,7 +891,7 @@ void snapshot_object_shader_params_readonly(EditorSceneManager& scene_manager,
                                   const void* src = scene_obj->shader_params();
                                   if (!src)
                                   {
-                                      src = is_raster2d ? raster2d_default_data : nanovdb_default_data;
+                                      src = is_gaussian ? gaussian_default_data : nanovdb_default_data;
                                   }
                                   if (!src)
                                   {
@@ -905,14 +905,14 @@ void EditorScene::get_shader_params_for_object(pnanovdb_editor_token_t* scene_to
                                                pnanovdb_editor_token_t* name_token,
                                                void* shader_params_data)
 {
-    const void* raster2d_default = (m_raster2d_params.default_array && m_raster2d_params.default_array->data) ?
-                                       m_raster2d_params.default_array->data :
+    const void* gaussian_default = (m_gaussian_params.default_array && m_gaussian_params.default_array->data) ?
+                                       m_gaussian_params.default_array->data :
                                        nullptr;
     const void* nanovdb_default = (m_nanovdb_params.default_array && m_nanovdb_params.default_array->data) ?
                                       m_nanovdb_params.default_array->data :
                                       nullptr;
-    snapshot_object_shader_params_readonly(m_scene_manager, scene_token, name_token, m_raster2d_params.size,
-                                           m_nanovdb_params.size, raster2d_default, nanovdb_default, shader_params_data);
+    snapshot_object_shader_params_readonly(m_scene_manager, scene_token, name_token, m_gaussian_params.size,
+                                           m_nanovdb_params.size, gaussian_default, nanovdb_default, shader_params_data);
 }
 
 void EditorScene::update_scene_tree_after_conversion(pnanovdb_editor_token_t* scene_token,
@@ -1126,7 +1126,7 @@ void EditorScene::handle_gaussian_data_load(pnanovdb_editor_token_t* scene,
     std::shared_ptr<pnanovdb_raster_gaussian_data_t> old_owner;
     m_scene_manager.add_gaussian_data(scene_token, name_token, gaussian_data, params_array,
                                       m_raster_shader_params_data_type, m_compute, m_editor->impl->raster,
-                                      m_device_queue, pnanovdb_editor::s_raster2d_gaussian_shader, process_pipeline,
+                                      m_device_queue, pnanovdb_editor::s_gaussian_splat_shader, process_pipeline,
                                       render_pipeline, &old_owner);
 
     // Store source filepath and copy process params for re-conversion

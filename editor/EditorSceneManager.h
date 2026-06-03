@@ -150,6 +150,9 @@ struct PipelineStage
 
     bool dirty = true; // Needs re-execution
 
+    // Set once the user explicitly configures this stage via set_pipeline() or map_pipeline_params()
+    bool configured = false;
+
     PipelineStage() = default;
 
     ~PipelineStage()
@@ -158,7 +161,11 @@ struct PipelineStage
     }
 
     PipelineStage(const PipelineStage& other)
-        : type(other.type), params{}, shader_overrides(other.shader_overrides), dirty(other.dirty)
+        : type(other.type),
+          params{},
+          shader_overrides(other.shader_overrides),
+          dirty(other.dirty),
+          configured(other.configured)
     {
         if (other.params.data && other.params.size > 0)
         {
@@ -176,6 +183,7 @@ struct PipelineStage
                 params = {};
                 shader_overrides.clear();
                 dirty = true;
+                configured = false;
             }
         }
     }
@@ -208,12 +216,17 @@ struct PipelineStage
             type = other.type;
             shader_overrides = other.shader_overrides;
             dirty = other.dirty;
+            configured = other.configured;
         }
         return *this;
     }
 
     PipelineStage(PipelineStage&& other) noexcept
-        : type(other.type), params(other.params), shader_overrides(std::move(other.shader_overrides)), dirty(other.dirty)
+        : type(other.type),
+          params(other.params),
+          shader_overrides(std::move(other.shader_overrides)),
+          dirty(other.dirty),
+          configured(other.configured)
     {
         other.params = {};
     }
@@ -227,6 +240,7 @@ struct PipelineStage
             params = other.params;
             shader_overrides = std::move(other.shader_overrides);
             dirty = other.dirty;
+            configured = other.configured;
             other.params = {};
         }
         return *this;
@@ -748,6 +762,34 @@ public:
         uint64_t key = make_key(scene, name);
         auto it = m_objects.find(key);
         SceneObject* obj = (it != m_objects.end()) ? &it->second : nullptr;
+        callback(obj);
+    }
+
+    /*!
+        \brief Run a callback against an object, creating a data-less placeholder
+               if none exists yet.
+
+        \note Thread-safe. The callback always receives a non-null pointer.
+    */
+    template <typename Func>
+    void with_object_or_create(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name, Func callback)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        uint64_t key = make_key(scene, name);
+        auto it = m_objects.find(key);
+        SceneObject* obj = nullptr;
+        if (it != m_objects.end())
+        {
+            obj = &it->second;
+        }
+        else
+        {
+            obj = &m_objects[key];
+            obj->type = SceneObjectType::NanoVDB;
+            obj->scene_token = scene;
+            obj->name_token = name;
+            obj->ensure_shader_name_storage().object_key = key;
+        }
         callback(obj);
     }
 

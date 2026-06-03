@@ -40,7 +40,7 @@ bool mesh(const pnanovdb_compute_t* compute, pnanovdb_editor_token_t* scene, con
     request.source_filepath = filepath;
     request.load_params = &load_params;
 
-    const bool started = pipeline_start_load(/*scene_manager*/ nullptr, scene, request);
+    const bool started = pipeline_load(/*scene_manager*/ nullptr, scene, request);
     pipeline_params_release(&load_params);
 
     if (!started)

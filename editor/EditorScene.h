@@ -227,7 +227,7 @@ public:
                                    pnanovdb_raster_shader_params_t* raster_params,
                                    const char* filename,
                                    pnanovdb_pipeline_type_t process_pipeline = pnanovdb_pipeline_type_noop,
-                                   pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_raster2d,
+                                   pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_gaussian_splat,
                                    const pnanovdb_pipeline_params_t* process_params = nullptr);
 
     void handle_mesh_data_load(pnanovdb_editor_token_t* scene,
@@ -368,7 +368,7 @@ private:
     const pnanovdb_reflect_data_type_t* m_raster_shader_params_data_type;
 
     SceneShaderParams m_nanovdb_params;
-    SceneShaderParams m_raster2d_params;
+    SceneShaderParams m_gaussian_params;
 };
 
 #if defined(_WIN32)
@@ -380,9 +380,9 @@ private:
 PNANOVDB_EDITOR_EXPORT_CXX void snapshot_object_shader_params_readonly(EditorSceneManager& scene_manager,
                                                                        pnanovdb_editor_token_t* scene_token,
                                                                        pnanovdb_editor_token_t* name_token,
-                                                                       size_t raster2d_params_size,
+                                                                       size_t gaussian_params_size,
                                                                        size_t nanovdb_params_size,
-                                                                       const void* raster2d_default_data,
+                                                                       const void* gaussian_default_data,
                                                                        const void* nanovdb_default_data,
                                                                        void* shader_params_data);
 

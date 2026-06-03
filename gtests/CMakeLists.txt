@@ -67,3 +67,4 @@ ConfigureTest(VoxelBVHBuildPipelineTest VoxelBVHBuildPipelineTest.cpp GpuTestSup
 ConfigureTest(StreamingUiToViewSyncTest StreamingUiToViewSyncTest.cpp EditorTestSupport.cpp GpuTestSupport.cpp)
 ConfigureTest(MultiEditorPipelineRuntimeTest MultiEditorPipelineRuntimeTest.cpp)
 ConfigureTest(ConcurrentPipelineTest ConcurrentPipelineTest.cpp)
+ConfigureTest(PipelineApiTest PipelineApiTest.cpp EditorTestSupport.cpp)
