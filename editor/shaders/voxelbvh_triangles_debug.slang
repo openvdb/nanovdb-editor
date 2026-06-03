@@ -337,9 +337,9 @@ void ray_debug_plane(
 
         pnanovdb_address_t addr = pnanovdb_readaccessor_get_value_address(grid_type, buf, acc, ijk);
         uint64_t val_raw = pnanovdb_read_uint64(buf, addr);
-        uint active_level_mask = uint(val_raw) & 0xFFFF;
-        uint skip_level = (uint(val_raw) >> 16u) & 0xFFFF;
-        uint list_begin_idx = uint(val_raw >> 32u);
+        uint active_level_mask = voxelbvh_get_active_level_mask(val_raw);
+        uint skip_level = uvoxelbvh_get_skip_levelint(val_raw);
+        uint first_range_idx = voxelbvh_get_first_range_idx(val_raw);
 
         uint border_level = skip_level;
         uint color_idx = skip_level;
@@ -350,7 +350,7 @@ void ray_debug_plane(
         }
         if (shader_params.show_list_ids != 0u)
         {
-            color_idx = list_begin_idx % 12;
+            color_idx = first_range_idx % 12;
         }
         if (shader_params.show_inactive != 0u)
         {
@@ -475,7 +475,7 @@ void ray_hdda_nanovdb(uint thread_idx,
             {
                 pnanovdb_address_t addr = pnanovdb_readaccessor_get_value_address(grid_type, buf, acc, hdda.hdda.ijk);
                 uint64_t val_raw = pnanovdb_read_uint64(buf, addr);
-                uint skip_level = (uint(val_raw) >> 16u) & 0xFFFF;
+                uint skip_level = voxelbvh_get_skip_level(val_raw);
 
                 // align HDDA tmin/tmax to current voxel size
                 dim = 1 << skip_level;

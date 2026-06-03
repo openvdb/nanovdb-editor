@@ -105,7 +105,7 @@ bool workgroup_hdda_step(inout workgroup_hdda_t hdda, uint thread_idx, float3 ra
         {
             hdda.needs_update = true;
 
-            uint skip_level = (uint(s_voxel_val[s_hdda_min_idx]) >> 16u) & 0xFFFF;
+            uint skip_level = voxelbvh_get_skip_level(s_voxel_val[s_hdda_min_idx]);
             // align HDDA tmin/tmax to current voxel size
             int dim = 1 << skip_level;
             hdda_step(hdda.hdda, rayOrigin, rayDir, rayDirInv, dim);

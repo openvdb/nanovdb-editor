@@ -20,6 +20,8 @@
 #include <cstdio>
 #include <math.h>
 
+#include "editor/shaders/voxelbvh_common.h"
+
 static void save_ply(pnanovdb_compute_t& compute,
                      pnanovdb_compute_array_t* positions,
                      pnanovdb_compute_array_t* indices,
@@ -481,12 +483,12 @@ void voxelbvh_test()
                                 pnanovdb_address_t val_addr =
                                     pnanovdb_leaf_get_table_address(grid_type, buf, leaf, leaf_n);
                                 pnanovdb_uint64_t val = pnanovdb_read_uint64(buf, val_addr);
-                                pnanovdb_uint32_t list_idx = pnanovdb_uint32_t(val >> 32u);
+                                pnanovdb_uint32_t list_idx = voxelbvh_get_first_range_idx(val);
                                 if (list_idx > max_list_idx)
                                 {
                                     max_list_idx = list_idx;
                                 }
-                                bit_count += pnanovdb_uint64_countbits(val & 0xFFFF);
+                                bit_count += pnanovdb_uint64_countbits(voxelbvh_get_active_level_mask(val));
                             }
                         }
                         else
@@ -494,12 +496,12 @@ void voxelbvh_test()
                             pnanovdb_address_t val_addr =
                                 pnanovdb_lower_get_table_address(grid_type, buf, lower, lower_n);
                             pnanovdb_uint64_t val = pnanovdb_read_uint64(buf, val_addr);
-                            pnanovdb_uint32_t list_idx = pnanovdb_uint32_t(val >> 32u);
+                            pnanovdb_uint32_t list_idx = voxelbvh_get_first_range_idx(val);
                             if (list_idx > max_list_idx)
                             {
                                 max_list_idx = list_idx;
                             }
-                            bit_count += pnanovdb_uint64_countbits(val & 0xFFFF);
+                            bit_count += pnanovdb_uint64_countbits(voxelbvh_get_active_level_mask(val));
                         }
                     }
                 }
@@ -507,12 +509,12 @@ void voxelbvh_test()
                 {
                     pnanovdb_address_t val_addr = pnanovdb_upper_get_table_address(grid_type, buf, upper, upper_n);
                     pnanovdb_uint64_t val = pnanovdb_read_uint64(buf, val_addr);
-                    pnanovdb_uint32_t list_idx = pnanovdb_uint32_t(val >> 32u);
+                    pnanovdb_uint32_t list_idx = voxelbvh_get_first_range_idx(val);
                     if (list_idx > max_list_idx)
                     {
                         max_list_idx = list_idx;
                     }
-                    bit_count += pnanovdb_uint64_countbits(val & 0xFFFF);
+                    bit_count += pnanovdb_uint64_countbits(voxelbvh_get_active_level_mask(val));
                 }
             }
         }
@@ -520,12 +522,12 @@ void voxelbvh_test()
         {
             pnanovdb_address_t val_addr = pnanovdb_root_tile_get_value_address(grid_type, buf, tile);
             pnanovdb_uint64_t val = pnanovdb_read_uint64(buf, val_addr);
-            pnanovdb_uint32_t list_idx = pnanovdb_uint32_t(val >> 32u);
+            pnanovdb_uint32_t list_idx = voxelbvh_get_first_range_idx(val);
             if (list_idx > max_list_idx)
             {
                 max_list_idx = list_idx;
             }
-            bit_count += pnanovdb_uint64_countbits(val & 0xFFFF);
+            bit_count += pnanovdb_uint64_countbits(voxelbvh_get_active_level_mask(val));
         }
     }
     printf("node_counts: root(%u) upper(%u) lower(%u) leaf(%u)\n", root_tile_count, upper_count, lower_count, leaf_count);
@@ -584,10 +586,10 @@ void voxelbvh_test()
                 val_pass_count++;
             }
 
-            pnanovdb_uint32_t active_lmask = pnanovdb_uint32_t(val & 0xFFFF);
-            pnanovdb_uint32_t list_begin_idx = pnanovdb_uint32_t(val >> 32u);
-            pnanovdb_uint32_t list_countbits = pnanovdb_uint32_countbits(active_lmask & ~lmask);
-            pnanovdb_uint32_t list_idx = list_begin_idx + list_countbits;
+            pnanovdb_uint32_t active_level_mask = voxelbvh_get_active_level_mask(val);
+            pnanovdb_uint32_t first_range_idx = voxelbvh_get_first_range_idx(val);
+            pnanovdb_uint32_t list_countbits = pnanovdb_uint32_countbits(active_level_mask & ~lmask);
+            pnanovdb_uint32_t list_idx = first_range_idx + list_countbits;
             uint64_t range_val = range_flat_ptr[list_idx];
             if (list_countbits != 0u)
             {
@@ -605,10 +607,10 @@ void voxelbvh_test()
             }
 
             pnanovdb_uint32_t range_flat_count = 0u;
-            pnanovdb_uint32_t list_flat_countbits = pnanovdb_uint32_countbits(active_lmask & 0xFFFF);
+            pnanovdb_uint32_t list_flat_countbits = pnanovdb_uint32_countbits(active_level_mask & 0xFFFF);
             for (pnanovdb_uint32_t sub_idx = 0u; sub_idx < list_flat_countbits; sub_idx++)
             {
-                uint64_t range_flat_val = range_flat_ptr[list_begin_idx + sub_idx];
+                uint64_t range_flat_val = range_flat_ptr[first_range_idx + sub_idx];
                 uint32_t range_flat_begin = uint32_t(range_flat_val);
                 uint32_t range_flat_end = uint32_t(range_flat_val >> 32u);
                 range_flat_count += range_flat_end - range_flat_begin;
@@ -616,7 +618,7 @@ void voxelbvh_test()
             if (range_flat_count > range_flat_count_max)
             {
                 range_flat_count_max = range_flat_count;
-                range_flat_mask_max = active_lmask;
+                range_flat_mask_max = active_level_mask;
             }
 
             if (addr.byte_offset != addr_old.byte_offset)

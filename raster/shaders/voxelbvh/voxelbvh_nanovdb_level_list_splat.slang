@@ -5,6 +5,8 @@
 #define PNANOVDB_BUF_HLSL_RW
 #include "PNanoVDB.h"
 
+#include "voxelbvh_common.h"
+
 struct constants_t
 {
     uint nanovdb_word_count;
@@ -69,9 +71,9 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 
     pnanovdb_uint64_t val = pnanovdb_read_uint64(buf, address);
 
-    uint active_lmask = uint(val & 0xFFFF);
-    uint list_begin_idx = uint(val >> 32u);
-    uint list_idx = list_begin_idx + countbits(active_lmask & ~lmask);
+    uint active_level_mask = voxelbvh_get_active_level_mask(val);
+    uint first_range_idx = uint(voxelbvh_get_first_range_idx(val));
+    uint range_idx = first_range_idx + countbits(active_level_mask & ~lmask);
 
-    range_flat_out[list_idx] = range;
+    range_flat_out[range_idx] = range;
 }

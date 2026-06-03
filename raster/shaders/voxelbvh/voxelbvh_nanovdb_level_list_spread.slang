@@ -6,6 +6,7 @@ struct user_state_t
 }
 
 #include "voxelbvh_nanovdb_iterate.slang"
+#include "voxelbvh_common.h"
 
 void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint level, uint n,
                   pnanovdb_coord_t ijk, inout user_state_t user_state)
@@ -22,7 +23,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     pnanovdb_root_handle_t root = pnanovdb_tree_get_root(buf, tree);
 
     pnanovdb_uint64_t val = pnanovdb_read_uint64(buf, val_addr);
-    if (uint(val & 0xFFFF) == 0)
+    if (voxelbvh_get_active_level_mask(val) == 0)
     {
         for (uint l = 1u; l < 12; l++)
         {
@@ -32,19 +33,19 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
             pnanovdb_address_t read_val_addr = pnanovdb_root_get_value_address(grid_type, buf, root, ijkmask);
             pnanovdb_uint64_t read_val = pnanovdb_read_uint64(buf, read_val_addr);
 
-            uint read_active_level_mask = uint(read_val) & 0xFFFF;
+            uint read_active_level_mask = voxelbvh_get_active_level_mask(read_val);
             if ((read_active_level_mask & lmask) != 0u)
             {
-                uint read_list_begin_idx = uint(read_val >> 32u);
-                uint read_skip_level = (uint(read_val) >> 16u) & 0xFFFF;
+                uint read_first_range_idx = uint(voxelbvh_get_first_range_idx(read_val));
+                uint read_skip_level = voxelbvh_get_skip_level(read_val);
 
                 // the lsbs of the active level mask are false positives for this voxel
                 // we should dump the lsbs of the active level mask and offset the list begin accordingly
                 uint active_level_mask = read_active_level_mask & lmask;
-                uint list_begin_idx = read_list_begin_idx + countbits(read_active_level_mask & ~lmask);
+                uint first_range_idx = read_first_range_idx + countbits(read_active_level_mask & ~lmask);
                 uint skip_level = read_skip_level;
 
-                val = (uint64_t(list_begin_idx) << 32u) | uint64_t((skip_level << 16u) | active_level_mask);
+                val = voxelbvh_make_voxel_val(active_level_mask, skip_level, first_range_idx);
                 break;
             }
         }

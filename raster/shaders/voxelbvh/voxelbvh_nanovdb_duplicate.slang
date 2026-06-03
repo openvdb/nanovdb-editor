@@ -6,6 +6,7 @@ struct user_state_t
 }
 
 #include "voxelbvh_nanovdb_iterate.slang"
+#include "voxelbvh_common.h"
 
 void nanovdb_set_bit(RWStructuredBuffer<uint2> write_buf, pnanovdb_address_t addr, uint bit_idx)
 {
@@ -115,7 +116,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
             // Add extra leaves for mid sized primitives
             // Mask applied here is a heuristic
             pnanovdb_uint64_t voxel_val_raw = pnanovdb_read_uint64(buf, val_addr);
-            uint active_level_mask = uint(voxel_val_raw) & 0xFFFF;
+            uint active_level_mask = voxelbvh_get_active_level_mask(voxel_val_raw);
             if ((active_level_mask & 0x1F) != 0u)
             {
                 src_child_is_active = true;
