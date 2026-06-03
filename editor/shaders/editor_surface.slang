@@ -3,15 +3,14 @@
 // SDF / level-set isosurface renderer.
 //
 // Finds the first zero-crossing of the signed scalar field along each camera
-// ray using hierarchical DDA traversal (the PNanoVDB HDDA helpers enabled via
-// PNANOVDB_HDDA), then shades the hit as an opaque surface. Supports FLOAT and
-// ONINDEX (float blind-data) grids. Output uses the same premultiplied
-// alpha-as-transmittance convention as editor.slang: alpha 0 == opaque,
-// alpha 1 == fully transparent (background shows through).
+// ray using the PNanoVDB hierarchical DDA helpers (PNANOVDB_HDDA, enabled by
+// default for HLSL in PNanoVDB.h), then shades the hit as an opaque surface.
+// Supports FLOAT and ONINDEX (float blind-data) grids. Output uses the same
+// premultiplied alpha-as-transmittance convention as editor.slang: alpha 0 ==
+// opaque, alpha 1 == fully transparent (background shows through).
 #define PNANOVDB_HLSL
 #define PNANOVDB_ADDRESS_64
 #define PNANOVDB_BUF_HLSL_64
-#define PNANOVDB_HDDA
 #include "PNanoVDB.h"
 
 #include "editor_params.slang"
@@ -20,7 +19,7 @@ struct shader_params_t
 {
     float isovalue;     // iso level to extract (0 for level sets)
     float surface_eps;  // index-space bisection tolerance (<= 0 disables refinement)
-    uint auto_center;    // reserved for parity with editor.slang (unused: HDDA traverses true index space)
+    uint auto_center;    // recenter the traversal near the origin in index space (float precision for off-origin grids)
     float ambient;      // ambient lighting term
 
     float4 light_dir;     // world-space light direction; (0,0,0) -> headlight
@@ -90,14 +89,17 @@ float read_distance(pnanovdb_grid_type_t grid_type, StructuredBuffer<uint2> buf,
     return value;
 }
 
-// Trilinearly interpolated distance at an arbitrary index-space position. Voxel
-// values are treated as samples at integer (cell-center) coordinates, matching
-// editor.slang's compute_trilinear_weights convention.
-float read_distance_trilinear(pnanovdb_grid_type_t grid_type, StructuredBuffer<uint2> buf, inout pnanovdb_readaccessor_t acc, float3 pos)
+// Trilinearly interpolated distance at an arbitrary position expressed in
+// recentered ("local") index space. Voxel values are treated as samples at
+// integer (cell-center) coordinates, matching editor.slang's
+// compute_trilinear_weights convention. ijk_offset (a multiple of 4096, see
+// auto_center) is added back to recover the true coordinate for each lookup.
+float read_distance_trilinear(pnanovdb_grid_type_t grid_type, StructuredBuffer<uint2> buf, inout pnanovdb_readaccessor_t acc, float3 pos, int3 ijk_offset)
 {
     float3 p = pos - 0.5f;
-    int3 ijk000 = int3(floor(p));
-    float3 w = p - float3(ijk000);
+    int3 base = int3(floor(p));
+    float3 w = p - float3(base);
+    int3 ijk000 = base + ijk_offset;
 
     float result = 0.f;
     [unroll]
@@ -113,16 +115,17 @@ float read_distance_trilinear(pnanovdb_grid_type_t grid_type, StructuredBuffer<u
 }
 
 // Index-space surface normal = normalized gradient of the field via central
-// differences of the trilinearly sampled distance.
-float3 surface_normal(pnanovdb_grid_type_t grid_type, StructuredBuffer<uint2> buf, inout pnanovdb_readaccessor_t acc, float3 pos)
+// differences of the trilinearly sampled distance. pos is in recentered index
+// space; the offset is direction-invariant so the normal is unaffected by it.
+float3 surface_normal(pnanovdb_grid_type_t grid_type, StructuredBuffer<uint2> buf, inout pnanovdb_readaccessor_t acc, float3 pos, int3 ijk_offset)
 {
     const float h = 1.f;
-    float dx = read_distance_trilinear(grid_type, buf, acc, pos + float3(h, 0.f, 0.f)) -
-               read_distance_trilinear(grid_type, buf, acc, pos - float3(h, 0.f, 0.f));
-    float dy = read_distance_trilinear(grid_type, buf, acc, pos + float3(0.f, h, 0.f)) -
-               read_distance_trilinear(grid_type, buf, acc, pos - float3(0.f, h, 0.f));
-    float dz = read_distance_trilinear(grid_type, buf, acc, pos + float3(0.f, 0.f, h)) -
-               read_distance_trilinear(grid_type, buf, acc, pos - float3(0.f, 0.f, h));
+    float dx = read_distance_trilinear(grid_type, buf, acc, pos + float3(h, 0.f, 0.f), ijk_offset) -
+               read_distance_trilinear(grid_type, buf, acc, pos - float3(h, 0.f, 0.f), ijk_offset);
+    float dy = read_distance_trilinear(grid_type, buf, acc, pos + float3(0.f, h, 0.f), ijk_offset) -
+               read_distance_trilinear(grid_type, buf, acc, pos - float3(0.f, h, 0.f), ijk_offset);
+    float dz = read_distance_trilinear(grid_type, buf, acc, pos + float3(0.f, 0.f, h), ijk_offset) -
+               read_distance_trilinear(grid_type, buf, acc, pos - float3(0.f, 0.f, h), ijk_offset);
     float3 n = float3(dx, dy, dz);
     float len = length(n);
     return (len > 1e-8f) ? (n / len) : float3(0.f, 0.f, 1.f);
@@ -142,14 +145,17 @@ bool surface_zero_crossing(pnanovdb_grid_type_t grid_type,
                            float tmax,
                            float isovalue,
                            float eps,
+                           int3 ijk_offset,
                            out float thit)
 {
     thit = tmin;
 
+    // origin/direction are in recentered ("local") index space; shift the true
+    // root bbox by the same offset so the HDDA float math stays near the origin.
     pnanovdb_coord_t bbox_min = pnanovdb_root_get_bbox_min(buf, acc.root);
     pnanovdb_coord_t bbox_max = pnanovdb_root_get_bbox_max(buf, acc.root);
-    float3 bbox_minf = pnanovdb_coord_to_vec3(bbox_min);
-    float3 bbox_maxf = pnanovdb_coord_to_vec3(pnanovdb_coord_add(bbox_max, pnanovdb_coord_uniform(1)));
+    float3 bbox_minf = float3(bbox_min - ijk_offset);
+    float3 bbox_maxf = float3(bbox_max - ijk_offset + int3(1, 1, 1));
 
     bool hit = pnanovdb_hdda_ray_clip(bbox_minf, bbox_maxf, origin, tmin, direction, tmax);
     if (!hit || tmax > 1.0e20f)
@@ -160,27 +166,28 @@ bool surface_zero_crossing(pnanovdb_grid_type_t grid_type,
     float3 pos = pnanovdb_hdda_ray_start(origin, tmin, direction);
     pnanovdb_coord_t ijk = pnanovdb_hdda_pos_to_ijk(pos);
 
-    float v0 = read_distance(grid_type, buf, acc, ijk);
+    // ijk is in local space; add ijk_offset back to recover the true coordinate
+    // for every accessor / value lookup.
+    float v0 = read_distance(grid_type, buf, acc, ijk + ijk_offset);
     float d_prev = v0 - isovalue;
     float t_prev = tmin;
 
-    int dim = pnanovdb_uint32_as_int32(pnanovdb_readaccessor_get_dim(grid_type, buf, acc, ijk));
+    int dim = pnanovdb_uint32_as_int32(pnanovdb_readaccessor_get_dim(grid_type, buf, acc, ijk + ijk_offset));
     pnanovdb_hdda_t hdda;
     pnanovdb_hdda_init(hdda, origin, tmin, direction, tmax, dim);
     while (pnanovdb_hdda_step(hdda))
     {
         float3 pos_start = pnanovdb_hdda_ray_start(origin, hdda.tmin + 1.0001f, direction);
         ijk = pnanovdb_hdda_pos_to_ijk(pos_start);
-        dim = pnanovdb_uint32_as_int32(pnanovdb_readaccessor_get_dim(grid_type, buf, acc, ijk));
+        dim = pnanovdb_uint32_as_int32(pnanovdb_readaccessor_get_dim(grid_type, buf, acc, ijk + ijk_offset));
         pnanovdb_hdda_update(hdda, origin, direction, dim);
-        if (hdda.dim > 1 || !pnanovdb_readaccessor_is_active(grid_type, buf, acc, ijk))
+        if (hdda.dim > 1 || !pnanovdb_readaccessor_is_active(grid_type, buf, acc, ijk + ijk_offset))
         {
             continue;
         }
-        while (pnanovdb_hdda_step(hdda) && pnanovdb_readaccessor_is_active(grid_type, buf, acc, hdda.voxel))
+        while (pnanovdb_hdda_step(hdda) && pnanovdb_readaccessor_is_active(grid_type, buf, acc, hdda.voxel + ijk_offset))
         {
-            ijk = hdda.voxel;
-            float v = read_distance(grid_type, buf, acc, ijk);
+            float v = read_distance(grid_type, buf, acc, hdda.voxel + ijk_offset);
             float d = v - isovalue;
             if (d * d_prev < 0.f)
             {
@@ -202,7 +209,7 @@ bool surface_zero_crossing(pnanovdb_grid_type_t grid_type,
                             break;
                         }
                         float tm = 0.5f * (ta + tb);
-                        float dm = read_distance_trilinear(grid_type, buf, acc, origin + tm * direction) - isovalue;
+                        float dm = read_distance_trilinear(grid_type, buf, acc, origin + tm * direction, ijk_offset) - isovalue;
                         if (da * dm <= 0.f)
                         {
                             tb = tm;
@@ -240,7 +247,7 @@ bool render_surface(StructuredBuffer<uint2> buf, float3 worldRayOrigin, float3 w
     pnanovdb_readaccessor_t acc;
     pnanovdb_readaccessor_init(PNANOVDB_REF(acc), root);
 
-    // Transform ray into index space (HDDA + accessor operate in true index coords).
+    // Transform ray into index space.
     float3 origin = pnanovdb_grid_world_to_indexf(buf, grid, worldRayOrigin);
     float3 dir = pnanovdb_grid_world_to_index_dirf(buf, grid, worldRayDir);
     float dirMag = length(dir);
@@ -250,14 +257,29 @@ bool render_surface(StructuredBuffer<uint2> buf, float3 worldRayOrigin, float3 w
     }
     dir /= dirMag;
 
+    // Auto-centering: shift the float ray math by an integer (multiple-of-4096)
+    // offset so coordinates stay near the origin for off-origin grids. The
+    // offset is added back at every accessor/value lookup, so results are
+    // identical to true-index-space traversal, just with better float precision.
+    int3 ijk_offset = int3(0, 0, 0);
+    if (shader_params.auto_center != 0u)
+    {
+        int3 bbox_min = pnanovdb_root_get_bbox_min(buf, root);
+        int3 bbox_max = pnanovdb_root_get_bbox_max(buf, root);
+        int3 bbox_ave = ((bbox_max + bbox_min) >> 1u);
+        ijk_offset = (bbox_ave & ~4095);
+    }
+    float3 origin_local = origin - float3(ijk_offset);
+
     float thit;
-    if (!surface_zero_crossing(grid_type, buf, acc, origin, 0.f, dir, 1e9f, isovalue, shader_params.surface_eps, thit))
+    if (!surface_zero_crossing(
+            grid_type, buf, acc, origin_local, 0.f, dir, 1e9f, isovalue, shader_params.surface_eps, ijk_offset, thit))
     {
         return false;
     }
 
-    float3 hitPos = origin + thit * dir;
-    float3 n = surface_normal(grid_type, buf, acc, hitPos);
+    float3 hitPos = origin_local + thit * dir;
+    float3 n = surface_normal(grid_type, buf, acc, hitPos, ijk_offset);
 
     // Orient the normal toward the viewer.
     if (dot(n, -dir) < 0.f)
