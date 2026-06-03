@@ -4,7 +4,7 @@
 /*!
     \file   editor/PipelineTypes.h
 
-    \brief  Pipeline type enum (internal; API has only opaque pnanovdb_pipeline_type_t).
+    \brief
 */
 
 #pragma once
@@ -13,17 +13,18 @@
 
 enum pnanovdb_pipeline_type_enum_t
 {
-    pnanovdb_pipeline_type_noop = 0,
-    pnanovdb_pipeline_type_nanovdb_render = 1,
-    pnanovdb_pipeline_type_gaussian_splat = 2,
-    pnanovdb_pipeline_type_gaussian_voxelize = 3,
-    pnanovdb_pipeline_type_voxelbvh_render = 4,
-    pnanovdb_pipeline_type_voxelbvh_lines_render = 5,
-    pnanovdb_pipeline_type_voxelbvh_triangles_render = 6,
-    pnanovdb_pipeline_type_voxelbvh_triangles_debug_render = 7,
-    pnanovdb_pipeline_type_voxelbvh_debug_render = 8,
-    pnanovdb_pipeline_type_voxelbvh_build = 9,
-    pnanovdb_pipeline_type_mesh_load = 10,
+    pnanovdb_pipeline_type_noop = 0, // no-op load stage (data added directly, no import)
+    pnanovdb_pipeline_type_nanovdb_render = 1, // render: ray-march a NanoVDB grid
+    pnanovdb_pipeline_type_gaussian_splat = 2, // render: 2D Gaussian splatting
+    pnanovdb_pipeline_type_gaussian_voxelize = 3, // process: Gaussians -> NanoVDB
+    pnanovdb_pipeline_type_voxelbvh_render = 4, // render: VoxelBVH grid
+    pnanovdb_pipeline_type_voxelbvh_lines_render = 5, // render: VoxelBVH as lines
+    pnanovdb_pipeline_type_voxelbvh_triangles_render = 6, // render: VoxelBVH as triangles
+    pnanovdb_pipeline_type_voxelbvh_triangles_debug_render = 7, // render: triangles, debug shading
+    pnanovdb_pipeline_type_voxelbvh_debug_render = 8, // render: VoxelBVH, debug shading
+    pnanovdb_pipeline_type_voxelbvh_build = 9, // process: build a VoxelBVH (from mesh/gaussians)
+    pnanovdb_pipeline_type_mesh_load = 10, // load: read a PLY into compute arrays
+    pnanovdb_pipeline_type_gaussian_load = 11, // load: import a Gaussian file -> data rendered by gaussian_splat
     pnanovdb_pipeline_type_count
 };
 

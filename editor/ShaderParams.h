@@ -30,6 +30,7 @@
 #include <map>
 #include <cstring>
 #include <optional>
+#include <mutex>
 
 #pragma once
 
@@ -152,14 +153,24 @@ public:
     template <typename Func>
     void forEachGroupShader(Func callback) const
     {
-        for (const auto& [pool_index, shader_param_pair] : group_params_)
+        std::vector<std::string> shader_names;
         {
-            callback(shader_param_pair.first);
+            std::lock_guard<std::recursive_mutex> lock(m_params_mutex);
+            shader_names.reserve(group_params_.size());
+            for (const auto& [pool_index, shader_param_pair] : group_params_)
+            {
+                shader_names.push_back(shader_param_pair.first);
+            }
+        }
+        for (const auto& shader_name : shader_names)
+        {
+            callback(shader_name);
         }
     }
 
     std::vector<ShaderParam>* get(const std::string& shader_name)
     {
+        std::lock_guard<std::recursive_mutex> lock(m_params_mutex);
         if (params_map_.find(shader_name) == params_map_.end())
         {
             return nullptr;
@@ -185,6 +196,8 @@ public:
     void clear_pending_array_for_shader(const std::string& shader_name);
 
 private:
+    mutable std::recursive_mutex m_params_mutex;
+
     std::vector<std::vector<char>> shader_params_pool_; // each array corresponds to a shader parameter pool index
     std::map<std::string, std::vector<ShaderParam>> params_map_; // <shader_name, shader_params>
     std::map<size_t, std::pair<std::string, ShaderParam>> group_params_; // <pool_index, <shader_file, ShaderParam>>

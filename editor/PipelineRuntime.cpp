@@ -602,10 +602,10 @@ bool VoxelBVHWorker::handle_completion()
 }
 
 // ============================================================================
-// GaussianSplatWorker - file import -> Gaussian splats / NanoVDB (gaussian_splat pipeline)
+// GaussianLoadWorker - file import -> Gaussian splats / NanoVDB (gaussian_load pipeline)
 // ============================================================================
 
-GaussianSplatWorker::~GaussianSplatWorker()
+GaussianLoadWorker::~GaussianLoadWorker()
 {
     cancel_and_join();
 
@@ -614,7 +614,7 @@ GaussianSplatWorker::~GaussianSplatWorker()
     pipeline_params_release(&m_pending_process_params);
 }
 
-void GaussianSplatWorker::release_pending_resources()
+void GaussianLoadWorker::release_pending_resources()
 {
     release_compute_array(m_compute, m_pending_nanovdb_array);
 
@@ -634,7 +634,7 @@ void GaussianSplatWorker::release_pending_resources()
     }
 }
 
-void GaussianSplatWorker::init(const PipelineContext& ctx, EditorScene* editor_scene)
+void GaussianLoadWorker::init(const PipelineContext& ctx, EditorScene* editor_scene)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -645,13 +645,13 @@ void GaussianSplatWorker::init(const PipelineContext& ctx, EditorScene* editor_s
     m_editor_scene = editor_scene;
 }
 
-bool GaussianSplatWorker::start(const char* raster_filepath,
-                                float voxels_per_unit,
-                                bool rasterize_to_nanovdb,
-                                pnanovdb_pipeline_type_t process_pipeline,
-                                pnanovdb_pipeline_type_t render_pipeline,
-                                EditorSceneManager* scene_manager,
-                                pnanovdb_editor_token_t* scene_token)
+bool GaussianLoadWorker::start(const char* raster_filepath,
+                               const pnanovdb_pipeline_params_t* process_params,
+                               bool rasterize_to_nanovdb,
+                               pnanovdb_pipeline_type_t process_pipeline,
+                               pnanovdb_pipeline_type_t render_pipeline,
+                               EditorSceneManager* scene_manager,
+                               pnanovdb_editor_token_t* scene_token)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -659,7 +659,7 @@ bool GaussianSplatWorker::start(const char* raster_filepath,
     {
         Console::getInstance().addLog(
             Console::LogLevel::Error,
-            "GaussianSplatWorker::start: not initialized -- pipeline_init must run before start()");
+            "GaussianLoadWorker::start: not initialized -- pipeline_init must run before start()");
         return false;
     }
     if (!raster_filepath)
@@ -676,9 +676,9 @@ bool GaussianSplatWorker::start(const char* raster_filepath,
     m_pending_process_pipeline = process_pipeline;
     m_pending_render_pipeline = render_pipeline;
     pnanovdb_pipeline_get_default_params(process_pipeline, &m_pending_process_params);
-    if (process_pipeline == pnanovdb_pipeline_type_gaussian_voxelize)
+    if (process_params && process_params->data && process_params->size > 0)
     {
-        pipeline_params_set_voxels_per_unit(&m_pending_process_params, voxels_per_unit);
+        pipeline_params_assign_copy(process_params, &m_pending_process_params);
     }
 
     m_pending_filepath = raster_filepath;
@@ -704,7 +704,7 @@ bool GaussianSplatWorker::start(const char* raster_filepath,
 
     m_enqueued = true;
 
-    const float voxel_size = 1.f / voxels_per_unit;
+    const float voxel_size = 1.f / pipeline_params_get_voxels_per_unit(&m_pending_process_params);
 
     m_task_id = m_worker->enqueue(
         [this](pnanovdb_raster_t* raster, const pnanovdb_compute_t* compute, pnanovdb_compute_queue_t* queue,
@@ -726,21 +726,20 @@ bool GaussianSplatWorker::start(const char* raster_filepath,
     return true;
 }
 
-bool GaussianSplatWorker::start_from_request(const PipelineLoadRequest& request,
-                                             EditorSceneManager* scene_manager,
-                                             pnanovdb_editor_token_t* scene_token)
+bool GaussianLoadWorker::start_from_request(const PipelineLoadRequest& request,
+                                            EditorSceneManager* scene_manager,
+                                            pnanovdb_editor_token_t* scene_token)
 {
-    if (request.load_pipeline != pnanovdb_pipeline_type_gaussian_splat)
+    if (request.load_pipeline != pnanovdb_pipeline_type_gaussian_load)
     {
         return false;
     }
-    const float voxels_per_unit = pipeline_params_get_voxels_per_unit(request.load_params);
     const bool rasterize_to_nanovdb = (request.process_pipeline == pnanovdb_pipeline_type_gaussian_voxelize);
-    return start(request.source_filepath, voxels_per_unit, rasterize_to_nanovdb, request.process_pipeline,
+    return start(request.source_filepath, request.process_params, rasterize_to_nanovdb, request.process_pipeline,
                  request.render_pipeline, scene_manager, scene_token);
 }
 
-bool GaussianSplatWorker::handle_completion()
+bool GaussianLoadWorker::handle_completion()
 {
     if (!m_worker || !m_worker->isTaskCompleted(m_task_id))
     {
@@ -807,7 +806,7 @@ bool GaussianSplatWorker::handle_completion()
     {
         Console::getInstance().addLog(
             Console::LogLevel::Error,
-            "GaussianSplatWorker::handle_completion: no EditorScene captured -- init() must run before handle_completion");
+            "GaussianLoadWorker::handle_completion: no EditorScene captured -- init() must run before handle_completion");
     }
     else
     {
@@ -1062,7 +1061,7 @@ bool MeshLoadWorker::handle_completion()
 // PipelineRuntime
 // ============================================================================
 
-PNANOVDB_REGISTER_WORKER(GaussianSplatWorker);
+PNANOVDB_REGISTER_WORKER(GaussianLoadWorker);
 PNANOVDB_REGISTER_WORKER(MeshLoadWorker);
 PNANOVDB_REGISTER_WORKER(GaussianVoxelizeWorker);
 PNANOVDB_REGISTER_WORKER(VoxelBVHWorker);

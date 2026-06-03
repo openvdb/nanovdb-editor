@@ -5,7 +5,8 @@
 A **pipeline** is the unit of work the editor runs on a scene object to turn data
 into something renderable. Concretely it is a registered
 `pnanovdb_pipeline_descriptor_t` indexed by a `pnanovdb_pipeline_type_t` enum
-value (see `editor/PipelineTypes.h`).
+value (see `editor/PipelineTypes.h`). The descriptors live in
+`editor/Pipeline.cpp`.
 
 Every scene object pins one pipeline per **stage**, and the three stages run in
 order:
@@ -52,12 +53,12 @@ Do these regardless of sync vs async.
        (before pnanovdb_pipeline_type_count)
 
 [ ] 2. Params struct (if the pipeline has tunable parameters)
-       editor/Pipeline.cpp        (process-stage params, this TU only)
-         OR editor/PipelineRuntime.h (load-stage params shared with the worker)
+       editor/Pipeline.cpp        (process-stage params used only inside Pipeline.cpp)
+         OR editor/PipelineRuntime.h (load-stage params, so the worker's .cpp sees them too)
        struct <Name>Params { ... };  // C-friendly POD
-       PNANOVDB_REFLECT_STRUCT_OPAQUE_IMPL(<Name>Params)  // same TU, right after
+       PNANOVDB_REFLECT_STRUCT_OPAQUE_IMPL(<Name>Params)  // in the same file, right after
 
-[ ] 3. Typed getters/setters (if callers outside this TU touch the params)
+[ ] 3. Typed getters/setters (only if code in another .cpp reads/writes the params)
        editor/PipelineRuntime.h:
        pipeline_params_get_<name>_<field>() / _set_<name>_<field>()
        (guard params->size, operate on the opaque blob)
@@ -70,26 +71,40 @@ Do these regardless of sync vs async.
              offsetof(<Name>Params, <field>), default, min, max, step,
              /*enum_labels*/ nullptr, /*enum_count*/ 0 },
        };
-       Wire into the descriptor's param_fields / param_field_count (step 5).
+       Pass it in step 5 via PNANOVDB_PIPELINE_FIELDS(s_<name>_param_fields).
        Without this the params exist but the UI shows no widgets for them.
 
 [ ] 5. Descriptor + registration
-       editor/Pipeline.cpp:
-       static const pnanovdb_pipeline_descriptor_t s_<name>_descriptor = {
-           pnanovdb_pipeline_type_<name>,
-           pnanovdb_pipeline_stage_<load|process|render>,
-           "Human-readable name",
-           /*shaders*/ nullptr, /*shader_count*/ 0,
-           /*params_size*/ sizeof(<Name>Params),
-           /*params_data_type*/ PNANOVDB_REFLECT_DATA_TYPE(<Name>Params),
-           /*init_params*/ init_params_t<<Name>Params>,
-           /*execute*/ execute_<name>,   // or nullptr for async-only
-           /*get_render_method*/ get_render_method_<none|nanovdb|gaussian>,
-           /*map_params*/ map_params<&SceneObject::process_params>, // or render_params / nullptr
-           /*param_fields*/ s_<name>_param_fields, // or nullptr
-           /*param_field_count*/ sizeof(s_<name>_param_fields) / sizeof(s_<name>_param_fields[0]), // or 0
-       };
-       PNANOVDB_REGISTER_PIPELINE(s_<name>_descriptor);
+       editor/Pipeline.cpp: pick the define-and-register macro for your stage.
+       Each one builds a static pnanovdb_pipeline_descriptor_t and self-registers
+       it (no separate PNANOVDB_REGISTER_PIPELINE line, no central switch). Fill
+       the params trio with PNANOVDB_PIPELINE_PARAMS(<Name>Params) (or
+       PNANOVDB_PIPELINE_NO_PARAMS) and the param-field pair with
+       PNANOVDB_PIPELINE_FIELDS(s_<name>_param_fields) (or PNANOVDB_PIPELINE_NO_FIELDS).
+
+       // load: no shaders, no render method, params never mapped to the object
+       PNANOVDB_REGISTER_LOAD_PIPELINE(
+           s_<name>_descriptor, pnanovdb_pipeline_type_<name>, "Human-readable name",
+           PNANOVDB_PIPELINE_PARAMS(<Name>Params), // or PNANOVDB_PIPELINE_NO_PARAMS
+           execute_<name>);                        // or nullptr for async-only
+
+       // process: params always map to SceneObject::process_params
+       PNANOVDB_REGISTER_PROCESS_PIPELINE(
+           s_<name>_descriptor, pnanovdb_pipeline_type_<name>, "Human-readable name",
+           s_<name>_shaders, /*shader_count*/ 1,   // or nullptr, 0 for no shaders
+           PNANOVDB_PIPELINE_PARAMS(<Name>Params),
+           execute_<name>,                         // or nullptr for async-only
+           get_render_method_<nanovdb|gaussian>,
+           PNANOVDB_PIPELINE_FIELDS(s_<name>_param_fields)); // or PNANOVDB_PIPELINE_NO_FIELDS
+
+       // render: you pick the render method and how params map to the object
+       PNANOVDB_REGISTER_RENDER_PIPELINE(
+           s_<name>_descriptor, pnanovdb_pipeline_type_<name>, "Human-readable name",
+           s_<name>_shaders, /*shader_count*/ 1,
+           PNANOVDB_PIPELINE_PARAMS(<Name>Params), // or PNANOVDB_PIPELINE_NO_PARAMS
+           execute_<name>, get_render_method_<none|nanovdb|gaussian>,
+           map_params<&SceneObject::render_params>); // or nullptr
+
        pipeline_init / pipeline_load / pipeline_update iterate workers
        polymorphically -- no edits there.
 
@@ -114,8 +129,8 @@ of the shared ones:
 
 ## Async pipeline only
 
-An async pipeline offloads blocking work to a background worker. Set the
-descriptor's `/*execute*/` slot to `nullptr` (step 5) and add a worker:
+An async pipeline offloads blocking work to a background worker. Pass `nullptr`
+as the `execute` argument of the step 5 macro and add a worker:
 
 ```
 [ ] <Name>Worker : AsyncWorker
@@ -161,15 +176,14 @@ For the worker, implement on the render thread unless noted:
 ## Shortcut: shader-only render pipeline
 
 A render-stage pipeline that renders a NanoVDB grid with a custom shader (reusing
-`NanoVDBRenderParams` init/execute/map/render-method) needs no descriptor
-aggregate. Enum + shader + shader.json + these 3 lines in `Pipeline.cpp`:
+`NanoVDBRenderParams` init/execute/map/render-method) skips the per-field macro.
+Enum + shader + shader.json + these 2 lines in `Pipeline.cpp`:
 
 ```cpp
 PNANOVDB_DEFINE_PIPELINE_SHADERS(s_<name>_shaders,
     PNANOVDB_PIPELINE_SHADER("editor/<name>.slang", nullptr, PNANOVDB_TRUE));
-PNANOVDB_DEFINE_NANOVDB_RENDER_PIPELINE(s_<name>_descriptor,
+PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_<name>_descriptor,
     pnanovdb_pipeline_type_<name>, "Human-readable name", s_<name>_shaders);
-PNANOVDB_REGISTER_PIPELINE(s_<name>_descriptor);
 ```
 
 ## Reference
@@ -180,3 +194,4 @@ PNANOVDB_REGISTER_PIPELINE(s_<name>_descriptor);
 | `pnanovdb_pipeline_type_nanovdb_render` | render  | sync       | `editor/Pipeline.cpp`                                                                                        |
 | `pnanovdb_pipeline_type_voxelbvh_build` | process | sync+async | `editor/Pipeline.cpp`, `PipelineRuntime.{h,cpp}`                                                             |
 | `pnanovdb_pipeline_type_mesh_load`      | load    | async-only | `PipelineRuntime.{h,cpp}`, `editor/Pipeline.cpp`, `editor/MeshImport.cpp`                                    |
+| `pnanovdb_pipeline_type_gaussian_load`  | load    | async-only | `PipelineRuntime.{h,cpp}`, `editor/Pipeline.cpp`, `editor/GaussianImport.cpp`                                |

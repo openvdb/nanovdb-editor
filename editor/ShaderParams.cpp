@@ -182,6 +182,7 @@ bool ShaderParams::isJsonLoaded(const std::string& shader_name, bool is_group_fi
 
 bool ShaderParams::load(const std::string& shader_name, bool reload, bool load_group)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_params_mutex);
     // lazy load
     if (params_map_.find(shader_name) != params_map_.end() && !reload)
     {
@@ -281,6 +282,7 @@ bool ShaderParams::load(const std::string& shader_name, bool reload, bool load_g
 
 bool ShaderParams::loadGroup(const std::string& group_file, bool reload)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_params_mutex);
     if (!reload && !group_params_.empty())
     {
         return true;
@@ -344,6 +346,7 @@ void* ShaderParams::getValue(ShaderParam& shader_param)
 
 const void* ShaderParams::getValue(const ShaderParam& shader_param)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_params_mutex);
     if (shader_param.pool_index >= shader_params_pool_.size() || shader_params_pool_[shader_param.pool_index].empty())
     {
         return nullptr;
@@ -353,6 +356,7 @@ const void* ShaderParams::getValue(const ShaderParam& shader_param)
 
 void ShaderParams::set_compute_array_for_shader(const std::string& shader_name, pnanovdb_compute_array_t* array)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_params_mutex);
     if (!array)
     {
         return;
@@ -409,11 +413,13 @@ void ShaderParams::set_compute_array_for_shader(const std::string& shader_name, 
 
 void ShaderParams::clear_pending_array_for_shader(const std::string& shader_name)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_params_mutex);
     pending_arrays_data_.erase(shader_name);
 }
 
 size_t ShaderParams::copy_params_to_buffer(const std::string& shader_name, void* dst, size_t dst_size)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_params_mutex);
     if (!dst || dst_size == 0)
     {
         return 0;
@@ -457,6 +463,7 @@ size_t ShaderParams::copy_params_to_buffer(const std::string& shader_name, void*
 pnanovdb_compute_array_t* ShaderParams::get_compute_array_for_shader(const std::string& shader_name,
                                                                      const pnanovdb_compute_t* compute)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_params_mutex);
     if (!compute)
     {
         return nullptr;
@@ -478,6 +485,7 @@ pnanovdb_compute_array_t* ShaderParams::get_compute_array_for_shader(const std::
 
 size_t ShaderParams::allocatePoolArray(size_t total_size, const void* initial_data)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_params_mutex);
     std::vector<char> pool_array(total_size);
 
     if (initial_data)
@@ -495,6 +503,7 @@ size_t ShaderParams::allocatePoolArray(size_t total_size, const void* initial_da
 
 void ShaderParams::deallocatePoolArray(size_t pool_index)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_params_mutex);
     if (pool_index >= shader_params_pool_.size())
     {
         return;
@@ -506,6 +515,7 @@ void ShaderParams::deallocatePoolArray(size_t pool_index)
 
 size_t ShaderParams::findEquivalentParamPoolIndex(const ShaderParam& new_param)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_params_mutex);
     for (const auto& [shader_name, shader_params] : params_map_)
     {
         for (const auto& existing_param : shader_params)
@@ -595,6 +605,7 @@ void assignTypedValue(ImGuiDataType type,
 
 bool ShaderParams::getAllocatedPoolArray(ShaderParam& shader_param)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_params_mutex);
     // lazy allocate
     if (shader_param.pool_index != SIZE_MAX)
     {
@@ -642,6 +653,7 @@ bool ShaderParams::getAllocatedPoolArray(ShaderParam& shader_param)
 
 bool ShaderParams::resetToDefaults(const std::string& shader_name)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_params_mutex);
     if (!load(shader_name, false))
     {
         return false;
@@ -702,6 +714,7 @@ bool ShaderParams::resetToDefaults(const std::string& shader_name)
 
 bool ShaderParams::resetGroupToDefaults(const std::string& group_file_path)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_params_mutex);
     if (!loadGroup(group_file_path, false))
     {
         return false;
@@ -895,6 +908,7 @@ void ShaderParams::addToBoolParam(const std::string& name, const nlohmann::json&
 
 void ShaderParams::render(const std::string& shader_name)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_params_mutex);
     bool hasParams = load(shader_name, false);
     if (!hasParams)
     {
@@ -919,6 +933,7 @@ void ShaderParams::render(const std::string& shader_name)
 
 void ShaderParams::renderGroup(const std::string& group_file_path)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_params_mutex);
     bool hasGroup = loadGroup(group_file_path, false);
     if (!hasGroup)
     {

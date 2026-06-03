@@ -78,19 +78,19 @@ bool gaussian(EditorScene& editor_scene,
         return true;
     }
 
-    pnanovdb_pipeline_params_t load_params{};
-    pnanovdb_pipeline_get_default_params(pnanovdb_pipeline_type_gaussian_voxelize, &load_params);
-    pipeline_params_set_voxels_per_unit(&load_params, voxels_per_unit);
+    pnanovdb_pipeline_params_t process_params{};
+    pnanovdb_pipeline_get_default_params(process_pipeline, &process_params);
+    pipeline_params_set_voxels_per_unit(&process_params, voxels_per_unit);
 
     PipelineLoadRequest request;
-    request.load_pipeline = pnanovdb_pipeline_type_gaussian_splat;
+    request.load_pipeline = pnanovdb_pipeline_type_gaussian_load;
     request.process_pipeline = process_pipeline;
     request.render_pipeline = render_pipeline;
     request.source_filepath = filepath;
-    request.load_params = &load_params;
+    request.process_params = &process_params;
 
     const bool started = pipeline_load(&scene_manager, scene, request);
-    pipeline_params_release(&load_params);
+    pipeline_params_release(&process_params);
 
     return started;
 }

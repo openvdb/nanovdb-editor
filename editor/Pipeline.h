@@ -16,6 +16,7 @@
 #include "nanovdb_editor/putil/Raster.h"
 #include "nanovdb_editor/putil/VoxelBVH.h"
 #include "PipelineTypes.h"
+#include "PipelineRegistry.h"
 #include <memory>
 #include <string>
 
@@ -60,18 +61,6 @@ struct pnanovdb_pipeline_context_t
 // Pipeline Registry
 // ============================================================================
 
-// Register a pipeline descriptor (call at startup)
-void pnanovdb_pipeline_register(const pnanovdb_pipeline_descriptor_t* descriptor);
-
-// Get registered pipeline count
-pnanovdb_uint32_t pnanovdb_pipeline_get_count(void);
-
-// Pipeline type utilities (use registered descriptors)
-const char* pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_t type);
-const char* pnanovdb_pipeline_get_shader_group(pnanovdb_pipeline_type_t type);
-const pnanovdb_pipeline_descriptor_t* pnanovdb_pipeline_get_descriptor(pnanovdb_pipeline_type_t type);
-void pnanovdb_pipeline_get_default_params(pnanovdb_pipeline_type_t type, pnanovdb_pipeline_params_t* params);
-
 typedef enum pnanovdb_pipeline_voxelbvh_source_enum_t
 {
     pnanovdb_pipeline_voxelbvh_source_gaussian_file = 0,
@@ -85,12 +74,6 @@ bool pnanovdb_pipeline_voxelbvh_build_params_set_source_type(pnanovdb_pipeline_p
 bool pnanovdb_pipeline_voxelbvh_build_params_set_inflation_radius(pnanovdb_pipeline_params_t* params, float radius);
 bool pnanovdb_pipeline_voxelbvh_build_params_set_resolution(pnanovdb_pipeline_params_t* params,
                                                             pnanovdb_uint32_t resolution);
-
-// Execute pipeline using registered function pointers
-pnanovdb_pipeline_result_t pnanovdb_pipeline_execute(pnanovdb_pipeline_type_t type,
-                                                     pnanovdb_scene_object_t* obj,
-                                                     pnanovdb_pipeline_context_t* ctx);
-pnanovdb_pipeline_render_method_t pnanovdb_pipeline_get_render_method(pnanovdb_pipeline_type_t type);
 
 // ============================================================================
 // Scene Object Pipeline Operations
@@ -177,6 +160,7 @@ struct PipelineLoadRequest
     pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_noop;
     const char* source_filepath = nullptr;
     const pnanovdb_pipeline_params_t* load_params = nullptr;
+    const pnanovdb_pipeline_params_t* process_params = nullptr;
 };
 
 /*!

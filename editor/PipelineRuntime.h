@@ -358,16 +358,16 @@ private:
 };
 
 // ============================================================================
-// GaussianSplatWorker - file import -> Gaussian splats / NanoVDB (gaussian_splat pipeline)
+// GaussianLoadWorker - file import -> Gaussian splats / NanoVDB (gaussian_load pipeline)
 // ============================================================================
 
-class GaussianSplatWorker : public AsyncWorker
+class GaussianLoadWorker : public AsyncWorker
 {
 public:
-    static constexpr pnanovdb_pipeline_type_t kPipelineType = pnanovdb_pipeline_type_gaussian_splat;
+    static constexpr pnanovdb_pipeline_type_t kPipelineType = pnanovdb_pipeline_type_gaussian_load;
 
-    GaussianSplatWorker() = default;
-    ~GaussianSplatWorker() override;
+    GaussianLoadWorker() = default;
+    ~GaussianLoadWorker() override;
 
     pnanovdb_pipeline_type_t pipeline_type() const override
     {
@@ -383,7 +383,7 @@ public:
 
 private:
     bool start(const char* raster_filepath,
-               float voxels_per_unit,
+               const pnanovdb_pipeline_params_t* process_params,
                bool rasterize_to_nanovdb,
                pnanovdb_pipeline_type_t process_pipeline,
                pnanovdb_pipeline_type_t render_pipeline,
