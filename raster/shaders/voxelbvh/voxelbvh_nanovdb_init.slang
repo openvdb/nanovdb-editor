@@ -28,6 +28,40 @@ float4 compute_world_to_voxel(float3 world_min, float3 world_max)
     return float4(offset, scale);
 }
 
+uint64_t convert_to_double(float v)
+{
+    uint raw = asuint(v);
+    uint sign = (raw >> 31) & 1;
+    uint exponent = (raw >> 23) & 0xFF;
+    uint mantissa = raw & 0x7FFFFF;
+    uint exponent_fp64 = exponent + 896;
+    uint64_t raw64 = (uint64_t(sign) << 63) |
+                     (uint64_t(exponent_fp64) << 52) |
+                     (uint64_t(mantissa) << 29);
+    return raw64;
+}
+
+PNANOVDB_FORCE_INLINE void pnanovdb_write_double_float(pnanovdb_buf_t buf, pnanovdb_address_t address, float value)
+{
+    pnanovdb_write_uint64(buf, address, convert_to_double(value));
+}
+
+PNANOVDB_FORCE_INLINE void pnanovdb_grid_set_world_bbox_float(pnanovdb_buf_t buf, pnanovdb_grid_handle_t p, pnanovdb_uint32_t index, float world_bbox) {
+    pnanovdb_write_double_float(buf, pnanovdb_address_offset(p.address, PNANOVDB_GRID_OFF_WORLD_BBOX + 8u * index), world_bbox);
+}
+PNANOVDB_FORCE_INLINE void pnanovdb_grid_set_voxel_size_float(pnanovdb_buf_t buf, pnanovdb_grid_handle_t p, pnanovdb_uint32_t index, float voxel_size) {
+    pnanovdb_write_double_float(buf, pnanovdb_address_offset(p.address, PNANOVDB_GRID_OFF_VOXEL_SIZE + 8u * index), voxel_size);
+}
+PNANOVDB_FORCE_INLINE void pnanovdb_map_set_matd_float(pnanovdb_buf_t buf, pnanovdb_map_handle_t p, pnanovdb_uint32_t index, float matd) {
+    pnanovdb_write_double_float(buf, pnanovdb_address_offset(p.address, PNANOVDB_MAP_OFF_MATD + 8u * index), matd);
+}
+PNANOVDB_FORCE_INLINE void pnanovdb_map_set_invmatd_float(pnanovdb_buf_t buf, pnanovdb_map_handle_t p, pnanovdb_uint32_t index, float invmatd) {
+    pnanovdb_write_double_float(buf, pnanovdb_address_offset(p.address, PNANOVDB_MAP_OFF_INVMATD + 8u * index), invmatd);
+}
+PNANOVDB_FORCE_INLINE void pnanovdb_map_set_vecd_float(pnanovdb_buf_t buf, pnanovdb_map_handle_t p, pnanovdb_uint32_t index, float vecd) {
+    pnanovdb_write_double_float(buf, pnanovdb_address_offset(p.address, PNANOVDB_MAP_OFF_VECD + 8u * index), vecd);
+}
+
 [shader("compute")][numthreads(256, 1, 1)]
 void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
@@ -52,9 +86,9 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         float voxel_size_inv = 1.f / voxel_size;
         float3 voxel_offset = -world_to_voxel.xyz * voxel_size;
 
-        pnanovdb_grid_set_voxel_size(buf, grid, 0u, double(voxel_size));
-        pnanovdb_grid_set_voxel_size(buf, grid, 1u, double(voxel_size));
-        pnanovdb_grid_set_voxel_size(buf, grid, 2u, double(voxel_size));
+        pnanovdb_grid_set_voxel_size_float(buf, grid, 0u, voxel_size);
+        pnanovdb_grid_set_voxel_size_float(buf, grid, 1u, voxel_size);
+        pnanovdb_grid_set_voxel_size_float(buf, grid, 2u, voxel_size);
 
         pnanovdb_map_handle_t map = pnanovdb_grid_get_map(buf, grid);
         pnanovdb_map_set_matf(buf, map, 0u, voxel_size);
@@ -66,22 +100,22 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         pnanovdb_map_set_invmatf(buf, map, 0u, voxel_size_inv);
         pnanovdb_map_set_invmatf(buf, map, 4u, voxel_size_inv);
         pnanovdb_map_set_invmatf(buf, map, 8u, voxel_size_inv);
-        pnanovdb_map_set_matd(buf, map, 0u, double(voxel_size));
-        pnanovdb_map_set_matd(buf, map, 4u, double(voxel_size));
-        pnanovdb_map_set_matd(buf, map, 8u, double(voxel_size));
-        pnanovdb_map_set_vecd(buf, map, 0u, double(voxel_offset.x));
-        pnanovdb_map_set_vecd(buf, map, 1u, double(voxel_offset.y));
-        pnanovdb_map_set_vecd(buf, map, 2u, double(voxel_offset.z));
-        pnanovdb_map_set_invmatd(buf, map, 0u, double(voxel_size_inv));
-        pnanovdb_map_set_invmatd(buf, map, 4u, double(voxel_size_inv));
-        pnanovdb_map_set_invmatd(buf, map, 8u, double(voxel_size_inv));
+        pnanovdb_map_set_matd_float(buf, map, 0u, voxel_size);
+        pnanovdb_map_set_matd_float(buf, map, 4u, voxel_size);
+        pnanovdb_map_set_matd_float(buf, map, 8u, voxel_size);
+        pnanovdb_map_set_vecd_float(buf, map, 0u, voxel_offset.x);
+        pnanovdb_map_set_vecd_float(buf, map, 1u, voxel_offset.y);
+        pnanovdb_map_set_vecd_float(buf, map, 2u, voxel_offset.z);
+        pnanovdb_map_set_invmatd_float(buf, map, 0u, voxel_size_inv);
+        pnanovdb_map_set_invmatd_float(buf, map, 4u, voxel_size_inv);
+        pnanovdb_map_set_invmatd_float(buf, map, 8u, voxel_size_inv);
 
-        pnanovdb_grid_set_world_bbox(buf, grid, 0u, double(g_aabb_min.x));
-        pnanovdb_grid_set_world_bbox(buf, grid, 1u, double(g_aabb_min.y));
-        pnanovdb_grid_set_world_bbox(buf, grid, 2u, double(g_aabb_min.z));
-        pnanovdb_grid_set_world_bbox(buf, grid, 3u, double(g_aabb_max.x));
-        pnanovdb_grid_set_world_bbox(buf, grid, 4u, double(g_aabb_max.y));
-        pnanovdb_grid_set_world_bbox(buf, grid, 5u, double(g_aabb_max.z));
+        pnanovdb_grid_set_world_bbox_float(buf, grid, 0u, g_aabb_min.x);
+        pnanovdb_grid_set_world_bbox_float(buf, grid, 1u, g_aabb_min.y);
+        pnanovdb_grid_set_world_bbox_float(buf, grid, 2u, g_aabb_min.z);
+        pnanovdb_grid_set_world_bbox_float(buf, grid, 3u, g_aabb_max.x);
+        pnanovdb_grid_set_world_bbox_float(buf, grid, 4u, g_aabb_max.y);
+        pnanovdb_grid_set_world_bbox_float(buf, grid, 5u, g_aabb_max.z);
 
         pnanovdb_tree_handle_t tree = pnanovdb_grid_get_tree(buf, grid);
         pnanovdb_root_handle_t root = pnanovdb_tree_get_root(buf, tree);

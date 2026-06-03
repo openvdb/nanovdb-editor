@@ -592,6 +592,9 @@ static pnanovdb_pipeline_render_method_t get_render_method_gaussian(void)
 PNANOVDB_DEFINE_PIPELINE_SHADERS(s_nanovdb_render_shaders,
                                  PNANOVDB_PIPELINE_SHADER("editor/editor.slang", nullptr, PNANOVDB_TRUE));
 
+PNANOVDB_DEFINE_PIPELINE_SHADERS(s_nanovdb_surface_shaders,
+                                 PNANOVDB_PIPELINE_SHADER("editor/editor_surface.slang", nullptr, PNANOVDB_TRUE));
+
 PNANOVDB_DEFINE_PIPELINE_SHADERS(s_gaussian_splat_shaders,
                                  PNANOVDB_PIPELINE_SHADER("raster/gaussian_rasterize_2d.slang",
                                                           "raster/raster2d_group",
@@ -600,8 +603,8 @@ PNANOVDB_DEFINE_PIPELINE_SHADERS(s_gaussian_splat_shaders,
 PNANOVDB_DEFINE_PIPELINE_SHADERS(s_gaussian_voxelize_shaders,
                                  PNANOVDB_PIPELINE_SHADER("raster/gaussian_frag_color.slang", nullptr, PNANOVDB_TRUE));
 
-PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_render_shaders,
-                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh.slang", nullptr, PNANOVDB_TRUE));
+PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_gaussians_shaders,
+                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_gaussians.slang", nullptr, PNANOVDB_TRUE));
 
 PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_lines_render_shaders,
                                  PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_lines.slang", nullptr, PNANOVDB_TRUE));
@@ -1171,6 +1174,12 @@ PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_nanovdb_render_descriptor,
                                           "NanoVDB Render",
                                           s_nanovdb_render_shaders);
 
+// SDF/level-set isosurface rendered via HDDA zero-crossing search.
+PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_nanovdb_surface_descriptor,
+                                          pnanovdb_pipeline_type_nanovdb_surface,
+                                          "NanoVDB Surface (SDF)",
+                                          s_nanovdb_surface_shaders);
+
 // Gaussian splat draws the loaded Gaussians directly; params come from shader JSON.
 PNANOVDB_REGISTER_RENDER_PIPELINE(s_gaussian_splat_descriptor,
                                   pnanovdb_pipeline_type_gaussian_splat,
@@ -1193,10 +1202,10 @@ PNANOVDB_REGISTER_PROCESS_PIPELINE(s_gaussian_voxelize_descriptor,
                                    get_render_method_nanovdb,
                                    PNANOVDB_PIPELINE_FIELDS(s_gaussian_voxelize_param_fields));
 
-PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_voxelbvh_render_descriptor,
-                                          pnanovdb_pipeline_type_voxelbvh_render,
-                                          "Voxel BVH Render",
-                                          s_voxelbvh_render_shaders);
+PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_voxelbvh_gaussians_render_descriptor,
+                                          pnanovdb_pipeline_type_voxelbvh_gaussians_render,
+                                          "Voxel BVH Gaussians",
+                                          s_voxelbvh_gaussians_shaders);
 
 PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_voxelbvh_lines_render_descriptor,
                                           pnanovdb_pipeline_type_voxelbvh_lines_render,
