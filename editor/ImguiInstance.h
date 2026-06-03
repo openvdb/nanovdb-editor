@@ -140,7 +140,7 @@ struct Instance
     std::string nanovdb_filepath = ""; // filename selected in the ImGuiFileDialog
     std::string raster_filepath = "";
     std::string mesh_filepath = "";
-    float raster_voxels_per_unit = 128.f;
+    float raster_voxels_per_unit = pnanovdb_editor::k_default_voxels_per_unit;
     int gaussian_import_mode = static_cast<int>(pnanovdb_editor::gaussian_import::Mode::Raster2D);
     bool mesh_import_show_debug = false;
 

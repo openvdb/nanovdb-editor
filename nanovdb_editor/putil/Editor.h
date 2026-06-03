@@ -83,7 +83,7 @@ typedef struct pnanovdb_pipeline_descriptor_t
     pnanovdb_uint32_t shader_count;
 
     pnanovdb_uint64_t params_size;
-    const char* params_type_name;
+    const pnanovdb_reflect_data_type_t* params_data_type;
 
     pnanovdb_pipeline_init_params_fn init_params;
     pnanovdb_pipeline_execute_fn execute;
@@ -107,31 +107,6 @@ struct pnanovdb_shader_params_desc_t
     pnanovdb_uint64_t element_count;
 };
 typedef struct pnanovdb_shader_params_desc_t pnanovdb_shader_params_desc_t;
-
-// ------------------------------------------------ Shader Parameter Provider Callback Interface
-
-typedef struct pnanovdb_shader_param_provider_ctx_t pnanovdb_shader_param_provider_ctx_t;
-
-typedef struct pnanovdb_shader_param_value_t
-{
-    const void* data;
-    pnanovdb_uint64_t size;
-    pnanovdb_uint64_t element_count;
-    pnanovdb_uint32_t type; // ImGuiDataType-compatible type
-} pnanovdb_shader_param_value_t;
-
-// Provider callback function type - called to retrieve a parameter value by name
-typedef pnanovdb_bool_t (*pnanovdb_shader_param_provider_fn)(pnanovdb_shader_param_provider_ctx_t* ctx,
-                                                             const char* shader_name,
-                                                             const char* param_name,
-                                                             pnanovdb_shader_param_value_t* out_value);
-
-// Provider descriptor - can be registered to provide shader parameters
-typedef struct pnanovdb_shader_param_provider_t
-{
-    pnanovdb_shader_param_provider_ctx_t* ctx; // User context passed to callback
-    pnanovdb_shader_param_provider_fn get_value; // Get parameter value callback
-} pnanovdb_shader_param_provider_t;
 
 // ------------------------------------------------ Editor -----------------------------------------------------------
 

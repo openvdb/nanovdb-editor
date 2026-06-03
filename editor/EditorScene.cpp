@@ -1102,7 +1102,6 @@ void EditorScene::handle_gaussian_data_load(pnanovdb_editor_token_t* scene,
                                             pnanovdb_raster_gaussian_data_t* gaussian_data,
                                             pnanovdb_raster_shader_params_t* raster_params,
                                             const char* filename,
-                                            std::shared_ptr<pnanovdb_raster_gaussian_data_t>& old_gaussian_data_ptr,
                                             pnanovdb_pipeline_type_t process_pipeline,
                                             pnanovdb_pipeline_type_t render_pipeline,
                                             const pnanovdb_pipeline_params_t* process_params)
@@ -1915,7 +1914,12 @@ bool EditorScene::load_mesh_file(pnanovdb_editor_token_t* scene,
                                  const char* filepath,
                                  const pnanovdb_editor::mesh_import::Options& options)
 {
-    return mesh_import::mesh(*this, m_compute, scene, filepath, options);
+    // The async load worker uses the EditorScene captured at pipeline_init
+    // time (see MeshLoadWorker::init in PipelineRuntime.cpp), so we do not
+    // forward *this through the import call. We continue to gate on the
+    // editor having been initialized via m_compute -- the file-format
+    // module needs it to allocate the position/index/color compute arrays.
+    return mesh_import::mesh(m_compute, scene, filepath, options);
 }
 
 bool EditorScene::save_nanovdb_file(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name, const char* filepath)

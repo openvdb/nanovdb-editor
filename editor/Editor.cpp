@@ -15,6 +15,7 @@
 #include "EditorParamMapRegistry.h"
 #include "Renderer.h"
 #include "Pipeline.h"
+#include "PipelineRuntime.h"
 
 #include "ShaderMonitor.h"
 #include "Console.h"
@@ -148,8 +149,7 @@ static pnanovdb_bool_t init_impl(pnanovdb_editor_t* editor,
 
 void init(pnanovdb_editor_t* editor)
 {
-    pipeline_register_builtins();
-
+    editor->impl->pipeline_runtime = std::make_unique<pnanovdb_editor::PipelineRuntime>();
     editor->impl->scene_manager = new EditorSceneManager();
     editor->impl->scene_view = new SceneView();
     editor->impl->param_map_registry = create_param_map_registry();
@@ -181,6 +181,7 @@ void shutdown(pnanovdb_editor_t* editor)
     {
         editor->stop(editor);
     }
+    editor->impl->pipeline_runtime.reset();
     if (editor->impl->scene_view)
     {
         delete editor->impl->scene_view;
@@ -460,6 +461,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
     editor->impl->show_active.store(true);
 
+    pnanovdb_editor::RuntimeScope runtime_scope(editor->impl->pipeline_runtime.get());
+
     pnanovdb_int32_t image_width = s_default_width;
     pnanovdb_int32_t image_height = s_default_height;
 
@@ -629,7 +632,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         raster_init_ctx.voxelbvh_ctx = editor->impl->voxelbvh_ctx;
         raster_init_ctx.renderer = editor->impl->renderer;
         raster_init_ctx.scene_manager = editor->impl->scene_manager;
-        pnanovdb_editor::pipeline_init_rasterizer(raster_init_ctx);
+        pnanovdb_editor::pipeline_init(raster_init_ctx, editor->impl->editor_scene);
     }
 
     if (editor->impl->editor_worker)
@@ -665,9 +668,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
             break;
         }
 
-        // pending raster data deleted next frame after being replaced
-        std::shared_ptr<pnanovdb_raster_gaussian_data_t> old_gaussian_data_ptr = nullptr;
-
         imgui_window_iface->get_camera_view_proj(imgui_window, &image_width, &image_height, &view, &projection);
         pnanovdb_camera_mat_t view_inv = pnanovdb_camera_mat_inverse(view);
         pnanovdb_camera_mat_t projection_inv = pnanovdb_camera_mat_inverse(projection);
@@ -684,10 +684,9 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         editor->impl->editor_scene->process_pending_editor_changes();
         editor->impl->editor_scene->process_pending_ui_changes();
 
-        // Handle async operations (rasterization + pipeline conversion) - single entry point in pipeline
-        bool async_in_progress = pnanovdb_editor::pipeline_update_async_progress(
-            editor->impl->editor_scene, imgui_user_instance->progress.text, imgui_user_instance->progress.value,
-            old_gaussian_data_ptr);
+        // handle async operations
+        bool async_in_progress =
+            pnanovdb_editor::pipeline_update(imgui_user_instance->progress.text, imgui_user_instance->progress.value);
 
         if (!async_in_progress)
         {
@@ -2091,6 +2090,10 @@ void set_pipeline(pnanovdb_editor_t* editor,
     {
         return;
     }
+    if (stage >= pnanovdb_pipeline_stage_count)
+    {
+        return;
+    }
 
     editor->impl->scene_manager->with_object(scene, name,
                                              [&](SceneObject* obj)
@@ -2099,17 +2102,18 @@ void set_pipeline(pnanovdb_editor_t* editor,
                                                  {
                                                      return;
                                                  }
-                                                 if (stage == pnanovdb_pipeline_stage_load)
+                                                 PipelineStage& slot = obj->pipeline.stages[stage];
+                                                 const bool type_changed = (slot.type != type);
+                                                 slot.type = type;
+                                                 if (!type_changed)
                                                  {
-                                                     obj->load_pipeline() = type;
+                                                     return;
                                                  }
-                                                 else if (stage == pnanovdb_pipeline_stage_process)
+                                                 pnanovdb_pipeline_get_default_params(type, &slot.params);
+                                                 slot.shader_overrides.clear();
+                                                 if (stage == pnanovdb_pipeline_stage_process)
                                                  {
-                                                     obj->process_pipeline() = type;
-                                                 }
-                                                 else if (stage == pnanovdb_pipeline_stage_render)
-                                                 {
-                                                     obj->render_pipeline() = type;
+                                                     obj->process_dirty() = true;
                                                  }
                                              });
 }

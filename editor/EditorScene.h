@@ -226,7 +226,6 @@ public:
                                    pnanovdb_raster_gaussian_data_t* gaussian_data,
                                    pnanovdb_raster_shader_params_t* raster_params,
                                    const char* filename,
-                                   std::shared_ptr<pnanovdb_raster_gaussian_data_t>& old_gaussian_data_ptr,
                                    pnanovdb_pipeline_type_t process_pipeline = pnanovdb_pipeline_type_noop,
                                    pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_raster2d,
                                    const pnanovdb_pipeline_params_t* process_params = nullptr);

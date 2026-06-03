@@ -31,8 +31,7 @@ struct Options
     pnanovdb_uint32_t resolution = 511u; //!< 1..4095
 };
 
-bool mesh(EditorScene& editor_scene,
-          const pnanovdb_compute_t* compute,
+bool mesh(const pnanovdb_compute_t* compute,
           pnanovdb_editor_token_t* scene,
           const char* filepath,
           const Options& options = {});

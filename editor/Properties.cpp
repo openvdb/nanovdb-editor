@@ -223,7 +223,8 @@ static void renderPipelineProcessParams(EditorSceneManager* scene_manager,
             new_name = base_name + "_" + std::to_string(suffix_index++);
         }
 
-        bool created = pnanovdb_editor::pipeline_create_variant(scene_manager, scene_token, name_token, new_name.c_str());
+        bool created = pnanovdb_editor::pipeline_create_variant(
+            scene_manager, scene_token, name_token, new_name.c_str(), ptr->compute);
 
         // Revert source object params to preserve "source unchanged" semantics for New.
         scene_manager->with_object(scene_token, name_token,
@@ -378,34 +379,25 @@ static void showVisibilityAndPipelineUI(EditorSceneManager* scene_manager,
 
     if (pipeline_changed)
     {
-        bool render_pipeline_changed = false;
-        std::string new_default_shader;
-        scene_manager->with_object(
-            scene_token, name_token,
-            [&](SceneObject* scene_obj)
-            {
-                if (!scene_obj)
-                    return;
-                if (scene_obj->process_pipeline() != process_pipeline)
-                {
-                    pnanovdb_pipeline_get_default_params(process_pipeline, &scene_obj->process_params());
-                }
-                render_pipeline_changed = (scene_obj->render_pipeline() != render_pipeline);
-                scene_obj->process_pipeline() = process_pipeline;
-                scene_obj->render_pipeline() = render_pipeline;
-                scene_obj->process_dirty() = true;
-                if (render_pipeline_changed)
-                {
-                    pnanovdb_pipeline_get_default_params(render_pipeline, &scene_obj->render_params());
-                    if (const char* s = pnanovdb_pipeline_get_shader_name(render_pipeline))
-                    {
-                        new_default_shader = s;
-                    }
-                }
-            });
-        if (render_pipeline_changed && !new_default_shader.empty() && editor_scene)
+        pnanovdb_editor_t* editor = editor_scene ? editor_scene->get_editor() : nullptr;
+        if (!editor)
         {
-            editor_scene->set_selected_object_shader_name(new_default_shader);
+            return;
+        }
+
+        const pnanovdb_pipeline_type_t prev_render =
+            editor->get_pipeline(editor, scene_token, name_token, pnanovdb_pipeline_stage_render);
+
+        editor->set_pipeline(editor, scene_token, name_token, pnanovdb_pipeline_stage_process, process_pipeline);
+        editor->set_pipeline(editor, scene_token, name_token, pnanovdb_pipeline_stage_render, render_pipeline);
+        editor->mark_pipeline_dirty(editor, scene_token, name_token);
+
+        if (render_pipeline != prev_render)
+        {
+            if (const char* s = pnanovdb_pipeline_get_shader_name(render_pipeline))
+            {
+                editor_scene->set_selected_object_shader_name(s);
+            }
         }
     }
 }

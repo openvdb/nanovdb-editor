@@ -30,6 +30,7 @@ class SceneView;
 class Renderer;
 class EditorScene;
 class ParamMapRegistry;
+class PipelineRuntime;
 
 // Shader constants
 constexpr const char* s_default_editor_shader = "editor/editor.slang";
@@ -39,7 +40,7 @@ constexpr const char* s_raster2d_gaussian_shader = "raster/gaussian_rasterize_2d
 
 // Thread Synchronization Model
 // ----------------------------
-// Worker Thread              Render Thread
+// External Caller            Render Thread
 // ━━━━━━━━━━━━━              ━━━━━━━━━━━━━
 // add_xyz()                  show() render loop
 //   └─ scene_manager (mutex)   ├─ scen_views (no mutex, render thread only)
@@ -54,6 +55,7 @@ struct pnanovdb_editor_impl_t
     pnanovdb_editor::Renderer* renderer;
     pnanovdb_editor::EditorScene* editor_scene;
     pnanovdb_editor::ParamMapRegistry* param_map_registry;
+    std::unique_ptr<pnanovdb_editor::PipelineRuntime> pipeline_runtime;
 
     // Currently used by the render thread in show()
     const pnanovdb_compiler_t* compiler;
@@ -214,12 +216,6 @@ static inline pnanovdb_bool_t pnanovdb_editor_token_is_valid(const pnanovdb_edit
 {
     return token ? PNANOVDB_TRUE : PNANOVDB_FALSE;
 }
-// -----------------------------------------------------------
-
-// ------------------------------------------------ Shader Parameter Provider Priorities
-constexpr uint32_t kShaderParamPriorityDefaults = 0; // Shader JSON defaults (lowest)
-constexpr uint32_t kShaderParamPriorityValues = 100; // Scene object values
-constexpr uint32_t kShaderParamPriorityPanel = 200; // Properties panel overrides (highest)
 // -----------------------------------------------------------
 
 // Forward declaration for execute_removal function
