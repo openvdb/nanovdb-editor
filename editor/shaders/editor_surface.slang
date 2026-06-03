@@ -22,8 +22,9 @@ struct shader_params_t
     uint auto_center;    // recenter the traversal near the origin in index space (float precision for off-origin grids)
     float ambient;      // ambient lighting term
 
-    float4 light_dir;     // world-space light direction; (0,0,0) -> headlight
     float4 surface_color; // base albedo (rgb)
+    float3 light_dir;     // world-space light direction; (0,0,0) -> headlight
+    float _pad1;
 };
 
 StructuredBuffer<uint2> buf;
@@ -288,9 +289,9 @@ bool render_surface(StructuredBuffer<uint2> buf, float3 worldRayOrigin, float3 w
     }
 
     float3 L;
-    if (length(shader_params.light_dir.xyz) > 1e-6f)
+    if (length(shader_params.light_dir) > 1e-6f)
     {
-        L = pnanovdb_grid_world_to_index_dirf(buf, grid, shader_params.light_dir.xyz);
+        L = pnanovdb_grid_world_to_index_dirf(buf, grid, shader_params.light_dir);
         float Llen = length(L);
         L = (Llen > 1e-8f) ? (L / Llen) : -dir;
     }

@@ -25,17 +25,6 @@
             "max": 1,
             "step": 0.01
         },
-        "light_dir": {
-            "value": [
-                0,
-                0,
-                0,
-                0
-            ],
-            "min": -1,
-            "max": 1,
-            "step": 0.01
-        },
         "surface_color": {
             "value": [
                 0.8,
@@ -44,6 +33,16 @@
                 1
             ],
             "min": 0,
+            "max": 1,
+            "step": 0.01
+        },
+        "light_dir": {
+            "value": [
+                0,
+                0,
+                0
+            ],
+            "min": -1,
             "max": 1,
             "step": 0.01
         }
