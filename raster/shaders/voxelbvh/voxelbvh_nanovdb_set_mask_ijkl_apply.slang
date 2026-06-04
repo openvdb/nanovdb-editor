@@ -77,7 +77,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     if (range_scratch_val.x != 0u)
     {
         pnanovdb_address_t addr = {range_scratch_val & ((uint64_t(1u) << 48u) - 1u)};
-        uint n = (range_scratch_val >> 48u);
+        uint n = uint(range_scratch_val >> 48u);
         nanovdb_set_bit(addr, n);
     }
 }
