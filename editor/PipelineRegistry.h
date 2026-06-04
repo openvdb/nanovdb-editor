@@ -19,11 +19,14 @@
 
 void pnanovdb_pipeline_register(const pnanovdb_pipeline_descriptor_t* descriptor);
 
-pnanovdb_uint32_t pnanovdb_pipeline_get_count(void);
+// Exported (default visibility) so tests can enumerate the registered pipelines
+// and their shaders without linking the whole editor; see
+// gtests/PipelineShaderCompileTest.cpp.
+PNANOVDB_API pnanovdb_uint32_t pnanovdb_pipeline_get_count(void);
 
 const char* pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_t type);
 const char* pnanovdb_pipeline_get_shader_group(pnanovdb_pipeline_type_t type);
-const pnanovdb_pipeline_descriptor_t* pnanovdb_pipeline_get_descriptor(pnanovdb_pipeline_type_t type);
+PNANOVDB_API const pnanovdb_pipeline_descriptor_t* pnanovdb_pipeline_get_descriptor(pnanovdb_pipeline_type_t type);
 void pnanovdb_pipeline_get_default_params(pnanovdb_pipeline_type_t type, pnanovdb_pipeline_params_t* params);
 
 pnanovdb_pipeline_result_t pnanovdb_pipeline_execute(pnanovdb_pipeline_type_t type,

@@ -119,6 +119,18 @@ void AsyncWorker::cancel_and_join()
     m_task_id = pnanovdb_util::WorkerThread::invalidTaskId();
 }
 
+void AsyncWorker::release()
+{
+    if (m_released)
+    {
+        return;
+    }
+    m_released = true;
+
+    cancel_and_join();
+    release_resources();
+}
+
 bool AsyncWorker::is_running()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -233,10 +245,14 @@ void AsyncWorker::finish_task()
 
 GaussianVoxelizeWorker::~GaussianVoxelizeWorker()
 {
-    cancel_and_join();
+    release();
+}
 
+void GaussianVoxelizeWorker::release_resources()
+{
     release_compute_array(m_pending_compute, m_pending_nanovdb_array);
     pipeline_params_release(&m_pending_params);
+    m_shader_params.reset();
 }
 
 void GaussianVoxelizeWorker::init(const PipelineContext& ctx, EditorScene* editor_scene)
@@ -408,8 +424,11 @@ bool GaussianVoxelizeWorker::handle_completion()
 
 VoxelBVHWorker::~VoxelBVHWorker()
 {
-    cancel_and_join();
+    release();
+}
 
+void VoxelBVHWorker::release_resources()
+{
     release_compute_array(m_pending_compute, m_pending_result);
     if (m_worker_ctx && m_iface && m_iface->destroy_context && m_worker_queue)
     {
@@ -607,11 +626,14 @@ bool VoxelBVHWorker::handle_completion()
 
 GaussianLoadWorker::~GaussianLoadWorker()
 {
-    cancel_and_join();
+    release();
+}
 
+void GaussianLoadWorker::release_resources()
+{
     release_pending_resources();
-
     pipeline_params_release(&m_pending_process_params);
+    m_shader_params.reset();
 }
 
 void GaussianLoadWorker::release_pending_resources()
@@ -830,8 +852,11 @@ bool GaussianLoadWorker::handle_completion()
 
 MeshLoadWorker::~MeshLoadWorker()
 {
-    cancel_and_join();
+    release();
+}
 
+void MeshLoadWorker::release_resources()
+{
     release_pending_arrays();
 }
 
@@ -1095,7 +1120,7 @@ void PipelineRuntime::shutdown()
     {
         if (w)
         {
-            w->cancel_and_join();
+            w->release();
         }
     }
 }

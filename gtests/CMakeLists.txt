@@ -48,6 +48,7 @@ function(ConfigureTest CMAKE_TEST_NAME)
 endfunction()
 
 ConfigureTest(ShaderCompileTest ShaderCompileTest.cpp)
+ConfigureTest(PipelineShaderCompileTest PipelineShaderCompileTest.cpp)
 ConfigureTest(ComputeDispatchTest ComputeDispatchTest.cpp)
 ConfigureTest(ShaderCompileCpuTest ShaderCompileCpuTest.cpp)
 ConfigureTest(FileFormatTest FileFormatTest.cpp)

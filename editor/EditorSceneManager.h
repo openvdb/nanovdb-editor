@@ -41,6 +41,7 @@ namespace pnanovdb_editor
 */
 enum class SceneObjectType
 {
+    Uninitialized, ///< Placeholder: configured but no resource attached yet
     NanoVDB, ///< Volume data
     GaussianData, ///< Gaussian splatting data
     Array, ///< Generic array data
@@ -277,7 +278,7 @@ struct SceneObjectPipeline
 */
 struct SceneObject
 {
-    SceneObjectType type; ///< Type of scene object
+    SceneObjectType type = SceneObjectType::Uninitialized; ///< Type of scene object
     pnanovdb_editor_token_t* scene_token; ///< Scene identifier token
     pnanovdb_editor_token_t* name_token; ///< Object name token
 
@@ -774,7 +775,7 @@ public:
         else
         {
             obj = &m_objects[key];
-            obj->type = SceneObjectType::NanoVDB;
+            obj->type = SceneObjectType::Uninitialized;
             obj->scene_token = scene;
             obj->name_token = name;
             obj->ensure_shader_name_storage().object_key = key;

@@ -144,14 +144,14 @@ bool pipeline_load(EditorSceneManager* scene_manager,
                    const PipelineLoadRequest& request);
 
 /*!
-    \brief Per-frame async update: poll progress and handle completion for
-           whichever pipeline worker is in flight.
+    \brief Per-frame async update: drain every worker that completed this frame,
+           then poll progress for any worker still in flight.
 
     \param progress_text  Filled with progress description while a task is
                           running
     \param progress_value Filled with 0.0..1.0 progress while a task is
                           running
-    \return true iff a task is still in progress
+    \return true iff at least one task is still in progress
 */
 bool pipeline_update(std::string& progress_text, float& progress_value);
 

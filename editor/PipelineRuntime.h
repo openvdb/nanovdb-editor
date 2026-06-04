@@ -224,6 +224,7 @@ public:
     AsyncWorker& operator=(AsyncWorker&&) = delete;
 
     void cancel_and_join();
+    void release();
 
     bool is_running();
     bool is_completed();
@@ -256,6 +257,10 @@ public:
 protected:
     AsyncWorker() = default;
 
+    virtual void release_resources()
+    {
+    }
+
     virtual const char* progress_waiting_text() const
     {
         return "Waiting for worker...";
@@ -284,6 +289,7 @@ protected:
     pnanovdb_uint32_t m_pending_name_token_id = 0;
     EditorSceneManager* m_pending_scene_manager = nullptr;
     const pnanovdb_compute_t* m_pending_compute = nullptr;
+    bool m_released = false;
 };
 
 // ============================================================================
@@ -308,6 +314,9 @@ public:
     bool handle_completion() override;
 
     float get_running_voxels_per_unit();
+
+protected:
+    void release_resources() override;
 
 private:
     EditorScene* m_editor_scene = nullptr;
@@ -343,6 +352,8 @@ public:
     bool handle_completion() override;
 
 protected:
+    void release_resources() override;
+
     const char* progress_running_fallback_text() const override
     {
         return "Building VoxelBVH...";
@@ -380,6 +391,9 @@ public:
     bool start_from_request(const PipelineLoadRequest& request,
                             EditorSceneManager* scene_manager,
                             pnanovdb_editor_token_t* scene_token) override;
+
+protected:
+    void release_resources() override;
 
 private:
     bool start(const char* raster_filepath,
@@ -446,6 +460,8 @@ public:
                             pnanovdb_editor_token_t* scene_token) override;
 
 protected:
+    void release_resources() override;
+
     const char* progress_running_fallback_text() const override
     {
         return "Loading mesh...";

@@ -860,23 +860,22 @@ bool pipeline_update(std::string& progress_text, float& progress_value)
 
     for (const auto& worker : rt->workers())
     {
-        if (!worker)
+        if (worker && !worker->is_running())
         {
-            continue;
+            worker->handle_completion();
         }
-        if (worker->is_running())
+    }
+    for (const auto& worker : rt->workers())
+    {
+        if (worker && worker->is_running())
         {
             worker->get_progress(progress_text, progress_value);
             return true;
         }
-        if (worker->handle_completion())
-        {
-            progress_text.clear();
-            progress_value = 0.0f;
-            return false;
-        }
     }
 
+    progress_text.clear();
+    progress_value = 0.0f;
     return false;
 }
 
