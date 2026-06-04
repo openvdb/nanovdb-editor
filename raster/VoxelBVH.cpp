@@ -2299,7 +2299,7 @@ void nanovdb_rgba8_from_voxelbvh(const pnanovdb_compute_t* compute,
     memcpy(mapped_constants, &constants, sizeof(constants_t));
     compute_interface->unmap_buffer(context, constant_buffer);
 
-    for (pnanovdb_uint32_t pass_id = 0u; pass_id < 256u; pass_id++)
+    for (pnanovdb_uint32_t pass_id = 0u; pass_id < 128u; pass_id++)
     {
         pnanovdb_compute_buffer_transient_t* constant_transient =
             compute_interface->register_buffer_as_transient(context, constant_buffer);
@@ -2348,7 +2348,7 @@ void nanovdb_rgba8_from_voxelbvh(const pnanovdb_compute_t* compute,
         pnanovdb_uint64_t flushed_frame = 0llu;
         compute->device_interface.flush(queue, &flushed_frame, nullptr, nullptr);
 
-        printf("nanovdb_rgba8_from_voxelbvh() step %d of 256\n", pass_id);
+        printf("nanovdb_rgba8_from_voxelbvh() step %d of 128\n", pass_id);
     }
 
     compute_interface->destroy_buffer(context, constant_buffer);
