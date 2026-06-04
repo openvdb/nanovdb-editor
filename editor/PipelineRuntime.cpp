@@ -772,6 +772,7 @@ bool GaussianLoadWorker::handle_completion()
                                 return;
 
                             obj->resources.source_filepath = m_pending_filepath;
+                            obj->load_pipeline() = pnanovdb_pipeline_type_gaussian_load;
                             obj->process_pipeline() = m_pending_process_pipeline;
                             obj->process_dirty() = false;
                             pnanovdb_pipeline_get_default_params(m_pending_process_pipeline, &obj->process_params());

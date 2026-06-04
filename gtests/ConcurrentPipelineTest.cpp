@@ -78,7 +78,7 @@ SyntheticGaussian make_gaussian(pnanovdb_compute_t& compute, std::uint32_t splat
 pnanovdb_compute_array_t* make_nanovdb_sphere(pnanovdb_compute_t& compute, float radius)
 {
     auto sphere = nanovdb::tools::createLevelSetSphere<float>(radius);
-    return compute.create_array(4u, sphere.size() / 4u, sphere.data());
+    return compute.create_array(4u, sphere.bufferSize() / 4u, sphere.data());
 }
 
 } // namespace

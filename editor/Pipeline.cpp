@@ -37,7 +37,7 @@ using GaussianVoxelizeParams = pnanovdb_editor::GaussianVoxelizeParams;
 struct VoxelBVHBuildParams
 {
     float source_type = 0.f; // pnanovdb_pipeline_voxelbvh_source_t
-    float resolution = 511.f;
+    float resolution = static_cast<float>(pnanovdb_editor::k_default_bvh_resolution);
     float inflation_radius = 0.f;
 };
 
@@ -627,8 +627,9 @@ static const pnanovdb_pipeline_param_field_t s_gaussian_voxelize_param_fields[] 
 
 // Field descriptors for VoxelBVHBuildParams
 static const pnanovdb_pipeline_param_field_t s_voxelbvh_build_param_fields[] = {
-    { "Resolution", "Max BVH integer coordinate (1..4095). Higher = finer voxel grid.", PNANOVDB_REFLECT_TYPE_FLOAT,
-      offsetof(VoxelBVHBuildParams, resolution), 511.0f, 1.0f, 4095.0f, 1.0f, nullptr, 0 },
+    { "Resolution", "Max BVH integer coordinate (1..4096). Higher = finer voxel grid.", PNANOVDB_REFLECT_TYPE_FLOAT,
+      offsetof(VoxelBVHBuildParams, resolution), static_cast<float>(pnanovdb_editor::k_default_bvh_resolution), 1.0f,
+      static_cast<float>(pnanovdb_editor::k_max_bvh_resolution), 1.0f, nullptr, 0 },
     { "Inflation Radius", "World-space inflation applied to lines/triangles. 0 = auto for Debug/Lines renders.",
       PNANOVDB_REFLECT_TYPE_FLOAT, offsetof(VoxelBVHBuildParams, inflation_radius), 0.0f, 0.0f, 100.0f, 0.01f, nullptr,
       0 },
@@ -686,195 +687,8 @@ static const pnanovdb_pipeline_param_field_t s_voxelbvh_build_param_fields[] = {
                                       PNANOVDB_PIPELINE_PARAMS(NanoVDBRenderParams), execute_nanovdb_render,           \
                                       get_render_method_nanovdb, map_params<&SceneObject::render_params>)
 
-// ============================================================================
-// C API - Scene Object Pipeline Operations
-// ============================================================================
-
-void pnanovdb_scene_object_set_pipeline(pnanovdb_scene_object_t* obj,
-                                        pnanovdb_pipeline_stage_t stage,
-                                        pnanovdb_pipeline_type_t type)
-{
-    auto* scene_obj = cast(obj);
-    if (!scene_obj || stage >= pnanovdb_pipeline_stage_count)
-        return;
-
-    scene_obj->pipeline.stages[stage].type = type;
-}
-
-pnanovdb_pipeline_type_t pnanovdb_scene_object_get_pipeline(pnanovdb_scene_object_t* obj, pnanovdb_pipeline_stage_t stage)
-{
-    auto* scene_obj = cast(obj);
-    if (!scene_obj || stage >= pnanovdb_pipeline_stage_count)
-        return pnanovdb_pipeline_type_noop;
-
-    return scene_obj->pipeline.stages[stage].type;
-}
-
-void pnanovdb_scene_object_mark_dirty(pnanovdb_scene_object_t* obj)
-{
-    auto* scene_obj = cast(obj);
-    if (scene_obj)
-        scene_obj->process_dirty() = true;
-}
-
-void* pnanovdb_scene_object_map_params(pnanovdb_scene_object_t* obj, const pnanovdb_reflect_data_type_t* param_data_type)
-{
-    if (!obj || !param_data_type)
-        return nullptr;
-
-    for (size_t i = 0; i < pnanovdb_pipeline_type_count; ++i)
-    {
-        const auto* desc = pnanovdb_pipeline_get_descriptor(static_cast<pnanovdb_pipeline_type_t>(i));
-        if (desc && desc->params_data_type && desc->map_params &&
-            pnanovdb_reflect_layout_compare(desc->params_data_type, param_data_type))
-        {
-            return desc->map_params(obj);
-        }
-    }
-    return nullptr;
-}
-
-void pnanovdb_scene_object_unmap_params(pnanovdb_scene_object_t* obj, const pnanovdb_reflect_data_type_t* param_data_type)
-{
-    // Currently no-op - params stay mapped
-    (void)obj;
-    (void)param_data_type;
-}
-
-pnanovdb_uint32_t pnanovdb_scene_object_get_pipeline_stage_shader_count(pnanovdb_scene_object_t* obj,
-                                                                        pnanovdb_pipeline_stage_t stage)
-{
-    auto* scene_obj = cast(obj);
-    if (!scene_obj || stage >= pnanovdb_pipeline_stage_count)
-        return 0;
-
-    pnanovdb_pipeline_type_t type = scene_obj->pipeline.stages[stage].type;
-    const auto* desc = pnanovdb_pipeline_get_descriptor(type);
-    return desc ? desc->shader_count : 0;
-}
-
-void pnanovdb_scene_object_set_pipeline_stage_shader(pnanovdb_scene_object_t* obj,
-                                                     pnanovdb_pipeline_stage_t stage,
-                                                     pnanovdb_uint32_t shader_idx,
-                                                     const char* override_shader)
-{
-    auto* scene_obj = cast(obj);
-    if (!scene_obj || !override_shader || stage >= pnanovdb_pipeline_stage_count)
-        return;
-
-    auto& stage_ref = scene_obj->pipeline.stages[stage];
-
-    // Ensure shader_overrides vector is large enough
-    if (shader_idx >= stage_ref.shader_overrides.size())
-        stage_ref.shader_overrides.resize(shader_idx + 1);
-
-    // Store override in the per-stage shader overrides
-    stage_ref.shader_overrides[shader_idx].shader_name = override_shader;
-}
-
-const char* pnanovdb_scene_object_get_pipeline_stage_shader(pnanovdb_scene_object_t* obj,
-                                                            pnanovdb_pipeline_stage_t stage,
-                                                            pnanovdb_uint32_t shader_idx)
-{
-    auto* scene_obj = cast(obj);
-    if (!scene_obj || stage >= pnanovdb_pipeline_stage_count)
-        return nullptr;
-
-    auto& stage_ref = scene_obj->pipeline.stages[stage];
-
-    // Check for override first
-    if (shader_idx < stage_ref.shader_overrides.size() && stage_ref.shader_overrides[shader_idx].has_shader_override())
-    {
-        return stage_ref.shader_overrides[shader_idx].shader_name.c_str();
-    }
-
-    // Fall back to pipeline descriptor default
-    const auto* desc = pnanovdb_pipeline_get_descriptor(stage_ref.type);
-    if (desc && shader_idx < desc->shader_count && desc->shaders)
-        return desc->shaders[shader_idx].shader_name;
-
-    return nullptr;
-}
-
-pnanovdb_bool_t pnanovdb_scene_object_map_shader_params(pnanovdb_scene_object_t* obj,
-                                                        pnanovdb_uint32_t shader_idx,
-                                                        pnanovdb_shader_params_desc_t* out_desc)
-{
-    auto* scene_obj = cast(obj);
-    if (!scene_obj || !out_desc)
-        return PNANOVDB_FALSE;
-
-    (void)shader_idx;
-
-    const char* shader_name = nullptr;
-    if (scene_obj->shader_name())
-    {
-        shader_name = scene_obj->shader_name()->str;
-    }
-
-    const auto* dt = scene_obj->shader_params_data_type();
-    if (!dt || !scene_obj->shader_params())
-        return PNANOVDB_FALSE;
-
-    ShaderParamsDescCache& cache = scene_obj->params.shader_params_desc_cache;
-    if (cache.source_data_type != dt)
-    {
-        cache.source_data_type = dt;
-        cache.element_names.clear();
-        cache.element_type_names.clear();
-        cache.element_offsets.clear();
-        cache.element_names.reserve(dt->child_reflect_data_count);
-        cache.element_type_names.reserve(dt->child_reflect_data_count);
-        cache.element_offsets.reserve(dt->child_reflect_data_count);
-        for (pnanovdb_uint64_t i = 0; i < dt->child_reflect_data_count; ++i)
-        {
-            const pnanovdb_reflect_data_t& child = dt->child_reflect_datas[i];
-            cache.element_names.push_back(child.name);
-            const char* type_name = "unknown";
-            if (child.data_type)
-            {
-                type_name = child.data_type->struct_typename ?
-                                child.data_type->struct_typename :
-                                pnanovdb_reflect_type_to_string(child.data_type->data_type);
-            }
-            cache.element_type_names.push_back(type_name);
-            cache.element_offsets.push_back(child.data_offset);
-        }
-    }
-
-    out_desc->data = scene_obj->shader_params();
-    out_desc->data_size = dt->element_size;
-    out_desc->shader_name = shader_name ? shader_name : dt->struct_typename;
-    out_desc->element_names = cache.element_names.empty() ? nullptr : cache.element_names.data();
-    out_desc->element_typenames = cache.element_type_names.empty() ? nullptr : cache.element_type_names.data();
-    out_desc->element_offsets = cache.element_offsets.empty() ? nullptr : cache.element_offsets.data();
-    out_desc->element_count = dt->child_reflect_data_count;
-
-    return PNANOVDB_TRUE;
-}
-
-void pnanovdb_scene_object_unmap_shader_params(pnanovdb_scene_object_t* obj, pnanovdb_uint32_t shader_idx)
-{
-    // No-op
-    (void)obj;
-    (void)shader_idx;
-}
-
-const pnanovdb_reflect_data_type_t* pnanovdb_scene_object_get_shader_params_type(pnanovdb_scene_object_t* obj,
-                                                                                 pnanovdb_uint32_t shader_idx)
-{
-    auto* scene_obj = cast(obj);
-    if (!scene_obj)
-        return nullptr;
-    return scene_obj->shader_params_data_type();
-}
-
 // ----------------------------------------------------------------------------
 // Voxel BVH build params setters (public; declared in Pipeline.h)
-//
-// VoxelBVHBuildParams is intentionally kept private to this TU. Callers
-// modify the params blob via these helpers so a future struct change (extra
-// field, reordering) doesn't silently break editor code.
 // ----------------------------------------------------------------------------
 static bool ensure_voxelbvh_build_params(pnanovdb_pipeline_params_t* params)
 {
@@ -948,14 +762,6 @@ pnanovdb_pipeline_result_t pipeline_execute_process(SceneObject* obj, const Pipe
 bool pipeline_needs_process(SceneObject* obj)
 {
     return obj && obj->process_dirty() && obj->process_pipeline() != pnanovdb_pipeline_type_noop;
-}
-
-void pipeline_mark_dirty(SceneObject* obj)
-{
-    if (obj)
-    {
-        obj->process_dirty() = true;
-    }
 }
 
 void pipeline_execute_pending(EditorSceneManager* manager, const PipelineContext& ctx)

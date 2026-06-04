@@ -17,8 +17,10 @@
 #include "Pipeline.h"
 #include "Console.h"
 
+#include <cfloat>
 #include <cmath>
 #include <cctype>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -211,7 +213,8 @@ static void renderPipelineProcessParams(EditorSceneManager* scene_manager,
         {
             bool exists = false;
             auto* candidate_token = pnanovdb_editor::EditorToken::getInstance().getToken(new_name.c_str());
-            scene_manager->with_object(scene_token, candidate_token, [&](pnanovdb_editor::SceneObject* existing_obj)
+            scene_manager->with_object(scene_token, candidate_token,
+                                       [&](pnanovdb_editor::SceneObject* existing_obj)
                                        { exists = (existing_obj != nullptr); });
 
             if (!exists)
@@ -340,6 +343,48 @@ static void showShaderParamsResetButton(EditorSceneManager* scene_manager,
     }
 }
 
+// Read-only display of where the object's data came from and how it was loaded.
+static void showSourceInfo(const char* suffix, const std::string& source_filepath, pnanovdb_pipeline_type_t load_pipeline)
+{
+    ImGui::TextDisabled("Source:");
+    ImGui::SameLine();
+    if (source_filepath.empty())
+    {
+        ImGui::TextDisabled("(none)");
+    }
+    else
+    {
+        char source_id[32];
+        snprintf(source_id, sizeof(source_id), "##source%s", suffix);
+
+        char source_buf[1024];
+        strncpy(source_buf, source_filepath.c_str(), sizeof(source_buf) - 1);
+        source_buf[sizeof(source_buf) - 1] = '\0';
+
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        ImGui::InputText(source_id, source_buf, sizeof(source_buf), ImGuiInputTextFlags_ReadOnly);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", source_filepath.c_str());
+    }
+
+    // How the data was loaded (read-only: changing it would not re-load the file)
+    const auto* load_desc = pnanovdb_pipeline_get_descriptor(load_pipeline);
+    const char* load_name = (load_desc && load_desc->name) ? load_desc->name : "Unknown";
+    ImGui::TextDisabled("Load:");
+    ImGui::SameLine();
+    char load_id[32];
+    snprintf(load_id, sizeof(load_id), "##load%s", suffix);
+    ImGui::SetNextItemWidth(k_property_combo_width);
+    ImGui::BeginDisabled();
+    if (ImGui::BeginCombo(load_id, load_name))
+    {
+        ImGui::EndCombo();
+    }
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Pipeline used to load this object's source data");
+}
+
 // Helper to show common visibility and pipeline UI for scene objects
 static void showVisibilityAndPipelineUI(EditorSceneManager* scene_manager,
                                         pnanovdb_editor_token_t* scene_token,
@@ -348,6 +393,8 @@ static void showVisibilityAndPipelineUI(EditorSceneManager* scene_manager,
                                         bool& is_visible,
                                         pnanovdb_pipeline_type_t& process_pipeline,
                                         pnanovdb_pipeline_type_t& render_pipeline,
+                                        pnanovdb_pipeline_type_t load_pipeline,
+                                        const std::string& source_filepath,
                                         EditorScene* editor_scene = nullptr)
 {
     char visible_id[32], process_id[32], render_id[32];
@@ -370,6 +417,8 @@ static void showVisibilityAndPipelineUI(EditorSceneManager* scene_manager,
             editor_scene->select_render_view(scene_token, name_token);
         }
     }
+
+    showSourceInfo(suffix, source_filepath, load_pipeline);
 
     ImGui::TextDisabled("Pipeline:");
     bool pipeline_changed = false;
@@ -745,6 +794,8 @@ void Properties::render(imgui_instance_user::Instance* ptr)
                          (unsigned long long)(selection.name_token ? selection.name_token->id : 0ULL));
 
                 std::string properties_shader_name;
+                std::string source_filepath;
+                pnanovdb_pipeline_type_t load_pipeline = pnanovdb_pipeline_type_noop;
                 pnanovdb_pipeline_type_t process_pipeline = pnanovdb_pipeline_type_noop;
                 pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_gaussian_splat;
                 bool is_visible = true;
@@ -755,9 +806,11 @@ void Properties::render(imgui_instance_user::Instance* ptr)
                                            {
                                                if (scene_obj)
                                                {
+                                                   load_pipeline = scene_obj->load_pipeline();
                                                    process_pipeline = scene_obj->process_pipeline();
                                                    render_pipeline = scene_obj->render_pipeline();
                                                    is_visible = scene_obj->visible;
+                                                   source_filepath = scene_obj->resources.source_filepath;
                                                    const char* shader = pipeline_get_shader(scene_obj);
                                                    if (shader)
                                                        properties_shader_name = shader;
@@ -765,7 +818,8 @@ void Properties::render(imgui_instance_user::Instance* ptr)
                                            });
 
                 showVisibilityAndPipelineUI(scene_manager, scene_token, selection.name_token, ui_suffix, is_visible,
-                                            process_pipeline, render_pipeline, ptr->editor_scene);
+                                            process_pipeline, render_pipeline, load_pipeline, source_filepath,
+                                            ptr->editor_scene);
 
                 renderPipelineProcessParams(
                     scene_manager, scene_token, selection.name_token, process_pipeline, ui_suffix, ptr);
@@ -789,6 +843,8 @@ void Properties::render(imgui_instance_user::Instance* ptr)
                          (unsigned long long)(selection.name_token ? selection.name_token->id : 0ULL));
 
                 std::string properties_shader_name;
+                std::string source_filepath;
+                pnanovdb_pipeline_type_t load_pipeline = pnanovdb_pipeline_type_noop;
                 pnanovdb_pipeline_type_t process_pipeline = pnanovdb_pipeline_type_noop;
                 pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_nanovdb_render;
                 bool is_visible = true;
@@ -799,9 +855,11 @@ void Properties::render(imgui_instance_user::Instance* ptr)
                                            {
                                                if (scene_obj)
                                                {
+                                                   load_pipeline = scene_obj->load_pipeline();
                                                    process_pipeline = scene_obj->process_pipeline();
                                                    render_pipeline = scene_obj->render_pipeline();
                                                    is_visible = scene_obj->visible;
+                                                   source_filepath = scene_obj->resources.source_filepath;
                                                    const char* shader = pipeline_get_shader(scene_obj);
                                                    if (shader)
                                                        properties_shader_name = shader;
@@ -809,7 +867,8 @@ void Properties::render(imgui_instance_user::Instance* ptr)
                                            });
 
                 showVisibilityAndPipelineUI(scene_manager, scene_token, selection.name_token, ui_suffix, is_visible,
-                                            process_pipeline, render_pipeline, ptr->editor_scene);
+                                            process_pipeline, render_pipeline, load_pipeline, source_filepath,
+                                            ptr->editor_scene);
 
                 renderPipelineProcessParams(
                     scene_manager, scene_token, selection.name_token, process_pipeline, ui_suffix, ptr);

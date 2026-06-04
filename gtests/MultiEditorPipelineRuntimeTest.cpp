@@ -60,8 +60,8 @@ TEST(NanoVDBEditor, MultiEditorPipelineRuntimeIsolation)
     auto sphere_a = nanovdb::tools::createLevelSetSphere<float>(8.0f);
     auto sphere_b = nanovdb::tools::createLevelSetSphere<float>(12.0f);
 
-    pnanovdb_compute_array_t* arr_a = compute.create_array(4u, sphere_a.size() / 4u, sphere_a.data());
-    pnanovdb_compute_array_t* arr_b = compute.create_array(4u, sphere_b.size() / 4u, sphere_b.data());
+    pnanovdb_compute_array_t* arr_a = compute.create_array(4u, sphere_a.bufferSize() / 4u, sphere_a.data());
+    pnanovdb_compute_array_t* arr_b = compute.create_array(4u, sphere_b.bufferSize() / 4u, sphere_b.data());
     ASSERT_NE(arr_a, nullptr);
     ASSERT_NE(arr_b, nullptr);
 

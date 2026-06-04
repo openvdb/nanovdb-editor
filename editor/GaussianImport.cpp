@@ -65,6 +65,7 @@ bool gaussian(EditorScene& editor_scene,
                                       if (!obj)
                                           return;
                                       obj->resources.source_filepath = filepath_copy;
+                                      obj->load_pipeline() = pnanovdb_pipeline_type_gaussian_load;
                                       auto& process_params = obj->process_params();
                                       pnanovdb_pipeline_voxelbvh_build_params_set_source_type(
                                           &process_params, pnanovdb_pipeline_voxelbvh_source_gaussian_file);

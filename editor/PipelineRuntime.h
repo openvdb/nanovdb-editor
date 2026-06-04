@@ -40,7 +40,7 @@ struct GaussianVoxelizeParams
 struct MeshLoadParams
 {
     float inflation_radius = 0.f; //!< 0 = auto for line-based renders
-    pnanovdb_uint32_t resolution = 511u; //!< 1..4095
+    pnanovdb_uint32_t resolution = k_default_bvh_resolution; //!< 1..k_max_bvh_resolution
     pnanovdb_uint32_t show_debug = 0u; //!< nonzero -> triangles_debug_render
 };
 
@@ -93,7 +93,7 @@ inline bool pipeline_params_set_mesh_load_inflation_radius(pnanovdb_pipeline_par
 
 inline pnanovdb_uint32_t pipeline_params_get_mesh_load_resolution(const pnanovdb_pipeline_params_t* params)
 {
-    return detail::params_field_get(params, &MeshLoadParams::resolution, 511u);
+    return detail::params_field_get(params, &MeshLoadParams::resolution, k_default_bvh_resolution);
 }
 
 inline bool pipeline_params_set_mesh_load_resolution(pnanovdb_pipeline_params_t* params, pnanovdb_uint32_t value)
@@ -203,7 +203,7 @@ struct VoxelBVHBuildRequest
     static constexpr int k_max_arrays = 6;
 
     VoxelBVHBuildSource source = VoxelBVHBuildSource::GaussianFile;
-    pnanovdb_uint32_t resolution = 511u;
+    pnanovdb_uint32_t resolution = k_default_bvh_resolution;
     float inflation_radius = 0.f;
     std::string filepath;
     std::shared_ptr<pnanovdb_compute_array_t> array_owners[k_max_arrays];

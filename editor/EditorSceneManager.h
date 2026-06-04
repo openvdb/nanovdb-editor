@@ -83,14 +83,6 @@ struct ShaderNameStorage
     pnanovdb_editor_shader_name_t value = {};
 };
 
-struct ShaderParamsDescCache
-{
-    const pnanovdb_reflect_data_type_t* source_data_type = nullptr;
-    std::vector<const char*> element_names;
-    std::vector<const char*> element_type_names;
-    std::vector<pnanovdb_uint64_t> element_offsets;
-};
-
 /*!
     \brief Compile-time known parameters for a scene object
 */
@@ -103,9 +95,6 @@ struct SceneObjectParams
     // Typed params pointer and reflection info
     void* shader_params = nullptr;
     const pnanovdb_reflect_data_type_t* shader_params_data_type = nullptr;
-
-    // Cached descriptor views for pnanovdb_scene_object_map_shader_params
-    ShaderParamsDescCache shader_params_desc_cache;
 
     // Associated shader name
     std::shared_ptr<ShaderNameStorage> shader_name_storage = std::make_shared<ShaderNameStorage>();

@@ -1047,6 +1047,13 @@ void EditorScene::handle_nanovdb_data_load(pnanovdb_editor_token_t* scene,
     m_scene_manager.add_nanovdb(scene_token, name_token, nanovdb_array, params_array, m_compute, shader_name_token,
                                 pnanovdb_pipeline_type_noop, render_pipeline);
 
+    m_scene_manager.with_object(scene_token, name_token,
+                                [filename](SceneObject* obj)
+                                {
+                                    if (obj)
+                                        obj->resources.source_filepath = filename;
+                                });
+
     // Register in SceneView (for scene tree display)
     m_scene_view.add_nanovdb_to_scene(
         scene_token, name_token, nanovdb_array, params_array ? params_array->data : nullptr);
@@ -1087,6 +1094,7 @@ void EditorScene::handle_mesh_data_load(pnanovdb_editor_token_t* scene,
             if (!obj)
                 return;
             obj->resources.source_filepath = filepath_copy;
+            obj->load_pipeline() = pnanovdb_pipeline_type_mesh_load;
             auto& process_params = obj->process_params();
             pnanovdb_pipeline_voxelbvh_build_params_set_source_type(&process_params, source_type);
             pnanovdb_pipeline_voxelbvh_build_params_set_inflation_radius(&process_params, inflation_radius);
@@ -1136,6 +1144,7 @@ void EditorScene::handle_gaussian_data_load(pnanovdb_editor_token_t* scene,
                                     if (!obj)
                                         return;
                                     obj->resources.source_filepath = filename;
+                                    obj->load_pipeline() = pnanovdb_pipeline_type_gaussian_load;
                                     if (process_params && process_params->data && process_params->size > 0)
                                     {
                                         void* copy = malloc(process_params->size);

@@ -89,4 +89,7 @@ namespace pnanovdb_editor
 {
 inline constexpr float k_default_voxels_per_unit = 128.f;
 inline constexpr float k_default_voxel_size = 1.f / k_default_voxels_per_unit;
+
+inline constexpr pnanovdb_uint32_t k_default_bvh_resolution = 512u; //!< 1..k_max_bvh_resolution
+inline constexpr pnanovdb_uint32_t k_max_bvh_resolution = 4096u;
 } // namespace pnanovdb_editor

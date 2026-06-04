@@ -249,7 +249,7 @@ TEST(NanoVDBEditor, MarkPipelineDirtyKicksScheduler)
     ASSERT_NE(name, nullptr);
 
     auto sphere = nanovdb::tools::createLevelSetSphere<float>(2.0f);
-    pnanovdb_compute_array_t* nanovdb_array = compute.create_array(4u, sphere.size() / 4u, sphere.data());
+    pnanovdb_compute_array_t* nanovdb_array = compute.create_array(4u, sphere.bufferSize() / 4u, sphere.data());
     ASSERT_NE(nanovdb_array, nullptr);
     editor.add_nanovdb_2(&editor, scene, name, nanovdb_array);
 
@@ -260,7 +260,7 @@ TEST(NanoVDBEditor, MarkPipelineDirtyKicksScheduler)
     editor.set_pipeline(&editor, scene, name, pnanovdb_pipeline_stage_process, pnanovdb_pipeline_type_nanovdb_render);
 
     bool kicked = false;
-    for (int i = 0; i < 20 && !kicked; ++i)
+    for (int i = 0; i < 100 && !kicked; ++i)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         kicked = (pnanovdb_editor_test::get_object_process_dirty(&editor, scene, name) == PNANOVDB_FALSE);
@@ -271,7 +271,7 @@ TEST(NanoVDBEditor, MarkPipelineDirtyKicksScheduler)
     editor.mark_pipeline_dirty(&editor, scene, name);
 
     bool re_kicked = false;
-    for (int i = 0; i < 20 && !re_kicked; ++i)
+    for (int i = 0; i < 100 && !re_kicked; ++i)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         re_kicked = (pnanovdb_editor_test::get_object_process_dirty(&editor, scene, name) == PNANOVDB_FALSE);

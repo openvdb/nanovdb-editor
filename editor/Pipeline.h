@@ -75,38 +75,6 @@ bool pnanovdb_pipeline_voxelbvh_build_params_set_inflation_radius(pnanovdb_pipel
 bool pnanovdb_pipeline_voxelbvh_build_params_set_resolution(pnanovdb_pipeline_params_t* params,
                                                             pnanovdb_uint32_t resolution);
 
-// ============================================================================
-// Scene Object Pipeline Operations
-// ============================================================================
-
-void pnanovdb_scene_object_set_pipeline(pnanovdb_scene_object_t* obj,
-                                        pnanovdb_pipeline_stage_t stage,
-                                        pnanovdb_pipeline_type_t type);
-pnanovdb_pipeline_type_t pnanovdb_scene_object_get_pipeline(pnanovdb_scene_object_t* obj,
-                                                            pnanovdb_pipeline_stage_t stage);
-void pnanovdb_scene_object_mark_dirty(pnanovdb_scene_object_t* obj);
-
-void* pnanovdb_scene_object_map_params(pnanovdb_scene_object_t* obj, const pnanovdb_reflect_data_type_t* param_data_type);
-void pnanovdb_scene_object_unmap_params(pnanovdb_scene_object_t* obj,
-                                        const pnanovdb_reflect_data_type_t* param_data_type);
-
-pnanovdb_uint32_t pnanovdb_scene_object_get_pipeline_stage_shader_count(pnanovdb_scene_object_t* obj,
-                                                                        pnanovdb_pipeline_stage_t stage);
-void pnanovdb_scene_object_set_pipeline_stage_shader(pnanovdb_scene_object_t* obj,
-                                                     pnanovdb_pipeline_stage_t stage,
-                                                     pnanovdb_uint32_t shader_idx,
-                                                     const char* override_shader);
-const char* pnanovdb_scene_object_get_pipeline_stage_shader(pnanovdb_scene_object_t* obj,
-                                                            pnanovdb_pipeline_stage_t stage,
-                                                            pnanovdb_uint32_t shader_idx);
-
-pnanovdb_bool_t pnanovdb_scene_object_map_shader_params(pnanovdb_scene_object_t* obj,
-                                                        pnanovdb_uint32_t shader_idx,
-                                                        pnanovdb_shader_params_desc_t* out_desc);
-void pnanovdb_scene_object_unmap_shader_params(pnanovdb_scene_object_t* obj, pnanovdb_uint32_t shader_idx);
-const pnanovdb_reflect_data_type_t* pnanovdb_scene_object_get_shader_params_type(pnanovdb_scene_object_t* obj,
-                                                                                 pnanovdb_uint32_t shader_idx);
-
 namespace pnanovdb_editor
 {
 
@@ -134,7 +102,6 @@ struct PipelineContext
 pnanovdb_pipeline_render_method_t pipeline_get_render_method(pnanovdb_pipeline_type_t render_pipeline);
 pnanovdb_pipeline_result_t pipeline_execute_process(SceneObject* obj, const PipelineContext& ctx);
 bool pipeline_needs_process(SceneObject* obj);
-void pipeline_mark_dirty(SceneObject* obj);
 void pipeline_execute_pending(EditorSceneManager* manager, const PipelineContext& ctx);
 const char* pipeline_get_shader(const SceneObject* obj);
 
