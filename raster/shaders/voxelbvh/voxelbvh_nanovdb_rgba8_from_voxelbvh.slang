@@ -5,7 +5,12 @@ struct user_state_t
     int unused;
 }
 
+#define PNANOVDB_ITERATE_WORKGROUP_THREADS 128
+#define PNANOVDB_ITERATE_WORKGROUP_COUNT 256
+
 #include "voxelbvh_nanovdb_iterate.slang"
+#include "hdda.slang"
+#include "workgroup_voxelbvh.slang"
 #include "voxelbvh_common.h"
 
 struct constants2_t
@@ -14,108 +19,6 @@ struct constants2_t
 };
 
 ConstantBuffer<constants2_t> constants2;
-
-float3 cross_product(float3 a, float3 b)
-{
-    return float3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
-}
-
-groupshared uint64_t s_range[12u];
-
-struct workgroup_voxelbvh_iterator_t
-{
-    uint active_level_count;
-    uint total_count;
-    uint pass_idx;
-    uint pass_count;
-};
-
-void workgroup_voxelbvh_iterator_init(
-    inout workgroup_voxelbvh_iterator_t iter,
-    uint thread_idx,
-    uint max_pass_count,
-    pnanovdb_grid_handle_t grid,
-    uint64_t voxel_val_raw)
-{
-    uint active_level_mask = voxelbvh_get_active_level_mask(voxel_val_raw);
-    uint first_range_idx = uint(voxelbvh_get_first_range_idx(voxel_val_raw));
-
-    iter.pass_idx = 0u;
-    iter.active_level_count = countbits(active_level_mask);
-    if (thread_idx < 12u)
-    {
-        pnanovdb_uint64_t range = {};
-        if (thread_idx < iter.active_level_count)
-        {
-            pnanovdb_address_t range_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf_scratch, grid, 0u);
-            range_addr = pnanovdb_address_offset_product(range_addr, 8u, first_range_idx);
-            range = pnanovdb_read_uint64(buf_scratch, pnanovdb_address_offset(range_addr, 8u * thread_idx));
-        }
-        s_range[thread_idx] = range;
-    }
-    GroupMemoryBarrierWithGroupSync();
-    iter.total_count = 0u;
-    for (uint active_level_idx = 0u; active_level_idx < iter.active_level_count; active_level_idx++)
-    {
-        pnanovdb_uint64_t range = s_range[active_level_idx];
-        iter.total_count += uint(range >> 32u) - uint(range);
-    }
-    iter.pass_count = (iter.total_count + 255u) / 256u;
-    if (iter.pass_count > max_pass_count)
-    {
-        iter.pass_count = max_pass_count;
-    }
-}
-
-bool workgroup_voxelbvh_iterator_get(
-    inout workgroup_voxelbvh_iterator_t iter,
-    uint thread_idx,
-    inout uint prim_id_index)
-{
-    if (iter.pass_idx >= iter.pass_count)
-    {
-        return false;
-    }
-    uint flat_prim_id_index = 256u * iter.pass_idx + thread_idx;
-    uint flat_accum = 0u;
-    prim_id_index = ~0u;
-    for (uint active_level_idx = 0u; active_level_idx < iter.active_level_count; active_level_idx++)
-    {
-        uint range_begin = uint(s_range[active_level_idx]);
-        uint range_end = uint(s_range[active_level_idx] >> 32u);
-        uint prim_id_index_cmp = range_begin + flat_prim_id_index - flat_accum;
-        if (prim_id_index_cmp < range_end)
-        {
-            prim_id_index = prim_id_index_cmp;
-            break;
-        }
-        flat_accum += (range_end - range_begin);
-    }
-    return true;
-}
-
-void workgroup_voxelbvh_iterator_step(
-    inout workgroup_voxelbvh_iterator_t iter)
-{
-    iter.pass_idx++;
-}
-
-void workgroup_voxelbvh_iterator_reset(
-    inout workgroup_voxelbvh_iterator_t iter)
-{
-    iter.pass_idx = 0u;
-}
-
-uint workgroup_voxelbvh_iterator_count_in_pass(
-    inout workgroup_voxelbvh_iterator_t iter)
-{
-    uint count = iter.total_count - 256u * iter.pass_idx;
-    if (count > 256u)
-    {
-        count = 256u;
-    }
-    return count;
-}
 
 // based on: https://iquilezles.org/articles/intersectors/
 float3 intersect_triangle( in float3 ro, in float3 rd, in float3 v0, in float3 v1, in float3 v2 )
@@ -194,7 +97,7 @@ void intersect_triangle(
     }
 }
 
-groupshared uint64_t s_voxel_val[256u];
+groupshared uint64_t s_voxel_val[PNANOVDB_ITERATE_WORKGROUP_THREADS];
 
 struct prim_t
 {
@@ -202,7 +105,7 @@ struct prim_t
     uint id_b;
     uint id_c;
 };
-groupshared prim_t s_prims[256u];
+groupshared prim_t s_prims[PNANOVDB_ITERATE_WORKGROUP_THREADS];
 
 void workgroup_triangle_process(uint thread_idx,
                                 bool this_thread_active,
@@ -217,7 +120,7 @@ void workgroup_triangle_process(uint thread_idx,
                                 inout float nominalT)
 {
     workgroup_voxelbvh_iterator_t iter = {};
-    workgroup_voxelbvh_iterator_init(iter, thread_idx, 32u, grid, voxel_val_raw);
+    workgroup_voxelbvh_iterator_init(buf_scratch, iter, thread_idx, 32u, grid, voxel_val_raw);
 
     uint prim_id_index = ~0u;
     while (workgroup_voxelbvh_iterator_get(iter, thread_idx, prim_id_index))
@@ -268,14 +171,14 @@ void workgroup_triangle_process(uint thread_idx,
     }
 }
 
-groupshared int4 s_ijkw[256u];
+groupshared int4 s_ijkw[PNANOVDB_ITERATE_WORKGROUP_THREADS];
 
-groupshared float4 s_sum[256u];
+groupshared float4 s_sum[PNANOVDB_ITERATE_WORKGROUP_THREADS];
 
 void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint level, uint n,
                   pnanovdb_coord_t ijk, inout user_state_t user_state)
 {
-    uint thread_idx = n & 255;
+    uint thread_idx = n & (PNANOVDB_ITERATE_WORKGROUP_THREADS - 1u);
 
     // assuming single grid for now
     pnanovdb_grid_handle_t grid = {};
@@ -285,7 +188,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
 
     bool this_thread_active = !pnanovdb_address_is_null(val_addr);
 
-    // Spreading load over 256 dispatches
+    // Spreading load over 128 dispatches
     this_thread_active = this_thread_active && thread_idx == constants2.pass_id;
 
     if (this_thread_active)
@@ -327,7 +230,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     GroupMemoryBarrierWithGroupSync();
 
     float4 sum = float4(0.f, 0.f, 0.f, 0.f);
-    // Spreading load over 256 dispatches
+    // Spreading load over 128 dispatches
     uint s_idx = constants2.pass_id;
     if (s_voxel_val[s_idx] != 0u)
     {
@@ -344,7 +247,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
             {
                 uvw = float3(
                     0.f,
-                    (1.f / 15.f) * (thread_idx >> 4),
+                    (1.f / 7.f) * (thread_idx >> 4),
                     (1.f / 15.f) * (thread_idx & 15));
                 worldRayDir = float3(1.f, 0.f, 0.f);
             }
@@ -352,14 +255,14 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
             {
                 uvw = float3(
                     1.f,
-                    (1.f / 15.f) * (thread_idx >> 4),
+                    (1.f / 7.f) * (thread_idx >> 4),
                     (1.f / 15.f) * (thread_idx & 15));
                 worldRayDir = float3(-1.f, 0.f, 0.f);
             }
             if (face_id == 2)
             {
                 uvw = float3(
-                    (1.f / 15.f) * (thread_idx >> 4),
+                    (1.f / 7.f) * (thread_idx >> 4),
                     0.f,
                     (1.f / 15.f) * (thread_idx & 15));
                 worldRayDir = float3(0.f, 1.f, 0.f);
@@ -367,7 +270,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
             if (face_id == 3)
             {
                 uvw = float3(
-                    (1.f / 15.f) * (thread_idx >> 4),
+                    (1.f / 7.f) * (thread_idx >> 4),
                     1.f,
                     (1.f / 15.f) * (thread_idx & 15));
                 worldRayDir = float3(0.f, -1.f, 0.f);
@@ -375,7 +278,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
             if (face_id == 4)
             {
                 uvw = float3(
-                    (1.f / 15.f) * (thread_idx >> 4),
+                    (1.f / 7.f) * (thread_idx >> 4),
                     (1.f / 15.f) * (thread_idx & 15),
                     0.f);
                 worldRayDir = float3(0.f, 0.f, 1.f);
@@ -383,7 +286,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
             if (face_id == 5)
             {
                 uvw = float3(
-                    (1.f / 15.f) * (thread_idx >> 4),
+                    (1.f / 7.f) * (thread_idx >> 4),
                     (1.f / 15.f) * (thread_idx & 15),
                     1.f);
                 worldRayDir = float3(0.f, 0.f, -1.f);
@@ -428,9 +331,9 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
             if (thread_idx < 64u)
             {
                 sum_local += s_sum[thread_idx + 64u];
-                sum_local += s_sum[thread_idx + 128u];
-                sum_local += s_sum[thread_idx + 192u];
-                sum_local *= 0.25f;
+                //sum_local += s_sum[thread_idx + 128u];
+                //sum_local += s_sum[thread_idx + 192u];
+                sum_local *= 0.5f;
             }
             GroupMemoryBarrierWithGroupSync();
             s_sum[thread_idx] = sum_local;
@@ -484,7 +387,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     }
 }
 
-[shader("compute")][numthreads(256, 1, 1)]
+[shader("compute")][numthreads(128, 1, 1)]
 void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
     user_state_t user_state = {};

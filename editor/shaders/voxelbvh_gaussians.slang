@@ -325,7 +325,7 @@ void workgroup_gaussian_process(uint thread_idx,
                                 inout float nominalT)
 {
     workgroup_voxelbvh_iterator_t iter = {};
-    workgroup_voxelbvh_iterator_init(iter, thread_idx, 32u, grid, voxel_val_raw);
+    workgroup_voxelbvh_iterator_init(buf, iter, thread_idx, 32u, grid, voxel_val_raw);
 
     for (uint layer = 0u; layer <= 16u; layer++)
     {

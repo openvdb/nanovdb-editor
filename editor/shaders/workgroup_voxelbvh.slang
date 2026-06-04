@@ -13,6 +13,7 @@ struct workgroup_voxelbvh_iterator_t
 };
 
 void workgroup_voxelbvh_iterator_init(
+    RWStructuredBuffer<uint2> iter_buf,
     inout workgroup_voxelbvh_iterator_t iter,
     uint thread_idx,
     uint max_pass_count,
@@ -29,9 +30,9 @@ void workgroup_voxelbvh_iterator_init(
         pnanovdb_uint64_t range = {};
         if (thread_idx < iter.active_level_count)
         {
-            pnanovdb_address_t range_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 0u);
+            pnanovdb_address_t range_addr = pnanovdb_grid_get_gridblindmetadata_value_address(iter_buf, grid, 0u);
             range_addr = pnanovdb_address_offset_product(range_addr, 8u, first_range_idx);
-            range = pnanovdb_read_uint64(buf, pnanovdb_address_offset(range_addr, 8u * thread_idx));
+            range = pnanovdb_read_uint64(iter_buf, pnanovdb_address_offset(range_addr, 8u * thread_idx));
         }
         s_range[thread_idx] = range;
     }
