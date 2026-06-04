@@ -39,7 +39,7 @@ struct Raster3DParams
 struct VoxelBVHBuildParams
 {
     float source_type = 0.f; // pnanovdb_pipeline_voxelbvh_source_t
-    float resolution = 511.f;
+    float resolution = 512.f;
     float inflation_radius = 0.f;
 };
 
@@ -343,7 +343,7 @@ enum class VoxelBVHBuildSource
 struct VoxelBVHBuildRequest
 {
     VoxelBVHBuildSource source = VoxelBVHBuildSource::GaussianFile;
-    pnanovdb_uint32_t resolution = 511u;
+    pnanovdb_uint32_t resolution = 512u;
     float inflation_radius = 0.f;
     std::string filepath; // only for GaussianFile
     // Triangles/Lines: array_owners/_ptrs[0]=indices, [1]=positions, [2]=colors
@@ -1272,8 +1272,8 @@ static const pnanovdb_pipeline_param_field_t s_raster3d_param_fields[] = {
 
 // Field descriptors for VoxelBVHBuildParams
 static const pnanovdb_pipeline_param_field_t s_voxelbvh_build_param_fields[] = {
-    { "Resolution", "Max BVH integer coordinate (1..4095). Higher = finer voxel grid.", PNANOVDB_REFLECT_TYPE_FLOAT,
-      offsetof(VoxelBVHBuildParams, resolution), 511.0f, 1.0f, 4095.0f, 1.0f, nullptr, 0 },
+    { "Resolution", "Max BVH integer coordinate (1..4096). Higher = finer voxel grid.", PNANOVDB_REFLECT_TYPE_FLOAT,
+      offsetof(VoxelBVHBuildParams, resolution), 512.0f, 1.0f, 4096.0f, 1.0f, nullptr, 0 },
     { "Inflation Radius", "World-space inflation applied to lines/triangles. 0 = auto for Debug/Lines renders.",
       PNANOVDB_REFLECT_TYPE_FLOAT, offsetof(VoxelBVHBuildParams, inflation_radius), 0.0f, 0.0f, 100.0f, 0.01f, nullptr,
       0 },
