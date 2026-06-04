@@ -28,7 +28,7 @@ struct Options
 {
     bool show_debug = false;
     float inflation_radius = 0.f; //!< 0 = auto for line-based renders
-    pnanovdb_uint32_t resolution = 511u; //!< 1..4095
+    pnanovdb_uint32_t resolution = 512u; //!< 1..4096
 };
 
 bool mesh(EditorScene& editor_scene,
