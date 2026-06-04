@@ -6,6 +6,7 @@ struct user_state_t
 }
 
 #include "voxelbvh_nanovdb_iterate.slang"
+#include "voxelbvh_common.h"
 
 struct merge_arg_t
 {
@@ -32,7 +33,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     uint l = merge_arg_in.level;
     int flip_mask = 1 << l;
 
-    if ((uint(val >> 16u) & 0xFFFF) == l)
+    if (voxelbvh_get_skip_level(val) == l)
     {
         bool all_match = true;
         for (uint i = 1u; i < 8; i++)
@@ -59,7 +60,13 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
         }
         if (all_match)
         {
-            val = (val & ~uint64_t(0xFFFF0000)) | uint64_t(((l + 1) & 0xFFFF) << 16u);
+            uint active_level_mask = voxelbvh_get_active_level_mask(val);
+            uint skip_level = voxelbvh_get_skip_level(val);
+            uint64_t first_range_idx = voxelbvh_get_first_range_idx(val);
+
+            skip_level = l + 1;
+
+            val = voxelbvh_make_voxel_val(active_level_mask, skip_level, first_range_idx);
         }
     }
 

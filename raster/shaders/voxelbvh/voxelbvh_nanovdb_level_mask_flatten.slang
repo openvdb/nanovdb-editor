@@ -6,6 +6,7 @@ struct user_state_t
 }
 
 #include "voxelbvh_nanovdb_iterate.slang"
+#include "voxelbvh_common.h"
 
 void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint level, uint n,
                   pnanovdb_coord_t ijk, inout user_state_t user_state)
@@ -22,7 +23,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     pnanovdb_root_handle_t root = pnanovdb_tree_get_root(buf, tree);
 
     pnanovdb_uint64_t val = pnanovdb_read_uint64(buf, val_addr);
-    if ((uint(val) & 0xFFFF) != 0u)
+    if (voxelbvh_get_active_level_mask(val) != 0u)
     {
         for (uint l = 0u; l < 12; l++)
         {

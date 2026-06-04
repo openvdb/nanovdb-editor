@@ -6,6 +6,7 @@ struct user_state_t
 };
 
 #include "voxelbvh_nanovdb_iterate.slang"
+#include "voxelbvh_common.h"
 
 RWStructuredBuffer<uint2> workgroup_counters_inout;
 
@@ -18,8 +19,8 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     if (!pnanovdb_address_is_null(val_addr))
     {
         pnanovdb_uint32_t val = pnanovdb_read_uint32(buf, val_addr);
-        uint active_lmask = val & 0xFFFF;
-        alloc_count = countbits(active_lmask);
+        uint active_level_mask = voxelbvh_get_active_level_mask(val);
+        alloc_count = countbits(active_level_mask);
     }
     user_state.element_count = user_state.element_count + alloc_count;
 }

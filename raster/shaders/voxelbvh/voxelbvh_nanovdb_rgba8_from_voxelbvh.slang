@@ -6,6 +6,7 @@ struct user_state_t
 }
 
 #include "voxelbvh_nanovdb_iterate.slang"
+#include "voxelbvh_common.h"
 
 struct constants2_t
 {
@@ -36,8 +37,8 @@ void workgroup_voxelbvh_iterator_init(
     pnanovdb_grid_handle_t grid,
     uint64_t voxel_val_raw)
 {
-    uint active_level_mask = uint(voxel_val_raw) & 0xFFFF;
-    uint list_begin_idx = uint(voxel_val_raw >> 32u);
+    uint active_level_mask = voxelbvh_get_active_level_mask(voxel_val_raw);
+    uint first_range_idx = uint(voxelbvh_get_first_range_idx(voxel_val_raw));
 
     iter.pass_idx = 0u;
     iter.active_level_count = countbits(active_level_mask);
@@ -47,7 +48,7 @@ void workgroup_voxelbvh_iterator_init(
         if (thread_idx < iter.active_level_count)
         {
             pnanovdb_address_t range_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf_scratch, grid, 0u);
-            range_addr = pnanovdb_address_offset_product(range_addr, 8u, list_begin_idx);
+            range_addr = pnanovdb_address_offset_product(range_addr, 8u, first_range_idx);
             range = pnanovdb_read_uint64(buf_scratch, pnanovdb_address_offset(range_addr, 8u * thread_idx));
         }
         s_range[thread_idx] = range;

@@ -6,6 +6,7 @@ struct user_state_t
 };
 
 #include "voxelbvh_nanovdb_iterate.slang"
+#include "voxelbvh_common.h"
 
 StructuredBuffer<uint2> workgroup_counters_inout;
 
@@ -21,8 +22,8 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     if (!pnanovdb_address_is_null(val_addr))
     {
         val = pnanovdb_read_uint64(buf, val_addr);
-        uint active_lmask = uint(val) & 0xFFFF;
-        alloc_count = countbits(active_lmask);
+        uint active_level_mask = voxelbvh_get_active_level_mask(val);
+        alloc_count = countbits(active_level_mask);
     }
 
     uint64_t4 alloc_count4 = uint64_t4(alloc_count, 0llu, 0llu, 0llu);
@@ -35,7 +36,15 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
         uint64_t val_alloc_idx = user_state.workgroup_alloc_idx + scan_alloc_count4.x - alloc_count4.x;
         // voxel value is only 32-bit for now
         uint val_alloc_idx32 = alloc_count == 0u ? 0u : uint(val_alloc_idx);
-        val = val | (uint64_t(val_alloc_idx32) << 32u);
+
+        uint active_level_mask = voxelbvh_get_active_level_mask(val);
+        uint skip_level = voxelbvh_get_skip_level(val);
+        uint64_t first_range_idx = voxelbvh_get_first_range_idx(val);
+
+        first_range_idx = val_alloc_idx32;
+
+        val = voxelbvh_make_voxel_val(active_level_mask, skip_level, first_range_idx);
+
         pnanovdb_write_uint64(buf, val_addr, val);
     }
 

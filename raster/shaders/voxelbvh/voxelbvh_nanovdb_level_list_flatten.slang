@@ -6,6 +6,7 @@ struct user_state_t
 }
 
 #include "voxelbvh_nanovdb_iterate.slang"
+#include "voxelbvh_common.h"
 
 RWStructuredBuffer<uint2> range_flat_inout;
 
@@ -24,11 +25,11 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     pnanovdb_root_handle_t root = pnanovdb_tree_get_root(buf, tree);
 
     pnanovdb_uint64_t ref_val = pnanovdb_read_uint64(buf, val_addr);
-    if (uint(ref_val & 0xFFFF) != 0)
+    if (voxelbvh_get_active_level_mask(ref_val) != 0)
     {
         for (uint l = 0u; l < 12; l++)
         {
-            if ((uint(ref_val & 0xFFFF) & (1u << l)) != 0u)
+            if ((voxelbvh_get_active_level_mask(ref_val) & (1u << l)) != 0u)
             {
                 uint lmask = ~((1u << l) - 1u);
                 pnanovdb_coord_t ijkmask = ijk & lmask;
@@ -36,8 +37,8 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
                 pnanovdb_address_t read_val_addr = pnanovdb_root_get_value_address(grid_type, buf, root, ijkmask);
                 pnanovdb_uint64_t read_val = pnanovdb_read_uint64(buf, read_val_addr);
 
-                uint ref_list_idx = uint(ref_val >> 32u) + countbits(uint(ref_val) & ~lmask);
-                uint read_list_idx = uint(read_val >> 32u) + countbits(uint(read_val) & ~lmask);
+                uint ref_list_idx = uint(voxelbvh_get_first_range_idx(ref_val)) + countbits(uint(ref_val) & ~lmask);
+                uint read_list_idx = uint(voxelbvh_get_first_range_idx(read_val)) + countbits(uint(read_val) & ~lmask);
                 if (ref_list_idx != read_list_idx)
                 {
                     range_flat_inout[ref_list_idx] = range_flat_inout[read_list_idx];
