@@ -7,6 +7,7 @@ struct user_state_t
 
 #define PNANOVDB_ITERATE_WORKGROUP_THREADS 128
 #define PNANOVDB_ITERATE_WORKGROUP_COUNT 256
+#define WORKGROUP_VOXELBVH_THREADS 128
 
 #include "voxelbvh_nanovdb_iterate.slang"
 #include "hdda.slang"

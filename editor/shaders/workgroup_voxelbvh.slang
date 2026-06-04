@@ -2,6 +2,10 @@
 
 #include "voxelbvh_common.h"
 
+#ifndef WORKGROUP_VOXELBVH_THREADS
+#define WORKGROUP_VOXELBVH_THREADS 128
+#endif
+
 groupshared uint64_t s_range[12u];
 
 struct workgroup_voxelbvh_iterator_t
@@ -43,7 +47,7 @@ void workgroup_voxelbvh_iterator_init(
         pnanovdb_uint64_t range = s_range[active_level_idx];
         iter.total_count += uint(range >> 32u) - uint(range);
     }
-    iter.pass_count = (iter.total_count + 127u) / 128u;
+    iter.pass_count = (iter.total_count + WORKGROUP_VOXELBVH_THREADS - 1u) / WORKGROUP_VOXELBVH_THREADS;
     if (iter.pass_count > max_pass_count)
     {
         iter.pass_count = max_pass_count;
@@ -59,7 +63,7 @@ bool workgroup_voxelbvh_iterator_get(
     {
         return false;
     }
-    uint flat_prim_id_index = 128u * iter.pass_idx + thread_idx;
+    uint flat_prim_id_index = WORKGROUP_VOXELBVH_THREADS * iter.pass_idx + thread_idx;
     uint flat_accum = 0u;
     prim_id_index = ~0u;
     for (uint active_level_idx = 0u; active_level_idx < iter.active_level_count; active_level_idx++)
@@ -92,10 +96,10 @@ void workgroup_voxelbvh_iterator_reset(
 uint workgroup_voxelbvh_iterator_count_in_pass(
     inout workgroup_voxelbvh_iterator_t iter)
 {
-    uint count = iter.total_count - 128u * iter.pass_idx;
-    if (count > 128u)
+    uint count = iter.total_count - WORKGROUP_VOXELBVH_THREADS * iter.pass_idx;
+    if (count > WORKGROUP_VOXELBVH_THREADS)
     {
-        count = 128u;
+        count = WORKGROUP_VOXELBVH_THREADS;
     }
     return count;
 }
