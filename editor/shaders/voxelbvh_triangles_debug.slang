@@ -338,7 +338,7 @@ void ray_debug_plane(
         pnanovdb_address_t addr = pnanovdb_readaccessor_get_value_address(grid_type, buf, acc, ijk);
         uint64_t val_raw = pnanovdb_read_uint64(buf, addr);
         uint active_level_mask = voxelbvh_get_active_level_mask(val_raw);
-        uint skip_level = uvoxelbvh_get_skip_levelint(val_raw);
+        uint skip_level = voxelbvh_get_skip_level(val_raw);
         uint first_range_idx = voxelbvh_get_first_range_idx(val_raw);
 
         uint border_level = skip_level;
