@@ -248,8 +248,8 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
             return pnanovdb_pipeline_result_skipped;
         }
 
-        const bool already_running = with_runtime(false, [](PipelineRuntime& rt) { return rt.any_worker_running(); });
-        if (already_running)
+        const bool already_busy = with_runtime(false, [](PipelineRuntime& rt) { return rt.any_worker_busy(); });
+        if (already_busy)
         {
             return pnanovdb_pipeline_result_pending;
         }
@@ -508,16 +508,14 @@ static pnanovdb_pipeline_result_t execute_gaussian_voxelize(pnanovdb_scene_objec
         init_params_t<GaussianVoxelizeParams>(&process_params);
     }
 
-    // Single in-flight async task policy (see PipelineRuntime): only one worker
-    // runs at a time. Defer while any worker is busy; when the busy worker is our
-    // own conversion, surface the re-convert hint for a changed voxels_per_unit.
+    // Only one worker runs at a time
     bool busy = false;
     bool self_running = false;
     float running_vpu = pnanovdb_editor::k_default_voxels_per_unit;
     (void)with_runtime(false,
                        [&](PipelineRuntime& rt)
                        {
-                           if (AsyncWorker* running = rt.running_worker())
+                           if (AsyncWorker* running = rt.busy_worker())
                            {
                                busy = true;
                                if (running->pipeline_type() == GaussianVoxelizeWorker::kPipelineType)
@@ -845,15 +843,14 @@ bool pipeline_load(EditorSceneManager* scene_manager,
         "pipeline_load",
         [&](PipelineRuntime& rt)
         {
-            // Single in-flight async task policy (see PipelineRuntime): refuse a
-            // new load while any worker is still running rather than letting a
-            // second worker run concurrently.
-            if (AsyncWorker* running = rt.running_worker())
+            rt.handle_completions();
+
+            if (AsyncWorker* busy = rt.busy_worker())
             {
                 Console::getInstance().addLog(Console::LogLevel::Warning,
                                               "pipeline_load: an async task (pipeline type %u) is already in flight; "
                                               "ignoring load request for pipeline type %u",
-                                              (unsigned)running->pipeline_type(), (unsigned)request.load_pipeline);
+                                              (unsigned)busy->pipeline_type(), (unsigned)request.load_pipeline);
                 return false;
             }
             for (const auto& worker : rt.workers())
@@ -878,21 +875,7 @@ bool pipeline_update(std::string& progress_text, float& progress_value)
         return false;
     }
 
-    // Drain every worker that finished this frame. Completions are independent
-    // of the single in-flight invariant -- a worker handing off its result is
-    // exactly what frees the slot for the next task -- so we always sweep all of
-    // them rather than the (at most one) running worker.
-    for (const auto& worker : rt->workers())
-    {
-        if (worker && !worker->is_running())
-        {
-            worker->handle_completion();
-        }
-    }
-
-    // Single in-flight async task invariant (see PipelineRuntime): at most one
-    // worker is ever running, so its progress fully describes the runtime's
-    // async state. Start sites enforce this; we only report it here.
+    rt->handle_completions();
     if (AsyncWorker* running = rt->running_worker())
     {
         running->get_progress(progress_text, progress_value);

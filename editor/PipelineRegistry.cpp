@@ -20,9 +20,28 @@
 // Pipeline Registry storage
 // ============================================================================
 
-static std::array<const pnanovdb_pipeline_descriptor_t*, pnanovdb_pipeline_type_count> s_pipeline_registry = {};
-static pnanovdb_uint32_t s_pipeline_count = 0;
-static std::mutex s_pipeline_registry_mutex;
+namespace
+{
+using PipelineRegistryStorage = std::array<const pnanovdb_pipeline_descriptor_t*, pnanovdb_pipeline_type_count>;
+
+PipelineRegistryStorage& registry()
+{
+    static PipelineRegistryStorage s_registry = {};
+    return s_registry;
+}
+
+std::mutex& registry_mutex()
+{
+    static std::mutex s_mutex;
+    return s_mutex;
+}
+
+pnanovdb_uint32_t& pipeline_count()
+{
+    static pnanovdb_uint32_t s_count = 0;
+    return s_count;
+}
+} // namespace
 
 void pnanovdb_pipeline_register(const pnanovdb_pipeline_descriptor_t* descriptor)
 {
@@ -30,22 +49,23 @@ void pnanovdb_pipeline_register(const pnanovdb_pipeline_descriptor_t* descriptor
     {
         return;
     }
-    std::lock_guard<std::mutex> lock(s_pipeline_registry_mutex);
-    s_pipeline_registry[descriptor->type] = descriptor;
-    s_pipeline_count = 0;
-    for (auto* d : s_pipeline_registry)
+    std::lock_guard<std::mutex> lock(registry_mutex());
+    registry()[descriptor->type] = descriptor;
+    pnanovdb_uint32_t count = 0;
+    for (auto* d : registry())
     {
         if (d)
         {
-            ++s_pipeline_count;
+            ++count;
         }
     }
+    pipeline_count() = count;
 }
 
 pnanovdb_uint32_t pnanovdb_pipeline_get_count(void)
 {
-    std::lock_guard<std::mutex> lock(s_pipeline_registry_mutex);
-    return s_pipeline_count;
+    std::lock_guard<std::mutex> lock(registry_mutex());
+    return pipeline_count();
 }
 
 // ============================================================================
@@ -68,8 +88,8 @@ const pnanovdb_pipeline_descriptor_t* pnanovdb_pipeline_get_descriptor(pnanovdb_
 {
     if (type >= pnanovdb_pipeline_type_count)
         return nullptr;
-    std::lock_guard<std::mutex> lock(s_pipeline_registry_mutex);
-    return s_pipeline_registry[type];
+    std::lock_guard<std::mutex> lock(registry_mutex());
+    return registry()[type];
 }
 
 void pnanovdb_pipeline_get_default_params(pnanovdb_pipeline_type_t type, pnanovdb_pipeline_params_t* params)

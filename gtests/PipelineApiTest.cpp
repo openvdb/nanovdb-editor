@@ -79,14 +79,14 @@ protected:
 TEST_F(PipelineApiTest, SetGetRoundTripPerStage)
 {
     editor.set_pipeline(
-        &editor, scene_token, name_token, pnanovdb_pipeline_stage_load, pnanovdb_pipeline_type_gaussian_splat);
+        &editor, scene_token, name_token, pnanovdb_pipeline_stage_load, pnanovdb_pipeline_type_gaussian_load);
     editor.set_pipeline(
         &editor, scene_token, name_token, pnanovdb_pipeline_stage_process, pnanovdb_pipeline_type_gaussian_voxelize);
     editor.set_pipeline(
         &editor, scene_token, name_token, pnanovdb_pipeline_stage_render, pnanovdb_pipeline_type_nanovdb_render);
 
     EXPECT_EQ(editor.get_pipeline(&editor, scene_token, name_token, pnanovdb_pipeline_stage_load),
-              pnanovdb_pipeline_type_gaussian_splat);
+              pnanovdb_pipeline_type_gaussian_load);
     EXPECT_EQ(editor.get_pipeline(&editor, scene_token, name_token, pnanovdb_pipeline_stage_process),
               pnanovdb_pipeline_type_gaussian_voxelize);
     EXPECT_EQ(editor.get_pipeline(&editor, scene_token, name_token, pnanovdb_pipeline_stage_render),
@@ -108,13 +108,13 @@ TEST_F(PipelineApiTest, SetPipelineOnlyDirtiesOnProcessStageChange)
     editor.set_pipeline(&editor, scene_token, name_token, pnanovdb_pipeline_stage_load, pnanovdb_pipeline_type_noop);
     const pnanovdb_bool_t before_load_change = snapshot_dirty();
     editor.set_pipeline(
-        &editor, scene_token, name_token, pnanovdb_pipeline_stage_load, pnanovdb_pipeline_type_gaussian_splat);
+        &editor, scene_token, name_token, pnanovdb_pipeline_stage_load, pnanovdb_pipeline_type_gaussian_load);
     EXPECT_EQ(snapshot_dirty(), before_load_change);
 
     editor.set_pipeline(&editor, scene_token, name_token, pnanovdb_pipeline_stage_process, pnanovdb_pipeline_type_noop);
     editor.set_pipeline(&editor, scene_token, name_token, pnanovdb_pipeline_stage_process, pnanovdb_pipeline_type_noop);
     editor.set_pipeline(
-        &editor, scene_token, name_token, pnanovdb_pipeline_stage_process, pnanovdb_pipeline_type_nanovdb_render);
+        &editor, scene_token, name_token, pnanovdb_pipeline_stage_process, pnanovdb_pipeline_type_gaussian_voxelize);
     EXPECT_EQ(snapshot_dirty(), PNANOVDB_TRUE);
 }
 
@@ -269,7 +269,7 @@ TEST(NanoVDBEditor, MarkPipelineDirtyKicksScheduler)
     EXPECT_EQ(editor.get_pipeline(&editor, scene, name, pnanovdb_pipeline_stage_process), pnanovdb_pipeline_type_noop);
     EXPECT_EQ(pnanovdb_editor_test::get_object_process_dirty(&editor, scene, name), PNANOVDB_TRUE);
 
-    editor.set_pipeline(&editor, scene, name, pnanovdb_pipeline_stage_process, pnanovdb_pipeline_type_nanovdb_render);
+    editor.set_pipeline(&editor, scene, name, pnanovdb_pipeline_stage_process, pnanovdb_pipeline_type_voxelbvh_build);
 
     bool kicked = false;
     for (int i = 0; i < 100 && !kicked; ++i)

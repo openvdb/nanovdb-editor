@@ -2101,6 +2101,30 @@ void set_pipeline(pnanovdb_editor_t* editor,
         return;
     }
 
+    if (type >= pnanovdb_pipeline_type_count)
+    {
+        Console::getInstance().addLog(
+            Console::LogLevel::Warning, "set_pipeline: pipeline type %u is out of range; ignoring", (unsigned)type);
+        return;
+    }
+    const pnanovdb_pipeline_descriptor_t* descriptor = pnanovdb_pipeline_get_descriptor(type);
+    if (!descriptor)
+    {
+        Console::getInstance().addLog(Console::LogLevel::Warning,
+                                      "set_pipeline: no descriptor registered for pipeline type %u; ignoring",
+                                      (unsigned)type);
+        return;
+    }
+    if (type != pnanovdb_pipeline_type_noop && descriptor->stage != stage)
+    {
+        Console::getInstance().addLog(Console::LogLevel::Warning,
+                                      "set_pipeline: pipeline type %u (%s) belongs to stage %u, not requested stage %u; "
+                                      "ignoring",
+                                      (unsigned)type, descriptor->name ? descriptor->name : "?",
+                                      (unsigned)descriptor->stage, (unsigned)stage);
+        return;
+    }
+
     editor->impl->scene_manager->with_object_or_create(scene, name,
                                                        [&](SceneObject* obj)
                                                        {

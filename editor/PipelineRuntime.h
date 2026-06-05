@@ -258,6 +258,12 @@ public:
         return m_worker && m_worker->isTaskCompleted(m_task_id);
     }
 
+    bool is_busy()
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_enqueued;
+    }
+
     bool get_progress(std::string& text, float& value);
 
     pnanovdb_uint32_t pending_scene_token_id();
@@ -581,6 +587,34 @@ public:
     bool any_worker_running() const
     {
         return running_worker() != nullptr;
+    }
+
+    AsyncWorker* busy_worker() const
+    {
+        for (const auto& w : m_workers)
+        {
+            if (w && w->is_busy())
+            {
+                return w.get();
+            }
+        }
+        return nullptr;
+    }
+
+    bool any_worker_busy() const
+    {
+        return busy_worker() != nullptr;
+    }
+
+    void handle_completions()
+    {
+        for (const auto& w : m_workers)
+        {
+            if (w && !w->is_running())
+            {
+                w->handle_completion();
+            }
+        }
     }
 
 private:
