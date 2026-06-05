@@ -433,6 +433,8 @@ static pnanovdb_pipeline_result_t execute_gaussian_voxelize(pnanovdb_scene_objec
         Console::getInstance().addLog(
             Console::LogLevel::Debug, "execute_gaussian_voxelize: early exit (scene_obj=%p, source_filepath='%s')",
             (void*)scene_obj, scene_obj ? scene_obj->resources.source_filepath.c_str() : "<null>");
+        if (scene_obj)
+            scene_obj->process_dirty() = false;
         return pnanovdb_pipeline_result_no_data;
     }
 
@@ -442,6 +444,8 @@ static pnanovdb_pipeline_result_t execute_gaussian_voxelize(pnanovdb_scene_objec
     {
         Console::getInstance().addLog(
             Console::LogLevel::Error, "Gaussian voxelize processing failed: missing scene_manager");
+        // Terminal condition: clear dirty so we don't retry every frame.
+        scene_obj->process_dirty() = false;
         return pnanovdb_pipeline_result_error;
     }
 
@@ -902,6 +906,9 @@ PNANOVDB_DEFINE_PIPELINE_SHADERS(s_nanovdb_render_shaders,
 PNANOVDB_DEFINE_PIPELINE_SHADERS(s_nanovdb_surface_shaders,
                                  PNANOVDB_PIPELINE_SHADER("editor/editor_surface.slang", nullptr, PNANOVDB_TRUE));
 
+PNANOVDB_DEFINE_PIPELINE_SHADERS(s_image2d_render_shaders,
+                                 PNANOVDB_PIPELINE_SHADER("editor/image2d.slang", nullptr, PNANOVDB_TRUE));
+
 PNANOVDB_DEFINE_PIPELINE_SHADERS(s_gaussian_splat_shaders,
                                  PNANOVDB_PIPELINE_SHADER("raster/gaussian_rasterize_2d.slang",
                                                           "raster/raster2d_group",
@@ -942,6 +949,12 @@ PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_nanovdb_surface_descriptor,
                                           pnanovdb_pipeline_type_nanovdb_surface,
                                           "NanoVDB Surface (SDF)",
                                           s_nanovdb_surface_shaders);
+
+// Blits a NanoVDB image grid (RGBA stored as blind metadata) to a 2D texture.
+PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_image2d_render_descriptor,
+                                          pnanovdb_pipeline_type_image2d_render,
+                                          "Image 2D",
+                                          s_image2d_render_shaders);
 
 PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_voxelbvh_gaussians_render_descriptor,
                                           pnanovdb_pipeline_type_voxelbvh_gaussians_render,

@@ -242,6 +242,14 @@ bool GaussianVoxelizeWorker::start(SceneObject* scene_obj,
         return false;
     }
 
+    pnanovdb_compute_queue_t* worker_queue = ctx->compute_queue ? ctx->compute_queue : ctx->queue;
+    if (!worker_queue)
+    {
+        Console::getInstance().addLog(
+            Console::LogLevel::Error, "start_conversion: no compute queue available for re-conversion");
+        return false;
+    }
+
     if (!m_worker || m_worker->hasRunningTask())
     {
         Console::getInstance().addLog("Warning: Conversion already in progress, skipping");
@@ -274,7 +282,7 @@ bool GaussianVoxelizeWorker::start(SceneObject* scene_obj,
                                        nullptr, // profiler
                                        (void*)m_worker.get());
         },
-        const_cast<pnanovdb_raster_t*>(ctx->raster), ctx->compute, ctx->compute_queue, m_pending_filepath.c_str(),
+        const_cast<pnanovdb_raster_t*>(ctx->raster), ctx->compute, worker_queue, m_pending_filepath.c_str(),
         &m_pending_nanovdb_array, m_shader_params.arrays(), m_shader_params.params());
 
     Console::getInstance().addLog("Starting re-conversion from '%s' (voxels_per_unit=%.1f, voxel_size=%.6f)...",

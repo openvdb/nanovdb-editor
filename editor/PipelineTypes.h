@@ -26,6 +26,7 @@ enum pnanovdb_pipeline_type_enum_t
     pnanovdb_pipeline_type_mesh_load = 10, // load: read a PLY into compute arrays
     pnanovdb_pipeline_type_gaussian_load = 11, // load: import a Gaussian file into gaussian_data
     pnanovdb_pipeline_type_nanovdb_surface = 12, // render: SDF/level-set isosurface via HDDA zero-crossing
+    pnanovdb_pipeline_type_image2d_render = 13, // render: NanoVDB image grid (blind-metadata RGBA) to a 2D texture
     pnanovdb_pipeline_type_count
 };
 
