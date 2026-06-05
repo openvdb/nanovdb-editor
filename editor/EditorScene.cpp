@@ -76,11 +76,12 @@ EditorScene::EditorScene(const EditorSceneConfig& config)
     // Initialize raster shader params arrays with defaults
     {
         m_raster_shader_params_data_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t);
-        m_gaussian_params.shader_name = pnanovdb_editor::s_raster2d_shader_group;
+        const char* gaussian_shader_group = pnanovdb_pipeline_get_shader_group(pnanovdb_pipeline_type_gaussian_splat);
+        m_gaussian_params.shader_name = gaussian_shader_group;
         m_gaussian_params.size = m_raster_shader_params_data_type->element_size;
         m_gaussian_params.default_array = m_scene_manager.create_initialized_shader_params(
-            m_compute, nullptr, pnanovdb_editor::s_raster2d_shader_group,
-            m_raster_shader_params_data_type->element_size, m_raster_shader_params_data_type);
+            m_compute, nullptr, gaussian_shader_group, m_raster_shader_params_data_type->element_size,
+            m_raster_shader_params_data_type);
     }
 
     // Setup shader monitoring
@@ -740,8 +741,8 @@ void EditorScene::reload_shader_params_for_current_view(pnanovdb_pipeline_render
     {
         destroy_default_array(m_gaussian_params);
         m_gaussian_params.default_array = m_scene_manager.create_initialized_shader_params(
-            m_compute, nullptr, pnanovdb_editor::s_raster2d_shader_group, m_gaussian_params.size,
-            m_raster_shader_params_data_type);
+            m_compute, nullptr, pnanovdb_pipeline_get_shader_group(pnanovdb_pipeline_type_gaussian_splat),
+            m_gaussian_params.size, m_raster_shader_params_data_type);
     }
     else if (render_method == pnanovdb_pipeline_render_method_nanovdb)
     {
@@ -1134,8 +1135,8 @@ void EditorScene::handle_gaussian_data_load(pnanovdb_editor_token_t* scene,
     std::shared_ptr<pnanovdb_raster_gaussian_data_t> old_owner;
     m_scene_manager.add_gaussian_data(scene_token, name_token, gaussian_data, params_array,
                                       m_raster_shader_params_data_type, m_compute, m_editor->impl->raster,
-                                      m_device_queue, pnanovdb_editor::s_gaussian_splat_shader, process_pipeline,
-                                      render_pipeline, &old_owner);
+                                      m_device_queue, pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat),
+                                      process_pipeline, render_pipeline, &old_owner);
 
     // Store source filepath and copy process params for re-conversion
     m_scene_manager.with_object(scene_token, name_token,
@@ -1631,7 +1632,7 @@ void EditorScene::clear_selection()
     m_render_view_selection = SceneSelection();
     // Clear displayed data and reset shader_name to default when no object is selected
     clear_editor_view_state();
-    m_editor->impl->shader_name = s_default_editor_shader;
+    m_editor->impl->shader_name = pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_nanovdb_render);
 }
 
 void EditorScene::set_properties_selection(ViewType type,
@@ -1923,11 +1924,6 @@ bool EditorScene::load_mesh_file(pnanovdb_editor_token_t* scene,
                                  const char* filepath,
                                  const pnanovdb_editor::mesh_import::Options& options)
 {
-    // The async load worker uses the EditorScene captured at pipeline_init
-    // time (see MeshLoadWorker::init in PipelineRuntime.cpp), so we do not
-    // forward *this through the import call. We continue to gate on the
-    // editor having been initialized via m_compute -- the file-format
-    // module needs it to allocate the position/index/color compute arrays.
     return mesh_import::mesh(m_compute, scene, filepath, options);
 }
 

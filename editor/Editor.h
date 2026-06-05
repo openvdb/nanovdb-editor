@@ -13,6 +13,7 @@
 #include "nanovdb_editor/putil/Editor.h"
 #include "nanovdb_editor/putil/VoxelBVH.h"
 #include "PipelineTypes.h"
+#include "PipelineRegistry.h"
 
 #include <thread>
 #include <atomic>
@@ -31,11 +32,6 @@ class Renderer;
 class EditorScene;
 class ParamMapRegistry;
 class PipelineRuntime;
-
-// Shader constants
-constexpr const char* s_default_editor_shader = "editor/editor.slang";
-constexpr const char* s_raster2d_shader_group = "raster/raster2d_group";
-constexpr const char* s_gaussian_splat_shader = "raster/gaussian_rasterize_2d.slang";
 }
 
 // Thread Synchronization Model
@@ -72,7 +68,7 @@ struct pnanovdb_editor_impl_t
     pnanovdb_raster_context_t* raster_ctx;
     pnanovdb_voxelbvh_t* voxelbvh;
     pnanovdb_voxelbvh_context_t* voxelbvh_ctx;
-    std::string shader_name = pnanovdb_editor::s_default_editor_shader;
+    std::string shader_name = pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_nanovdb_render);
     void* shader_params;
     const pnanovdb_reflect_data_type_t* shader_params_data_type;
 

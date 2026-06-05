@@ -9,7 +9,7 @@
 #include <nanovdb_editor/putil/Compute.h>
 #include <nanovdb_editor/putil/Editor.h>
 
-#include "editor/Editor.h" // pnanovdb_editor_impl_t, s_default_editor_shader
+#include "editor/Editor.h" // pnanovdb_editor_impl_t
 #include "editor/EditorSceneManager.h"
 #include "EditorTestSupport.h"
 
@@ -27,6 +27,11 @@ constexpr const char* kAltShaderName = "editor/image2d.slang";
 // Absolute file path components for direct invocation of the Slang compiler.
 constexpr const char* kAltShaderFile = "editor/shaders/image2d.slang";
 constexpr const char* kDefaultShaderFile = "editor/shaders/editor.slang";
+
+inline const char* default_editor_shader()
+{
+    return pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_nanovdb_render);
+}
 
 class ShaderNameSwapResetsParamsTest : public ::testing::Test
 {
@@ -106,10 +111,9 @@ protected:
         // first means the pool entries are populated from JSON (not from any
         // later object buffer) so these captures are the canonical defaults.
         alt_defaults = captureDefaults(kAltShaderName);
-        editor_defaults = captureDefaults(pnanovdb_editor::s_default_editor_shader);
+        editor_defaults = captureDefaults(default_editor_shader());
         ASSERT_FALSE(alt_defaults.empty()) << "Could not load JSON defaults for " << kAltShaderName;
-        ASSERT_FALSE(editor_defaults.empty())
-            << "Could not load JSON defaults for " << pnanovdb_editor::s_default_editor_shader;
+        ASSERT_FALSE(editor_defaults.empty()) << "Could not load JSON defaults for " << default_editor_shader();
         ASSERT_EQ(alt_defaults.size(), editor_defaults.size()) << "Both shaders allocate the 64KB constant buffer";
 
         // The two shaders' default buffers must differ; otherwise the test
@@ -126,7 +130,7 @@ protected:
         owned_array = compute.create_array(sizeof(uint8_t), bytes.size(), bytes.data());
         ASSERT_NE(owned_array, nullptr);
 
-        // add_nanovdb_2() uses editor->impl->shader_name (s_default_editor_shader)
+        // add_nanovdb_2() uses editor->impl->shader_name (the default editor shader)
         // and creates the per-object params buffer pre-populated with its
         // JSON defaults.
         editor.add_nanovdb_2(&editor, scene_token, name_token, owned_array);
@@ -221,7 +225,7 @@ TEST_F(ShaderNameSwapResetsParamsTest, ReassigningSameShaderNamePreservesUserByt
         static_cast<pnanovdb_editor_shader_name_t*>(editor.map_params(&editor, scene_token, name_token, name_type));
     ASSERT_NE(mapped, nullptr);
     // Re-assign the same shader name (no actual change).
-    mapped->shader_name = editor.get_token(pnanovdb_editor::s_default_editor_shader);
+    mapped->shader_name = editor.get_token(default_editor_shader());
     editor.unmap_params(&editor, scene_token, name_token);
 
     const auto buf = snapshotObjectBuffer();

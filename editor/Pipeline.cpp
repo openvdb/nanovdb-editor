@@ -541,38 +541,6 @@ static pnanovdb_pipeline_render_method_t get_render_method_gaussian(void)
 {
     return pnanovdb_pipeline_render_method_gaussian;
 }
-// ============================================================================
-// Built-in Pipeline Definitions
-// ============================================================================
-
-PNANOVDB_DEFINE_PIPELINE_SHADERS(s_nanovdb_render_shaders,
-                                 PNANOVDB_PIPELINE_SHADER("editor/editor.slang", nullptr, PNANOVDB_TRUE));
-
-PNANOVDB_DEFINE_PIPELINE_SHADERS(s_nanovdb_surface_shaders,
-                                 PNANOVDB_PIPELINE_SHADER("editor/editor_surface.slang", nullptr, PNANOVDB_TRUE));
-
-PNANOVDB_DEFINE_PIPELINE_SHADERS(s_gaussian_splat_shaders,
-                                 PNANOVDB_PIPELINE_SHADER("raster/gaussian_rasterize_2d.slang",
-                                                          "raster/raster2d_group",
-                                                          PNANOVDB_FALSE));
-
-PNANOVDB_DEFINE_PIPELINE_SHADERS(s_gaussian_voxelize_shaders,
-                                 PNANOVDB_PIPELINE_SHADER("raster/gaussian_frag_color.slang", nullptr, PNANOVDB_TRUE));
-
-PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_gaussians_shaders,
-                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_gaussians.slang", nullptr, PNANOVDB_TRUE));
-
-PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_lines_render_shaders,
-                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_lines.slang", nullptr, PNANOVDB_TRUE));
-
-PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_triangles_render_shaders,
-                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_triangles.slang", nullptr, PNANOVDB_TRUE));
-
-PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_triangles_debug_render_shaders,
-                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_triangles_debug.slang", nullptr, PNANOVDB_TRUE));
-
-PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_debug_render_shaders,
-                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_debug.slang", nullptr, PNANOVDB_TRUE));
 
 // Field descriptors for GaussianVoxelizeParams (voxels_per_unit)
 static const pnanovdb_pipeline_param_field_t s_gaussian_voxelize_param_fields[] = {
@@ -923,6 +891,39 @@ bool pipeline_create_variant(EditorSceneManager* scene_manager,
     PNANOVDB_REGISTER_RENDER_PIPELINE(var, (type_), (name_), (shaders_), 1,                                            \
                                       PNANOVDB_PIPELINE_PARAMS(NanoVDBRenderParams), execute_nanovdb_render,           \
                                       get_render_method_nanovdb, map_params<&SceneObject::render_params>)
+
+// ============================================================================
+// Pipeline shader definitions
+// ============================================================================
+
+PNANOVDB_DEFINE_PIPELINE_SHADERS(s_nanovdb_render_shaders,
+                                 PNANOVDB_PIPELINE_SHADER("editor/editor.slang", nullptr, PNANOVDB_TRUE));
+
+PNANOVDB_DEFINE_PIPELINE_SHADERS(s_nanovdb_surface_shaders,
+                                 PNANOVDB_PIPELINE_SHADER("editor/editor_surface.slang", nullptr, PNANOVDB_TRUE));
+
+PNANOVDB_DEFINE_PIPELINE_SHADERS(s_gaussian_splat_shaders,
+                                 PNANOVDB_PIPELINE_SHADER("raster/gaussian_rasterize_2d.slang",
+                                                          "raster/raster2d_group",
+                                                          PNANOVDB_FALSE));
+
+PNANOVDB_DEFINE_PIPELINE_SHADERS(s_gaussian_voxelize_shaders,
+                                 PNANOVDB_PIPELINE_SHADER("raster/gaussian_frag_color.slang", nullptr, PNANOVDB_TRUE));
+
+PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_gaussians_shaders,
+                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_gaussians.slang", nullptr, PNANOVDB_TRUE));
+
+PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_lines_render_shaders,
+                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_lines.slang", nullptr, PNANOVDB_TRUE));
+
+PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_triangles_render_shaders,
+                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_triangles.slang", nullptr, PNANOVDB_TRUE));
+
+PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_triangles_debug_render_shaders,
+                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_triangles_debug.slang", nullptr, PNANOVDB_TRUE));
+
+PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_debug_render_shaders,
+                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_debug.slang", nullptr, PNANOVDB_TRUE));
 
 // ============================================================================
 // Self-registering pipeline descriptors

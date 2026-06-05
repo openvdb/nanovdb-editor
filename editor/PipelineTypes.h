@@ -13,10 +13,10 @@
 
 enum pnanovdb_pipeline_type_enum_t
 {
-    pnanovdb_pipeline_type_noop = 0, // no-op load stage (data added directly, no import)
+    pnanovdb_pipeline_type_noop = 0, // no-op load stage
     pnanovdb_pipeline_type_nanovdb_render = 1, // render: ray-march a NanoVDB grid
     pnanovdb_pipeline_type_gaussian_splat = 2, // render: 2D Gaussian splatting
-    pnanovdb_pipeline_type_gaussian_voxelize = 3, // process: Gaussians -> NanoVDB
+    pnanovdb_pipeline_type_gaussian_voxelize = 3, // process: Gaussians to NanoVDB
     pnanovdb_pipeline_type_voxelbvh_gaussians_render = 4, // render: VoxelBVH built from gaussians
     pnanovdb_pipeline_type_voxelbvh_lines_render = 5, // render: VoxelBVH as lines
     pnanovdb_pipeline_type_voxelbvh_triangles_render = 6, // render: VoxelBVH as triangles
@@ -24,7 +24,7 @@ enum pnanovdb_pipeline_type_enum_t
     pnanovdb_pipeline_type_voxelbvh_debug_render = 8, // render: VoxelBVH, debug shading
     pnanovdb_pipeline_type_voxelbvh_build = 9, // process: build a VoxelBVH (from mesh/gaussians)
     pnanovdb_pipeline_type_mesh_load = 10, // load: read a PLY into compute arrays
-    pnanovdb_pipeline_type_gaussian_load = 11, // load: import a Gaussian file -> data rendered by gaussian_splat
+    pnanovdb_pipeline_type_gaussian_load = 11, // load: import a Gaussian file into gaussian_data
     pnanovdb_pipeline_type_nanovdb_surface = 12, // render: SDF/level-set isosurface via HDDA zero-crossing
     pnanovdb_pipeline_type_count
 };
