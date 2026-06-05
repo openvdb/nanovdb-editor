@@ -127,13 +127,25 @@ public:
     float getTaskProgress(const TaskId& taskId)
     {
         std::unique_lock<std::mutex> lock(m_mutex);
-        return m_taskProgres;
+        if (m_completedTasks.find(taskId) != m_completedTasks.end())
+        {
+            return 1.0f;
+        }
+        if (taskId != invalidTaskId() && m_currentTaskId == taskId)
+        {
+            return m_taskProgres;
+        }
+        return 0.0f;
     }
 
     std::string getTaskProgressText(const TaskId& taskId)
     {
         std::unique_lock<std::mutex> lock(m_mutex);
-        return m_taskProgresText;
+        if (taskId != invalidTaskId() && m_currentTaskId == taskId)
+        {
+            return m_taskProgresText;
+        }
+        return std::string();
     }
 
     void updateTaskProgress(float progress = 0.f, std::string text = "")

@@ -289,6 +289,19 @@ void EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
     add_nanovdb_impl(scene, name, array, params_array, compute, shader_name, process_pipeline, render_pipeline);
 }
 
+namespace
+{
+void apply_default_stage(PipelineStage& slot, pnanovdb_pipeline_type_t type)
+{
+    if (slot.configured)
+    {
+        return;
+    }
+    slot.type = type;
+    pnanovdb_pipeline_get_default_params(type, &slot.params);
+}
+} // namespace
+
 void EditorSceneManager::add_nanovdb_impl(pnanovdb_editor_token_t* scene,
                                           pnanovdb_editor_token_t* name,
                                           pnanovdb_compute_array_t* array,
@@ -330,12 +343,9 @@ void EditorSceneManager::add_nanovdb_impl(pnanovdb_editor_token_t* scene,
     obj.ensure_shader_name_storage().object_key = key;
     obj.shader_name() = shader_name;
 
-    // Set pipelines (using provided values, not hardcoded defaults)
-    obj.process_pipeline() = process_pipeline;
-    obj.render_pipeline() = render_pipeline;
+    apply_default_stage(obj.pipeline.process(), process_pipeline);
+    apply_default_stage(obj.pipeline.render(), render_pipeline);
     obj.process_dirty() = true;
-    pnanovdb_pipeline_get_default_params(obj.process_pipeline(), &obj.process_params());
-    pnanovdb_pipeline_get_default_params(obj.render_pipeline(), &obj.render_params());
 
     if (object_exists)
     {
@@ -462,10 +472,11 @@ void EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,
                                            const char* shader_name,
                                            std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_owner_out)
 {
-    // Use default pipelines for Gaussian data: raster2d (no process, 2D splatting)
+    // Use default pipelines for Gaussian data: gaussian_splat (no process, 2D splatting)
     std::lock_guard<std::mutex> lock(m_mutex);
     add_gaussian_data_impl(scene, name, gaussian_data, params_array, shader_params_data_type, compute, raster, queue,
-                           shader_name, pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_raster2d, old_owner_out);
+                           shader_name, pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_gaussian_splat,
+                           old_owner_out);
 }
 
 void EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,
@@ -538,12 +549,9 @@ void EditorSceneManager::add_gaussian_data_impl(pnanovdb_editor_token_t* scene,
     obj.ensure_shader_name_storage().object_key = key;
     obj.shader_name() = EditorToken::getInstance().getToken(shader_name);
 
-    // Set pipelines (using provided values, not hardcoded defaults)
-    obj.process_pipeline() = process_pipeline;
-    obj.render_pipeline() = render_pipeline;
+    apply_default_stage(obj.pipeline.process(), process_pipeline);
+    apply_default_stage(obj.pipeline.render(), render_pipeline);
     obj.process_dirty() = true;
-    pnanovdb_pipeline_get_default_params(obj.process_pipeline(), &obj.process_params());
-    pnanovdb_pipeline_get_default_params(obj.render_pipeline(), &obj.render_params());
 
     if (object_exists)
         obj.visible = old_visible;
@@ -752,13 +760,11 @@ void configure_array_object_pipelines(SceneObject& obj,
 
     obj.ensure_shader_name_storage().object_key = key;
 
-    obj.process_pipeline() = process_pipeline;
-    obj.render_pipeline() = render_pipeline;
-    pnanovdb_pipeline_get_default_params(obj.process_pipeline(), &obj.process_params());
-    pnanovdb_pipeline_get_default_params(obj.render_pipeline(), &obj.render_params());
+    apply_default_stage(obj.pipeline.process(), process_pipeline);
+    apply_default_stage(obj.pipeline.render(), render_pipeline);
     obj.process_dirty() = true;
 
-    const pnanovdb_pipeline_descriptor_t* render_desc = pnanovdb_pipeline_get_descriptor(render_pipeline);
+    const pnanovdb_pipeline_descriptor_t* render_desc = pnanovdb_pipeline_get_descriptor(obj.render_pipeline());
     const char* render_shader_name = (render_desc && render_desc->shader_count > 0u && render_desc->shaders) ?
                                          render_desc->shaders[0].shader_name :
                                          nullptr;

@@ -886,7 +886,7 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                                         itemViewType = ViewType::NanoVDBs;
                                         badge = "N";
                                     }
-                                    else if (rm == pnanovdb_pipeline_render_method_raster2d)
+                                    else if (rm == pnanovdb_pipeline_render_method_gaussian)
                                     {
                                         itemViewType = ViewType::GaussianScenes;
                                         badge = "G";

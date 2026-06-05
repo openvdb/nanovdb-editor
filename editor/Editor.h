@@ -13,6 +13,7 @@
 #include "nanovdb_editor/putil/Editor.h"
 #include "nanovdb_editor/putil/VoxelBVH.h"
 #include "PipelineTypes.h"
+#include "PipelineRegistry.h"
 
 #include <thread>
 #include <atomic>
@@ -30,16 +31,12 @@ class SceneView;
 class Renderer;
 class EditorScene;
 class ParamMapRegistry;
-
-// Shader constants
-constexpr const char* s_default_editor_shader = "editor/editor.slang";
-constexpr const char* s_raster2d_shader_group = "raster/raster2d_group";
-constexpr const char* s_raster2d_gaussian_shader = "raster/gaussian_rasterize_2d.slang";
+class PipelineRuntime;
 }
 
 // Thread Synchronization Model
 // ----------------------------
-// Worker Thread              Render Thread
+// External Caller            Render Thread
 // ━━━━━━━━━━━━━              ━━━━━━━━━━━━━
 // add_xyz()                  show() render loop
 //   └─ scene_manager (mutex)   ├─ scen_views (no mutex, render thread only)
@@ -54,6 +51,7 @@ struct pnanovdb_editor_impl_t
     pnanovdb_editor::Renderer* renderer;
     pnanovdb_editor::EditorScene* editor_scene;
     pnanovdb_editor::ParamMapRegistry* param_map_registry;
+    std::unique_ptr<pnanovdb_editor::PipelineRuntime> pipeline_runtime;
 
     // Currently used by the render thread in show()
     const pnanovdb_compiler_t* compiler;
@@ -70,7 +68,7 @@ struct pnanovdb_editor_impl_t
     pnanovdb_raster_context_t* raster_ctx;
     pnanovdb_voxelbvh_t* voxelbvh;
     pnanovdb_voxelbvh_context_t* voxelbvh_ctx;
-    std::string shader_name = pnanovdb_editor::s_default_editor_shader;
+    std::string shader_name = pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_nanovdb_render);
     void* shader_params;
     const pnanovdb_reflect_data_type_t* shader_params_data_type;
 
@@ -214,12 +212,6 @@ static inline pnanovdb_bool_t pnanovdb_editor_token_is_valid(const pnanovdb_edit
 {
     return token ? PNANOVDB_TRUE : PNANOVDB_FALSE;
 }
-// -----------------------------------------------------------
-
-// ------------------------------------------------ Shader Parameter Provider Priorities
-constexpr uint32_t kShaderParamPriorityDefaults = 0; // Shader JSON defaults (lowest)
-constexpr uint32_t kShaderParamPriorityValues = 100; // Scene object values
-constexpr uint32_t kShaderParamPriorityPanel = 200; // Properties panel overrides (highest)
 // -----------------------------------------------------------
 
 // Forward declaration for execute_removal function

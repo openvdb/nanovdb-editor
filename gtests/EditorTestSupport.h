@@ -46,6 +46,30 @@ void* get_object_shader_params_ptr(pnanovdb_editor_t* editor,
                                    pnanovdb_editor_token_t* scene,
                                    pnanovdb_editor_token_t* name);
 
+pnanovdb_bool_t get_object_process_dirty(pnanovdb_editor_t* editor,
+                                         pnanovdb_editor_token_t* scene,
+                                         pnanovdb_editor_token_t* name);
+
+size_t get_object_pipeline_params_size(pnanovdb_editor_t* editor,
+                                       pnanovdb_editor_token_t* scene,
+                                       pnanovdb_editor_token_t* name,
+                                       pnanovdb_pipeline_stage_t stage);
+
+const void* get_object_pipeline_params_data(pnanovdb_editor_t* editor,
+                                            pnanovdb_editor_token_t* scene,
+                                            pnanovdb_editor_token_t* name,
+                                            pnanovdb_pipeline_stage_t stage);
+
+size_t get_object_pipeline_shader_override_count(pnanovdb_editor_t* editor,
+                                                 pnanovdb_editor_token_t* scene,
+                                                 pnanovdb_editor_token_t* name,
+                                                 pnanovdb_pipeline_stage_t stage);
+
+pnanovdb_bool_t append_blank_shader_override(pnanovdb_editor_t* editor,
+                                             pnanovdb_editor_token_t* scene,
+                                             pnanovdb_editor_token_t* name,
+                                             pnanovdb_pipeline_stage_t stage);
+
 } // namespace pnanovdb_editor_test
 
 #endif

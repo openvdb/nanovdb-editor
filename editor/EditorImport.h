@@ -28,11 +28,10 @@ struct Options
 {
     bool show_debug = false;
     float inflation_radius = 0.f; //!< 0 = auto for line-based renders
-    pnanovdb_uint32_t resolution = 512u; //!< 1..4096
+    pnanovdb_uint32_t resolution = k_default_bvh_resolution; //!< 1..k_max_bvh_resolution
 };
 
-bool mesh(EditorScene& editor_scene,
-          const pnanovdb_compute_t* compute,
+bool mesh(const pnanovdb_compute_t* compute,
           pnanovdb_editor_token_t* scene,
           const char* filepath,
           const Options& options = {});
@@ -54,8 +53,8 @@ namespace gaussian_import
 {
 enum class Mode : int
 {
-    Raster2D = 0,
-    Raster3D = 1,
+    Splat = 0,
+    Voxelize = 1,
     VoxelBVH = 2,
 };
 

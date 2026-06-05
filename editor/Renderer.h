@@ -42,31 +42,6 @@ enum class ShaderDispatchResult
 };
 
 /*!
-    \brief Render type for scene objects
-
-    Each object can specify how it should be rendered.
-*/
-enum class RenderType
-{
-    None, ///< Not renderable
-    NanoVDB, ///< Volume rendering using compute shader
-    Raster2D, ///< 2D rasterization (e.g., Gaussian splatting)
-};
-
-// Forward declaration
-enum class SceneObjectType;
-
-/*!
-    \brief Convert SceneObjectType to RenderType
-
-    Maps scene object types to their corresponding render types.
-
-    \param type The scene object type
-    \return The corresponding render type
-*/
-RenderType get_render_type_from_scene_object_type(SceneObjectType type);
-
-/*!
     \brief Configuration for the Renderer
 */
 struct RendererConfig
@@ -81,9 +56,6 @@ struct RendererConfig
 
 /*!
     \brief Manages rendering for different object types
-
-    The Renderer class abstracts away the rendering logic from the main editor loop.
-    It handles both NanoVDB volume rendering and 2D rasterization based on the object's RenderType.
 */
 class Renderer
 {

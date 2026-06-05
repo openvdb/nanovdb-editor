@@ -7,7 +7,7 @@
 #include <nanovdb_editor/putil/Compute.h>
 #include <nanovdb_editor/putil/Editor.h>
 
-#include "editor/Editor.h" // pnanovdb_editor_impl_t, s_default_editor_shader
+#include "editor/Editor.h" // pnanovdb_editor_impl_t
 #include "editor/EditorSceneManager.h"
 #include "EditorTestSupport.h"
 
@@ -21,6 +21,11 @@ namespace
 {
 
 constexpr const char* kDefaultShaderFile = "editor/shaders/editor.slang";
+
+inline const char* default_editor_shader()
+{
+    return pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_nanovdb_render);
+}
 
 class ShaderParamsResetToDefaultsTest : public ::testing::Test
 {
@@ -109,9 +114,9 @@ protected:
         // Capture the pool *before* any object exists so we record the actual
         // JSON defaults (capture_shader_default_params returns live pool
         // state, which equals defaults only on a fresh pool).
-        editor_defaults = capturePoolBytes(pnanovdb_editor::s_default_editor_shader);
+        editor_defaults = capturePoolBytes(default_editor_shader());
         ASSERT_FALSE(editor_defaults.empty())
-            << "Could not load JSON defaults for " << pnanovdb_editor::s_default_editor_shader;
+            << "Could not load JSON defaults for " << default_editor_shader();
 
         scene_token = editor.get_token("reset_defaults_scene");
         name_a = editor.get_token("reset_defaults_object_a");
@@ -126,7 +131,7 @@ protected:
         ASSERT_NE(owned_array_a, nullptr);
         ASSERT_NE(owned_array_b, nullptr);
 
-        // Both objects use s_default_editor_shader; refresh_params_for_shader
+        // Both objects use the default editor shader; refresh_params_for_shader
         // should hit them both.
         editor.add_nanovdb_2(&editor, scene_token, name_a, owned_array_a);
         editor.add_nanovdb_2(&editor, scene_token, name_b, owned_array_b);
@@ -162,7 +167,7 @@ protected:
 // Sanity: capturePoolBytes on a fresh-load pool returns the JSON defaults.
 TEST_F(ShaderParamsResetToDefaultsTest, FreshPoolMatchesJsonDefaults)
 {
-    const auto snap = capturePoolBytes(pnanovdb_editor::s_default_editor_shader);
+    const auto snap = capturePoolBytes(default_editor_shader());
     ASSERT_EQ(snap.size(), editor_defaults.size());
     EXPECT_EQ(std::memcmp(snap.data(), editor_defaults.data(), snap.size()), 0)
         << "Adding objects should not have mutated the pool away from JSON defaults";
@@ -173,17 +178,17 @@ TEST_F(ShaderParamsResetToDefaultsTest, FreshPoolMatchesJsonDefaults)
 // produces the right answer.
 TEST_F(ShaderParamsResetToDefaultsTest, ResetRestoresPoolToJsonDefaults)
 {
-    stampPoolWithPattern(pnanovdb_editor::s_default_editor_shader, 0x55);
+    stampPoolWithPattern(default_editor_shader(), 0x55);
 
-    auto stamped = capturePoolBytes(pnanovdb_editor::s_default_editor_shader);
+    auto stamped = capturePoolBytes(default_editor_shader());
     ASSERT_EQ(stamped.size(), editor_defaults.size());
     ASSERT_NE(std::memcmp(stamped.data(), editor_defaults.data(), stamped.size()), 0)
         << "Precondition: stamped pool should differ from defaults";
 
     ASSERT_TRUE(editor.impl->scene_manager->reset_shader_params_to_defaults(
-        &compute, pnanovdb_editor::s_default_editor_shader));
+        &compute, default_editor_shader()));
 
-    const auto after = capturePoolBytes(pnanovdb_editor::s_default_editor_shader);
+    const auto after = capturePoolBytes(default_editor_shader());
     ASSERT_EQ(after.size(), editor_defaults.size());
     EXPECT_EQ(std::memcmp(after.data(), editor_defaults.data(), after.size()), 0)
         << "Pool was not restored to JSON defaults after reset_shader_params_to_defaults";
@@ -217,10 +222,10 @@ TEST_F(ShaderParamsResetToDefaultsTest, ResetRefreshesPerObjectBuffersOfAllObjec
     // until the proactive refresh fires.
     std::memset(ptr_a, 0xAA, copy_size);
     std::memset(ptr_b, 0xAA, copy_size);
-    stampPoolWithPattern(pnanovdb_editor::s_default_editor_shader, 0x77);
+    stampPoolWithPattern(default_editor_shader(), 0x77);
 
     ASSERT_TRUE(editor.impl->scene_manager->reset_shader_params_to_defaults(
-        &compute, pnanovdb_editor::s_default_editor_shader));
+        &compute, default_editor_shader()));
 
     // refresh_params_for_shader reallocates each object's params array, so
     // the data pointer may have moved.
@@ -242,10 +247,10 @@ TEST_F(ShaderParamsResetToDefaultsTest, ResetIsIdempotent)
 {
     auto& scene_manager = *editor.impl->scene_manager;
 
-    ASSERT_TRUE(scene_manager.reset_shader_params_to_defaults(&compute, pnanovdb_editor::s_default_editor_shader));
-    ASSERT_TRUE(scene_manager.reset_shader_params_to_defaults(&compute, pnanovdb_editor::s_default_editor_shader));
+    ASSERT_TRUE(scene_manager.reset_shader_params_to_defaults(&compute, default_editor_shader()));
+    ASSERT_TRUE(scene_manager.reset_shader_params_to_defaults(&compute, default_editor_shader()));
 
-    const auto snap = capturePoolBytes(pnanovdb_editor::s_default_editor_shader);
+    const auto snap = capturePoolBytes(default_editor_shader());
     ASSERT_EQ(snap.size(), editor_defaults.size());
     EXPECT_EQ(std::memcmp(snap.data(), editor_defaults.data(), snap.size()), 0)
         << "Repeated reset must keep the pool at JSON defaults";
