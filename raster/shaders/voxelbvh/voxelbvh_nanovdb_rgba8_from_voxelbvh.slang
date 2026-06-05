@@ -848,7 +848,8 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
                     sum_local.rgb *= (1.f / sum_local.a);
                 }
 
-                sum = max(sum, sum_local);
+                //sum = max(sum, sum_local);
+                sum = sum + (1.f / 6.f) * sum_local;
             }
             GroupMemoryBarrierWithGroupSync();
         }
