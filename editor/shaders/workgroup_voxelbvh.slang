@@ -17,7 +17,7 @@ struct workgroup_voxelbvh_iterator_t
 };
 
 void workgroup_voxelbvh_iterator_init(
-    RWStructuredBuffer<uint2> iter_buf,
+    pnanovdb_buf_t iter_buf,
     inout workgroup_voxelbvh_iterator_t iter,
     uint thread_idx,
     uint max_pass_count,

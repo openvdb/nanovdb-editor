@@ -377,7 +377,7 @@ struct prim_t
 };
 groupshared prim_t s_prims[128u];
 
-float2 compute_culling_range(RWStructuredBuffer<uint2> cull_buf,
+float2 compute_culling_range(pnanovdb_buf_t cull_buf,
                              pnanovdb_grid_handle_t grid,
                              float3 worldRayDirCenter,
                              int3 ijk,

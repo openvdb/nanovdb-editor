@@ -8,7 +8,7 @@ struct user_state_t
 #include "voxelbvh_nanovdb_iterate.slang"
 #include "voxelbvh_common.h"
 
-void nanovdb_set_bit(RWStructuredBuffer<uint2> write_buf, pnanovdb_address_t addr, uint bit_idx)
+void nanovdb_set_bit(pnanovdb_buf_t write_buf, pnanovdb_address_t addr, uint bit_idx)
 {
     uint64_t word_idx = (addr.byte_offset >> 3u) + (bit_idx >> 6u);
     uint64_t val = uint64_t(1u) << (bit_idx & 63u);
@@ -18,7 +18,7 @@ void nanovdb_set_bit(RWStructuredBuffer<uint2> write_buf, pnanovdb_address_t add
 }
 
 bool find_child_bit(
-    RWStructuredBuffer<uint2> lookup_buf,
+    pnanovdb_buf_t lookup_buf,
     pnanovdb_grid_handle_t grid,
     uint pass_id,
     pnanovdb_coord_t ijk,
