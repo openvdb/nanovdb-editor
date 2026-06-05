@@ -112,41 +112,6 @@ void RasterFileShaderParams::reset()
 // AsyncWorker (shared base)
 // ============================================================================
 
-void AsyncWorker::cancel_and_join()
-{
-    m_worker.reset();
-    m_enqueued = false;
-    m_task_id = pnanovdb_util::WorkerThread::invalidTaskId();
-}
-
-void AsyncWorker::release()
-{
-    if (m_released)
-    {
-        return;
-    }
-    m_released = true;
-
-    cancel_and_join();
-    release_resources();
-}
-
-bool AsyncWorker::is_running()
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (!m_worker || !m_enqueued)
-    {
-        return false;
-    }
-    return !m_worker->isTaskCompleted(m_task_id);
-}
-
-bool AsyncWorker::is_completed()
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return m_worker && m_worker->isTaskCompleted(m_task_id);
-}
-
 bool AsyncWorker::get_progress(std::string& text, float& value)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -224,19 +189,6 @@ bool AsyncWorker::with_pending_object(const std::function<void(SceneObject*)>& f
                                              }
                                          });
     return found;
-}
-
-void AsyncWorker::finish_task()
-{
-    m_pending_scene_token_id = 0;
-    m_pending_name_token_id = 0;
-    m_pending_scene_manager = nullptr;
-    m_pending_compute = nullptr;
-    m_enqueued = false;
-    if (m_worker)
-    {
-        m_worker->removeCompletedTask(m_task_id);
-    }
 }
 
 // ============================================================================

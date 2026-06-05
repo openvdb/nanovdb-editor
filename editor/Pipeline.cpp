@@ -247,12 +247,8 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
         {
             return pnanovdb_pipeline_result_skipped;
         }
-        const bool already_running = with_runtime(false,
-                                                  [](PipelineRuntime& rt)
-                                                  {
-                                                      auto* w = rt.worker<VoxelBVHWorker>();
-                                                      return w && w->is_running();
-                                                  });
+
+        const bool already_running = with_runtime(false, [](PipelineRuntime& rt) { return rt.any_worker_running(); });
         if (already_running)
         {
             return pnanovdb_pipeline_result_pending;
@@ -512,28 +508,41 @@ static pnanovdb_pipeline_result_t execute_gaussian_voxelize(pnanovdb_scene_objec
         init_params_t<GaussianVoxelizeParams>(&process_params);
     }
 
-    const bool conversion_running = with_runtime(false,
-                                                 [](PipelineRuntime& rt)
-                                                 {
-                                                     auto* w = rt.worker<GaussianVoxelizeWorker>();
-                                                     return w && w->is_running();
-                                                 });
-    if (conversion_running)
+    // Single in-flight async task policy (see PipelineRuntime): only one worker
+    // runs at a time. Defer while any worker is busy; when the busy worker is our
+    // own conversion, surface the re-convert hint for a changed voxels_per_unit.
+    bool busy = false;
+    bool self_running = false;
+    float running_vpu = pnanovdb_editor::k_default_voxels_per_unit;
+    (void)with_runtime(false,
+                       [&](PipelineRuntime& rt)
+                       {
+                           if (AsyncWorker* running = rt.running_worker())
+                           {
+                               busy = true;
+                               if (running->pipeline_type() == GaussianVoxelizeWorker::kPipelineType)
+                               {
+                                   self_running = true;
+                                   if (auto* w = rt.worker<GaussianVoxelizeWorker>())
+                                   {
+                                       running_vpu = w->get_running_voxels_per_unit();
+                                   }
+                               }
+                           }
+                           return true;
+                       });
+    if (busy)
     {
-        const float running_vpu =
-            with_runtime(pnanovdb_editor::k_default_voxels_per_unit,
-                         [](PipelineRuntime& rt)
-                         {
-                             auto* w = rt.worker<GaussianVoxelizeWorker>();
-                             return w ? w->get_running_voxels_per_unit() : pnanovdb_editor::k_default_voxels_per_unit;
-                         });
-        const float requested_vpu = pnanovdb_editor::pipeline_params_get_voxels_per_unit(&process_params);
-        if (requested_vpu != running_vpu)
+        if (self_running)
         {
-            Console::getInstance().addLog(
-                Console::LogLevel::Debug,
-                "Gaussian voxelize: conversion running (vpu=%.1f), will re-convert with vpu=%.1f when done",
-                running_vpu, requested_vpu);
+            const float requested_vpu = pnanovdb_editor::pipeline_params_get_voxels_per_unit(&process_params);
+            if (requested_vpu != running_vpu)
+            {
+                Console::getInstance().addLog(
+                    Console::LogLevel::Debug,
+                    "Gaussian voxelize: conversion running (vpu=%.1f), will re-convert with vpu=%.1f when done",
+                    running_vpu, requested_vpu);
+            }
         }
         return pnanovdb_pipeline_result_pending;
     }
@@ -832,22 +841,33 @@ bool pipeline_load(EditorSceneManager* scene_manager,
                    pnanovdb_editor_token_t* scene_token,
                    const PipelineLoadRequest& request)
 {
-    return with_runtime_or_warn("pipeline_load",
-                                [&](PipelineRuntime& rt)
-                                {
-                                    for (const auto& worker : rt.workers())
-                                    {
-                                        if (worker && worker->start_from_request(request, scene_manager, scene_token))
-                                        {
-                                            return true;
-                                        }
-                                    }
-                                    Console::getInstance().addLog(
-                                        Console::LogLevel::Warning,
-                                        "pipeline_load: no load worker registered for pipeline type %u",
-                                        (unsigned)request.load_pipeline);
-                                    return false;
-                                });
+    return with_runtime_or_warn(
+        "pipeline_load",
+        [&](PipelineRuntime& rt)
+        {
+            // Single in-flight async task policy (see PipelineRuntime): refuse a
+            // new load while any worker is still running rather than letting a
+            // second worker run concurrently.
+            if (AsyncWorker* running = rt.running_worker())
+            {
+                Console::getInstance().addLog(Console::LogLevel::Warning,
+                                              "pipeline_load: an async task (pipeline type %u) is already in flight; "
+                                              "ignoring load request for pipeline type %u",
+                                              (unsigned)running->pipeline_type(), (unsigned)request.load_pipeline);
+                return false;
+            }
+            for (const auto& worker : rt.workers())
+            {
+                if (worker && worker->start_from_request(request, scene_manager, scene_token))
+                {
+                    return true;
+                }
+            }
+            Console::getInstance().addLog(Console::LogLevel::Warning,
+                                          "pipeline_load: no load worker registered for pipeline type %u",
+                                          (unsigned)request.load_pipeline);
+            return false;
+        });
 }
 
 bool pipeline_update(std::string& progress_text, float& progress_value)
@@ -858,6 +878,10 @@ bool pipeline_update(std::string& progress_text, float& progress_value)
         return false;
     }
 
+    // Drain every worker that finished this frame. Completions are independent
+    // of the single in-flight invariant -- a worker handing off its result is
+    // exactly what frees the slot for the next task -- so we always sweep all of
+    // them rather than the (at most one) running worker.
     for (const auto& worker : rt->workers())
     {
         if (worker && !worker->is_running())
@@ -865,13 +889,14 @@ bool pipeline_update(std::string& progress_text, float& progress_value)
             worker->handle_completion();
         }
     }
-    for (const auto& worker : rt->workers())
+
+    // Single in-flight async task invariant (see PipelineRuntime): at most one
+    // worker is ever running, so its progress fully describes the runtime's
+    // async state. Start sites enforce this; we only report it here.
+    if (AsyncWorker* running = rt->running_worker())
     {
-        if (worker && worker->is_running())
-        {
-            worker->get_progress(progress_text, progress_value);
-            return true;
-        }
+        running->get_progress(progress_text, progress_value);
+        return true;
     }
 
     progress_text.clear();

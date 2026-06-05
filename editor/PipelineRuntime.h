@@ -223,11 +223,41 @@ public:
     AsyncWorker(AsyncWorker&&) = delete;
     AsyncWorker& operator=(AsyncWorker&&) = delete;
 
-    void cancel_and_join();
-    void release();
+    void cancel_and_join()
+    {
+        m_worker.reset();
+        m_enqueued = false;
+        m_task_id = pnanovdb_util::WorkerThread::invalidTaskId();
+    }
 
-    bool is_running();
-    bool is_completed();
+    void release()
+    {
+        if (m_released)
+        {
+            return;
+        }
+        m_released = true;
+
+        cancel_and_join();
+        release_resources();
+    }
+
+    bool is_running()
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (!m_worker || !m_enqueued)
+        {
+            return false;
+        }
+        return !m_worker->isTaskCompleted(m_task_id);
+    }
+
+    bool is_completed()
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_worker && m_worker->isTaskCompleted(m_task_id);
+    }
+
     bool get_progress(std::string& text, float& value);
 
     pnanovdb_uint32_t pending_scene_token_id();
@@ -278,7 +308,18 @@ protected:
 
     bool with_pending_object(const std::function<void(SceneObject*)>& fn);
 
-    void finish_task();
+    void finish_task()
+    {
+        m_pending_scene_token_id = 0;
+        m_pending_name_token_id = 0;
+        m_pending_scene_manager = nullptr;
+        m_pending_compute = nullptr;
+        m_enqueued = false;
+        if (m_worker)
+        {
+            m_worker->removeCompletedTask(m_task_id);
+        }
+    }
 
     std::unique_ptr<pnanovdb_util::WorkerThread> m_worker = std::make_unique<pnanovdb_util::WorkerThread>();
     pnanovdb_util::WorkerThread::TaskId m_task_id = pnanovdb_util::WorkerThread::invalidTaskId();
@@ -520,6 +561,26 @@ public:
     {
         AsyncWorker* w = worker_for(T::kPipelineType);
         return w ? static_cast<T*>(w) : nullptr;
+    }
+
+    // ------------------------------------------------------------------------
+    // Single in-flight async task invariant
+    // ------------------------------------------------------------------------
+    AsyncWorker* running_worker() const
+    {
+        for (const auto& w : m_workers)
+        {
+            if (w && w->is_running())
+            {
+                return w.get();
+            }
+        }
+        return nullptr;
+    }
+
+    bool any_worker_running() const
+    {
+        return running_worker() != nullptr;
     }
 
 private:

@@ -1652,7 +1652,12 @@ void execute_removal(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, 
             // Nothing to clear globally for cameras
             break;
 
-        default:
+        case SceneObjectType::Uninitialized:
+            // Configured-but-resourceless placeholder
+            break;
+
+        case SceneObjectType::Array:
+            // Generic arrays hold no global renderer state of their own.
             break;
         }
     }

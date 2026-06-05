@@ -12,10 +12,12 @@
 #include <nanovdb/tools/CreatePrimitives.h>
 
 #include "EditorTestSupport.h"
+#include "GpuTestSupport.h"
 
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <string>
 #include <thread>
 
 namespace
@@ -227,6 +229,16 @@ TEST(NanoVDBEditor, MarkPipelineDirtyKicksScheduler)
         GTEST_SKIP() << "No Vulkan-compatible device available on this machine";
     }
 
+    if (pnanovdb_editor_test::should_skip_on_software_renderer(phys_desc.device_name))
+    {
+        const std::string skip_reason = pnanovdb_editor_test::software_renderer_skip_reason(
+            phys_desc.device_name, "pipeline scheduler-kick test (headless render loop too slow)");
+        compute.device_interface.destroy_device_manager(device_manager);
+        pnanovdb_compute_free(&compute);
+        pnanovdb_compiler_free(&compiler);
+        GTEST_SKIP() << skip_reason;
+    }
+
     pnanovdb_compute_device_t* device = compute.device_interface.create_device(device_manager, &device_desc);
     ASSERT_NE(device, nullptr);
 
@@ -265,7 +277,8 @@ TEST(NanoVDBEditor, MarkPipelineDirtyKicksScheduler)
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         kicked = (pnanovdb_editor_test::get_object_process_dirty(&editor, scene, name) == PNANOVDB_FALSE);
     }
-    EXPECT_TRUE(kicked) << "Scheduler did not clear process_dirty after set_pipeline(stage_process, !noop)";
+    EXPECT_TRUE(kicked) << "Scheduler did not clear process_dirty after set_pipeline(stage_process, !noop) (device='"
+                        << phys_desc.device_name << "')";
 
     ASSERT_EQ(pnanovdb_editor_test::get_object_process_dirty(&editor, scene, name), PNANOVDB_FALSE);
     editor.mark_pipeline_dirty(&editor, scene, name);
@@ -276,7 +289,8 @@ TEST(NanoVDBEditor, MarkPipelineDirtyKicksScheduler)
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         re_kicked = (pnanovdb_editor_test::get_object_process_dirty(&editor, scene, name) == PNANOVDB_FALSE);
     }
-    EXPECT_TRUE(re_kicked) << "Scheduler did not re-run the process pipeline after mark_pipeline_dirty";
+    EXPECT_TRUE(re_kicked) << "Scheduler did not re-run the process pipeline after mark_pipeline_dirty (device='"
+                           << phys_desc.device_name << "')";
 
     editor.stop(&editor);
     std::this_thread::sleep_for(std::chrono::milliseconds(100));

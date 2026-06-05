@@ -105,8 +105,7 @@ Do these regardless of sync vs async.
            execute_<name>, get_render_method_<none|nanovdb|gaussian>,
            map_params<&SceneObject::render_params>); // or nullptr
 
-       pipeline_init / pipeline_load / pipeline_update iterate workers
-       polymorphically -- no edits there.
+       (pipeline_init / pipeline_load / pipeline_update need no edits.)
 
 [ ] 6. UI entry point (optional)
        e.g. mesh_import::mesh() in editor/MeshImport.cpp builds a
@@ -142,10 +141,8 @@ as the `execute` argument of the step 5 macro and add a worker:
        Register at file scope: PNANOVDB_REGISTER_WORKER(<Name>Worker);
 ```
 
-The `PipelineRuntime` (owned by the editor for the duration of `show()`) builds
-one instance of every `PNANOVDB_REGISTER_WORKER`-ed worker, and `pipeline_load`
-/ `pipeline_update` dispatch to them by `pipeline_type()` — no central switch to
-edit.
+The runtime runs at most one worker at a time; new work is deferred while a
+worker is running, so your worker never has to handle concurrent runs.
 
 ### Async worker contract
 

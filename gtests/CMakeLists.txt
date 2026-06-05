@@ -67,5 +67,6 @@ ConfigureTest(ShaderParamsResetToDefaultsTest ShaderParamsResetToDefaultsTest.cp
 ConfigureTest(VoxelBVHBuildPipelineTest VoxelBVHBuildPipelineTest.cpp GpuTestSupport.cpp)
 ConfigureTest(StreamingUiToViewSyncTest StreamingUiToViewSyncTest.cpp EditorTestSupport.cpp GpuTestSupport.cpp)
 ConfigureTest(MultiEditorPipelineRuntimeTest MultiEditorPipelineRuntimeTest.cpp)
+ConfigureTest(PipelineWorkerShutdownTest PipelineWorkerShutdownTest.cpp)
 ConfigureTest(ConcurrentPipelineTest ConcurrentPipelineTest.cpp)
-ConfigureTest(PipelineApiTest PipelineApiTest.cpp EditorTestSupport.cpp)
+ConfigureTest(PipelineApiTest PipelineApiTest.cpp EditorTestSupport.cpp GpuTestSupport.cpp)
