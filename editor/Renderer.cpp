@@ -17,22 +17,6 @@
 
 namespace pnanovdb_editor
 {
-RenderType get_render_type_from_scene_object_type(SceneObjectType type)
-{
-    switch (type)
-    {
-    case SceneObjectType::NanoVDB:
-        return RenderType::NanoVDB;
-    case SceneObjectType::GaussianData:
-        return RenderType::Raster2D;
-    case SceneObjectType::Array:
-        return RenderType::NanoVDB;
-    case SceneObjectType::Camera:
-    default:
-        return RenderType::None; // Cameras and unknown types are not renderable
-    }
-}
-
 void Renderer::init(const RendererConfig& config)
 {
     m_config = config;

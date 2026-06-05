@@ -39,9 +39,19 @@ RUN if [ -n "$TORCH_INDEX_URL" ]; then \
     fi
 
 RUN if [ -n "$FVDB_CORE_NIGHTLY" ] && [ "$FVDB_CORE_NIGHTLY" != "0" ]; then \
-        FVDB_VER=$(pip index versions --pre fvdb-core \
-          --index-url="${FVDB_CORE_NIGHTLY_INDEX_URL:?required}" \
-          | tr ',()' '\n' | grep -m1 "${FVDB_CORE_NIGHTLY_CUDA_SUFFIX:?required}") && \
+        : "${FVDB_CORE_NIGHTLY_INDEX_URL:?required}" "${FVDB_CORE_NIGHTLY_CUDA_SUFFIX:?required}" && \
+        FVDB_INDEX_OUT=$(pip index versions --pre fvdb-core \
+            --index-url="${FVDB_CORE_NIGHTLY_INDEX_URL}" 2>/dev/null) && \
+        FVDB_VER=$(printf '%s\n' "${FVDB_INDEX_OUT}" \
+            | tr ',()' '\n' | tr -d ' ' \
+            | grep -m1 "${FVDB_CORE_NIGHTLY_CUDA_SUFFIX}"); \
+        if [ -z "${FVDB_VER}" ]; then \
+            echo "fvdb-core nightly lookup found no '${FVDB_CORE_NIGHTLY_CUDA_SUFFIX}' build" >&2; \
+            echo "ERROR: could not resolve a nightly fvdb-core '${FVDB_CORE_NIGHTLY_CUDA_SUFFIX}' build from ${FVDB_CORE_NIGHTLY_INDEX_URL}" >&2; \
+            echo "Available versions were:" >&2; \
+            printf '%s\n' "${FVDB_INDEX_OUT}" >&2; \
+            exit 1; \
+        fi && \
         echo "Nightly: fvdb-core==${FVDB_VER}" && \
         pip install --pre "fvdb-core==${FVDB_VER}" "nanovdb-editor" \
           --extra-index-url "${FVDB_CORE_NIGHTLY_INDEX_URL}" \

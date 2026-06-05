@@ -41,6 +41,7 @@ namespace pnanovdb_editor
 */
 enum class SceneObjectType
 {
+    Uninitialized, ///< Placeholder: configured but no resource attached yet
     NanoVDB, ///< Volume data
     GaussianData, ///< Gaussian splatting data
     Array, ///< Generic array data
@@ -83,14 +84,6 @@ struct ShaderNameStorage
     pnanovdb_editor_shader_name_t value = {};
 };
 
-struct ShaderParamsDescCache
-{
-    const pnanovdb_reflect_data_type_t* source_data_type = nullptr;
-    std::vector<const char*> element_names;
-    std::vector<const char*> element_type_names;
-    std::vector<pnanovdb_uint64_t> element_offsets;
-};
-
 /*!
     \brief Compile-time known parameters for a scene object
 */
@@ -103,9 +96,6 @@ struct SceneObjectParams
     // Typed params pointer and reflection info
     void* shader_params = nullptr;
     const pnanovdb_reflect_data_type_t* shader_params_data_type = nullptr;
-
-    // Cached descriptor views for pnanovdb_scene_object_map_shader_params
-    ShaderParamsDescCache shader_params_desc_cache;
 
     // Associated shader name
     std::shared_ptr<ShaderNameStorage> shader_name_storage = std::make_shared<ShaderNameStorage>();
@@ -150,6 +140,9 @@ struct PipelineStage
 
     bool dirty = true; // Needs re-execution
 
+    // Set once the user explicitly configures this stage via set_pipeline() or map_pipeline_params()
+    bool configured = false;
+
     PipelineStage() = default;
 
     ~PipelineStage()
@@ -158,7 +151,11 @@ struct PipelineStage
     }
 
     PipelineStage(const PipelineStage& other)
-        : type(other.type), params{}, shader_overrides(other.shader_overrides), dirty(other.dirty)
+        : type(other.type),
+          params{},
+          shader_overrides(other.shader_overrides),
+          dirty(other.dirty),
+          configured(other.configured)
     {
         if (other.params.data && other.params.size > 0)
         {
@@ -176,6 +173,7 @@ struct PipelineStage
                 params = {};
                 shader_overrides.clear();
                 dirty = true;
+                configured = false;
             }
         }
     }
@@ -208,12 +206,17 @@ struct PipelineStage
             type = other.type;
             shader_overrides = other.shader_overrides;
             dirty = other.dirty;
+            configured = other.configured;
         }
         return *this;
     }
 
     PipelineStage(PipelineStage&& other) noexcept
-        : type(other.type), params(other.params), shader_overrides(std::move(other.shader_overrides)), dirty(other.dirty)
+        : type(other.type),
+          params(other.params),
+          shader_overrides(std::move(other.shader_overrides)),
+          dirty(other.dirty),
+          configured(other.configured)
     {
         other.params = {};
     }
@@ -227,6 +230,7 @@ struct PipelineStage
             params = other.params;
             shader_overrides = std::move(other.shader_overrides);
             dirty = other.dirty;
+            configured = other.configured;
             other.params = {};
         }
         return *this;
@@ -274,7 +278,7 @@ struct SceneObjectPipeline
 */
 struct SceneObject
 {
-    SceneObjectType type; ///< Type of scene object
+    SceneObjectType type = SceneObjectType::Uninitialized; ///< Type of scene object
     pnanovdb_editor_token_t* scene_token; ///< Scene identifier token
     pnanovdb_editor_token_t* name_token; ///< Object name token
 
@@ -748,6 +752,34 @@ public:
         uint64_t key = make_key(scene, name);
         auto it = m_objects.find(key);
         SceneObject* obj = (it != m_objects.end()) ? &it->second : nullptr;
+        callback(obj);
+    }
+
+    /*!
+        \brief Run a callback against an object, creating a data-less placeholder
+               if none exists yet.
+
+        \note Thread-safe. The callback always receives a non-null pointer.
+    */
+    template <typename Func>
+    void with_object_or_create(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name, Func callback)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        uint64_t key = make_key(scene, name);
+        auto it = m_objects.find(key);
+        SceneObject* obj = nullptr;
+        if (it != m_objects.end())
+        {
+            obj = &it->second;
+        }
+        else
+        {
+            obj = &m_objects[key];
+            obj->type = SceneObjectType::Uninitialized;
+            obj->scene_token = scene;
+            obj->name_token = name;
+            obj->ensure_shader_name_storage().object_key = key;
+        }
         callback(obj);
     }
 

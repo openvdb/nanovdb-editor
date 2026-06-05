@@ -9,7 +9,7 @@
 #include <nanovdb_editor/putil/Compute.h>
 #include <nanovdb_editor/putil/Editor.h>
 
-#include "editor/Editor.h" // pnanovdb_editor_impl_t, s_default_editor_shader
+#include "editor/Editor.h" // pnanovdb_editor_impl_t
 #include "editor/EditorSceneManager.h"
 #include "EditorTestSupport.h"
 
@@ -22,11 +22,16 @@
 namespace
 {
 
-// Shader name as the editor sees it (relative to the install-time shaders dir).
-constexpr const char* kAltShaderName = "editor/image2d.slang";
-// Absolute file path components for direct invocation of the Slang compiler.
-constexpr const char* kAltShaderFile = "editor/shaders/image2d.slang";
-constexpr const char* kDefaultShaderFile = "editor/shaders/editor.slang";
+
+inline const char* default_editor_shader()
+{
+    return pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_nanovdb_render);
+}
+
+inline const char* alt_shader()
+{
+    return pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_image2d_render);
+}
 
 class ShaderNameSwapResetsParamsTest : public ::testing::Test
 {
@@ -46,9 +51,13 @@ protected:
     std::vector<char> editor_defaults;
     std::vector<char> alt_defaults;
 
-    bool compileToCache(const char* rel_path)
+    // Maps an editor-visible shader name (e.g. "editor/foo.slang") to its on-disk
+    // source under editor/shaders/ and compiles it so the JSON cache is warm.
+    bool compileToCache(const char* shader_name)
     {
-        const std::filesystem::path shader = std::filesystem::path(__FILE__).parent_path().parent_path() / rel_path;
+        const std::filesystem::path repo_root = std::filesystem::path(__FILE__).parent_path().parent_path();
+        const std::filesystem::path shader =
+            repo_root / "editor" / "shaders" / std::filesystem::path(shader_name).filename();
         if (!std::filesystem::exists(shader))
         {
             return false;
@@ -91,7 +100,7 @@ protected:
         // must exist on disk for ShaderParams::load() to populate the pool
         // with non-zero defaults. Pre-compile both shaders so the test does
         // not depend on a prior run having warmed the cache.
-        if (!compileToCache(kDefaultShaderFile) || !compileToCache(kAltShaderFile))
+        if (!compileToCache(default_editor_shader()) || !compileToCache(alt_shader()))
         {
             GTEST_SKIP() << "Slang compilation unavailable in this environment";
         }
@@ -105,11 +114,10 @@ protected:
         // Capture per-shader JSON defaults before adding the object. Doing it
         // first means the pool entries are populated from JSON (not from any
         // later object buffer) so these captures are the canonical defaults.
-        alt_defaults = captureDefaults(kAltShaderName);
-        editor_defaults = captureDefaults(pnanovdb_editor::s_default_editor_shader);
-        ASSERT_FALSE(alt_defaults.empty()) << "Could not load JSON defaults for " << kAltShaderName;
-        ASSERT_FALSE(editor_defaults.empty())
-            << "Could not load JSON defaults for " << pnanovdb_editor::s_default_editor_shader;
+        alt_defaults = captureDefaults(alt_shader());
+        editor_defaults = captureDefaults(default_editor_shader());
+        ASSERT_FALSE(alt_defaults.empty()) << "Could not load JSON defaults for " << alt_shader();
+        ASSERT_FALSE(editor_defaults.empty()) << "Could not load JSON defaults for " << default_editor_shader();
         ASSERT_EQ(alt_defaults.size(), editor_defaults.size()) << "Both shaders allocate the 64KB constant buffer";
 
         // The two shaders' default buffers must differ; otherwise the test
@@ -126,7 +134,7 @@ protected:
         owned_array = compute.create_array(sizeof(uint8_t), bytes.size(), bytes.data());
         ASSERT_NE(owned_array, nullptr);
 
-        // add_nanovdb_2() uses editor->impl->shader_name (s_default_editor_shader)
+        // add_nanovdb_2() uses editor->impl->shader_name (the default editor shader)
         // and creates the per-object params buffer pre-populated with its
         // JSON defaults.
         editor.add_nanovdb_2(&editor, scene_token, name_token, owned_array);
@@ -186,7 +194,7 @@ TEST_F(ShaderNameSwapResetsParamsTest, SwappingShaderNameResetsObjectParamsToNew
     auto* mapped =
         static_cast<pnanovdb_editor_shader_name_t*>(editor.map_params(&editor, scene_token, name_token, name_type));
     ASSERT_NE(mapped, nullptr);
-    mapped->shader_name = editor.get_token(kAltShaderName);
+    mapped->shader_name = editor.get_token(alt_shader());
     editor.unmap_params(&editor, scene_token, name_token);
 
     const auto buf = snapshotObjectBuffer();
@@ -221,7 +229,7 @@ TEST_F(ShaderNameSwapResetsParamsTest, ReassigningSameShaderNamePreservesUserByt
         static_cast<pnanovdb_editor_shader_name_t*>(editor.map_params(&editor, scene_token, name_token, name_type));
     ASSERT_NE(mapped, nullptr);
     // Re-assign the same shader name (no actual change).
-    mapped->shader_name = editor.get_token(pnanovdb_editor::s_default_editor_shader);
+    mapped->shader_name = editor.get_token(default_editor_shader());
     editor.unmap_params(&editor, scene_token, name_token);
 
     const auto buf = snapshotObjectBuffer();

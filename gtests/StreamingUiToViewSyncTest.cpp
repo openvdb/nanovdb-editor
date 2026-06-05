@@ -107,7 +107,7 @@ TEST(StreamingUiToViewSync, PoolMutationPropagatesToObjectBufferEachFrame)
     ASSERT_NE(name_token, nullptr);
 
     auto sphere_grid = nanovdb::tools::createLevelSetSphere<float>(4.0f);
-    pnanovdb_compute_array_t* nanovdb_array = compute.create_array(4u, sphere_grid.size() / 4u, sphere_grid.data());
+    pnanovdb_compute_array_t* nanovdb_array = compute.create_array(4u, sphere_grid.bufferSize() / 4u, sphere_grid.data());
     ASSERT_NE(nanovdb_array, nullptr);
     editor.add_nanovdb_2(&editor, scene_token, name_token, nanovdb_array);
     compute.destroy_array(nanovdb_array);

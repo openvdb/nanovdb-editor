@@ -51,7 +51,7 @@ TEST(NanoVDBEditor, EditorStartStopHeadlessStreaming)
     auto sphere_grid = nanovdb::tools::createLevelSetSphere<float>(10.0f);
 
     // Create compute array from the grid data
-    pnanovdb_compute_array_t* nanovdb_array = compute.create_array(4u, sphere_grid.size() / 4u, sphere_grid.data());
+    pnanovdb_compute_array_t* nanovdb_array = compute.create_array(4u, sphere_grid.bufferSize() / 4u, sphere_grid.data());
     ASSERT_NE(nanovdb_array, nullptr) << "Failed to create nanovdb array";
 
     // Configure editor (headless, streaming mode)

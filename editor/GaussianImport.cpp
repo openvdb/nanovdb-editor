@@ -17,6 +17,7 @@
 #include "Editor.h"
 #include "Console.h"
 #include "Pipeline.h"
+#include "PipelineRuntime.h"
 #include "PipelineTypes.h"
 
 #include "nanovdb_editor/putil/Compute.h"
@@ -64,6 +65,7 @@ bool gaussian(EditorScene& editor_scene,
                                       if (!obj)
                                           return;
                                       obj->resources.source_filepath = filepath_copy;
+                                      obj->load_pipeline() = pnanovdb_pipeline_type_gaussian_load;
                                       auto& process_params = obj->process_params();
                                       pnanovdb_pipeline_voxelbvh_build_params_set_source_type(
                                           &process_params, pnanovdb_pipeline_voxelbvh_source_gaussian_file);
@@ -77,27 +79,21 @@ bool gaussian(EditorScene& editor_scene,
         return true;
     }
 
-    bool rasterize_to_nanovdb = (process_pipeline == pnanovdb_pipeline_type_raster3d);
+    pnanovdb_pipeline_params_t process_params{};
+    pnanovdb_pipeline_get_default_params(process_pipeline, &process_params);
+    pipeline_params_set_voxels_per_unit(&process_params, voxels_per_unit);
 
-    PipelineContext ctx;
-    ctx.compute = editor->impl->compute;
-    ctx.device = editor->impl->device;
-    ctx.queue = editor->impl->device_queue;
-    ctx.compute_queue = editor->impl->compute_queue;
-    ctx.raster = editor->impl->raster;
-    ctx.raster_ctx = editor->impl->raster_ctx;
-    ctx.voxelbvh = editor->impl->voxelbvh;
-    ctx.voxelbvh_ctx = editor->impl->voxelbvh_ctx;
-    ctx.renderer = editor->impl->renderer;
-    ctx.scene_manager = &scene_manager;
+    PipelineLoadRequest request;
+    request.load_pipeline = pnanovdb_pipeline_type_gaussian_load;
+    request.process_pipeline = process_pipeline;
+    request.render_pipeline = render_pipeline;
+    request.source_filepath = filepath;
+    request.process_params = &process_params;
 
-    if (!pipeline_start_rasterization(filepath, voxels_per_unit, rasterize_to_nanovdb, process_pipeline,
-                                      render_pipeline, &editor_scene, &scene_manager, scene, ctx))
-    {
-        return false;
-    }
+    const bool started = pipeline_load(&scene_manager, scene, request);
+    pipeline_params_release(&process_params);
 
-    return true;
+    return started;
 }
 
 } // namespace gaussian_import
