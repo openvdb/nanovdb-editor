@@ -109,7 +109,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
         {
             src_child_is_active = true;
         }
-#if 1
+#if 0
         else if (grid_type == PNANOVDB_GRID_TYPE_INT64)
         {
             // Note: assuming VoxelBVH
