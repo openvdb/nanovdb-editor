@@ -219,11 +219,16 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
     const float user_inflation_radius = build_params->inflation_radius;
 
     auto* voxelbvh = ctx->voxelbvh;
-    auto* voxelbvh_ctx = ctx->voxelbvh_ctx;
     auto* compute = ctx->compute;
-    auto* queue = ctx->queue;
 
-    pnanovdb_compute_array_t* result = nullptr;
+    auto* scene_manager = cast(ctx->scene_manager);
+    if (!scene_manager)
+    {
+        Console::getInstance().addLog(Console::LogLevel::Error, "VoxelBVH build: missing scene_manager");
+        scene_obj->process_dirty() = false;
+        return pnanovdb_pipeline_result_error;
+    }
+
     float effective_inflation_radius = user_inflation_radius;
 
     auto get_named_array = [&](const char* key) -> pnanovdb_compute_array_t*
@@ -239,33 +244,13 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
         return it == owners.end() ? std::shared_ptr<pnanovdb_compute_array_t>{} : it->second;
     };
 
-    auto* scene_manager = cast(ctx->scene_manager);
-    const bool async_available = ctx->compute_queue && ctx->compute_queue != ctx->queue && scene_manager;
-    auto try_start_async = [&](VoxelBVHBuildRequest&& req) -> pnanovdb_pipeline_result_t
+    const bool already_busy = with_runtime(false, [](PipelineRuntime& rt) { return rt.any_worker_busy(); });
+    if (already_busy)
     {
-        if (!async_available)
-        {
-            return pnanovdb_pipeline_result_skipped;
-        }
+        return pnanovdb_pipeline_result_pending;
+    }
 
-        const bool already_busy = with_runtime(false, [](PipelineRuntime& rt) { return rt.any_worker_busy(); });
-        if (already_busy)
-        {
-            return pnanovdb_pipeline_result_pending;
-        }
-        const bool started = with_runtime_or_warn("execute_voxelbvh_build",
-                                                  [&](PipelineRuntime& rt)
-                                                  {
-                                                      auto* w = rt.worker<VoxelBVHWorker>();
-                                                      return w && w->start(scene_obj, scene_manager, ctx, std::move(req));
-                                                  });
-        if (started)
-        {
-            return pnanovdb_pipeline_result_pending;
-        }
-        return pnanovdb_pipeline_result_skipped;
-    };
-
+    VoxelBVHBuildRequest req;
     switch (source_type)
     {
     case pnanovdb_pipeline_voxelbvh_source_gaussian_file:
@@ -286,15 +271,9 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
             return pnanovdb_pipeline_result_error;
         }
 
-        VoxelBVHBuildRequest req;
         req.source = VoxelBVHBuildSource::GaussianFile;
         req.resolution = resolution;
         req.filepath = path;
-        const pnanovdb_pipeline_result_t async_result = try_start_async(std::move(req));
-        if (async_result == pnanovdb_pipeline_result_pending)
-            return pnanovdb_pipeline_result_pending;
-
-        result = voxelbvh->nanovdb_from_gaussians_file(compute, queue, voxelbvh_ctx, path.c_str(), resolution);
         break;
     }
     case pnanovdb_pipeline_voxelbvh_source_triangles:
@@ -334,7 +313,6 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
                 effective_inflation_radius = k_mesh_debug_voxel_multiplier * voxel_size;
         }
 
-        VoxelBVHBuildRequest req;
         req.source = VoxelBVHBuildSource::Triangles;
         req.resolution = resolution;
         req.inflation_radius = effective_inflation_radius;
@@ -344,12 +322,6 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
         req.array_ptrs[0] = indices;
         req.array_ptrs[1] = positions;
         req.array_ptrs[2] = colors;
-        const pnanovdb_pipeline_result_t async_result = try_start_async(std::move(req));
-        if (async_result == pnanovdb_pipeline_result_pending)
-            return pnanovdb_pipeline_result_pending;
-
-        result = voxelbvh->nanovdb_from_triangles_array(
-            compute, queue, voxelbvh_ctx, indices, positions, colors, effective_inflation_radius, resolution);
         break;
     }
     case pnanovdb_pipeline_voxelbvh_source_lines:
@@ -386,7 +358,6 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
                 effective_inflation_radius = k_mesh_lines_voxel_multiplier * voxel_size;
         }
 
-        VoxelBVHBuildRequest req;
         req.source = VoxelBVHBuildSource::Lines;
         req.resolution = resolution;
         req.inflation_radius = effective_inflation_radius;
@@ -396,12 +367,6 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
         req.array_ptrs[0] = indices;
         req.array_ptrs[1] = positions;
         req.array_ptrs[2] = colors;
-        const pnanovdb_pipeline_result_t async_result = try_start_async(std::move(req));
-        if (async_result == pnanovdb_pipeline_result_pending)
-            return pnanovdb_pipeline_result_pending;
-
-        result = voxelbvh->nanovdb_from_lines_array(
-            compute, queue, voxelbvh_ctx, indices, positions, colors, effective_inflation_radius, resolution);
         break;
     }
     case pnanovdb_pipeline_voxelbvh_source_gaussian_arrays:
@@ -428,7 +393,6 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
             return pnanovdb_pipeline_result_error;
         }
 
-        VoxelBVHBuildRequest req;
         req.source = VoxelBVHBuildSource::GaussianArrays;
         req.resolution = resolution;
         for (int i = 0; i < 6; ++i)
@@ -436,11 +400,6 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
             req.array_owners[i] = get_named_owner(gaussian_keys[i]);
             req.array_ptrs[i] = gaussian_arrays[i];
         }
-        const pnanovdb_pipeline_result_t async_result = try_start_async(std::move(req));
-        if (async_result == pnanovdb_pipeline_result_pending)
-            return pnanovdb_pipeline_result_pending;
-
-        result = voxelbvh->nanovdb_from_gaussians_array(compute, queue, voxelbvh_ctx, gaussian_arrays, 6u, resolution);
         break;
     }
     default:
@@ -449,31 +408,21 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
         return pnanovdb_pipeline_result_error;
     }
 
-    if (!result)
+    const bool started = with_runtime_or_warn("execute_voxelbvh_build",
+                                              [&](PipelineRuntime& rt)
+                                              {
+                                                  auto* w = rt.worker<VoxelBVHWorker>();
+                                                  return w && w->start(scene_obj, scene_manager, ctx, std::move(req));
+                                              });
+    if (started)
     {
-        Console::getInstance().addLog(
-            Console::LogLevel::Error, "VoxelBVH build: nanovdb_from_* returned null (source_type=%d)", source_type);
-        scene_obj->process_dirty() = false;
-        return pnanovdb_pipeline_result_error;
+        return pnanovdb_pipeline_result_pending;
     }
 
-    std::shared_ptr<pnanovdb_compute_array_t> owner(result,
-                                                    [compute](pnanovdb_compute_array_t* arr)
-                                                    {
-                                                        if (arr && compute)
-                                                            compute->destroy_array(arr);
-                                                    });
-    scene_obj->nanovdb_array() = result;
-    scene_obj->resources.nanovdb_array_owner = owner;
-
+    // Worker start failed; keep process_dirty set so the next frame retries.
     Console::getInstance().addLog(
-        "VoxelBVH build: source_type=%d, render_pipeline=%d, resolution=%u, "
-        "inflation_radius=%.5f, nanovdb (%llu elements)",
-        source_type, static_cast<int>(scene_obj->render_pipeline()), resolution, effective_inflation_radius,
-        (unsigned long long)result->element_count);
-
-    scene_obj->process_dirty() = false;
-    return pnanovdb_pipeline_result_success;
+        Console::LogLevel::Error, "VoxelBVH build: worker start failed (source_type=%d); will retry", source_type);
+    return pnanovdb_pipeline_result_pending;
 }
 
 static pnanovdb_pipeline_result_t execute_gaussian_voxelize(pnanovdb_scene_object_t* obj, pnanovdb_pipeline_context_t* ctx)
@@ -641,58 +590,6 @@ static const pnanovdb_pipeline_param_field_t s_voxelbvh_build_param_fields[] = {
       PNANOVDB_REFLECT_TYPE_FLOAT, offsetof(VoxelBVHBuildParams, inflation_radius), 0.0f, 0.0f, 100.0f, 0.01f, nullptr,
       0 },
 };
-
-// ----------------------------------------------------------------------------
-// Pipeline descriptor + registration macros
-// ----------------------------------------------------------------------------
-
-#define PNANOVDB_PIPELINE_PARAMS(T) sizeof(T), PNANOVDB_REFLECT_DATA_TYPE(T), init_params_t<T>
-#define PNANOVDB_PIPELINE_NO_PARAMS 0, nullptr, nullptr
-#define PNANOVDB_PIPELINE_FIELDS(arr) (arr), (sizeof(arr) / sizeof((arr)[0]))
-#define PNANOVDB_PIPELINE_NO_FIELDS nullptr, 0
-
-// load stage: no shaders, no render method, params are never mapped to the object.
-#define PNANOVDB_REGISTER_LOAD_PIPELINE(var, type_, name_, params_, execute_)                                          \
-    static const pnanovdb_pipeline_descriptor_t var = {                                                                \
-        (type_), pnanovdb_pipeline_stage_load, (name_), nullptr, 0, params_, (execute_), get_render_method_none,       \
-        nullptr, PNANOVDB_PIPELINE_NO_FIELDS,                                                                          \
-    };                                                                                                                 \
-    PNANOVDB_REGISTER_PIPELINE(var)
-
-// process stage: params are always mapped to SceneObject::process_params.
-#define PNANOVDB_REGISTER_PROCESS_PIPELINE(                                                                            \
-    var, type_, name_, shaders_, shader_count_, params_, execute_, render_method_, fields_)                            \
-    static const pnanovdb_pipeline_descriptor_t var = {                                                                \
-        (type_),                                                                                                       \
-        pnanovdb_pipeline_stage_process,                                                                               \
-        (name_),                                                                                                       \
-        (shaders_),                                                                                                    \
-        (shader_count_),                                                                                               \
-        params_,                                                                                                       \
-        (execute_),                                                                                                    \
-        (render_method_),                                                                                              \
-        map_params<&SceneObject::process_params>,                                                                      \
-        fields_,                                                                                                       \
-    };                                                                                                                 \
-    PNANOVDB_REGISTER_PIPELINE(var)
-
-// render stage: caller picks the render method and how params map to the object.
-#define PNANOVDB_REGISTER_RENDER_PIPELINE(                                                                             \
-    var, type_, name_, shaders_, shader_count_, params_, execute_, render_method_, map_)                               \
-    static const pnanovdb_pipeline_descriptor_t var = {                                                                \
-        (type_),         pnanovdb_pipeline_stage_render,                                                               \
-        (name_),         (shaders_),                                                                                   \
-        (shader_count_), params_,                                                                                      \
-        (execute_),      (render_method_),                                                                             \
-        (map_),          PNANOVDB_PIPELINE_NO_FIELDS,                                                                  \
-    };                                                                                                                 \
-    PNANOVDB_REGISTER_PIPELINE(var)
-
-// Common render case: draw an existing NanoVDB grid with NanoVDBRenderParams.
-#define PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(var, type_, name_, shaders_)                                         \
-    PNANOVDB_REGISTER_RENDER_PIPELINE(var, (type_), (name_), (shaders_), 1,                                            \
-                                      PNANOVDB_PIPELINE_PARAMS(NanoVDBRenderParams), execute_nanovdb_render,           \
-                                      get_render_method_nanovdb, map_params<&SceneObject::render_params>)
 
 // ----------------------------------------------------------------------------
 // Voxel BVH build params setters (public; declared in Pipeline.h)
@@ -976,6 +873,58 @@ bool pipeline_create_variant(EditorSceneManager* scene_manager,
 } // namespace pnanovdb_editor
 
 // ============================================================================
+// Pipeline descriptor + registration macros
+// ============================================================================
+
+#define PNANOVDB_PIPELINE_PARAMS(T) sizeof(T), PNANOVDB_REFLECT_DATA_TYPE(T), init_params_t<T>
+#define PNANOVDB_PIPELINE_NO_PARAMS 0, nullptr, nullptr
+#define PNANOVDB_PIPELINE_FIELDS(arr) (arr), (sizeof(arr) / sizeof((arr)[0]))
+#define PNANOVDB_PIPELINE_NO_FIELDS nullptr, 0
+
+// load stage: no shaders, no render method, params are never mapped to the object.
+#define PNANOVDB_REGISTER_LOAD_PIPELINE(var, type_, name_, params_, execute_)                                          \
+    static const pnanovdb_pipeline_descriptor_t var = {                                                                \
+        (type_), pnanovdb_pipeline_stage_load, (name_), nullptr, 0, params_, (execute_), get_render_method_none,       \
+        nullptr, PNANOVDB_PIPELINE_NO_FIELDS,                                                                          \
+    };                                                                                                                 \
+    PNANOVDB_REGISTER_PIPELINE(var)
+
+// process stage: params are always mapped to SceneObject::process_params.
+#define PNANOVDB_REGISTER_PROCESS_PIPELINE(                                                                            \
+    var, type_, name_, shaders_, shader_count_, params_, execute_, render_method_, fields_)                            \
+    static const pnanovdb_pipeline_descriptor_t var = {                                                                \
+        (type_),                                                                                                       \
+        pnanovdb_pipeline_stage_process,                                                                               \
+        (name_),                                                                                                       \
+        (shaders_),                                                                                                    \
+        (shader_count_),                                                                                               \
+        params_,                                                                                                       \
+        (execute_),                                                                                                    \
+        (render_method_),                                                                                              \
+        map_params<&SceneObject::process_params>,                                                                      \
+        fields_,                                                                                                       \
+    };                                                                                                                 \
+    PNANOVDB_REGISTER_PIPELINE(var)
+
+// render stage: caller picks the render method and how params map to the object.
+#define PNANOVDB_REGISTER_RENDER_PIPELINE(                                                                             \
+    var, type_, name_, shaders_, shader_count_, params_, execute_, render_method_, map_)                               \
+    static const pnanovdb_pipeline_descriptor_t var = {                                                                \
+        (type_),         pnanovdb_pipeline_stage_render,                                                               \
+        (name_),         (shaders_),                                                                                   \
+        (shader_count_), params_,                                                                                      \
+        (execute_),      (render_method_),                                                                             \
+        (map_),          PNANOVDB_PIPELINE_NO_FIELDS,                                                                  \
+    };                                                                                                                 \
+    PNANOVDB_REGISTER_PIPELINE(var)
+
+// Common render case: draw an existing NanoVDB grid with NanoVDBRenderParams.
+#define PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(var, type_, name_, shaders_)                                         \
+    PNANOVDB_REGISTER_RENDER_PIPELINE(var, (type_), (name_), (shaders_), 1,                                            \
+                                      PNANOVDB_PIPELINE_PARAMS(NanoVDBRenderParams), execute_nanovdb_render,           \
+                                      get_render_method_nanovdb, map_params<&SceneObject::render_params>)
+
+// ============================================================================
 // Self-registering pipeline descriptors
 // ============================================================================
 
@@ -992,6 +941,31 @@ PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_nanovdb_surface_descriptor,
                                           pnanovdb_pipeline_type_nanovdb_surface,
                                           "NanoVDB Surface (SDF)",
                                           s_nanovdb_surface_shaders);
+
+PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_voxelbvh_gaussians_render_descriptor,
+                                          pnanovdb_pipeline_type_voxelbvh_gaussians_render,
+                                          "Voxel BVH Gaussians",
+                                          s_voxelbvh_gaussians_shaders);
+
+PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_voxelbvh_lines_render_descriptor,
+                                          pnanovdb_pipeline_type_voxelbvh_lines_render,
+                                          "Voxel BVH Lines",
+                                          s_voxelbvh_lines_render_shaders);
+
+PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_voxelbvh_triangles_render_descriptor,
+                                          pnanovdb_pipeline_type_voxelbvh_triangles_render,
+                                          "Voxel BVH Triangles",
+                                          s_voxelbvh_triangles_render_shaders);
+
+PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_voxelbvh_triangles_debug_render_descriptor,
+                                          pnanovdb_pipeline_type_voxelbvh_triangles_debug_render,
+                                          "Voxel BVH Triangles Debug",
+                                          s_voxelbvh_triangles_debug_render_shaders);
+
+PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_voxelbvh_debug_render_descriptor,
+                                          pnanovdb_pipeline_type_voxelbvh_debug_render,
+                                          "Voxel BVH Debug",
+                                          s_voxelbvh_debug_render_shaders);
 
 // Gaussian splat draws the loaded Gaussians directly; params come from shader JSON.
 PNANOVDB_REGISTER_RENDER_PIPELINE(s_gaussian_splat_descriptor,
@@ -1015,26 +989,6 @@ PNANOVDB_REGISTER_PROCESS_PIPELINE(s_gaussian_voxelize_descriptor,
                                    get_render_method_nanovdb,
                                    PNANOVDB_PIPELINE_FIELDS(s_gaussian_voxelize_param_fields));
 
-PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_voxelbvh_gaussians_render_descriptor,
-                                          pnanovdb_pipeline_type_voxelbvh_gaussians_render,
-                                          "Voxel BVH Gaussians",
-                                          s_voxelbvh_gaussians_shaders);
-
-PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_voxelbvh_lines_render_descriptor,
-                                          pnanovdb_pipeline_type_voxelbvh_lines_render,
-                                          "Voxel BVH Lines",
-                                          s_voxelbvh_lines_render_shaders);
-
-PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_voxelbvh_triangles_render_descriptor,
-                                          pnanovdb_pipeline_type_voxelbvh_triangles_render,
-                                          "Voxel BVH Triangles",
-                                          s_voxelbvh_triangles_render_shaders);
-
-PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_voxelbvh_triangles_debug_render_descriptor,
-                                          pnanovdb_pipeline_type_voxelbvh_triangles_debug_render,
-                                          "Voxel BVH Triangles Debug",
-                                          s_voxelbvh_triangles_debug_render_shaders);
-
 PNANOVDB_REGISTER_PROCESS_PIPELINE(s_voxelbvh_build_descriptor,
                                    pnanovdb_pipeline_type_voxelbvh_build,
                                    "Voxel BVH Build",
@@ -1045,10 +999,6 @@ PNANOVDB_REGISTER_PROCESS_PIPELINE(s_voxelbvh_build_descriptor,
                                    get_render_method_nanovdb,
                                    PNANOVDB_PIPELINE_FIELDS(s_voxelbvh_build_param_fields));
 
-PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_voxelbvh_debug_render_descriptor,
-                                          pnanovdb_pipeline_type_voxelbvh_debug_render,
-                                          "Voxel BVH Debug",
-                                          s_voxelbvh_debug_render_shaders);
 
 PNANOVDB_REGISTER_LOAD_PIPELINE(s_mesh_load_descriptor,
                                 pnanovdb_pipeline_type_mesh_load,
