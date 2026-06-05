@@ -215,7 +215,7 @@ void voxelbvh_test()
         }
         mapped_range[idx] = uint64_t(idx) | (uint64_t(idx + 1u) << 32u);
     }
-#elif 0
+#elif 1
     static const pnanovdb_uint32_t prim_meta_count = 6u;
     pnanovdb_compute_array_t* prim_meta_arrays[prim_meta_count] = {};
 
@@ -713,7 +713,7 @@ void voxelbvh_test()
                 pnanovdb_address_t prim_id_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 1u);
                 pnanovdb_uint32_t prim_id =
                     pnanovdb_read_uint32(buf, pnanovdb_address_offset_product(prim_id_addr, 4u, range_begin));
-#if 0
+#if 1
                 pnanovdb_address_t sh0_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 6u);
                 pnanovdb_vec3_t sh0 = pnanovdb_read_vec3(buf, pnanovdb_address_offset_product(sh0_addr, 12u, prim_id));
 
@@ -745,7 +745,7 @@ void voxelbvh_test()
         }
     }
 
-    save_ply(compute, positions_array, indices_array, out_ply);
+    //save_ply(compute, positions_array, indices_array, out_ply);
 
     // save NanoVDB out to disk
     compute.save_nanovdb(nanovdb_meta, out_file);
