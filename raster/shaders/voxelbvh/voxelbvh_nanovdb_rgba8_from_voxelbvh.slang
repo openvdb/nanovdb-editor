@@ -463,7 +463,7 @@ void workgroup_gaussian_process(uint thread_idx,
                 bool should_cull_layer = layer > 0u && layer - 1u != (prim_key & 15);
                 if (should_cull_t || should_cull_layer)
                 {
-                    //prim_key = ~0u;
+                    prim_key = ~0u;
                 }
             }
 
