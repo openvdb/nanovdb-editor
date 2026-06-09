@@ -213,8 +213,7 @@ static void renderPipelineProcessParams(EditorSceneManager* scene_manager,
         {
             bool exists = false;
             auto* candidate_token = pnanovdb_editor::EditorToken::getInstance().getToken(new_name.c_str());
-            scene_manager->with_object(scene_token, candidate_token,
-                                       [&](pnanovdb_editor::SceneObject* existing_obj)
+            scene_manager->with_object(scene_token, candidate_token, [&](pnanovdb_editor::SceneObject* existing_obj)
                                        { exists = (existing_obj != nullptr); });
 
             if (!exists)

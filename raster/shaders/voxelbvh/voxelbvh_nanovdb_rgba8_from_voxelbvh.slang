@@ -669,7 +669,9 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     {
         ijkw = s_ijkw[s_idx];
 
-        for (uint face_id = 0u; face_id < 6u; face_id++)
+        const uint face_count = 1u;
+        uint face_id = 0u;
+        //for (uint face_id = 0u; face_id < 6u; face_id++)
         {
             int3 ijk_min = ijkw.xyz;
             int3 ijk_max = ijkw.xyz + ijkw.w;
@@ -849,7 +851,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
                 }
 
                 //sum = max(sum, sum_local);
-                sum = sum + (1.f / 6.f) * sum_local;
+                sum = sum + (1.f / float(face_count)) * sum_local;
             }
             GroupMemoryBarrierWithGroupSync();
         }

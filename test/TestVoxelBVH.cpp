@@ -221,6 +221,7 @@ void voxelbvh_test()
 
     const pnanovdb_uint32_t resolution = 2048u;
     const char* in_file = "./data/garden_eps2d03.ply";
+    // const char* in_file = "./data/ficus.ply";
     const char* out_file = "./data/garden_eps2d03.nvdb";
 
     pnanovdb_compute_array_t* ijkl_array = nullptr;
@@ -745,18 +746,18 @@ void voxelbvh_test()
         }
     }
 
-    //save_ply(compute, positions_array, indices_array, out_ply);
+    // save_ply(compute, positions_array, indices_array, out_ply);
 
     // save NanoVDB out to disk
     compute.save_nanovdb(nanovdb_meta, out_file);
 
+#if 1
     pnanovdb_compute_array_t* nanovdb_rgba8_2x = nullptr;
     voxel_bvh.nanovdb_duplicate_topology_array(&compute, queue, voxelbvh_ctx, &nanovdb_rgba8_2x, nanovdb_meta,
                                                resolution, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE);
     pnanovdb_compute_array_t* nanovdb_rgba8_4x = nullptr;
-    voxel_bvh.nanovdb_duplicate_topology_array(
-        &compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_rgba8_2x, 2u * resolution,
-        PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE);
+    voxel_bvh.nanovdb_duplicate_topology_array(&compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_rgba8_2x,
+                                               2u * resolution, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE);
 
     voxel_bvh.nanovdb_rgba8_from_voxelbvh_array(&compute, queue, voxelbvh_ctx, nanovdb_rgba8_4x, nanovdb_meta);
 
@@ -764,6 +765,7 @@ void voxelbvh_test()
 
     compute.destroy_array(nanovdb_rgba8_2x);
     compute.destroy_array(nanovdb_rgba8_4x);
+#endif
 
     compute.destroy_array(nanovdb_meta);
     for (uint32_t idx = 0u; idx < prim_meta_count; idx++)

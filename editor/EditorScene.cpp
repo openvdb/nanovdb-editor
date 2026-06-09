@@ -1133,10 +1133,10 @@ void EditorScene::handle_gaussian_data_load(pnanovdb_editor_token_t* scene,
 
     // Add with explicit pipeline configuration
     std::shared_ptr<pnanovdb_raster_gaussian_data_t> old_owner;
-    m_scene_manager.add_gaussian_data(scene_token, name_token, gaussian_data, params_array,
-                                      m_raster_shader_params_data_type, m_compute, m_editor->impl->raster,
-                                      m_device_queue, pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat),
-                                      process_pipeline, render_pipeline, &old_owner);
+    m_scene_manager.add_gaussian_data(
+        scene_token, name_token, gaussian_data, params_array, m_raster_shader_params_data_type, m_compute,
+        m_editor->impl->raster, m_device_queue, pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat),
+        process_pipeline, render_pipeline, &old_owner);
 
     // Store source filepath and copy process params for re-conversion
     m_scene_manager.with_object(scene_token, name_token,

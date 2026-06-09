@@ -318,7 +318,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
             for (size_t idx = 0u; idx < element.size(); idx++)
             {
                 uint32_t val = *((uint32_t*)&element[idx]);
-                uint32_t val_new = (((val)&0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) |
+                uint32_t val_new = (((val) & 0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) |
                                    (((val >> 16u) & 0xFF) << 8u) | (((val >> 24u) & 0xFF) << 0u);
                 *((uint32_t*)&element[idx]) = val_new;
             }
@@ -449,7 +449,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
                     read_count += fread(&id, 1u, 4u, file);
                     if (is_big_endian)
                     {
-                        uint32_t id_new = (((id)&0xFF) << 24u) | (((id >> 8u) & 0xFF) << 16u) |
+                        uint32_t id_new = (((id) & 0xFF) << 24u) | (((id >> 8u) & 0xFF) << 16u) |
                                           (((id >> 16u) & 0xFF) << 8u) | (((id >> 24u) & 0xFF) << 0u);
                         id = id_new;
                     }
@@ -476,7 +476,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
                 for (int k = 0; k < 2; k++)
                 {
                     uint32_t val = v[k];
-                    v[k] = (((val)&0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) | (((val >> 16u) & 0xFF) << 8u) |
+                    v[k] = (((val) & 0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) | (((val >> 16u) & 0xFF) << 8u) |
                            (((val >> 24u) & 0xFF) << 0u);
                 }
             }

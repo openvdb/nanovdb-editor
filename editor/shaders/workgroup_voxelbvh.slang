@@ -16,15 +16,16 @@ struct workgroup_voxelbvh_iterator_t
     uint pass_count;
 };
 
-void workgroup_voxelbvh_iterator_init(
+void workgroup_voxelbvh_iterator_init_masked(
     pnanovdb_buf_t iter_buf,
     inout workgroup_voxelbvh_iterator_t iter,
     uint thread_idx,
     uint max_pass_count,
     pnanovdb_grid_handle_t grid,
-    uint64_t voxel_val_raw)
+    uint64_t voxel_val_raw,
+    uint mask)
 {
-    uint active_level_mask = voxelbvh_get_active_level_mask(voxel_val_raw);
+    uint active_level_mask = voxelbvh_get_active_level_mask(voxel_val_raw) & mask;
     uint first_range_idx = uint(voxelbvh_get_first_range_idx(voxel_val_raw));
 
     iter.pass_idx = 0u;
@@ -52,6 +53,17 @@ void workgroup_voxelbvh_iterator_init(
     {
         iter.pass_count = max_pass_count;
     }
+}
+
+void workgroup_voxelbvh_iterator_init(
+    pnanovdb_buf_t iter_buf,
+    inout workgroup_voxelbvh_iterator_t iter,
+    uint thread_idx,
+    uint max_pass_count,
+    pnanovdb_grid_handle_t grid,
+    uint64_t voxel_val_raw)
+{
+    workgroup_voxelbvh_iterator_init_masked(iter_buf, iter, thread_idx, max_pass_count, grid, voxel_val_raw, ~0u);
 }
 
 bool workgroup_voxelbvh_iterator_get(
