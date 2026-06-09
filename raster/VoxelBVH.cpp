@@ -1327,6 +1327,12 @@ static void ijkl_from_gaussians_file(const pnanovdb_compute_t* compute,
         }
         compute->unmap_array(arrays_gaussian[1]);
 
+        // create shn if missing
+        if (!arrays_gaussian[5])
+        {
+            arrays_gaussian[5] = compute->create_array(0u, 0u, nullptr);
+        }
+
         compute_gpu_array_t* means_gpu_array = gpu_array_create();
         compute_gpu_array_t* opacities_gpu_array = gpu_array_create();
         compute_gpu_array_t* quaternions_gpu_array = gpu_array_create();
