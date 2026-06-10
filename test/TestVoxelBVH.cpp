@@ -225,11 +225,12 @@ void voxelbvh_test()
     const char* out_file = "./data/garden_eps2d03.nvdb";
 
 #if 1
-    const float rot = 3.14f / 12.f;
+    const float zscale = 1.f /  4.f;
+    const float rot = 3.14f / 4.f;
     const float transform[16u] = {
-        cosf(rot), 0.f, sinf(rot), 0.f,
+        cosf(rot), 0.f, zscale * sinf(rot), 0.f,
         0.f, 1.f, 0.f, 0.f,
-        -sinf(rot), 0.f, cosf(rot), 0.f,
+        -sinf(rot), 0.f, zscale * cosf(rot), 0.f,
         0.f, 0.f, 0.f, 1.f
     };
 #else
@@ -772,13 +773,13 @@ void voxelbvh_test()
     pnanovdb_compute_array_t* nanovdb_rgba8_2x = nullptr;
     voxel_bvh.nanovdb_duplicate_topology_array(&compute, queue, voxelbvh_ctx, &nanovdb_rgba8_2x, nanovdb_meta,
                                                resolution, transform, 16u, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE);
-    //pnanovdb_compute_array_t* nanovdb_rgba8_4x = nullptr;
-    //voxel_bvh.nanovdb_duplicate_topology_array(&compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_rgba8_2x,
-    //                                           2u * resolution, transform, 16u, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE);
+    pnanovdb_compute_array_t* nanovdb_rgba8_4x = nullptr;
+    voxel_bvh.nanovdb_duplicate_topology_array(&compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_rgba8_2x,
+                                               2u * resolution, transform, 16u, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE);
 
-    voxel_bvh.nanovdb_rgba8_from_voxelbvh_array(&compute, queue, voxelbvh_ctx, nanovdb_rgba8_2x, nanovdb_meta);
+    voxel_bvh.nanovdb_rgba8_from_voxelbvh_array(&compute, queue, voxelbvh_ctx, nanovdb_rgba8_4x, nanovdb_meta);
 
-    compute.save_nanovdb(nanovdb_rgba8_2x, "./data/test_rgba8.nvdb");
+    compute.save_nanovdb(nanovdb_rgba8_4x, "./data/test_rgba8.nvdb");
 
     compute.destroy_array(nanovdb_rgba8_2x);
     //compute.destroy_array(nanovdb_rgba8_4x);
