@@ -203,16 +203,30 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         pnanovdb_map_set_invmatf(buf, map, 7u, grid_mat_inv[1][2]);
         pnanovdb_map_set_invmatf(buf, map, 8u, grid_mat_inv[2][2]);
 
-        // TODO
-        pnanovdb_map_set_matd_float(buf, map, 0u, voxel_size);
-        pnanovdb_map_set_matd_float(buf, map, 4u, voxel_size);
-        pnanovdb_map_set_matd_float(buf, map, 8u, voxel_size);
-        pnanovdb_map_set_vecd_float(buf, map, 0u, voxel_offset.x);
-        pnanovdb_map_set_vecd_float(buf, map, 1u, voxel_offset.y);
-        pnanovdb_map_set_vecd_float(buf, map, 2u, voxel_offset.z);
-        pnanovdb_map_set_invmatd_float(buf, map, 0u, voxel_size_inv);
-        pnanovdb_map_set_invmatd_float(buf, map, 4u, voxel_size_inv);
-        pnanovdb_map_set_invmatd_float(buf, map, 8u, voxel_size_inv);
+        // set double precision variants
+        pnanovdb_map_set_matd_float(buf, map, 0u, grid_mat[0][0]);
+        pnanovdb_map_set_matd_float(buf, map, 1u, grid_mat[1][0]);
+        pnanovdb_map_set_matd_float(buf, map, 2u, grid_mat[2][0]);
+        pnanovdb_map_set_matd_float(buf, map, 3u, grid_mat[0][1]);
+        pnanovdb_map_set_matd_float(buf, map, 4u, grid_mat[1][1]);
+        pnanovdb_map_set_matd_float(buf, map, 5u, grid_mat[2][1]);
+        pnanovdb_map_set_matd_float(buf, map, 6u, grid_mat[0][2]);
+        pnanovdb_map_set_matd_float(buf, map, 7u, grid_mat[1][2]);
+        pnanovdb_map_set_matd_float(buf, map, 8u, grid_mat[2][2]);
+
+        pnanovdb_map_set_vecd_float(buf, map, 0u, grid_mat[3][0]);
+        pnanovdb_map_set_vecd_float(buf, map, 1u, grid_mat[3][1]);
+        pnanovdb_map_set_vecd_float(buf, map, 2u, grid_mat[3][2]);
+
+        pnanovdb_map_set_invmatd_float(buf, map, 0u, grid_mat_inv[0][0]);
+        pnanovdb_map_set_invmatd_float(buf, map, 1u, grid_mat_inv[1][0]);
+        pnanovdb_map_set_invmatd_float(buf, map, 2u, grid_mat_inv[2][0]);
+        pnanovdb_map_set_invmatd_float(buf, map, 3u, grid_mat_inv[0][1]);
+        pnanovdb_map_set_invmatd_float(buf, map, 4u, grid_mat_inv[1][1]);
+        pnanovdb_map_set_invmatd_float(buf, map, 5u, grid_mat_inv[2][1]);
+        pnanovdb_map_set_invmatd_float(buf, map, 6u, grid_mat_inv[0][2]);
+        pnanovdb_map_set_invmatd_float(buf, map, 7u, grid_mat_inv[1][2]);
+        pnanovdb_map_set_invmatd_float(buf, map, 8u, grid_mat_inv[2][2]);
 
         pnanovdb_grid_set_world_bbox_float(buf, grid, 0u, g_aabb_min.x);
         pnanovdb_grid_set_world_bbox_float(buf, grid, 1u, g_aabb_min.y);
