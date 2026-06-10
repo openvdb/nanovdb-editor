@@ -225,10 +225,11 @@ void voxelbvh_test()
     const char* out_file = "./data/garden_eps2d03.nvdb";
 
 #if 1
+    const float rot = 3.14f / 12.f;
     const float transform[16u] = {
-        0.707f, 0.f, 0.707f, 0.f,
+        cosf(rot), 0.f, sinf(rot), 0.f,
         0.f, 1.f, 0.f, 0.f,
-        -0.707f, 0.f, 0.707f, 0.f,
+        -sinf(rot), 0.f, cosf(rot), 0.f,
         0.f, 0.f, 0.f, 1.f
     };
 #else
