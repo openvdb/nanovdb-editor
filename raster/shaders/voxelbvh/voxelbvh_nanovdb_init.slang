@@ -168,28 +168,30 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         );
         float4x4 grid_mat_inv = mul(constants.transform, world_to_voxel_mat);
 
-        float4x4 tmp_4x4 = transpose(grid_mat_inv);
-        mat_t tmp_mat = {tmp_4x4[0], tmp_4x4[1], tmp_4x4[2], tmp_4x4[3]};
+        mat_t tmp_mat = {grid_mat_inv[0], grid_mat_inv[1], grid_mat_inv[2], grid_mat_inv[3]};
         float4x4 grid_mat = mat_inverse(tmp_mat);
 
         pnanovdb_grid_set_voxel_size_float(buf, grid, 0u, voxel_size);
         pnanovdb_grid_set_voxel_size_float(buf, grid, 1u, voxel_size);
         pnanovdb_grid_set_voxel_size_float(buf, grid, 2u, voxel_size);
 
+        // Slang operator[] does [row][column]
+        // NanoVDB does column major in practice
+
         pnanovdb_map_handle_t map = pnanovdb_grid_get_map(buf, grid);
         pnanovdb_map_set_matf(buf, map, 0u, grid_mat[0][0]);
-        pnanovdb_map_set_matf(buf, map, 1u, grid_mat[0][1]);
-        pnanovdb_map_set_matf(buf, map, 2u, grid_mat[0][2]);
-        pnanovdb_map_set_matf(buf, map, 3u, grid_mat[1][0]);
+        pnanovdb_map_set_matf(buf, map, 1u, grid_mat[1][0]);
+        pnanovdb_map_set_matf(buf, map, 2u, grid_mat[2][0]);
+        pnanovdb_map_set_matf(buf, map, 3u, grid_mat[0][1]);
         pnanovdb_map_set_matf(buf, map, 4u, grid_mat[1][1]);
-        pnanovdb_map_set_matf(buf, map, 5u, grid_mat[1][2]);
-        pnanovdb_map_set_matf(buf, map, 6u, grid_mat[2][0]);
-        pnanovdb_map_set_matf(buf, map, 7u, grid_mat[2][1]);
+        pnanovdb_map_set_matf(buf, map, 5u, grid_mat[2][1]);
+        pnanovdb_map_set_matf(buf, map, 6u, grid_mat[0][2]);
+        pnanovdb_map_set_matf(buf, map, 7u, grid_mat[1][2]);
         pnanovdb_map_set_matf(buf, map, 8u, grid_mat[2][2]);
 
-        pnanovdb_map_set_vecf(buf, map, 0u, grid_mat[0][3]);
-        pnanovdb_map_set_vecf(buf, map, 1u, grid_mat[1][3]);
-        pnanovdb_map_set_vecf(buf, map, 2u, grid_mat[2][3]);
+        pnanovdb_map_set_vecf(buf, map, 0u, grid_mat[3][0]);
+        pnanovdb_map_set_vecf(buf, map, 1u, grid_mat[3][1]);
+        pnanovdb_map_set_vecf(buf, map, 2u, grid_mat[3][2]);
 
         pnanovdb_map_set_invmatf(buf, map, 0u, grid_mat_inv[0][0]);
         pnanovdb_map_set_invmatf(buf, map, 1u, grid_mat_inv[1][0]);
