@@ -670,7 +670,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
         ijkw = s_ijkw[s_idx];
 
         const uint face_count = 1u;
-        uint face_id = 0u;
+        uint face_id = 4u;
         //for (uint face_id = 0u; face_id < 6u; face_id++)
         {
             int3 ijk_min = ijkw.xyz;

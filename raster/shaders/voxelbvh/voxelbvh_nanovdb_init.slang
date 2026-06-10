@@ -10,6 +10,10 @@ struct constants_t
 {
     uint grid_size;
     uint resolution;
+    uint pad0;
+    uint pad1;
+    float4x4 transform;
+    float4x4 transform_inv;
 };
 ConstantBuffer<constants_t> constants;
 
@@ -62,6 +66,76 @@ PNANOVDB_FORCE_INLINE void pnanovdb_map_set_vecd_float(pnanovdb_buf_t buf, pnano
     pnanovdb_write_double_float(buf, pnanovdb_address_offset(p.address, PNANOVDB_MAP_OFF_VECD + 8u * index), vecd);
 }
 
+struct mat_t
+{
+    float4 x, y, z, w;
+};
+
+float4x4 mat_inverse(const mat_t m)
+{
+    float f = (float(1.0) /
+               (m.x.x * m.y.y * m.z.z * m.w.w + m.x.x * m.y.z * m.z.w * m.w.y + m.x.x * m.y.w * m.z.y * m.w.z +
+                m.x.y * m.y.x * m.z.w * m.w.z + m.x.y * m.y.z * m.z.x * m.w.w + m.x.y * m.y.w * m.z.z * m.w.x +
+                m.x.z * m.y.x * m.z.y * m.w.w + m.x.z * m.y.y * m.z.w * m.w.x + m.x.z * m.y.w * m.z.x * m.w.y +
+                m.x.w * m.y.x * m.z.z * m.w.y + m.x.w * m.y.y * m.z.x * m.w.z + m.x.w * m.y.z * m.z.y * m.w.x +
+                -m.x.x * m.y.y * m.z.w * m.w.z + -m.x.x * m.y.z * m.z.y * m.w.w + -m.x.x * m.y.w * m.z.z * m.w.y +
+                -m.x.y * m.y.x * m.z.z * m.w.w + -m.x.y * m.y.z * m.z.w * m.w.x + -m.x.y * m.y.w * m.z.x * m.w.z +
+                -m.x.z * m.y.x * m.z.w * m.w.y + -m.x.z * m.y.y * m.z.x * m.w.w + -m.x.z * m.y.w * m.z.y * m.w.x +
+                -m.x.w * m.y.x * m.z.y * m.w.z + -m.x.w * m.y.y * m.z.z * m.w.x + -m.x.w * m.y.z * m.z.x * m.w.y));
+
+    float a00 = (m.y.y * m.z.z * m.w.w + m.y.z * m.z.w * m.w.y + m.y.w * m.z.y * m.w.z + -m.y.y * m.z.w * m.w.z +
+                 -m.y.z * m.z.y * m.w.w + -m.y.w * m.z.z * m.w.y);
+
+    float a10 = (m.x.y * m.z.w * m.w.z + m.x.z * m.z.y * m.w.w + m.x.w * m.z.z * m.w.y + -m.x.y * m.z.z * m.w.w +
+                 -m.x.z * m.z.w * m.w.y + -m.x.w * m.z.y * m.w.z);
+
+    float a20 = (m.x.y * m.y.z * m.w.w + m.x.z * m.y.w * m.w.y + m.x.w * m.y.y * m.w.z + -m.x.y * m.y.w * m.w.z +
+                 -m.x.z * m.y.y * m.w.w + -m.x.w * m.y.z * m.w.y);
+
+    float a30 = (m.x.y * m.y.w * m.z.z + m.x.z * m.y.y * m.z.w + m.x.w * m.y.z * m.z.y + -m.x.y * m.y.z * m.z.w +
+                 -m.x.z * m.y.w * m.z.y + -m.x.w * m.y.y * m.z.z);
+
+    float a01 = (m.y.x * m.z.w * m.w.z + m.y.z * m.z.x * m.w.w + m.y.w * m.z.z * m.w.x + -m.y.x * m.z.z * m.w.w +
+                 -m.y.z * m.z.w * m.w.x + -m.y.w * m.z.x * m.w.z);
+
+    float a11 = (m.x.x * m.z.z * m.w.w + m.x.z * m.z.w * m.w.x + m.x.w * m.z.x * m.w.z + -m.x.x * m.z.w * m.w.z +
+                 -m.x.z * m.z.x * m.w.w + -m.x.w * m.z.z * m.w.x);
+
+    float a21 = (m.x.x * m.y.w * m.w.z + m.x.z * m.y.x * m.w.w + m.x.w * m.y.z * m.w.x + -m.x.x * m.y.z * m.w.w +
+                 -m.x.z * m.y.w * m.w.x + -m.x.w * m.y.x * m.w.z);
+
+    float a31 = (m.x.x * m.y.z * m.z.w + m.x.z * m.y.w * m.z.x + m.x.w * m.y.x * m.z.z + -m.x.x * m.y.w * m.z.z +
+                 -m.x.z * m.y.x * m.z.w + -m.x.w * m.y.z * m.z.x);
+
+    float a02 = (m.y.x * m.z.y * m.w.w + m.y.y * m.z.w * m.w.x + m.y.w * m.z.x * m.w.y + -m.y.x * m.z.w * m.w.y +
+                 -m.y.y * m.z.x * m.w.w + -m.y.w * m.z.y * m.w.x);
+
+    float a12 = (-m.x.x * m.z.y * m.w.w + -m.x.y * m.z.w * m.w.x + -m.x.w * m.z.x * m.w.y + m.x.x * m.z.w * m.w.y +
+                 m.x.y * m.z.x * m.w.w + m.x.w * m.z.y * m.w.x);
+
+    float a22 = (m.x.x * m.y.y * m.w.w + m.x.y * m.y.w * m.w.x + m.x.w * m.y.x * m.w.y + -m.x.x * m.y.w * m.w.y +
+                 -m.x.y * m.y.x * m.w.w + -m.x.w * m.y.y * m.w.x);
+
+    float a32 = (m.x.x * m.y.w * m.z.y + m.x.y * m.y.x * m.z.w + m.x.w * m.y.y * m.z.x + -m.x.y * m.y.w * m.z.x +
+                 -m.x.w * m.y.x * m.z.y + -m.x.x * m.y.y * m.z.w);
+
+    float a03 = (m.y.x * m.z.z * m.w.y + m.y.y * m.z.x * m.w.z + m.y.z * m.z.y * m.w.x + -m.y.x * m.z.y * m.w.z +
+                 -m.y.y * m.z.z * m.w.x + -m.y.z * m.z.x * m.w.y);
+
+    float a13 = (m.x.x * m.z.y * m.w.z + m.x.y * m.z.z * m.w.x + m.x.z * m.z.x * m.w.y + -m.x.x * m.z.z * m.w.y +
+                 -m.x.y * m.z.x * m.w.z + -m.x.z * m.z.y * m.w.x);
+
+    float a23 = (m.x.x * m.y.z * m.w.y + m.x.y * m.y.x * m.w.z + m.x.z * m.y.y * m.w.x + -m.x.x * m.y.y * m.w.z +
+                 -m.x.y * m.y.z * m.w.x + -m.x.z * m.y.x * m.w.y);
+
+    float a33 = (m.x.x * m.y.y * m.z.z + m.x.y * m.y.z * m.z.x + m.x.z * m.y.x * m.z.y + -m.x.x * m.y.z * m.z.y +
+                 -m.x.y * m.y.x * m.z.z + -m.x.z * m.y.y * m.z.x);
+
+    float4x4 ret = { a00 * f, a10 * f, a20 * f, a30 * f, a01 * f, a11 * f, a21 * f, a31 * f,
+                                  a02 * f, a12 * f, a22 * f, a32 * f, a03 * f, a13 * f, a23 * f, a33 * f };
+    return ret;
+}
+
 [shader("compute")][numthreads(256, 1, 1)]
 void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
@@ -86,20 +160,48 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         float voxel_size_inv = 1.f / voxel_size;
         float3 voxel_offset = -world_to_voxel.xyz * voxel_size;
 
+        float4x4 world_to_voxel_mat = float4x4(
+            world_to_voxel.w, 0.f, 0.f, 0.f,
+            0.f, world_to_voxel.w, 0.f, 0.f,
+            0.f, 0.f, world_to_voxel.w, 0.f,
+            world_to_voxel.x, world_to_voxel.y, world_to_voxel.z, 1.f
+        );
+        float4x4 grid_mat_inv = mul(constants.transform, world_to_voxel_mat);
+
+        float4x4 tmp_4x4 = transpose(grid_mat_inv);
+        mat_t tmp_mat = {tmp_4x4[0], tmp_4x4[1], tmp_4x4[2], tmp_4x4[3]};
+        float4x4 grid_mat = mat_inverse(tmp_mat);
+
         pnanovdb_grid_set_voxel_size_float(buf, grid, 0u, voxel_size);
         pnanovdb_grid_set_voxel_size_float(buf, grid, 1u, voxel_size);
         pnanovdb_grid_set_voxel_size_float(buf, grid, 2u, voxel_size);
 
         pnanovdb_map_handle_t map = pnanovdb_grid_get_map(buf, grid);
-        pnanovdb_map_set_matf(buf, map, 0u, voxel_size);
-        pnanovdb_map_set_matf(buf, map, 4u, voxel_size);
-        pnanovdb_map_set_matf(buf, map, 8u, voxel_size);
-        pnanovdb_map_set_vecf(buf, map, 0u, voxel_offset.x);
-        pnanovdb_map_set_vecf(buf, map, 1u, voxel_offset.y);
-        pnanovdb_map_set_vecf(buf, map, 2u, voxel_offset.z);
-        pnanovdb_map_set_invmatf(buf, map, 0u, voxel_size_inv);
-        pnanovdb_map_set_invmatf(buf, map, 4u, voxel_size_inv);
-        pnanovdb_map_set_invmatf(buf, map, 8u, voxel_size_inv);
+        pnanovdb_map_set_matf(buf, map, 0u, grid_mat[0][0]);
+        pnanovdb_map_set_matf(buf, map, 1u, grid_mat[1][0]);
+        pnanovdb_map_set_matf(buf, map, 2u, grid_mat[2][0]);
+        pnanovdb_map_set_matf(buf, map, 3u, grid_mat[0][1]);
+        pnanovdb_map_set_matf(buf, map, 4u, grid_mat[1][1]);
+        pnanovdb_map_set_matf(buf, map, 5u, grid_mat[2][1]);
+        pnanovdb_map_set_matf(buf, map, 6u, grid_mat[0][2]);
+        pnanovdb_map_set_matf(buf, map, 7u, grid_mat[1][2]);
+        pnanovdb_map_set_matf(buf, map, 8u, grid_mat[2][2]);
+
+        pnanovdb_map_set_vecf(buf, map, 0u, grid_mat[0][3]);
+        pnanovdb_map_set_vecf(buf, map, 1u, grid_mat[1][3]);
+        pnanovdb_map_set_vecf(buf, map, 2u, grid_mat[2][3]);
+
+        pnanovdb_map_set_invmatf(buf, map, 0u, grid_mat_inv[0][0]);
+        pnanovdb_map_set_invmatf(buf, map, 1u, grid_mat_inv[1][0]);
+        pnanovdb_map_set_invmatf(buf, map, 2u, grid_mat_inv[2][0]);
+        pnanovdb_map_set_invmatf(buf, map, 3u, grid_mat_inv[0][1]);
+        pnanovdb_map_set_invmatf(buf, map, 4u, grid_mat_inv[1][1]);
+        pnanovdb_map_set_invmatf(buf, map, 5u, grid_mat_inv[2][1]);
+        pnanovdb_map_set_invmatf(buf, map, 6u, grid_mat_inv[0][2]);
+        pnanovdb_map_set_invmatf(buf, map, 7u, grid_mat_inv[1][2]);
+        pnanovdb_map_set_invmatf(buf, map, 8u, grid_mat_inv[2][2]);
+
+        // TODO
         pnanovdb_map_set_matd_float(buf, map, 0u, voxel_size);
         pnanovdb_map_set_matd_float(buf, map, 4u, voxel_size);
         pnanovdb_map_set_matd_float(buf, map, 8u, voxel_size);
