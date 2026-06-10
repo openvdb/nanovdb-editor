@@ -178,13 +178,13 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 
         pnanovdb_map_handle_t map = pnanovdb_grid_get_map(buf, grid);
         pnanovdb_map_set_matf(buf, map, 0u, grid_mat[0][0]);
-        pnanovdb_map_set_matf(buf, map, 1u, grid_mat[1][0]);
-        pnanovdb_map_set_matf(buf, map, 2u, grid_mat[2][0]);
-        pnanovdb_map_set_matf(buf, map, 3u, grid_mat[0][1]);
+        pnanovdb_map_set_matf(buf, map, 1u, grid_mat[0][1]);
+        pnanovdb_map_set_matf(buf, map, 2u, grid_mat[0][2]);
+        pnanovdb_map_set_matf(buf, map, 3u, grid_mat[1][0]);
         pnanovdb_map_set_matf(buf, map, 4u, grid_mat[1][1]);
-        pnanovdb_map_set_matf(buf, map, 5u, grid_mat[2][1]);
-        pnanovdb_map_set_matf(buf, map, 6u, grid_mat[0][2]);
-        pnanovdb_map_set_matf(buf, map, 7u, grid_mat[1][2]);
+        pnanovdb_map_set_matf(buf, map, 5u, grid_mat[1][2]);
+        pnanovdb_map_set_matf(buf, map, 6u, grid_mat[2][0]);
+        pnanovdb_map_set_matf(buf, map, 7u, grid_mat[2][1]);
         pnanovdb_map_set_matf(buf, map, 8u, grid_mat[2][2]);
 
         pnanovdb_map_set_vecf(buf, map, 0u, grid_mat[0][3]);

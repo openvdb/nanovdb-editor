@@ -357,30 +357,27 @@ static void nanovdb_init(const pnanovdb_compute_t* compute,
         pnanovdb_uint32_t resolution;
         pnanovdb_uint32_t pad0;
         pnanovdb_uint32_t pad1;
-        float transform[16u];
-        float transform_inv[16u];
+        pnanovdb_camera_mat_t transform;
+        pnanovdb_camera_mat_t transform_inv;
     };
     constants_t constants = {};
     constants.grid_size = (pnanovdb_uint32_t)size;
     constants.resolution = resolution;
-    constants.transform[0] = 1.f;
-    constants.transform[5] = 1.f;
-    constants.transform[10] = 1.f;
-    constants.transform[15] = 1.f;
-    constants.transform_inv[0] = 1.f;
-    constants.transform_inv[5] = 1.f;
-    constants.transform_inv[10] = 1.f;
-    constants.transform_inv[15] = 1.f;
+    constants.transform.x.x = 1.f;
+    constants.transform.y.y = 1.f;
+    constants.transform.z.z = 1.f;
+    constants.transform.w.w = 1.f;
+    constants.transform_inv.x.x = 1.f;
+    constants.transform_inv.y.y = 1.f;
+    constants.transform_inv.z.z = 1.f;
+    constants.transform_inv.w.w = 1.f;
     if (transform_floats && transform_float_count >= 16)
     {
-        for (pnanovdb_uint32_t idx = 0u; idx < transform_float_count; idx++)
-        {
-            constants.transform[idx] = transform_floats[idx];
-        }
         pnanovdb_camera_mat_t mat = {};
-        memcpy(&mat, &constants.transform[0], sizeof(pnanovdb_camera_mat_t));
+        memcpy(&mat, &transform_floats[0], sizeof(pnanovdb_camera_mat_t));
         pnanovdb_camera_mat_t mat_inv = pnanovdb_camera_mat_inverse(mat);
-        memcpy(&constants.transform_inv[0], &mat_inv, sizeof(pnanovdb_camera_mat_t));
+        constants.transform = pnanovdb_camera_mat_transpose(mat);
+        constants.transform_inv = pnanovdb_camera_mat_transpose(mat_inv);
     }
 
     // constants
@@ -1134,8 +1131,8 @@ static void ijkl_from_gaussians(const pnanovdb_compute_t* compute,
         pnanovdb_uint32_t pad1;
         pnanovdb_uint32_t pad2;
         pnanovdb_uint32_t pad3;
-        float transform[16u];
-        float transform_inv[16u];
+        pnanovdb_camera_mat_t transform;
+        pnanovdb_camera_mat_t transform_inv;
     };
     constants_t constants = {};
     constants.point_count = (pnanovdb_uint32_t)gaussian_count;
@@ -1143,24 +1140,21 @@ static void ijkl_from_gaussians(const pnanovdb_compute_t* compute,
     constants.voxel_count = 8u * constants.point_count;
     constants.voxel_workgroup_count = (constants.voxel_count + 255u) / 256u;
     constants.resolution = resolution;
-    constants.transform[0] = 1.f;
-    constants.transform[5] = 1.f;
-    constants.transform[10] = 1.f;
-    constants.transform[15] = 1.f;
-    constants.transform_inv[0] = 1.f;
-    constants.transform_inv[5] = 1.f;
-    constants.transform_inv[10] = 1.f;
-    constants.transform_inv[15] = 1.f;
+    constants.transform.x.x = 1.f;
+    constants.transform.y.y = 1.f;
+    constants.transform.z.z = 1.f;
+    constants.transform.w.w = 1.f;
+    constants.transform_inv.x.x = 1.f;
+    constants.transform_inv.y.y = 1.f;
+    constants.transform_inv.z.z = 1.f;
+    constants.transform_inv.w.w = 1.f;
     if (transform_floats && transform_float_count >= 16)
     {
-        for (pnanovdb_uint32_t idx = 0u; idx < transform_float_count; idx++)
-        {
-            constants.transform[idx] = transform_floats[idx];
-        }
         pnanovdb_camera_mat_t mat = {};
-        memcpy(&mat, &constants.transform[0], sizeof(pnanovdb_camera_mat_t));
+        memcpy(&mat, &transform_floats[0], sizeof(pnanovdb_camera_mat_t));
         pnanovdb_camera_mat_t mat_inv = pnanovdb_camera_mat_inverse(mat);
-        memcpy(&constants.transform_inv[0], &mat_inv, sizeof(pnanovdb_camera_mat_t));
+        constants.transform = pnanovdb_camera_mat_transpose(mat);
+        constants.transform_inv = pnanovdb_camera_mat_transpose(mat_inv);
     }
 
     // constants

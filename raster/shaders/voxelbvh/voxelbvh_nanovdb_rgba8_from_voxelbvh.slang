@@ -678,7 +678,6 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
 
             float3 uvw = {};
             float3 worldRayDir = {};
-            float4x4 view = {};
             uint resolution = 4096u;
             if (face_id == 0)
             {
@@ -687,10 +686,6 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
                     (1.f / 7.f) * (thread_idx >> 4),
                     (1.f / 15.f) * (thread_idx & 15));
                 worldRayDir = float3(1.f, 0.f, 0.f);
-                view = float4x4(0.f, 0.f, 1.f, 0.f,
-                                0.f, 1.f, 0.f, 0.f,
-                                1.f, 0.f, 0.f, 0.f,
-                                0.f, 0.f, 0.f, 1.f);
             }
             if (face_id == 1)
             {
@@ -699,10 +694,6 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
                     (1.f / 7.f) * (thread_idx >> 4),
                     (1.f / 15.f) * (thread_idx & 15));
                 worldRayDir = float3(-1.f, 0.f, 0.f);
-                view = float4x4(0.f, 0.f, -1.f, 0.f,
-                                0.f, 1.f, 0.f, 0.f,
-                                -1.f, 0.f, 0.f, 0.f,
-                                0.f, 0.f, 0.f, 1.f);
             }
             if (face_id == 2)
             {
@@ -711,10 +702,6 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
                     0.f,
                     (1.f / 15.f) * (thread_idx & 15));
                 worldRayDir = float3(0.f, 1.f, 0.f);
-                view = float4x4(1.f, 0.f, 0.f, 0.f,
-                                0.f, 0.f, 1.f, 0.f,
-                                0.f, -1.f, 0.f, 0.f,
-                                0.f, 0.f, 0.f, 1.f);
             }
             if (face_id == 3)
             {
@@ -723,10 +710,6 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
                     1.f,
                     (1.f / 15.f) * (thread_idx & 15));
                 worldRayDir = float3(0.f, -1.f, 0.f);
-                view = float4x4(1.f, 0.f, 0.f, 0.f,
-                                0.f, 0.f, -1.f, 0.f,
-                                0.f, 1.f, 0.f, 0.f,
-                                0.f, 0.f, 0.f, 1.f);
             }
             if (face_id == 4)
             {
@@ -735,10 +718,6 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
                     (1.f / 15.f) * (thread_idx & 15),
                     0.f);
                 worldRayDir = float3(0.f, 0.f, 1.f);
-                view = float4x4(1.f, 0.f, 0.f, 0.f,
-                                0.f, 1.f, 0.f, 0.f,
-                                0.f, 0.f, 1.f, 0.f,
-                                0.f, 0.f, 0.f, 1.f);
             }
             if (face_id == 5)
             {
@@ -747,10 +726,6 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
                     (1.f / 15.f) * (thread_idx & 15),
                     1.f);
                 worldRayDir = float3(0.f, 0.f, -1.f);
-                view = float4x4(-1.f, 0.f, 0.f, 0.f,
-                                0.f, 1.f, 0.f, 0.f,
-                                0.f, 0.f, -1.f, 0.f,
-                                0.f, 0.f, 0.f, 1.f);
             }
             float3 ijkf = (1.f - uvw) * float3(ijk_min) + uvw * float3(ijk_max);
 
@@ -768,6 +743,25 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
                 worldTmax *= rayDirMagn;
             }
             float3 worldRayDirInv = float3(1.f, 1.f, 1.f) / worldRayDir;
+
+            float3 up_vec = float3(0.f, 0.f, 1.f);
+            if (abs(worldRayDir.x) <= abs(worldRayDir.y) && abs(worldRayDir.x) <= abs(worldRayDir.z))
+            {
+                up_vec = float3(1.f, 0.f, 0.f);
+            }
+            else if (abs(worldRayDir.y) <= abs(worldRayDir.x) && abs(worldRayDir.y) <= abs(worldRayDir.z))
+            {
+                up_vec = float3(0.f, 1.f, 0.f);
+            }
+            float3 x_vec = normalize(cross_product(up_vec, worldRayDir));
+            float3 y_vec = cross_product(worldRayDir, x_vec);
+
+            float4x4 view = float4x4(
+                x_vec.x, y_vec.x, worldRayDir.x, 0.f,
+                x_vec.y, y_vec.y, worldRayDir.y, 0.f,
+                x_vec.z, y_vec.z, worldRayDir.z, 0.f,
+                0.f, 0.f, 0.f, 1.f
+            );
 
             float4 sum_local = float4(0.f, 0.f, 0.f, 1.f);
             float nominalT_local = 0.f;
