@@ -782,7 +782,7 @@ void voxelbvh_test()
     compute.save_nanovdb(nanovdb_rgba8_4x, "./data/test_rgba8.nvdb");
 
     compute.destroy_array(nanovdb_rgba8_2x);
-    //compute.destroy_array(nanovdb_rgba8_4x);
+    compute.destroy_array(nanovdb_rgba8_4x);
 #endif
 
     compute.destroy_array(nanovdb_meta);
