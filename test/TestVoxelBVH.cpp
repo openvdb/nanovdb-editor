@@ -1014,13 +1014,18 @@ void voxelbvh_generate_rgba8()
     uint64_t merged_uint64_count = (total_size + 7u) / 8u;
     pnanovdb_compute_array_t* merged_nanovdb = compute.create_array(8u, merged_uint64_count, nullptr);
 
+    pnanovdb_uint64_t global_offset = 0llu;
     for (uint vert_idx = 0u; vert_idx < 12u; vert_idx++)
     {
         pnanovdb_buf_t buf = pnanovdb_make_buf((uint32_t*)vert_nanovdbs[vert_idx]->data,
             vert_nanovdbs[vert_idx]->element_size * vert_nanovdbs[vert_idx]->element_count / 4u);
 
         pnanovdb_grid_handle_t grid = {};
-        memcpy(merged_nanovdb->data, buf.data, pnanovdb_grid_get_grid_size(buf, grid));
+        pnanovdb_uint64_t grid_size = pnanovdb_grid_get_grid_size(buf, grid);
+        uint8_t* data_dst = (uint8_t*)merged_nanovdb->data;
+        memcpy(data_dst + global_offset, buf.data, grid_size);
+
+        global_offset += grid_size;
     }
 
     printf("Save merged grid\n");
