@@ -549,7 +549,7 @@ void workgroup_gaussian_process(uint thread_idx,
                 pnanovdb_address_t shn_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf_scratch, grid, 7u);
 
                 // Note: this is assuming the typical PLY case for now
-                const uint sh_degree = 3u;
+                const uint sh_degree = 0u;
                 float3 color = eval_sh_function(sh_degree, sh0_addr, 3u * prim_id, shn_addr, 3u * 15u * prim_id, worldRayDirCenter);
                 s_prims[thread_idx].color = color;
 
