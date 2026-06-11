@@ -7,6 +7,11 @@ struct constants_t
     uint voxel_count;
     uint voxel_workgroup_count;
     uint resolution;
+    uint pad1;
+    uint pad2;
+    uint pad3;
+    float4x4 transform;
+    float4x4 transform_inv;
 };
 
 ConstantBuffer<constants_t> constants;
