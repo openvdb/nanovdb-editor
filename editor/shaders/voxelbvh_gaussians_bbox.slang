@@ -401,7 +401,7 @@ void intersect_gaussian(
         }
     }
 #else
-    if (!(sigma < 0.f || alpha < 0.01f) && alpha < 0.011f)
+    if (!(sigma < 0.f || alpha < 0.01f) && alpha < shader_params.max_alpha)
     {
         alpha = 1.f;
         if (t > 0.f && t >= tmin && t < tmax)
