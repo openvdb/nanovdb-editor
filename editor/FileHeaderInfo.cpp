@@ -303,6 +303,13 @@ bool FileHeaderInfo::render(pnanovdb_compute_array_t* array)
         ImGui::Text("Vecf[0:2]: (%.6f, %.6f, %.6f)", pnanovdb_map_get_vecf(buf, map, 0),
                     pnanovdb_map_get_vecf(buf, map, 1), pnanovdb_map_get_vecf(buf, map, 2));
         ImGui::Text("Taperf: (%.6f)", pnanovdb_map_get_taperf(buf, map, 0));
+
+        ImGui::Text("InvMatf[0:2]: (%.6f, %.6f, %.6f)", pnanovdb_map_get_invmatf(buf, map, 0),
+                    pnanovdb_map_get_invmatf(buf, map, 1), pnanovdb_map_get_invmatf(buf, map, 2));
+        ImGui::Text("InvMatf[3:5]: (%.6f, %.6f, %.6f)", pnanovdb_map_get_invmatf(buf, map, 3),
+                    pnanovdb_map_get_invmatf(buf, map, 4), pnanovdb_map_get_invmatf(buf, map, 5));
+        ImGui::Text("InvMatf[6:8]: (%.6f, %.6f, %.6f)", pnanovdb_map_get_invmatf(buf, map, 6),
+                    pnanovdb_map_get_invmatf(buf, map, 7), pnanovdb_map_get_invmatf(buf, map, 8));
     }
 
     if (ImGui::CollapsingHeader("Tree Information", ImGuiTreeNodeFlags_DefaultOpen))

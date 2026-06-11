@@ -1,11 +1,15 @@
 // spherical_harmonics.slang
 
+#ifndef SPHERICAL_HARMONIC_BUF
+#define SPHERICAL_HARMONIC_BUF buf
+#endif
+
 float3 read_sh_0(pnanovdb_address_t sh0_addr, uint sh_0_idx_begin)
 {
     float3 rgb;
-    rgb = float3(pnanovdb_read_float(buf, pnanovdb_address_offset(sh0_addr, 4u * (sh_0_idx_begin + 0u))),
-                 pnanovdb_read_float(buf, pnanovdb_address_offset(sh0_addr, 4u * (sh_0_idx_begin + 1u))),
-                 pnanovdb_read_float(buf, pnanovdb_address_offset(sh0_addr, 4u * (sh_0_idx_begin + 2u))));
+    rgb = float3(pnanovdb_read_float(SPHERICAL_HARMONIC_BUF, pnanovdb_address_offset(sh0_addr, 4u * (sh_0_idx_begin + 0u))),
+                 pnanovdb_read_float(SPHERICAL_HARMONIC_BUF, pnanovdb_address_offset(sh0_addr, 4u * (sh_0_idx_begin + 1u))),
+                 pnanovdb_read_float(SPHERICAL_HARMONIC_BUF, pnanovdb_address_offset(sh0_addr, 4u * (sh_0_idx_begin + 2u))));
     return rgb;
 }
 
@@ -13,9 +17,9 @@ float3 read_sh_n(pnanovdb_address_t shn_addr, uint sh_n_idx_begin, uint n)
 {
     uint idx = n - 1u;
     float3 rgb;
-    rgb = float3(pnanovdb_read_float(buf, pnanovdb_address_offset(shn_addr, 4u * (sh_n_idx_begin + idx + 0u))),
-                 pnanovdb_read_float(buf, pnanovdb_address_offset(shn_addr, 4u * (sh_n_idx_begin + idx + 15u))),
-                 pnanovdb_read_float(buf, pnanovdb_address_offset(shn_addr, 4u * (sh_n_idx_begin + idx + 30u))));
+    rgb = float3(pnanovdb_read_float(SPHERICAL_HARMONIC_BUF, pnanovdb_address_offset(shn_addr, 4u * (sh_n_idx_begin + idx + 0u))),
+                 pnanovdb_read_float(SPHERICAL_HARMONIC_BUF, pnanovdb_address_offset(shn_addr, 4u * (sh_n_idx_begin + idx + 15u))),
+                 pnanovdb_read_float(SPHERICAL_HARMONIC_BUF, pnanovdb_address_offset(shn_addr, 4u * (sh_n_idx_begin + idx + 30u))));
     return rgb;
 }
 

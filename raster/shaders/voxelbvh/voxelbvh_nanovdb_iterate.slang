@@ -5,6 +5,15 @@
 #define PNANOVDB_BUF_HLSL_RW
 #include "PNanoVDB.h"
 
+#ifndef PNANOVDB_ITERATE_WORKGROUP_THREADS
+#define PNANOVDB_ITERATE_WORKGROUP_THREADS 256
+#endif
+#ifndef PNANOVDB_ITERATE_WORKGROUP_COUNT
+#define PNANOVDB_ITERATE_WORKGROUP_COUNT 256
+#endif
+
+#define PNANOVDB_ITERATE_TOTAL_THREADS (PNANOVDB_ITERATE_WORKGROUP_COUNT * PNANOVDB_ITERATE_WORKGROUP_THREADS)
+
 struct constants_t
 {
     uint nanovdb_word_count;
@@ -41,16 +50,16 @@ pnanovdb_coord_t key_to_coord(pnanovdb_uint64_t key)
 void iterate_main(pnanovdb_address_t node_addr, pnanovdb_address_t val_addr, uint level, uint n,
                   pnanovdb_coord_t ijk,  inout user_state_t user_state);
 
-groupshared uint s_types[256u];
+groupshared uint s_types[PNANOVDB_ITERATE_WORKGROUP_THREADS];
 
 void do_iteration(uint group_idx, uint thread_idx, inout user_state_t user_state)
 {
-    uint pass_count = (constants.nanovdb_chunk_count + 65535u) / 65536u;
+    uint pass_count = (constants.nanovdb_chunk_count + PNANOVDB_ITERATE_TOTAL_THREADS - 1u) / PNANOVDB_ITERATE_TOTAL_THREADS;
     for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
     {
-        // fetch chunks for this worker, strided 256u
+        // fetch chunks for this worker, strided PNANOVDB_ITERATE_WORKGROUP_COUNT
         // 4-bits per 64-bits
-        uint chunk_idx = pass_idx * 65536u + group_idx + 256u * thread_idx;
+        uint chunk_idx = pass_idx * PNANOVDB_ITERATE_TOTAL_THREADS + group_idx + PNANOVDB_ITERATE_WORKGROUP_COUNT * thread_idx;
         uint word_idx = chunk_idx >> 4u;
         uint shift = uint(chunk_idx & 15) << 2;
         uint64_t node_mask = 0llu;
@@ -64,12 +73,12 @@ void do_iteration(uint group_idx, uint thread_idx, inout user_state_t user_state
 
         GroupMemoryBarrierWithGroupSync();
 
-        for (uint s_idx = 0u; s_idx < 256u; s_idx++)
+        for (uint s_idx = 0u; s_idx < PNANOVDB_ITERATE_WORKGROUP_THREADS; s_idx++)
         {
             type = s_types[s_idx];
             if (type >= 1u && type <= 4u)
             {
-                chunk_idx = pass_idx * 65536u + group_idx + 256u * s_idx;
+                chunk_idx = pass_idx * PNANOVDB_ITERATE_TOTAL_THREADS + group_idx + PNANOVDB_ITERATE_WORKGROUP_COUNT * s_idx;
 
                 // Should this be avoided?
                 pnanovdb_grid_handle_t grid = { pnanovdb_address_null() };
@@ -93,10 +102,10 @@ void do_iteration(uint group_idx, uint thread_idx, inout user_state_t user_state
                     }
                     pnanovdb_uint32_t root_tile_count = pnanovdb_root_get_tile_count(buf, root);
                     pnanovdb_uint32_t count = pnanovdb_root_get_tile_count(buf, root);
-                    pnanovdb_uint32_t pass_count = (count + 255u) / 256u;
-                    for (uint pass_idx = 0u; pass_idx < pass_count; pass_idx++)
+                    pnanovdb_uint32_t tile_pass_count = (count + PNANOVDB_ITERATE_WORKGROUP_THREADS - 1u) / PNANOVDB_ITERATE_WORKGROUP_THREADS;
+                    for (uint tile_pass_idx = 0u; tile_pass_idx < tile_pass_count; tile_pass_idx++)
                     {
-                        uint n = thread_idx + 256u * pass_idx;
+                        uint n = thread_idx + PNANOVDB_ITERATE_WORKGROUP_THREADS * tile_pass_idx;
 
                         pnanovdb_coord_t ijk = {0, 0, 0};
                         pnanovdb_address_t val_addr = pnanovdb_address_null();
@@ -120,7 +129,7 @@ void do_iteration(uint group_idx, uint thread_idx, inout user_state_t user_state
                 else if (type == 2u)
                 {
                     pnanovdb_upper_handle_t upper = {uint64_t(chunk_idx) << 5u};
-                    for (uint n = thread_idx; n < PNANOVDB_UPPER_TABLE_COUNT; n+= 256u)
+                    for (uint n = thread_idx; n < PNANOVDB_UPPER_TABLE_COUNT; n+= PNANOVDB_ITERATE_WORKGROUP_THREADS)
                     {
                         pnanovdb_coord_t ijk = pnanovdb_upper_get_bbox_min(buf, upper);
                         ijk.x += int(((n >> 10u) & 31) << 7u);
@@ -139,7 +148,7 @@ void do_iteration(uint group_idx, uint thread_idx, inout user_state_t user_state
                 else if (type == 3u)
                 {
                     pnanovdb_lower_handle_t lower = {uint64_t(chunk_idx) << 5u};
-                    for (uint n = thread_idx; n < PNANOVDB_LOWER_TABLE_COUNT; n+= 256u)
+                    for (uint n = thread_idx; n < PNANOVDB_LOWER_TABLE_COUNT; n+= PNANOVDB_ITERATE_WORKGROUP_THREADS)
                     {
                         pnanovdb_coord_t ijk = pnanovdb_lower_get_bbox_min(buf, lower);
                         ijk.x += int(((n >> 8u) & 15) << 3u);
@@ -158,7 +167,7 @@ void do_iteration(uint group_idx, uint thread_idx, inout user_state_t user_state
                 else if (type == 4u)
                 {
                     pnanovdb_leaf_handle_t leaf = {uint64_t(chunk_idx) << 5u};
-                    for (uint n = thread_idx; n < PNANOVDB_LEAF_TABLE_COUNT; n+= 256u)
+                    for (uint n = thread_idx; n < PNANOVDB_LEAF_TABLE_COUNT; n+= PNANOVDB_ITERATE_WORKGROUP_THREADS)
                     {
                         pnanovdb_coord_t ijk = pnanovdb_leaf_get_bbox_min(buf, leaf);
                         ijk.x += int((n >> 6u) & 7);

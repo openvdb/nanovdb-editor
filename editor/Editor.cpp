@@ -584,12 +584,10 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                                                         }
                                                     });
 
-    EditorSceneConfig scene_config{ imgui_user_instance,
-                                    editor,
-                                    imgui_user_settings,
-                                    device_queue,
-                                    compiler_inst,
-                                    pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_nanovdb_render) };
+    EditorSceneConfig scene_config{
+        imgui_user_instance, editor,        imgui_user_settings,
+        device_queue,        compiler_inst, pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_nanovdb_render)
+    };
     editor->impl->editor_scene = new EditorScene(scene_config);
 
     auto create_background = [&]()
@@ -1182,10 +1180,9 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
 
     // Add with deferred destruction handling (use local device_queue in case we waited for worker init)
     std::shared_ptr<pnanovdb_raster_gaussian_data_t> old_owner;
-    editor->impl->scene_manager->add_gaussian_data(scene, name, gaussian_data, raster_params_array, raster_params_dt,
-                                                   editor->impl->compute, editor->impl->raster, device_queue,
-                                                   pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat),
-                                                   &old_owner);
+    editor->impl->scene_manager->add_gaussian_data(
+        scene, name, gaussian_data, raster_params_array, raster_params_dt, editor->impl->compute, editor->impl->raster,
+        device_queue, pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat), &old_owner);
 
     // Chain old data through gaussian_data_old for deferred destruction
     if (old_owner)
