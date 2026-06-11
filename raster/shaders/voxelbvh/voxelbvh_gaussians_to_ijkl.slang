@@ -7,6 +7,11 @@ struct constants_t
     uint voxel_count;
     uint voxel_workgroup_count;
     uint resolution;
+    uint pad1;
+    uint pad2;
+    uint pad3;
+    float4x4 transform;
+    float4x4 transform_inv;
 };
 
 ConstantBuffer<constants_t> constants;
@@ -53,6 +58,9 @@ bool voxel_ellipsoid_overlap(uint idx, float4 world_to_voxel, int3 ijk, uint lev
         if ((vert_idx & 4u) != 0u) { voxel_pos.z += float(1u << level);}
 
         float3 local_pos = (voxel_pos - world_to_voxel.xyz) / world_to_voxel.w;
+
+        local_pos = mul(float4(local_pos, 1.f), constants.transform_inv).xyz;
+
         local_pos -= meansf;
 
         float3 rot0_inv = float3(
@@ -165,6 +173,8 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
             cube_pos_world.x = cube_pos.x * rot0.x + cube_pos.y * rot0.y + cube_pos.z * rot0.z + meansf.x;
             cube_pos_world.y = cube_pos.x * rot1.x + cube_pos.y * rot1.y + cube_pos.z * rot1.z + meansf.y;
             cube_pos_world.z = cube_pos.x * rot2.x + cube_pos.y * rot2.y + cube_pos.z * rot2.z + meansf.z;
+
+            cube_pos_world = mul(float4(cube_pos_world, 1.f), constants.transform).xyz;
 
             aabb_min = min(aabb_min, cube_pos_world);
             aabb_max = max(aabb_max, cube_pos_world);

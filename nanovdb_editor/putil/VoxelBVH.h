@@ -52,6 +52,8 @@ typedef struct pnanovdb_voxelbvh_t
                                      pnanovdb_uint64_t nanovdb_word_count,
                                      pnanovdb_compute_buffer_t* world_bbox_in,
                                      pnanovdb_uint32_t resolution,
+                                     const float* transform_floats,
+                                     pnanovdb_uint32_t transform_float_count,
                                      pnanovdb_uint32_t grid_type);
 
     void(PNANOVDB_ABI* nanovdb_add_nodes)(const pnanovdb_compute_t* compute,
@@ -80,7 +82,9 @@ typedef struct pnanovdb_voxelbvh_t
                                                           pnanovdb_compute_array_t* ijkl_in,
                                                           pnanovdb_compute_array_t* range_in,
                                                           pnanovdb_compute_array_t* world_bbox_in,
-                                                          pnanovdb_uint32_t resolution);
+                                                          pnanovdb_uint32_t resolution,
+                                                          const float* transform_floats,
+                                                          pnanovdb_uint32_t transform_float_count);
 
     void(PNANOVDB_ABI* ijkl_from_gaussians)(const pnanovdb_compute_t* compute,
                                             pnanovdb_compute_queue_t* queue,
@@ -94,7 +98,9 @@ typedef struct pnanovdb_voxelbvh_t
                                             pnanovdb_compute_buffer_t* prim_id_out,
                                             pnanovdb_compute_buffer_t* range_out,
                                             pnanovdb_compute_buffer_t* world_bbox_out,
-                                            pnanovdb_uint32_t resolution);
+                                            pnanovdb_uint32_t resolution,
+                                            const float* transform_floats,
+                                            pnanovdb_uint32_t transform_float_count);
 
     void(PNANOVDB_ABI* ijkl_from_gaussians_file)(const pnanovdb_compute_t* compute,
                                                  pnanovdb_compute_queue_t* queue,
@@ -106,7 +112,9 @@ typedef struct pnanovdb_voxelbvh_t
                                                  pnanovdb_compute_array_t** world_bbox_out,
                                                  pnanovdb_uint32_t resolution,
                                                  pnanovdb_compute_array_t** gaussian_arrays_out,
-                                                 pnanovdb_uint32_t gaussian_array_count);
+                                                 pnanovdb_uint32_t gaussian_array_count,
+                                                 const float* transform_floats,
+                                                 pnanovdb_uint32_t transform_float_count);
 
     void(PNANOVDB_ABI* nanovdb_append_metadata)(const pnanovdb_compute_t* compute,
                                                 pnanovdb_compute_array_t* nanovdb_in,
@@ -204,6 +212,8 @@ typedef struct pnanovdb_voxelbvh_t
                                                    pnanovdb_compute_buffer_t* src_nanovdb_in,
                                                    pnanovdb_uint64_t src_nanovdb_word_count,
                                                    pnanovdb_uint32_t resolution,
+                                                   const float* transform_floats,
+                                                   pnanovdb_uint32_t transform_float_count,
                                                    pnanovdb_uint32_t dst_grid_type,
                                                    pnanovdb_bool_t upsample);
 
@@ -213,6 +223,8 @@ typedef struct pnanovdb_voxelbvh_t
                                                          pnanovdb_compute_array_t** dst_nanovdb_out,
                                                          pnanovdb_compute_array_t* src_nanovdb_in,
                                                          pnanovdb_uint32_t resolution,
+                                                         const float* transform_floats,
+                                                         pnanovdb_uint32_t transform_float_count,
                                                          pnanovdb_uint32_t dst_grid_type,
                                                          pnanovdb_bool_t upsample);
 
