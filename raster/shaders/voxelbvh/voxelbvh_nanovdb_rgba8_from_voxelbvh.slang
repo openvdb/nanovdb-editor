@@ -17,12 +17,15 @@ struct user_state_t
 
 struct constants2_t
 {
+    float3 index_space_ray_direction;
     uint pass_id;
 };
 
 ConstantBuffer<constants2_t> constants2;
 
-#if 0
+//#define VOXELIZE_TRIANGLES
+
+#ifdef VOXELIZE_TRIANGLES
 
 // based on: https://iquilezles.org/articles/intersectors/
 float3 intersect_triangle( in float3 ro, in float3 rd, in float3 v0, in float3 v1, in float3 v2 )
@@ -669,186 +672,157 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     {
         ijkw = s_ijkw[s_idx];
 
-        const uint face_count = 1u;
-        uint face_id = 5u;
-        //for (uint face_id = 0u; face_id < 6u; face_id++)
+        float3 ray_dir = constants2.index_space_ray_direction;
+        float3 uvw = {};
+        float3 worldRayDir = {};
+        if (abs(ray_dir.x) >= abs(ray_dir.y) && abs(ray_dir.x) >= abs(ray_dir.z))
         {
-            int3 ijk_min = ijkw.xyz;
-            int3 ijk_max = ijkw.xyz + ijkw.w;
+            uvw = float3(
+                0.f,
+                (1.f / 7.f) * (thread_idx >> 4),
+                (1.f / 15.f) * (thread_idx & 15));
+            worldRayDir = float3(ray_dir.x >= 0.f ? 1.f : -1.f, 0.f, 0.f);
+        }
+        else if (abs(ray_dir.y) >= abs(ray_dir.x) && abs(ray_dir.y) >= abs(ray_dir.z))
+        {
+            uvw = float3(
+                (1.f / 7.f) * (thread_idx >> 4),
+                0.f,
+                (1.f / 15.f) * (thread_idx & 15));
+            worldRayDir = float3(0.f, ray_dir.y >= 0.f ? 1.f : -1.f, 0.f);
+        }
+        else
+        {
+            uvw = float3(
+                (1.f / 7.f) * (thread_idx >> 4),
+                (1.f / 15.f) * (thread_idx & 15),
+                0.f);
+            worldRayDir = float3(0.f, 0.f, ray_dir.z >= 0.f ? 1.f : -1.f);
+        }
 
-            float3 uvw = {};
-            float3 worldRayDir = {};
-            uint resolution = 4096u;
-            if (face_id == 0)
-            {
-                uvw = float3(
-                    0.f,
-                    (1.f / 7.f) * (thread_idx >> 4),
-                    (1.f / 15.f) * (thread_idx & 15));
-                worldRayDir = float3(1.f, 0.f, 0.f);
-            }
-            if (face_id == 1)
-            {
-                uvw = float3(
-                    1.f,
-                    (1.f / 7.f) * (thread_idx >> 4),
-                    (1.f / 15.f) * (thread_idx & 15));
-                worldRayDir = float3(-1.f, 0.f, 0.f);
-            }
-            if (face_id == 2)
-            {
-                uvw = float3(
-                    (1.f / 7.f) * (thread_idx >> 4),
-                    0.f,
-                    (1.f / 15.f) * (thread_idx & 15));
-                worldRayDir = float3(0.f, 1.f, 0.f);
-            }
-            if (face_id == 3)
-            {
-                uvw = float3(
-                    (1.f / 7.f) * (thread_idx >> 4),
-                    1.f,
-                    (1.f / 15.f) * (thread_idx & 15));
-                worldRayDir = float3(0.f, -1.f, 0.f);
-            }
-            if (face_id == 4)
-            {
-                uvw = float3(
-                    (1.f / 7.f) * (thread_idx >> 4),
-                    (1.f / 15.f) * (thread_idx & 15),
-                    0.f);
-                worldRayDir = float3(0.f, 0.f, 1.f);
-            }
-            if (face_id == 5)
-            {
-                uvw = float3(
-                    (1.f / 7.f) * (thread_idx >> 4),
-                    (1.f / 15.f) * (thread_idx & 15),
-                    1.f);
-                worldRayDir = float3(0.f, 0.f, -1.f);
-            }
-            float3 ijkf = (1.f - uvw) * float3(ijk_min) + uvw * float3(ijk_max);
+        const uint resolution = 4096u;
+        int3 ijk_min = ijkw.xyz;
+        int3 ijk_max = ijkw.xyz + ijkw.w;
+        float3 ijkf = (1.f - uvw) * float3(ijk_min) + uvw * float3(ijk_max);
 
-            float3 worldRayOrigin = ijkf;
-            float worldTmin = 0.f;
-            float worldTmax = float(ijkw.w);
+        float3 worldRayOrigin = ijkf;
+        float worldTmin = 0.f;
+        float worldTmax = float(ijkw.w);
 
-            worldRayOrigin = pnanovdb_grid_index_to_worldf(buf, grid, worldRayOrigin);
-            worldRayDir = pnanovdb_grid_index_to_world_dirf(buf, grid, worldRayDir);
-            float rayDirMagn = length(worldRayDir);
-            if (rayDirMagn > 0.f)
-            {
-                worldRayDir /= rayDirMagn;
-                worldTmin *= rayDirMagn;
-                worldTmax *= rayDirMagn;
-            }
-            float3 worldRayDirInv = float3(1.f, 1.f, 1.f) / worldRayDir;
+        worldRayOrigin = pnanovdb_grid_index_to_worldf(buf, grid, worldRayOrigin);
+        worldRayDir = pnanovdb_grid_index_to_world_dirf(buf, grid, worldRayDir);
+        float rayDirMagn = length(worldRayDir);
+        if (rayDirMagn > 0.f)
+        {
+            worldRayDir /= rayDirMagn;
+            worldTmin *= rayDirMagn;
+            worldTmax *= rayDirMagn;
+        }
+        float3 worldRayDirInv = float3(1.f, 1.f, 1.f) / worldRayDir;
 
-            float3 up_vec = float3(0.f, 0.f, 1.f);
-            if (abs(worldRayDir.x) <= abs(worldRayDir.y) && abs(worldRayDir.x) <= abs(worldRayDir.z))
-            {
-                up_vec = float3(1.f, 0.f, 0.f);
-            }
-            else if (abs(worldRayDir.y) <= abs(worldRayDir.x) && abs(worldRayDir.y) <= abs(worldRayDir.z))
-            {
-                up_vec = float3(0.f, 1.f, 0.f);
-            }
-            float3 x_vec = normalize(cross_product(up_vec, worldRayDir));
-            float3 y_vec = cross_product(worldRayDir, x_vec);
+        float3 up_vec = float3(0.f, 0.f, 1.f);
+        if (abs(worldRayDir.x) <= abs(worldRayDir.y) && abs(worldRayDir.x) <= abs(worldRayDir.z))
+        {
+            up_vec = float3(1.f, 0.f, 0.f);
+        }
+        else if (abs(worldRayDir.y) <= abs(worldRayDir.x) && abs(worldRayDir.y) <= abs(worldRayDir.z))
+        {
+            up_vec = float3(0.f, 1.f, 0.f);
+        }
+        float3 x_vec = normalize(cross_product(up_vec, worldRayDir));
+        float3 y_vec = cross_product(worldRayDir, x_vec);
 
-            float4x4 view = float4x4(
-                x_vec.x, y_vec.x, worldRayDir.x, 0.f,
-                x_vec.y, y_vec.y, worldRayDir.y, 0.f,
-                x_vec.z, y_vec.z, worldRayDir.z, 0.f,
-                0.f, 0.f, 0.f, 1.f
-            );
+        float4x4 view = float4x4(
+            x_vec.x, y_vec.x, worldRayDir.x, 0.f,
+            x_vec.y, y_vec.y, worldRayDir.y, 0.f,
+            x_vec.z, y_vec.z, worldRayDir.z, 0.f,
+            0.f, 0.f, 0.f, 1.f
+        );
 
-            float4 sum_local = float4(0.f, 0.f, 0.f, 1.f);
-            float nominalT_local = 0.f;
-#if 0
-            workgroup_triangle_process(thread_idx,
-                                    true,
-                                    grid,
-                                    worldRayOrigin,
-                                    worldRayDir,
-                                    worldRayDirInv,
-                                    worldTmin,
-                                    worldTmax,
-                                    s_voxel_val[s_idx],
-                                    sum_local,
-                                    nominalT_local);
+        float4 sum_local = float4(0.f, 0.f, 0.f, 1.f);
+        float nominalT_local = 0.f;
+#ifdef VOXELIZE_TRIANGLES
+        workgroup_triangle_process(thread_idx,
+                                true,
+                                grid,
+                                worldRayOrigin,
+                                worldRayDir,
+                                worldRayDirInv,
+                                worldTmin,
+                                worldTmax,
+                                s_voxel_val[s_idx],
+                                sum_local,
+                                nominalT_local);
 #else
-            workgroup_gaussian_process(thread_idx,
-                                    true,
-                                    grid,
-                                    worldRayOrigin,
-                                    worldRayDir,
-                                    worldRayDirInv,
-                                    view,
-                                    resolution,
-                                    worldRayDir, // center and ray here are the same
-                                    worldTmin,
-                                    worldTmax,
-                                    s_voxel_val[s_idx],
-                                    s_src_ijk[s_idx],
-                                    sum_local,
-                                    nominalT_local);
+        workgroup_gaussian_process(thread_idx,
+                                true,
+                                grid,
+                                worldRayOrigin,
+                                worldRayDir,
+                                worldRayDirInv,
+                                view,
+                                resolution,
+                                worldRayDir, // center and ray here are the same
+                                worldTmin,
+                                worldTmax,
+                                s_voxel_val[s_idx],
+                                s_src_ijk[s_idx],
+                                sum_local,
+                                nominalT_local);
 #endif
 
-            // flip to alpha before averaging
-            sum_local.a = 1.f - sum_local.a;
+        // flip to alpha before averaging
+        sum_local.a = 1.f - sum_local.a;
 
-            s_sum[thread_idx] = sum_local;
+        s_sum[thread_idx] = sum_local;
 
-            GroupMemoryBarrierWithGroupSync();
-            if (thread_idx < 64u)
-            {
-                sum_local += s_sum[thread_idx + 64u];
-                //sum_local += s_sum[thread_idx + 128u];
-                //sum_local += s_sum[thread_idx + 192u];
-                sum_local *= 0.5f;
-            }
-            GroupMemoryBarrierWithGroupSync();
-            s_sum[thread_idx] = sum_local;
-
-            GroupMemoryBarrierWithGroupSync();
-            if (thread_idx < 16u)
-            {
-                sum_local += s_sum[thread_idx + 16u];
-                sum_local += s_sum[thread_idx + 32u];
-                sum_local += s_sum[thread_idx + 48u];
-                sum_local *= 0.25f;
-            }
-            GroupMemoryBarrierWithGroupSync();
-            s_sum[thread_idx] = sum_local;
-
-            GroupMemoryBarrierWithGroupSync();
-            if (thread_idx < 4u)
-            {
-                sum_local += s_sum[thread_idx + 4u];
-                sum_local += s_sum[thread_idx + 8u];
-                sum_local += s_sum[thread_idx + 12u];
-                sum_local *= 0.25f;
-            }
-            GroupMemoryBarrierWithGroupSync();
-            s_sum[thread_idx] = sum_local;
-
-            GroupMemoryBarrierWithGroupSync();
-            if (thread_idx == s_idx)
-            {
-                sum_local = 0.25f * (s_sum[0] + s_sum[1] + s_sum[2] + s_sum[3]);
-
-                // normalize against misses
-                if (sum_local.a != 0.f)
-                {
-                    sum_local.rgb *= (1.f / sum_local.a);
-                }
-
-                //sum = max(sum, sum_local);
-                sum = sum + (1.f / float(face_count)) * sum_local;
-            }
-            GroupMemoryBarrierWithGroupSync();
+        GroupMemoryBarrierWithGroupSync();
+        if (thread_idx < 64u)
+        {
+            sum_local += s_sum[thread_idx + 64u];
+            //sum_local += s_sum[thread_idx + 128u];
+            //sum_local += s_sum[thread_idx + 192u];
+            sum_local *= 0.5f;
         }
+        GroupMemoryBarrierWithGroupSync();
+        s_sum[thread_idx] = sum_local;
+
+        GroupMemoryBarrierWithGroupSync();
+        if (thread_idx < 16u)
+        {
+            sum_local += s_sum[thread_idx + 16u];
+            sum_local += s_sum[thread_idx + 32u];
+            sum_local += s_sum[thread_idx + 48u];
+            sum_local *= 0.25f;
+        }
+        GroupMemoryBarrierWithGroupSync();
+        s_sum[thread_idx] = sum_local;
+
+        GroupMemoryBarrierWithGroupSync();
+        if (thread_idx < 4u)
+        {
+            sum_local += s_sum[thread_idx + 4u];
+            sum_local += s_sum[thread_idx + 8u];
+            sum_local += s_sum[thread_idx + 12u];
+            sum_local *= 0.25f;
+        }
+        GroupMemoryBarrierWithGroupSync();
+        s_sum[thread_idx] = sum_local;
+
+        GroupMemoryBarrierWithGroupSync();
+        if (thread_idx == s_idx)
+        {
+            sum_local = 0.25f * (s_sum[0] + s_sum[1] + s_sum[2] + s_sum[3]);
+
+            // normalize against misses
+            if (sum_local.a != 0.f)
+            {
+                sum_local.rgb *= (1.f / sum_local.a);
+            }
+
+            sum = sum_local;
+        }
+        GroupMemoryBarrierWithGroupSync();
     }
 
     if (this_thread_active)

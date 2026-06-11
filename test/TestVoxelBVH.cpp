@@ -224,30 +224,21 @@ void voxelbvh_test()
     // const char* in_file = "./data/ficus.ply";
     const char* out_file = "./data/garden_eps2d03.nvdb";
 
-#if 1
-    const float zscale = 1.f /  4.f;
+#    if 1
+    const float zscale = 1.f / 4.f;
     const float rot = 3.14f / 4.f;
-    const float transform[16u] = {
-        cosf(rot), 0.f, zscale * sinf(rot), 0.f,
-        0.f, 1.f, 0.f, 0.f,
-        -sinf(rot), 0.f, zscale * cosf(rot), 0.f,
-        0.f, 0.f, 0.f, 1.f
-    };
-#else
-    const float transform[16u] = {
-        1.f, 0.f, 0.f, 0.f,
-        0.f, 1.f, 0.f, 0.f,
-        0.f, 0.f, 1.f, 0.f,
-        0.f, 0.f, 0.f, 1.f
-    };
-#endif
+    const float transform[16u] = { cosf(rot),  0.f, zscale * sinf(rot), 0.f, 0.f, 1.f, 0.f, 0.f,
+                                   -sinf(rot), 0.f, zscale * cosf(rot), 0.f, 0.f, 0.f, 0.f, 1.f };
+#    else
+    const float transform[16u] = { 1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 0.f, 1.f };
+#    endif
 
     pnanovdb_compute_array_t* ijkl_array = nullptr;
     pnanovdb_compute_array_t* prim_id_array = nullptr;
     pnanovdb_compute_array_t* range_array = nullptr;
     pnanovdb_compute_array_t* world_bbox_array = nullptr;
-    voxel_bvh.ijkl_from_gaussians_file(&compute, queue, voxelbvh_ctx, in_file, &ijkl_array, &prim_id_array,
-                                       &range_array, &world_bbox_array, resolution, prim_meta_arrays, 6u, transform, 16u);
+    voxel_bvh.ijkl_from_gaussians_file(&compute, queue, voxelbvh_ctx, in_file, &ijkl_array, &prim_id_array, &range_array,
+                                       &world_bbox_array, resolution, prim_meta_arrays, 6u, transform, 16u);
 
     uint64_t range_count = range_array->element_count;
     uint64_t ijkl_count = ijkl_array->element_count;
@@ -777,7 +768,9 @@ void voxelbvh_test()
     voxel_bvh.nanovdb_duplicate_topology_array(&compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_rgba8_2x,
                                                2u * resolution, transform, 16u, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE);
 
-    voxel_bvh.nanovdb_rgba8_from_voxelbvh_array(&compute, queue, voxelbvh_ctx, nanovdb_rgba8_4x, nanovdb_meta);
+    pnanovdb_vec3_t index_space_ray_direction = { 0.f, 0.f, -1.f };
+    voxel_bvh.nanovdb_rgba8_from_voxelbvh_array(
+        &compute, queue, voxelbvh_ctx, nanovdb_rgba8_4x, nanovdb_meta, index_space_ray_direction);
 
     compute.save_nanovdb(nanovdb_rgba8_4x, "./data/test_rgba8.nvdb");
 

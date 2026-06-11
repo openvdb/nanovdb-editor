@@ -1060,7 +1060,8 @@ static void nanovdb_add_nodes_from_ijkl_array(const pnanovdb_compute_t* compute,
     gpu_array_alloc_device(compute, queue, flat_range_gpu_array, flat_range_array);
 
     nanovdb_init(compute, queue, voxelbvh_context, nanovdb_gpu_array->device_buffer, 2u * nanovdb_uint64_count,
-                 world_bbox_gpu_array->device_buffer, resolution, transform_floats, transform_float_count, PNANOVDB_GRID_TYPE_INT64);
+                 world_bbox_gpu_array->device_buffer, resolution, transform_floats, transform_float_count,
+                 PNANOVDB_GRID_TYPE_INT64);
 
     nanovdb_add_nodes_from_ijkl_buffer(compute, queue, voxelbvh_context, nanovdb_gpu_array->device_buffer,
                                        2u * nanovdb_uint64_count, flat_range_gpu_array->device_buffer,
@@ -2301,7 +2302,8 @@ void nanovdb_rgba8_from_voxelbvh(const pnanovdb_compute_t* compute,
                                  pnanovdb_compute_buffer_t* dst_nanovdb_inout,
                                  pnanovdb_uint64_t dst_nanovdb_word_count,
                                  pnanovdb_compute_buffer_t* src_nanovdb_in,
-                                 pnanovdb_uint64_t src_nanovdb_word_count)
+                                 pnanovdb_uint64_t src_nanovdb_word_count,
+                                 pnanovdb_vec3_t index_space_ray_direction)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -2365,10 +2367,12 @@ void nanovdb_rgba8_from_voxelbvh(const pnanovdb_compute_t* compute,
 
         struct constants2_t
         {
+            pnanovdb_vec3_t index_space_ray_direction;
             pnanovdb_uint32_t pass_id;
         };
         constants2_t constants2 = {};
         constants2.pass_id = pass_id;
+        constants2.index_space_ray_direction = index_space_ray_direction;
 
         // constants
         buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT;
@@ -2412,7 +2416,8 @@ void nanovdb_rgba8_from_voxelbvh_array(const pnanovdb_compute_t* compute,
                                        pnanovdb_compute_queue_t* queue,
                                        pnanovdb_voxelbvh_context_t* voxelbvh_context,
                                        pnanovdb_compute_array_t* dst_nanovdb_inout,
-                                       pnanovdb_compute_array_t* src_nanovdb_in)
+                                       pnanovdb_compute_array_t* src_nanovdb_in,
+                                       pnanovdb_vec3_t index_space_ray_direction)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -2429,7 +2434,7 @@ void nanovdb_rgba8_from_voxelbvh_array(const pnanovdb_compute_t* compute,
     pnanovdb_uint64_t dst_word_count = (dst_nanovdb_inout->element_count * dst_nanovdb_inout->element_size) / 4u;
 
     nanovdb_rgba8_from_voxelbvh(compute, queue, voxelbvh_context, dst_nanovdb_gpu_array->device_buffer, dst_word_count,
-                                src_nanovdb_gpu_array->device_buffer, src_word_count);
+                                src_nanovdb_gpu_array->device_buffer, src_word_count, index_space_ray_direction);
 
     gpu_array_readback(compute, queue, dst_nanovdb_gpu_array, dst_nanovdb_inout);
 

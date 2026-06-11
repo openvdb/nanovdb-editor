@@ -12,6 +12,7 @@
 #ifndef NANOVDB_PUTILS_VOXELBVH_H_HAS_BEEN_INCLUDED
 #define NANOVDB_PUTILS_VOXELBVH_H_HAS_BEEN_INCLUDED
 
+#include "nanovdb_editor/putil/Camera.h"
 #include "nanovdb_editor/putil/Compute.h"
 
 /// ********************************* VoxelBVH ***************************************
@@ -234,13 +235,15 @@ typedef struct pnanovdb_voxelbvh_t
                                                     pnanovdb_compute_buffer_t* dst_nanovdb_inout,
                                                     pnanovdb_uint64_t dst_nanovdb_word_count,
                                                     pnanovdb_compute_buffer_t* src_nanovdb_in,
-                                                    pnanovdb_uint64_t src_nanovdb_word_count);
+                                                    pnanovdb_uint64_t src_nanovdb_word_count,
+                                                    pnanovdb_vec3_t index_space_ray_direction);
 
     void(PNANOVDB_ABI* nanovdb_rgba8_from_voxelbvh_array)(const pnanovdb_compute_t* compute,
                                                           pnanovdb_compute_queue_t* queue,
                                                           pnanovdb_voxelbvh_context_t* context,
                                                           pnanovdb_compute_array_t* dst_nanovdb_inout,
-                                                          pnanovdb_compute_array_t* src_nanovdb_in);
+                                                          pnanovdb_compute_array_t* src_nanovdb_in,
+                                                          pnanovdb_vec3_t index_space_ray_direction);
 
 } pnanovdb_voxelbvh_t;
 

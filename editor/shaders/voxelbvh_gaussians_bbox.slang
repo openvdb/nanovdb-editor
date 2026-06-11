@@ -13,6 +13,8 @@ struct shader_params_t
 {
     uint sh_degree;
     uint max_level;
+    float max_alpha;
+    float bbox_edge_scale;
 };
 
 StructuredBuffer<uint2> buf;
@@ -282,8 +284,10 @@ void intersect_bbox(
     {
         uint axis = line_idx < 8u ? line_idx < 4u ? 0 : 1 : 2;
         uint quad = line_idx & 3;
-        float3 line_min = 0.05f * aabb_min + 0.95f * aabb_max;
-        float3 line_max = 0.95f * aabb_min + 0.05f * aabb_max;
+        float w = shader_params.bbox_edge_scale;
+        float winv = 1.f - w;
+        float3 line_min = w * aabb_min + winv * aabb_max;
+        float3 line_max = winv * aabb_min + w * aabb_max;
         if (axis == 0) {
             line_min.x = aabb_min.x;
             line_min.y = (quad & 1) != 0u ? aabb_min.y : line_min.y;
