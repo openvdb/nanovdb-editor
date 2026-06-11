@@ -14,6 +14,7 @@
 #include <nanovdb_editor/putil/FileFormat.h>
 #include <nanovdb_editor/putil/Reflect.h>
 #include <nanovdb_editor/putil/VoxelBVH.h>
+#include <nanovdb_editor/putil/Camera.h>
 
 #include <cstdarg>
 #include <cstdint>
@@ -21,6 +22,8 @@
 #include <math.h>
 
 #include "editor/shaders/voxelbvh_common.h"
+#include "nanovdb/PNanoVDB.h"
+#include "nanovdb_editor/putil/Compute.h"
 
 static void save_ply(pnanovdb_compute_t& compute,
                      pnanovdb_compute_array_t* positions,
@@ -131,8 +134,13 @@ static void log_print(pnanovdb_compute_log_level_t level, const char* format, ..
     va_end(args);
 }
 
+void voxelbvh_generate_rgba8();
+
 void voxelbvh_test()
 {
+    voxelbvh_generate_rgba8();
+    return;
+
     // load compiler and compute
     pnanovdb_compiler_t compiler = {};
     pnanovdb_compiler_load(&compiler);
@@ -219,10 +227,12 @@ void voxelbvh_test()
     static const pnanovdb_uint32_t prim_meta_count = 6u;
     pnanovdb_compute_array_t* prim_meta_arrays[prim_meta_count] = {};
 
-    const pnanovdb_uint32_t resolution = 2048u;
-    const char* in_file = "./data/garden_eps2d03.ply";
-    // const char* in_file = "./data/ficus.ply";
-    const char* out_file = "./data/garden_eps2d03.nvdb";
+    // const pnanovdb_uint32_t resolution = 2048u;
+    const pnanovdb_uint32_t resolution = 512u;
+    // const char* in_file = "./data/garden_eps2d03.ply";
+    const char* in_file = "./data/ficus.ply";
+    // const char* out_file = "./data/garden_eps2d03.nvdb";
+    const char* out_file = "./data/ficus.nvdb";
 
 #    if 1
     const float zscale = 1.f / 4.f;
@@ -787,8 +797,237 @@ void voxelbvh_test()
     compute.destroy_array(ijkl_array);
     compute.destroy_array(prim_id_array);
     compute.destroy_array(range_array);
+    compute.destroy_array(world_bbox_array);
+
     compute.destroy_array(built_nanovdb_array);
     compute.destroy_array(built_flat_range_array);
+
+    voxel_bvh.destroy_context(&compute, queue, voxelbvh_ctx);
+
+    pnanovdb_voxelbvh_free(&voxel_bvh);
+
+    compute.device_interface.destroy_device(device_manager, device);
+    compute.device_interface.destroy_device_manager(device_manager);
+
+    pnanovdb_compute_free(&compute);
+    pnanovdb_compiler_free(&compiler);
+}
+
+static const float g = (1.f + sqrt(5.f)) / 2.f;
+static const pnanovdb_vec3_t verts[12u] = {
+    {0.f, -1.f, -g},
+    {0.f, 1.f, -g},
+    {0.f, -1.f, g},
+    {0.f, 1.f, g},
+    {-1.f, -g, 0.f},
+    {1.f, -g, 0.f},
+    {-1.f, g, 0.f},
+    {1.f, g, 0.f},
+    {-g, 0.f, -1.f},
+    {-g, 0.f, 1.f},
+    {g, 0.f, -1.f},
+    {g, 0.f, 1.f}
+};
+static const float sphere_radius = sqrt(g*g + 1.f);
+
+static void get_transform(pnanovdb_uint32_t vert_idx, pnanovdb_camera_mat_t* transform)
+{
+    pnanovdb_vec3_t ray_dir = verts[vert_idx];
+    ray_dir = pnanovdb_camera_vec3_normalize(ray_dir);
+
+    pnanovdb_vec3_t up_vec = {0.f, 0.f, 1.f};
+    if (fabsf(ray_dir.x) <= fabsf(ray_dir.y) && fabsf(ray_dir.x) <= fabsf(ray_dir.z))
+    {
+        up_vec = pnanovdb_vec3_t{1.f, 0.f, 0.f};
+    }
+    else if (fabsf(ray_dir.y) <= fabsf(ray_dir.x) && fabsf(ray_dir.y) <= fabsf(ray_dir.z))
+    {
+        up_vec = pnanovdb_vec3_t{0.f, 1.f, 0.f};
+    }
+    pnanovdb_vec3_t x_vec = pnanovdb_camera_vec3_normalize(
+        pnanovdb_camera_vec3_cross(up_vec, ray_dir));
+    pnanovdb_vec3_t y_vec = pnanovdb_camera_vec3_cross(ray_dir, x_vec);
+
+    pnanovdb_camera_mat_t view = {
+        x_vec.x, y_vec.x, ray_dir.x, 0.f,
+        x_vec.y, y_vec.y, ray_dir.y, 0.f,
+        x_vec.z, y_vec.z, ray_dir.z, 0.f,
+        0.f, 0.f, 0.f, 1.f
+    };
+    *transform = view;
+}
+
+void voxelbvh_generate_rgba8()
+{
+    // load compiler and compute
+    pnanovdb_compiler_t compiler = {};
+    pnanovdb_compiler_load(&compiler);
+    pnanovdb_compute_t compute = {};
+    pnanovdb_compute_load(&compute, &compiler);
+
+    // create device
+    pnanovdb_compute_device_desc_t device_desc = {};
+    device_desc.log_print = log_print;
+    pnanovdb_compute_device_manager_t* device_manager = compute.device_interface.create_device_manager(PNANOVDB_FALSE);
+    pnanovdb_compute_device_t* device = compute.device_interface.create_device(device_manager, &device_desc);
+    pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
+
+    pnanovdb_voxelbvh_t voxel_bvh = {};
+    pnanovdb_voxelbvh_load(&voxel_bvh, &compute);
+
+    auto voxelbvh_ctx = voxel_bvh.create_context(&compute, queue);
+
+    static const pnanovdb_uint32_t prim_meta_count = 6u;
+    pnanovdb_compute_array_t* prim_meta_arrays[prim_meta_count] = {};
+
+    // const pnanovdb_uint32_t resolution = 2048u;
+    const pnanovdb_uint32_t resolution = 512u;
+    // const char* in_file = "./data/garden_eps2d03.ply";
+    const char* in_file = "./data/ficus.ply";
+    // const char* out_file = "./data/garden_eps2d03.nvdb";
+    const char* out_file = "./data/ficus.nvdb";
+
+    pnanovdb_compute_array_t* vert_nanovdbs[12] = {};
+    for (uint vert_idx = 0u; vert_idx < 12u; vert_idx++)
+    {
+        printf("VoxelBVH vert_idx(%d)\n", vert_idx);
+
+        pnanovdb_camera_mat_t transform_mat = {};
+        get_transform(vert_idx, &transform_mat);
+        float transform[16u] = {};
+        memcpy(transform, &transform_mat, sizeof(pnanovdb_camera_mat_t));
+
+        pnanovdb_compute_array_t* ijkl_array = nullptr;
+        pnanovdb_compute_array_t* prim_id_array = nullptr;
+        pnanovdb_compute_array_t* range_array = nullptr;
+        pnanovdb_compute_array_t* world_bbox_array = nullptr;
+        voxel_bvh.ijkl_from_gaussians_file(&compute, queue, voxelbvh_ctx, in_file, &ijkl_array, &prim_id_array, &range_array,
+                                        &world_bbox_array, resolution, prim_meta_arrays, 6u, transform, 16u);
+
+        uint64_t range_count = range_array->element_count;
+        uint64_t ijkl_count = ijkl_array->element_count;
+        uint64_t* mapped_ijkl = (uint64_t*)compute.map_array(ijkl_array);
+        uint64_t* mapped_range = (uint64_t*)compute.map_array(range_array);
+
+        pnanovdb_compute_array_t* built_nanovdb_array = nullptr;
+        pnanovdb_compute_array_t* built_flat_range_array = nullptr;
+        voxel_bvh.nanovdb_add_nodes_from_ijkl_array(&compute, queue, voxelbvh_ctx, &built_nanovdb_array,
+                                                    &built_flat_range_array, ijkl_array, range_array, world_bbox_array,
+                                                    resolution, transform, 16u);
+
+        pnanovdb_buf_t buf = pnanovdb_make_buf((uint32_t*)built_nanovdb_array->data,
+                                            built_nanovdb_array->element_size * built_nanovdb_array->element_count / 4u);
+        pnanovdb_uint64_t* range_flat_ptr = (pnanovdb_uint64_t*)built_flat_range_array->data;
+
+        // find first invalid key
+        uint64_t last_valid_key = ijkl_count;
+        for (uint64_t idx = 0u; idx < ijkl_count; idx++)
+        {
+            if ((mapped_ijkl[idx] & 0xFFFF) != 0xFFFF)
+            {
+                last_valid_key = idx;
+            }
+        }
+        // shrink prim_id array
+        prim_id_array->element_count = last_valid_key + 1u;
+
+        // find first invalid range
+        uint64_t flat_range_count = built_flat_range_array->element_count;
+        uint64_t last_valid_range = flat_range_count;
+        for (uint64_t idx = 0u; idx < built_flat_range_array->element_count; idx++)
+        {
+            if (range_flat_ptr[idx] != 0u)
+            {
+                last_valid_range = idx;
+            }
+        }
+        // shrink ranges array
+        built_flat_range_array->element_count = last_valid_range + 1u;
+
+        printf("Shrinking arrays prim_id(%zu vs %zu) range(%zu vs %zu)\n", prim_id_array->element_count, ijkl_count,
+            built_flat_range_array->element_count, flat_range_count);
+
+        pnanovdb_compute_array_t* metadata_arrays[2u + prim_meta_count] = { built_flat_range_array, prim_id_array };
+        for (pnanovdb_uint32_t idx = 0u; idx < prim_meta_count; idx++)
+        {
+            metadata_arrays[2u + idx] = prim_meta_arrays[idx];
+        }
+
+        printf("Append metadata vert_idx(%d)\n", vert_idx);
+        pnanovdb_compute_array_t* nanovdb_meta = nullptr;
+        voxel_bvh.nanovdb_append_metadata(
+            &compute, built_nanovdb_array, &nanovdb_meta, metadata_arrays, 2u + prim_meta_count);
+
+        // save NanoVDB out to disk
+        //compute.save_nanovdb(nanovdb_meta, out_file);
+
+        printf("Voxelize vert_idx(%d)\n", vert_idx);
+    #if 1
+        pnanovdb_compute_array_t* nanovdb_rgba8_2x = nullptr;
+        voxel_bvh.nanovdb_duplicate_topology_array(&compute, queue, voxelbvh_ctx, &nanovdb_rgba8_2x, nanovdb_meta,
+                                                resolution, transform, 16u, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE);
+        pnanovdb_compute_array_t* nanovdb_rgba8_4x = nullptr;
+        voxel_bvh.nanovdb_duplicate_topology_array(&compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_rgba8_2x,
+                                                2u * resolution, transform, 16u, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE);
+
+        pnanovdb_vec3_t index_space_ray_direction = { 0.f, 0.f, 1.f };
+        voxel_bvh.nanovdb_rgba8_from_voxelbvh_array(
+            &compute, queue, voxelbvh_ctx, nanovdb_rgba8_4x, nanovdb_meta, index_space_ray_direction);
+
+        //compute.save_nanovdb(nanovdb_rgba8_4x, "./data/test_rgba8.nvdb");
+        vert_nanovdbs[vert_idx] = nanovdb_rgba8_4x;
+
+        compute.destroy_array(nanovdb_rgba8_2x);
+        //compute.destroy_array(nanovdb_rgba8_4x);
+    #endif
+
+        compute.destroy_array(nanovdb_meta);
+        for (uint32_t idx = 0u; idx < prim_meta_count; idx++)
+        {
+            compute.destroy_array(prim_meta_arrays[idx]);
+        }
+
+        compute.destroy_array(ijkl_array);
+        compute.destroy_array(prim_id_array);
+        compute.destroy_array(range_array);
+        compute.destroy_array(world_bbox_array);
+
+        compute.destroy_array(built_nanovdb_array);
+        compute.destroy_array(built_flat_range_array);
+    }
+
+    printf("Merge grids\n");
+    // for each NanoVDB, set grid idx and count
+    pnanovdb_uint64_t total_size = 0llu;
+    for (uint vert_idx = 0u; vert_idx < 12u; vert_idx++)
+    {
+        pnanovdb_buf_t buf = pnanovdb_make_buf((uint32_t*)vert_nanovdbs[vert_idx]->data,
+            vert_nanovdbs[vert_idx]->element_size * vert_nanovdbs[vert_idx]->element_count / 4u);
+
+        pnanovdb_grid_handle_t grid = {};
+        pnanovdb_grid_set_grid_index(buf, grid, vert_idx);
+        pnanovdb_grid_set_grid_count(buf, grid, 12u);
+
+        total_size += pnanovdb_grid_get_grid_size(buf, grid);
+    }
+
+    uint64_t merged_uint64_count = (total_size + 7u) / 8u;
+    pnanovdb_compute_array_t* merged_nanovdb = compute.create_array(8u, merged_uint64_count, nullptr);
+
+    for (uint vert_idx = 0u; vert_idx < 12u; vert_idx++)
+    {
+        pnanovdb_buf_t buf = pnanovdb_make_buf((uint32_t*)vert_nanovdbs[vert_idx]->data,
+            vert_nanovdbs[vert_idx]->element_size * vert_nanovdbs[vert_idx]->element_count / 4u);
+
+        pnanovdb_grid_handle_t grid = {};
+        memcpy(merged_nanovdb->data, buf.data, pnanovdb_grid_get_grid_size(buf, grid));
+    }
+
+    printf("Save merged grid\n");
+
+    compute.save_nanovdb(merged_nanovdb, "./data/merged_rgba8.nvdb");
+
+    compute.destroy_array(merged_nanovdb);
 
     voxel_bvh.destroy_context(&compute, queue, voxelbvh_ctx);
 
