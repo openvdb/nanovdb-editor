@@ -895,6 +895,9 @@ void voxelbvh_generate_rgba8()
     pnanovdb_compute_device_t* device = compute.device_interface.create_device(device_manager, &device_desc);
     pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
 
+    //pnanovdb_compute_context_t* compute_context = compute.device_interface.get_compute_context(queue);
+    //compute.device_interface.set_resource_min_lifetime(compute_context, 0u);
+
     pnanovdb_voxelbvh_t voxel_bvh = {};
     pnanovdb_voxelbvh_load(&voxel_bvh, &compute);
 
@@ -910,11 +913,13 @@ void voxelbvh_generate_rgba8()
     // const char* out_file = "./data/garden_eps2d03.nvdb";
     const char* out_file = "./data/ficus.nvdb";
 
+    printf("Vulkan initialized\n");
+    print_memory_stats(&compute, device);
+
     pnanovdb_compute_array_t* vert_nanovdbs[vert_count] = {};
     for (pnanovdb_uint32_t vert_idx = 0u; vert_idx < vert_count; vert_idx++)
     {
         printf("ijkl from Gaussians vert_idx(%d)\n", vert_idx);
-        print_memory_stats(&compute, device);
 
         pnanovdb_camera_mat_t transform_mat = {};
         get_transform(vert_idx, &transform_mat);
@@ -935,7 +940,6 @@ void voxelbvh_generate_rgba8()
         uint64_t* mapped_range = (uint64_t*)compute.map_array(range_array);
 
         printf("NanoVDB from ijkl vert_idx(%d)\n", vert_idx);
-        print_memory_stats(&compute, device);
 
         pnanovdb_compute_array_t* built_nanovdb_array = nullptr;
         pnanovdb_compute_array_t* built_flat_range_array = nullptr;
@@ -1026,7 +1030,6 @@ void voxelbvh_generate_rgba8()
         compute.destroy_array(built_flat_range_array);
 
         printf("End of vert_idx(%d)\n", vert_idx);
-        print_memory_stats(&compute, device);
     }
 
     printf("Freeing GPU device before merge\n");
