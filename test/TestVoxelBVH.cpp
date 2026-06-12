@@ -913,8 +913,7 @@ void voxelbvh_generate_rgba8()
     pnanovdb_compute_array_t* vert_nanovdbs[vert_count] = {};
     for (pnanovdb_uint32_t vert_idx = 0u; vert_idx < vert_count; vert_idx++)
     {
-        printf("VoxelBVH vert_idx(%d)\n", vert_idx);
-
+        printf("ijkl from Gaussians vert_idx(%d)\n", vert_idx);
         print_memory_stats(&compute, device);
 
         pnanovdb_camera_mat_t transform_mat = {};
@@ -934,6 +933,9 @@ void voxelbvh_generate_rgba8()
         uint64_t ijkl_count = ijkl_array->element_count;
         uint64_t* mapped_ijkl = (uint64_t*)compute.map_array(ijkl_array);
         uint64_t* mapped_range = (uint64_t*)compute.map_array(range_array);
+
+        printf("NanoVDB from ijkl vert_idx(%d)\n", vert_idx);
+        print_memory_stats(&compute, device);
 
         pnanovdb_compute_array_t* built_nanovdb_array = nullptr;
         pnanovdb_compute_array_t* built_flat_range_array = nullptr;
@@ -1022,6 +1024,9 @@ void voxelbvh_generate_rgba8()
 
         compute.destroy_array(built_nanovdb_array);
         compute.destroy_array(built_flat_range_array);
+
+        printf("End of vert_idx(%d)\n", vert_idx);
+        print_memory_stats(&compute, device);
     }
 
     printf("Freeing GPU device before merge\n");
