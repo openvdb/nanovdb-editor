@@ -994,7 +994,7 @@ void voxelbvh_generate_rgba8()
 #if 1
         pnanovdb_compute_array_t* nanovdb_rgba8_4x = nullptr;
         voxel_bvh.nanovdb_duplicate_topology_array(&compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_meta,
-                                                   2u * resolution, transform, 16u, PNANOVDB_GRID_TYPE_RGBA8,
+                                                   resolution, transform, 16u, PNANOVDB_GRID_TYPE_RGBA8,
                                                    PNANOVDB_TRUE, 4u);
 
         pnanovdb_vec3_t index_space_ray_direction = { 0.f, 0.f, 1.f };
@@ -1021,6 +1021,7 @@ void voxelbvh_generate_rgba8()
         compute.destroy_array(built_flat_range_array);
 
         printf("End of vert_idx(%d)\n", vert_idx);
+        print_memory_stats(&compute, device);
     }
 
     printf("Freeing GPU device before merge\n");
