@@ -775,12 +775,9 @@ void voxelbvh_test()
     compute.save_nanovdb(nanovdb_meta, out_file);
 
 #if 1
-    pnanovdb_compute_array_t* nanovdb_rgba8_2x = nullptr;
-    voxel_bvh.nanovdb_duplicate_topology_array(&compute, queue, voxelbvh_ctx, &nanovdb_rgba8_2x, nanovdb_meta,
-                                               resolution, transform, 16u, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE);
     pnanovdb_compute_array_t* nanovdb_rgba8_4x = nullptr;
-    voxel_bvh.nanovdb_duplicate_topology_array(&compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_rgba8_2x,
-                                               2u * resolution, transform, 16u, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE);
+    voxel_bvh.nanovdb_duplicate_topology_array(&compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_meta,
+                                               2u * resolution, transform, 16u, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE, 4u);
 
     pnanovdb_vec3_t index_space_ray_direction = { 0.f, 0.f, -1.f };
     voxel_bvh.nanovdb_rgba8_from_voxelbvh_array(
@@ -788,7 +785,6 @@ void voxelbvh_test()
 
     compute.save_nanovdb(nanovdb_rgba8_4x, "./data/test_rgba8.nvdb");
 
-    compute.destroy_array(nanovdb_rgba8_2x);
     compute.destroy_array(nanovdb_rgba8_4x);
 #endif
 
@@ -996,13 +992,10 @@ void voxelbvh_generate_rgba8()
 
         printf("Voxelize vert_idx(%d)\n", vert_idx);
 #if 1
-        pnanovdb_compute_array_t* nanovdb_rgba8_2x = nullptr;
-        voxel_bvh.nanovdb_duplicate_topology_array(&compute, queue, voxelbvh_ctx, &nanovdb_rgba8_2x, nanovdb_meta,
-                                                   resolution, transform, 16u, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE);
         pnanovdb_compute_array_t* nanovdb_rgba8_4x = nullptr;
-        voxel_bvh.nanovdb_duplicate_topology_array(&compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_rgba8_2x,
+        voxel_bvh.nanovdb_duplicate_topology_array(&compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_meta,
                                                    2u * resolution, transform, 16u, PNANOVDB_GRID_TYPE_RGBA8,
-                                                   PNANOVDB_TRUE);
+                                                   PNANOVDB_TRUE, 4u);
 
         pnanovdb_vec3_t index_space_ray_direction = { 0.f, 0.f, 1.f };
         voxel_bvh.nanovdb_rgba8_from_voxelbvh_array(
@@ -1010,8 +1003,6 @@ void voxelbvh_generate_rgba8()
 
         // compute.save_nanovdb(nanovdb_rgba8_4x, "./data/test_rgba8.nvdb");
         vert_nanovdbs[vert_idx] = nanovdb_rgba8_4x;
-
-        compute.destroy_array(nanovdb_rgba8_2x);
         // compute.destroy_array(nanovdb_rgba8_4x);
 #endif
 
