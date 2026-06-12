@@ -1014,6 +1014,15 @@ void voxelbvh_generate_rgba8()
         compute.destroy_array(built_flat_range_array);
     }
 
+    printf("Freeing GPU device before merge\n");
+
+    voxel_bvh.destroy_context(&compute, queue, voxelbvh_ctx);
+
+    pnanovdb_voxelbvh_free(&voxel_bvh);
+
+    compute.device_interface.destroy_device(device_manager, device);
+    compute.device_interface.destroy_device_manager(device_manager);
+
     printf("Merge grids\n");
     // for each NanoVDB, set grid idx and count
     pnanovdb_uint64_t total_size = 0llu;
@@ -1055,13 +1064,6 @@ void voxelbvh_generate_rgba8()
     compute.save_nanovdb(merged_nanovdb, "./data/merged_rgba8.nvdb");
 
     compute.destroy_array(merged_nanovdb);
-
-    voxel_bvh.destroy_context(&compute, queue, voxelbvh_ctx);
-
-    pnanovdb_voxelbvh_free(&voxel_bvh);
-
-    compute.device_interface.destroy_device(device_manager, device);
-    compute.device_interface.destroy_device_manager(device_manager);
 
     pnanovdb_compute_free(&compute);
     pnanovdb_compiler_free(&compiler);
