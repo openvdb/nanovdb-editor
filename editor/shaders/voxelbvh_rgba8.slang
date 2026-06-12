@@ -21,6 +21,7 @@ ConstantBuffer<EditorParams> editor_params;
 ConstantBuffer<shader_params_t> shader_params;
 
 #if 0
+static const uint vert_count = 12u;
 static const float g = (1.f + sqrt(5.f)) / 2.f;
 static const float3 verts[12u] = {
     {0.f, -1.f, -g},
@@ -38,6 +39,7 @@ static const float3 verts[12u] = {
 };
 static const float sphere_radius = sqrt(g*g + 1.f);
 #else
+static const uint vert_count = 8u;
 static const pnanovdb_vec3_t verts[8u] = {
     {-1.f, -1.f, 0.f},
     {1.f, -1.f, 0.f},
@@ -68,7 +70,7 @@ void ray_hdda_nanovdb(uint thread_idx,
     {
         float max_dot = -1.f;
         target_grid_idx = 0;
-        for (uint vert_idx = 0u; vert_idx < 12u; vert_idx++)
+        for (uint vert_idx = 0u; vert_idx < vert_count; vert_idx++)
         {
             float cur_dot = dot(worldRayDirCenter, normalize(verts[vert_idx]));
             if (cur_dot >= max_dot)
@@ -78,7 +80,12 @@ void ray_hdda_nanovdb(uint thread_idx,
             }
         }
     }
-    for (int grid_idx = 0; grid_idx < target_grid_idx && grid_idx < 12; grid_idx++)
+    uint grid_count = pnanovdb_grid_get_grid_count(buf, grid);
+    if (target_grid_idx >= grid_count)
+    {
+        target_grid_idx = grid_count == 0u ? 0 : int(grid_count) - 1;
+    }
+    for (int grid_idx = 0; grid_idx < target_grid_idx && grid_idx < vert_count; grid_idx++)
     {
         grid.address.byte_offset += pnanovdb_grid_get_grid_size(buf, grid);
     }
