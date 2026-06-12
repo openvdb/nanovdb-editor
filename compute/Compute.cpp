@@ -89,9 +89,7 @@ pnanovdb_compute_array_t* load_nanovdb(const char* filepath)
     }
 
     pnanovdb_compute_array_t* array = create_array(
-        sizeof(pnanovdb_uint32_t),
-        gridHandles[0u].bufferSize() / sizeof(pnanovdb_uint32_t),
-        gridHandles[0u].data());
+        sizeof(pnanovdb_uint32_t), gridHandles[0u].bufferSize() / sizeof(pnanovdb_uint32_t), gridHandles[0u].data());
     array->filepath = filepath;
 
     return array;
@@ -573,7 +571,9 @@ std::mutex g_leak_tracker_mutex;
 struct leak_tracker_t
 {
     std::unordered_map<pnanovdb_compute_array_t*, bool> active_arrays;
-    leak_tracker_t() {}
+    leak_tracker_t()
+    {
+    }
     ~leak_tracker_t()
     {
         std::lock_guard<std::mutex> lock(g_leak_tracker_mutex);
@@ -581,8 +581,9 @@ struct leak_tracker_t
         {
             if (it.second)
             {
-                printf("Leak! data(%p) element_size(%zu) element_count(%zu) filepath(%s)\n",
-                    it.first->data, it.first->element_size, it.first->element_count, it.first->filepath ? it.first->filepath : "invalid");
+                printf("Leak! data(%p) element_size(%zu) element_count(%zu) filepath(%s)\n", it.first->data,
+                       it.first->element_size, it.first->element_count,
+                       it.first->filepath ? it.first->filepath : "invalid");
             }
         }
     }

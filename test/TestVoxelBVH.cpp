@@ -136,8 +136,8 @@ static void print_memory_stats(pnanovdb_compute_t* compute, pnanovdb_compute_dev
 {
     pnanovdb_compute_device_memory_stats_t stats = {};
     compute->device_interface.get_memory_stats(device, &stats);
-    printf("Vulkan mem: device(%zu) upload(%zu) readback(%zu) other(%zu)\n",
-        stats.device_memory_bytes, stats.upload_memory_bytes, stats.readback_memory_bytes, stats.other_memory_bytes);
+    printf("Vulkan mem: device(%zu) upload(%zu) readback(%zu) other(%zu)\n", stats.device_memory_bytes,
+           stats.upload_memory_bytes, stats.readback_memory_bytes, stats.other_memory_bytes);
 }
 
 void voxelbvh_generate_rgba8();
@@ -777,7 +777,7 @@ void voxelbvh_test()
 #if 1
     pnanovdb_compute_array_t* nanovdb_rgba8_4x = nullptr;
     voxel_bvh.nanovdb_duplicate_topology_array(&compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_meta,
-                                               2u * resolution, transform, 16u, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE, 4u);
+                                               resolution, transform, 16u, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE, 4u);
 
     pnanovdb_vec3_t index_space_ray_direction = { 0.f, 0.f, -1.f };
     voxel_bvh.nanovdb_rgba8_from_voxelbvh_array(
@@ -891,8 +891,8 @@ void voxelbvh_generate_rgba8()
     pnanovdb_compute_device_t* device = compute.device_interface.create_device(device_manager, &device_desc);
     pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
 
-    //pnanovdb_compute_context_t* compute_context = compute.device_interface.get_compute_context(queue);
-    //compute.device_interface.set_resource_min_lifetime(compute_context, 0u);
+    // pnanovdb_compute_context_t* compute_context = compute.device_interface.get_compute_context(queue);
+    // compute.device_interface.set_resource_min_lifetime(compute_context, 0u);
 
     pnanovdb_voxelbvh_t voxel_bvh = {};
     pnanovdb_voxelbvh_load(&voxel_bvh, &compute);
@@ -994,8 +994,8 @@ void voxelbvh_generate_rgba8()
 #if 1
         pnanovdb_compute_array_t* nanovdb_rgba8_4x = nullptr;
         voxel_bvh.nanovdb_duplicate_topology_array(&compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_meta,
-                                                   resolution, transform, 16u, PNANOVDB_GRID_TYPE_RGBA8,
-                                                   PNANOVDB_TRUE, 4u);
+                                                   resolution, transform, 16u, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE,
+                                                   4u);
 
         pnanovdb_vec3_t index_space_ray_direction = { 0.f, 0.f, 1.f };
         voxel_bvh.nanovdb_rgba8_from_voxelbvh_array(

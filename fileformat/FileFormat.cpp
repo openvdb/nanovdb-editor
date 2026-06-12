@@ -562,7 +562,8 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
         {
             if (is_line_indices)
             {
-                out_arrays[i] = create_array(2u * sizeof(uint32_t), source_array_uint32->size() / 2u, source_array_uint32->data());
+                out_arrays[i] =
+                    create_array(2u * sizeof(uint32_t), source_array_uint32->size() / 2u, source_array_uint32->data());
             }
             else
             {

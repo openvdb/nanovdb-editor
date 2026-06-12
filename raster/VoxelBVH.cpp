@@ -740,7 +740,8 @@ static void nanovdb_duplicate_topology_array(const pnanovdb_compute_t* compute,
 
     nanovdb_duplicate_topology(compute, queue, voxelbvh_context, dst_nanovdb_gpu_array->device_buffer,
                                2u * nanovdb_uint64_count, src_nanovdb_gpu_array->device_buffer, src_word_count,
-                               resolution, transform_floats, transform_float_count, dst_grid_type, upsample, upsample_factor);
+                               resolution, transform_floats, transform_float_count, dst_grid_type, upsample,
+                               upsample_factor);
 
     gpu_array_readback(compute, queue, dst_nanovdb_gpu_array, dst_nanovdb_array);
 
