@@ -227,12 +227,10 @@ void voxelbvh_test()
     static const pnanovdb_uint32_t prim_meta_count = 6u;
     pnanovdb_compute_array_t* prim_meta_arrays[prim_meta_count] = {};
 
-    // const pnanovdb_uint32_t resolution = 2048u;
-    const pnanovdb_uint32_t resolution = 512u;
-    // const char* in_file = "./data/garden_eps2d03.ply";
-    const char* in_file = "./data/ficus.ply";
-    // const char* out_file = "./data/garden_eps2d03.nvdb";
-    const char* out_file = "./data/ficus.nvdb";
+    const pnanovdb_uint32_t resolution = 2048u;
+    const char* in_file = "./data/garden_eps2d03.ply";
+    // const char* in_file = "./data/ficus.ply";
+    const char* out_file = "./data/garden_eps2d03.nvdb";
 
 #    if 1
     const float zscale = 1.f / 4.f;
