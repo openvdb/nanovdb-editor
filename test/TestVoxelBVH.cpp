@@ -1044,6 +1044,9 @@ void voxelbvh_generate_rgba8()
         uint8_t* data_dst = (uint8_t*)merged_nanovdb->data;
         memcpy(data_dst + global_offset, buf.data, grid_size);
 
+        compute.destroy_array(vert_nanovdbs[vert_idx]);
+        vert_nanovdbs[vert_idx] = nullptr;
+
         global_offset += grid_size;
     }
 
