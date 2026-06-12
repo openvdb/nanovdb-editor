@@ -88,16 +88,15 @@ pnanovdb_compute_array_t* load_nanovdb(const char* filepath)
     pnanovdb_compute_array_t* array = new pnanovdb_compute_array_t();
     array->filepath = filepath;
     array->element_size = sizeof(pnanovdb_uint32_t);
-    //array->element_count = gridHandle.bufferSize() / array->element_size;
-    //array->data = new char[gridHandle.bufferSize()];
-    //memcpy(array->data, gridHandle.data(), gridHandle.bufferSize());
+    // array->element_count = gridHandle.bufferSize() / array->element_size;
+    // array->data = new char[gridHandle.bufferSize()];
+    // memcpy(array->data, gridHandle.data(), gridHandle.bufferSize());
     array->element_count = total_size / array->element_size;
     array->data = new char[total_size];
     size_t global_offset = 0u;
     for (size_t i = 0u; i < gridHandles.size(); i++)
     {
-        memcpy((uint8_t*)array->data + global_offset,
-            gridHandles[i].data(), gridHandles[i].bufferSize());
+        memcpy((uint8_t*)array->data + global_offset, gridHandles[i].data(), gridHandles[i].bufferSize());
         global_offset += gridHandles[i].bufferSize();
     }
     return array;
