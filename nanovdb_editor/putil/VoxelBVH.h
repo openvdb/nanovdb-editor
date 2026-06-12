@@ -216,7 +216,8 @@ typedef struct pnanovdb_voxelbvh_t
                                                    const float* transform_floats,
                                                    pnanovdb_uint32_t transform_float_count,
                                                    pnanovdb_uint32_t dst_grid_type,
-                                                   pnanovdb_bool_t upsample);
+                                                   pnanovdb_bool_t upsample,
+                                                   pnanovdb_uint32_t upsample_factor);
 
     void(PNANOVDB_ABI* nanovdb_duplicate_topology_array)(const pnanovdb_compute_t* compute,
                                                          pnanovdb_compute_queue_t* queue,
@@ -227,7 +228,8 @@ typedef struct pnanovdb_voxelbvh_t
                                                          const float* transform_floats,
                                                          pnanovdb_uint32_t transform_float_count,
                                                          pnanovdb_uint32_t dst_grid_type,
-                                                         pnanovdb_bool_t upsample);
+                                                         pnanovdb_bool_t upsample,
+                                                         pnanovdb_uint32_t upsample_factor);
 
     void(PNANOVDB_ABI* nanovdb_rgba8_from_voxelbvh)(const pnanovdb_compute_t* compute,
                                                     pnanovdb_compute_queue_t* queue,

@@ -595,7 +595,8 @@ static void nanovdb_duplicate_topology(const pnanovdb_compute_t* compute,
                                        const float* transform_floats,
                                        pnanovdb_uint32_t transform_float_count,
                                        pnanovdb_uint32_t dst_grid_type,
-                                       pnanovdb_bool_t upsample)
+                                       pnanovdb_bool_t upsample,
+                                       pnanovdb_uint32_t upsample_factor)
 {
     auto ctx = cast(voxelbvh_context);
 
@@ -647,7 +648,7 @@ static void nanovdb_duplicate_topology(const pnanovdb_compute_t* compute,
                                  1u, 1u, 1u, "voxelbvh_nanovdb_to_bbox");
     }
 
-    pnanovdb_uint32_t dst_resolution = upsample ? 2u * resolution : resolution;
+    pnanovdb_uint32_t dst_resolution = upsample ? upsample_factor * resolution : resolution;
 
     nanovdb_init(compute, queue, voxelbvh_context, dst_nanovdb_inout, dst_nanovdb_word_count, world_bbox_buffer,
                  dst_resolution, transform_floats, transform_float_count, dst_grid_type);
@@ -666,7 +667,7 @@ static void nanovdb_duplicate_topology(const pnanovdb_compute_t* compute,
         };
         constants_t constants = {};
         constants.nanovdb_word_count = dst_nanovdb_word_count;
-        constants.ijkl_count = upsample ? 1u : 0u;
+        constants.ijkl_count = upsample ? upsample_factor : 0u;
         constants.nanovdb_chunk_count = dst_nanovdb_word_count >> 3u;
         constants.node_mask_uint64_count = node_mask_uint64_count;
         constants.range_count = pass_id;
@@ -715,15 +716,16 @@ static void nanovdb_duplicate_topology_array(const pnanovdb_compute_t* compute,
                                              const float* transform_floats,
                                              pnanovdb_uint32_t transform_float_count,
                                              pnanovdb_uint32_t dst_grid_type,
-                                             pnanovdb_bool_t upsample)
+                                             pnanovdb_bool_t upsample,
+                                             pnanovdb_uint32_t upsample_factor)
 {
     auto ctx = cast(voxelbvh_context);
 
     pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
     pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
 
-    // default to 6GB return for now
-    uint64_t buf_size = 6u * 1024llu * 1024llu * 1024llu;
+    // default to 2GB return for now
+    uint64_t buf_size = 2u * 1024llu * 1024llu * 1024llu;
     uint64_t nanovdb_uint64_count = (buf_size + 7u) / 8u;
 
     pnanovdb_compute_array_t* dst_nanovdb_array = compute->create_array(8u, nanovdb_uint64_count, nullptr);
@@ -738,7 +740,8 @@ static void nanovdb_duplicate_topology_array(const pnanovdb_compute_t* compute,
 
     nanovdb_duplicate_topology(compute, queue, voxelbvh_context, dst_nanovdb_gpu_array->device_buffer,
                                2u * nanovdb_uint64_count, src_nanovdb_gpu_array->device_buffer, src_word_count,
-                               resolution, transform_floats, transform_float_count, dst_grid_type, upsample);
+                               resolution, transform_floats, transform_float_count, dst_grid_type, upsample,
+                               upsample_factor);
 
     gpu_array_readback(compute, queue, dst_nanovdb_gpu_array, dst_nanovdb_array);
 

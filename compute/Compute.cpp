@@ -14,7 +14,9 @@
 
 #include <nanovdb/io/IO.h>
 
+#include <mutex>
 #include <stdio.h>
+#include <unordered_map>
 
 namespace pnanovdb_compute
 {
@@ -65,12 +67,14 @@ void destroy_shader_context(const pnanovdb_compute_t* compute,
     }
 }
 
+pnanovdb_compute_array_t* create_array(size_t element_size, pnanovdb_uint64_t element_count, const void* data);
+
 pnanovdb_compute_array_t* load_nanovdb(const char* filepath)
 {
-    nanovdb::GridHandle<nanovdb::HostBuffer> gridHandle;
+    std::vector<nanovdb::GridHandle<nanovdb::HostBuffer>> gridHandles;
     try
     {
-        gridHandle = nanovdb::io::readGrid(filepath, 0);
+        gridHandles = nanovdb::io::readGrids(filepath);
     }
     catch (const std::ios_base::failure& e)
     {
@@ -78,12 +82,16 @@ pnanovdb_compute_array_t* load_nanovdb(const char* filepath)
         return nullptr;
     }
 
-    pnanovdb_compute_array_t* array = new pnanovdb_compute_array_t();
+    if (gridHandles.size() == 0u)
+    {
+        printf("Error: NanoVDB must produce at least one grid handle '%s'\n", filepath);
+        return nullptr;
+    }
+
+    pnanovdb_compute_array_t* array = create_array(
+        sizeof(pnanovdb_uint32_t), gridHandles[0u].bufferSize() / sizeof(pnanovdb_uint32_t), gridHandles[0u].data());
     array->filepath = filepath;
-    array->element_size = sizeof(pnanovdb_uint32_t);
-    array->element_count = gridHandle.bufferSize() / array->element_size;
-    array->data = new char[gridHandle.bufferSize()];
-    memcpy(array->data, gridHandle.data(), gridHandle.bufferSize());
+
     return array;
 }
 
@@ -556,6 +564,38 @@ pnanovdb_bool_t dispatch_shader_on_array(const pnanovdb_compute_t* compute,
     return PNANOVDB_TRUE;
 }
 
+#define LEAK_TRACKER
+
+#ifdef LEAK_TRACKER
+std::mutex g_leak_tracker_mutex;
+struct leak_tracker_t
+{
+    std::unordered_map<pnanovdb_compute_array_t*, bool> active_arrays;
+    leak_tracker_t()
+    {
+    }
+    ~leak_tracker_t()
+    {
+        std::lock_guard<std::mutex> lock(g_leak_tracker_mutex);
+        for (auto&& it : active_arrays)
+        {
+            if (it.second)
+            {
+                printf("Leak! data(%p) element_size(%zu) element_count(%zu) filepath(%s)\n", it.first->data,
+                       it.first->element_size, it.first->element_count,
+                       it.first->filepath ? it.first->filepath : "invalid");
+            }
+        }
+    }
+    void set(pnanovdb_compute_array_t* array, bool is_active)
+    {
+        std::lock_guard<std::mutex> lock(g_leak_tracker_mutex);
+        active_arrays[array] = is_active;
+    }
+};
+leak_tracker_t g_leak_tracker;
+#endif
+
 pnanovdb_compute_array_t* create_array(size_t element_size, pnanovdb_uint64_t element_count, const void* data)
 {
     pnanovdb_compute_array_t* array = new pnanovdb_compute_array_t();
@@ -576,6 +616,11 @@ pnanovdb_compute_array_t* create_array(size_t element_size, pnanovdb_uint64_t el
     {
         memset(array->data, 0, array->element_size * array->element_count);
     }
+
+#ifdef LEAK_TRACKER
+    g_leak_tracker.set(array, true);
+#endif
+
     return array;
 }
 
@@ -596,6 +641,10 @@ void destroy_array(pnanovdb_compute_array_t* array)
         delete array;
         return;
     }
+
+#ifdef LEAK_TRACKER
+    g_leak_tracker.set(array, false);
+#endif
 
     delete[] (char*)array->data;
     array->data = nullptr;

@@ -11,6 +11,7 @@
 struct shader_params_t
 {
     uint mode;
+    int grid_idx;
 };
 
 StructuredBuffer<uint2> buf;
@@ -19,6 +20,38 @@ RWTexture2D<float4> texture_out;
 ConstantBuffer<EditorParams> editor_params;
 ConstantBuffer<shader_params_t> shader_params;
 
+#if 0
+static const uint vert_count = 12u;
+static const float g = (1.f + sqrt(5.f)) / 2.f;
+static const float3 verts[12u] = {
+    {0.f, -1.f, -g},
+    {0.f, 1.f, -g},
+    {0.f, -1.f, g},
+    {0.f, 1.f, g},
+    {-1.f, -g, 0.f},
+    {1.f, -g, 0.f},
+    {-1.f, g, 0.f},
+    {1.f, g, 0.f},
+    {-g, 0.f, -1.f},
+    {-g, 0.f, 1.f},
+    {g, 0.f, -1.f},
+    {g, 0.f, 1.f}
+};
+static const float sphere_radius = sqrt(g*g + 1.f);
+#else
+static const uint vert_count = 8u;
+static const pnanovdb_vec3_t verts[8u] = {
+    {-1.f, -1.f, 0.f},
+    {1.f, -1.f, 0.f},
+    {-1.f, 1.f, 0.f},
+    {1.f, 1.f, 0.f},
+    {-1.f, 0.f, 0.f},
+    {0.f, -1.f, 0.f},
+    {1.f, 0.f, 0.f},
+    {0.f, 1.f, 0.f}
+};
+#endif
+
 void ray_hdda_nanovdb(uint thread_idx,
                        StructuredBuffer<uint2> buf,
                        float3 worldRayOrigin,
@@ -26,10 +59,37 @@ void ray_hdda_nanovdb(uint thread_idx,
                        float3 worldRayDir,
                        float rayMaxT,
                        float3 worldRayDirInv,
+                       float3 worldRayDirCenter,
                        inout float4 sum,
                        inout float nominalT)
 {
     pnanovdb_grid_handle_t grid = { pnanovdb_address_null() };
+
+    int target_grid_idx = shader_params.grid_idx;
+    if (target_grid_idx < 0)
+    {
+        float max_dot = -1.f;
+        target_grid_idx = 0;
+        for (uint vert_idx = 0u; vert_idx < vert_count; vert_idx++)
+        {
+            float cur_dot = dot(worldRayDirCenter, normalize(verts[vert_idx]));
+            if (cur_dot >= max_dot)
+            {
+                max_dot = cur_dot;
+                target_grid_idx = int(vert_idx);
+            }
+        }
+    }
+    uint grid_count = pnanovdb_grid_get_grid_count(buf, grid);
+    if (target_grid_idx >= grid_count)
+    {
+        target_grid_idx = grid_count == 0u ? 0 : int(grid_count) - 1;
+    }
+    for (int grid_idx = 0; grid_idx < target_grid_idx && grid_idx < vert_count; grid_idx++)
+    {
+        grid.address.byte_offset += pnanovdb_grid_get_grid_size(buf, grid);
+    }
+
     pnanovdb_tree_handle_t tree = pnanovdb_grid_get_tree(buf, grid);
     pnanovdb_root_handle_t root = pnanovdb_tree_get_root(buf, tree);
     pnanovdb_grid_type_t grid_type = pnanovdb_grid_get_grid_type(buf, grid);
@@ -113,6 +173,28 @@ void ray_hdda_nanovdb(uint thread_idx,
     }
 }
 
+void get_center_ray_dir(out float3 rayDir)
+{
+    float2 ndc = float2(0.f, 0.f);
+    float4 pos_d0 = mul(float4(ndc.xy, 0.f, 1.f), editor_params.projection_inv);
+    float4 pos_d1 = mul(float4(ndc.xy, 1.f, 1.f), editor_params.projection_inv);
+
+    float z_d0 = pos_d0.z * (1.f / pos_d0.w);
+    float z_d1 = pos_d1.z * (1.f / pos_d1.w);
+    bool is_reverse_z = abs(z_d0) > abs(z_d1);
+    float4 ray_dir_near = is_reverse_z ? pos_d1 : pos_d0;
+
+    float4 ray_dir_far = ray_dir_near + mul(float4(0.f, 0.f, 1.f, 0.f), editor_params.projection_inv);
+    rayDir = normalize((ray_dir_far.xyz / ray_dir_far.w) - (ray_dir_near.xyz / ray_dir_near.w));
+    if (is_reverse_z)
+    {
+        rayDir = -rayDir;
+    }
+
+    rayDir = mul(float4(rayDir, 0.f), editor_params.view_inv).xyz;
+    rayDir = normalize(rayDir);
+}
+
 [shader("compute")][numthreads(16, 8, 1)]
 void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 thread_idx : SV_GroupThreadID)
 {
@@ -144,12 +226,12 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 thread_idx : SV_Gr
     rayOrigin4 = mul(rayOrigin4, editor_params.view_inv);
     float3 rayOrigin = rayOrigin4.xyz / rayOrigin4.w;
 
-    pnanovdb_grid_handle_t grid = { pnanovdb_address_null() };
-    pnanovdb_uint32_t grid_type = pnanovdb_grid_get_grid_type(buf, grid);
+    float3 rayDirCenter;
+    get_center_ray_dir(rayDirCenter);
 
     float4 sum = float4(0.f, 0.f, 0.f, 1.f);
     float nominalT = 0.f;
-    ray_hdda_nanovdb(thread_idx1d, buf, rayOrigin, 0.f, rayDir, 1e9f, rayDirInv, sum, nominalT);
+    ray_hdda_nanovdb(thread_idx1d, buf, rayOrigin, 0.f, rayDir, 1e9f, rayDirInv, rayDirCenter, sum, nominalT);
 
     texture_out[tidx] = sum;
 }
