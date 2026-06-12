@@ -132,6 +132,14 @@ static void log_print(pnanovdb_compute_log_level_t level, const char* format, ..
     va_end(args);
 }
 
+static void print_memory_stats(pnanovdb_compute_t* compute, pnanovdb_compute_device_t* device)
+{
+    pnanovdb_compute_device_memory_stats_t stats = {};
+    compute->device_interface.get_memory_stats(device, &stats);
+    printf("Vulkan mem: device(%zu) upload(%zu) readback(%zu) other(%zu)\n",
+        stats.device_memory_bytes, stats.upload_memory_bytes, stats.readback_memory_bytes, stats.other_memory_bytes);
+}
+
 void voxelbvh_generate_rgba8();
 
 void voxelbvh_test()
@@ -907,6 +915,8 @@ void voxelbvh_generate_rgba8()
     {
         printf("VoxelBVH vert_idx(%d)\n", vert_idx);
 
+        print_memory_stats(&compute, device);
+
         pnanovdb_camera_mat_t transform_mat = {};
         get_transform(vert_idx, &transform_mat);
         float transform[16u] = {};
@@ -1015,10 +1025,13 @@ void voxelbvh_generate_rgba8()
     }
 
     printf("Freeing GPU device before merge\n");
+    print_memory_stats(&compute, device);
 
     voxel_bvh.destroy_context(&compute, queue, voxelbvh_ctx);
 
     pnanovdb_voxelbvh_free(&voxel_bvh);
+
+    print_memory_stats(&compute, device);
 
     compute.device_interface.destroy_device(device_manager, device);
     compute.device_interface.destroy_device_manager(device_manager);
