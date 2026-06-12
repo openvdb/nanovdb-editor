@@ -903,7 +903,7 @@ void voxelbvh_generate_rgba8()
     const char* out_file = "./data/ficus.nvdb";
 
     pnanovdb_compute_array_t* vert_nanovdbs[vert_count] = {};
-    for (uint vert_idx = 0u; vert_idx < vert_count; vert_idx++)
+    for (pnanovdb_uint32_t vert_idx = 0u; vert_idx < vert_count; vert_idx++)
     {
         printf("VoxelBVH vert_idx(%d)\n", vert_idx);
 
