@@ -20,6 +20,31 @@
 
 // Adding missing NanoVDB load single handle functionality
 namespace nanovdb {// ==========================================================
+
+template<typename BufferT>
+GridHandle<BufferT> readWithFix(std::istream& is, const BufferT& pool)
+{
+    GridHandle<BufferT> gridHandle;
+    GridData data;
+    is.read((char*)&data, sizeof(GridData));
+    if (data.isValid()) {
+        uint64_t size = data.mGridSize, sum = 0u;
+        while(data.mGridIndex + 1u < data.mGridCount) {// loop over remaining raw grids in stream
+            is.seekg(data.mGridSize - sizeof(GridData), std::ios::cur);// skip grid
+            is.read((char*)&data, sizeof(GridData));
+            sum += data.mGridSize;
+        }
+        auto buffer = BufferT::create(size + sum, &pool);
+        is.seekg(-int64_t(size + sum - data.mGridSize + sizeof(GridData)), std::ios::cur);// rewind to start
+        is.read((char*)(buffer.data()), buffer.size());
+        gridHandle = std::move(buffer);
+    } else {
+        is.seekg(-sizeof(GridData), std::ios::cur);// rewind
+        throw std::logic_error("This stream does not contain a valid raw grid buffer");
+    }
+    return gridHandle;
+}// void GridHandle<BufferT>::read(std::istream& is, const BufferT& pool)
+
 namespace io {// ===============================================================
 
 template<typename BufferT>
@@ -27,7 +52,7 @@ GridHandle<BufferT> readGridSegment(std::istream& is, int n, const BufferT& pool
 {
     GridHandle<BufferT> handle;
     try {//first try to read a raw grid buffer
-        handle.read(is, pool);
+        handle = readWithFix(is, pool);
         // Disable updateGridCount vs original readGrid
         // tools::updateGridCount((GridData*)handle.data(), 0u, 1u);
     } catch(const std::logic_error&) {
