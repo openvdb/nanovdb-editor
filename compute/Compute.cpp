@@ -19,82 +19,101 @@
 #include <unordered_map>
 
 // Adding missing NanoVDB load single handle functionality
-namespace nanovdb {// ==========================================================
+namespace nanovdb
+{ // ==========================================================
 
-template<typename BufferT>
+template <typename BufferT>
 GridHandle<BufferT> readWithFix(std::istream& is, const BufferT& pool)
 {
     GridHandle<BufferT> gridHandle;
     GridData data;
     is.read((char*)&data, sizeof(GridData));
-    if (data.isValid()) {
+    if (data.isValid())
+    {
         uint64_t size = data.mGridSize, sum = 0u;
-        while(data.mGridIndex + 1u < data.mGridCount) {// loop over remaining raw grids in stream
-            is.seekg(data.mGridSize - sizeof(GridData), std::ios::cur);// skip grid
+        while (data.mGridIndex + 1u < data.mGridCount)
+        { // loop over remaining raw grids in stream
+            is.seekg(data.mGridSize - sizeof(GridData), std::ios::cur); // skip grid
             is.read((char*)&data, sizeof(GridData));
             sum += data.mGridSize;
         }
         auto buffer = BufferT::create(size + sum, &pool);
-        is.seekg(-int64_t(size + sum - data.mGridSize + sizeof(GridData)), std::ios::cur);// rewind to start
+        is.seekg(-int64_t(size + sum - data.mGridSize + sizeof(GridData)), std::ios::cur); // rewind to start
         is.read((char*)(buffer.data()), buffer.size());
         gridHandle = std::move(buffer);
-    } else {
-        is.seekg(-sizeof(GridData), std::ios::cur);// rewind
+    }
+    else
+    {
+        is.seekg(-sizeof(GridData), std::ios::cur); // rewind
         throw std::logic_error("This stream does not contain a valid raw grid buffer");
     }
     return gridHandle;
-}// void GridHandle<BufferT>::read(std::istream& is, const BufferT& pool)
+} // void GridHandle<BufferT>::read(std::istream& is, const BufferT& pool)
 
-namespace io {// ===============================================================
+namespace io
+{ // ===============================================================
 
-template<typename BufferT>
+template <typename BufferT>
 GridHandle<BufferT> readGridSegment(std::istream& is, int n, const BufferT& pool)
 {
     GridHandle<BufferT> handle;
-    try {//first try to read a raw grid buffer
+    try
+    { // first try to read a raw grid buffer
         handle = readWithFix(is, pool);
         // Disable updateGridCount vs original readGrid
         // tools::updateGridCount((GridData*)handle.data(), 0u, 1u);
-    } catch(const std::logic_error&) {
+    }
+    catch (const std::logic_error&)
+    {
         Segment seg;
         int counter = -1;
-        while (seg.read(is)) {
-            if (++counter == n) {
+        while (seg.read(is))
+        {
+            if (++counter == n)
+            {
                 uint64_t bufferSize = 0;
-                for (auto& m : seg.meta) bufferSize += m.gridSize;
+                for (auto& m : seg.meta)
+                    bufferSize += m.gridSize;
                 auto buffer = BufferT::create(bufferSize, &pool);
                 uint64_t bufferOffset = 0;
-                for (uint16_t i = 0; i < seg.header.gridCount; ++i) {
-                    auto *data = util::PtrAdd<GridData>(buffer.data(), bufferOffset);
+                for (uint16_t i = 0; i < seg.header.gridCount; ++i)
+                {
+                    auto* data = util::PtrAdd<GridData>(buffer.data(), bufferOffset);
                     Internal::read(is, (char*)data, seg.meta[i].gridSize, seg.header.codec);
                     tools::updateGridCount(data, uint32_t(i), uint32_t(seg.header.gridCount));
                     bufferOffset += seg.meta[i].gridSize;
-                }// loop over grids in segment
+                } // loop over grids in segment
                 handle = GridHandle<BufferT>(std::move(buffer));
                 break;
             }
-        }// loop over segments
-        if (n != counter) throw std::runtime_error("stream does not contain a #" + std::to_string(n) + " grid");
+        } // loop over segments
+        if (n != counter)
+            throw std::runtime_error("stream does not contain a #" + std::to_string(n) + " grid");
     }
     return handle;
-}// readGridHandle
+} // readGridHandle
 
 /// @brief Read the n'th grid
-template<typename BufferT>
+template <typename BufferT>
 GridHandle<BufferT> readGridSegment(const std::string& fileName, int n, int verbose, const BufferT& buffer)
 {
     std::ifstream is(fileName, std::ios::in | std::ios::binary);
-    if (!is.is_open()) throw std::ios_base::failure("Unable to open file named \"" + fileName + "\" for input");
+    if (!is.is_open())
+        throw std::ios_base::failure("Unable to open file named \"" + fileName + "\" for input");
     auto handle = readGridSegment<BufferT>(is, n, buffer);
-    if (verbose) {
-        if (n<0) {
+    if (verbose)
+    {
+        if (n < 0)
+        {
             std::cout << "Read all NanoGrids from the file named \"" << fileName << "\"" << std::endl;
-        } else {
+        }
+        else
+        {
             std::cout << "Read NanoGrid # " << n << " from the file named \"" << fileName << "\"" << std::endl;
         }
     }
     return handle; // is converted to r-value and return value is move constructed.
-}// readGridHandle
+} // readGridHandle
 
 }
 }
@@ -164,8 +183,8 @@ pnanovdb_compute_array_t* load_nanovdb(const char* filepath)
         return nullptr;
     }
 
-    pnanovdb_compute_array_t* array = create_array(
-        sizeof(pnanovdb_uint32_t), gridHandle.bufferSize() / sizeof(pnanovdb_uint32_t), gridHandle.data());
+    pnanovdb_compute_array_t* array =
+        create_array(sizeof(pnanovdb_uint32_t), gridHandle.bufferSize() / sizeof(pnanovdb_uint32_t), gridHandle.data());
     array->filepath = filepath;
 
     return array;

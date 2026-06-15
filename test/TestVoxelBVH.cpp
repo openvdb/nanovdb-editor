@@ -905,7 +905,7 @@ void voxelbvh_generate_rgba8()
     // const pnanovdb_uint32_t resolution = 2048u;
     const pnanovdb_uint32_t resolution = 512u;
     // const char* in_file = "./data/garden_ep51s2d03.ply";
-    const char* in_file = "./data/ficus.ply";
+    const char* in_file = "./data/dozer__segment.ply";
     // const char* out_file = "./data/garden_eps2d03.nvdb";
     const char* out_file = "./data/ficus.nvdb";
 
@@ -1075,6 +1075,11 @@ void voxelbvh_generate_rgba8()
     printf("Save merged grid\n");
 
     compute.save_nanovdb(merged_nanovdb, "./data/merged_rgba8.nvdb");
+    // FILE* file = fopen("./data/merged_rgba8.nvdb", "wb");
+    // fwrite(merged_nanovdb->data, 1u,
+    //     merged_nanovdb->element_size * merged_nanovdb->element_count,
+    //     file);
+    // fclose(file);
 
     compute.destroy_array(merged_nanovdb);
 
