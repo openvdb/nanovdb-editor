@@ -27,7 +27,7 @@ GridHandle<BufferT> readGridSegment(std::istream& is, int n, const BufferT& pool
 {
     GridHandle<BufferT> handle;
     try {//first try to read a raw grid buffer
-        handle.read(is, uint32_t(n), pool);
+        handle.read(is, pool);
         // Disable updateGridCount vs original readGrid
         // tools::updateGridCount((GridData*)handle.data(), 0u, 1u);
     } catch(const std::logic_error&) {
