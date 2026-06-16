@@ -23,22 +23,36 @@ namespace nanovdb
 { // ==========================================================
 
 template <typename BufferT>
-GridHandle<BufferT> readWithFix(std::istream& is, const BufferT& pool)
+GridHandle<BufferT> readSegment(std::istream& is, int n, const BufferT& pool)
 {
     GridHandle<BufferT> gridHandle;
+    int counter = -1;
     GridData data;
     is.read((char*)&data, sizeof(GridData));
     if (data.isValid())
     {
-        uint64_t size = data.mGridSize, sum = 0u;
-        while (data.mGridIndex + 1u < data.mGridCount)
+        if (data.mGridIndex == 0u)
+        {
+            ++counter;
+        }
+        uint64_t sum = data.mGridSize;
+        while (counter < n || data.mGridIndex + 1u < data.mGridCount)
         { // loop over remaining raw grids in stream
             is.seekg(data.mGridSize - sizeof(GridData), std::ios::cur); // skip grid
             is.read((char*)&data, sizeof(GridData));
+            if (is.eof())
+            {
+                throw std::logic_error("Hit end of file before finding Nth segment");
+            }
+            if (data.mGridIndex == 0u)
+            {
+                ++counter;
+                sum = 0u;
+            }
             sum += data.mGridSize;
         }
-        auto buffer = BufferT::create(size + sum, &pool);
-        is.seekg(-int64_t(size + sum - data.mGridSize + sizeof(GridData)), std::ios::cur); // rewind to start
+        auto buffer = BufferT::create(sum, &pool);
+        is.seekg(-int64_t(sum - data.mGridSize + sizeof(GridData)), std::ios::cur); // rewind to start
         is.read((char*)(buffer.data()), buffer.size());
         gridHandle = std::move(buffer);
     }
@@ -59,7 +73,7 @@ GridHandle<BufferT> readGridSegment(std::istream& is, int n, const BufferT& pool
     GridHandle<BufferT> handle;
     try
     { // first try to read a raw grid buffer
-        handle = readWithFix(is, pool);
+        handle = readSegment(is, n, pool);
         // Disable updateGridCount vs original readGrid
         // tools::updateGridCount((GridData*)handle.data(), 0u, 1u);
     }
