@@ -904,10 +904,8 @@ void voxelbvh_generate_rgba8()
 
     // const pnanovdb_uint32_t resolution = 2048u;
     const pnanovdb_uint32_t resolution = 512u;
-    // const char* in_file = "./data/garden_ep51s2d03.ply";
+    // const char* in_file = "./data/garden_eps2d03.ply";
     const char* in_file = "./data/dozer__segment.ply";
-    // const char* out_file = "./data/garden_eps2d03.nvdb";
-    const char* out_file = "./data/ficus.nvdb";
 
     printf("Vulkan initialized\n");
     print_memory_stats(&compute, device);
@@ -987,8 +985,6 @@ void voxelbvh_generate_rgba8()
         voxel_bvh.nanovdb_append_metadata(
             &compute, built_nanovdb_array, &nanovdb_meta, metadata_arrays, 2u + prim_meta_count);
 
-        // save NanoVDB out to disk
-        // compute.save_nanovdb(nanovdb_meta, out_file);
 
         printf("Voxelize vert_idx(%d)\n", vert_idx);
 #if 1

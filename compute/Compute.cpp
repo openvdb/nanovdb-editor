@@ -659,8 +659,7 @@ pnanovdb_bool_t dispatch_shader_on_array(const pnanovdb_compute_t* compute,
     return PNANOVDB_TRUE;
 }
 
-#define LEAK_TRACKER
-
+// #define LEAK_TRACKER
 #ifdef LEAK_TRACKER
 std::mutex g_leak_tracker_mutex;
 struct leak_tracker_t
