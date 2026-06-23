@@ -10,7 +10,7 @@ struct user_state_t
 #define WORKGROUP_VOXELBVH_THREADS 128
 
 #include "voxelbvh_nanovdb_iterate.slang"
-#include "hdda.slang"
+#include "workgroup_hdda.slang"
 #include "workgroup_voxelbvh.slang"
 #include "voxelbvh_common.h"
 #include "workgroup_radix_sort.slang"
@@ -601,12 +601,115 @@ void workgroup_gaussian_process(uint thread_idx,
     }
 }
 
-#endif
-
-groupshared int4 s_ijkw[PNANOVDB_ITERATE_WORKGROUP_THREADS];
 groupshared int3 s_src_ijk[PNANOVDB_ITERATE_WORKGROUP_THREADS];
 
-groupshared float4 s_sum[PNANOVDB_ITERATE_WORKGROUP_THREADS];
+void ray_hdda_nanovdb(uint thread_idx,
+                      float3 worldRayOrigin,
+                      float rayMinT,
+                      float3 worldRayDir,
+                      float rayMaxT,
+                      float3 worldRayDirInv,
+                      float4x4 view,
+                      uint resolution,
+                      float3 worldRayDirCenter,
+                      inout float4 sum,
+                      inout float nominalT)
+{
+    pnanovdb_grid_handle_t grid = { pnanovdb_address_null() };
+    pnanovdb_tree_handle_t tree = pnanovdb_grid_get_tree(buf_scratch, grid);
+    pnanovdb_root_handle_t root = pnanovdb_tree_get_root(buf_scratch, tree);
+    pnanovdb_grid_type_t grid_type = pnanovdb_grid_get_grid_type(buf_scratch, grid);
+
+    pnanovdb_readaccessor_t acc;
+    pnanovdb_readaccessor_init(PNANOVDB_REF(acc), root);
+
+    // transform ray from world to index space
+    float3 rayOrigin = pnanovdb_grid_world_to_indexf(buf_scratch, grid, worldRayOrigin);
+    float3 rayDir = pnanovdb_grid_world_to_index_dirf(buf_scratch, grid, worldRayDir);
+    float rayDirMagn = length(rayDir);
+    float rayDirMagnInv = 1.f;
+    if (rayDirMagn > 0.f)
+    {
+        rayDirMagnInv = 1.f / rayDirMagn;
+        rayDir *= rayDirMagnInv;
+        rayMinT *= rayDirMagn;
+        rayMaxT *= rayDirMagn;
+    }
+    float3 rayDirInv = float3(1.f, 1.f, 1.f) / rayDir;
+
+    // intersect local ray with local bbox
+    int3 bbox_min = pnanovdb_root_get_bbox_min(buf_scratch, root);
+    int3 bbox_max = pnanovdb_root_get_bbox_max(buf_scratch, root);
+
+    float3 bbox_minf = float3(bbox_min - int3(1,1,1));
+    float3 bbox_maxf = float3(bbox_max + int3(2,2,2));
+
+    float boxMinT;
+    float boxMaxT;
+    bool isHit = intersect_box(rayDir, rayDirInv, bbox_minf - rayOrigin, bbox_maxf - rayOrigin, boxMinT, boxMaxT);
+
+    boxMinT = max(rayMinT, boxMinT);
+    if (boxMinT > boxMaxT)
+    {
+        isHit = false;
+    }
+
+    workgroup_hdda_t hdda = {};
+    workgroup_hdda_init(hdda, thread_idx, rayOrigin, rayDir, rayDirInv, isHit, boxMinT, boxMaxT);
+    bool should_run = true;
+    while(should_run)
+    {
+        // update HDDA state as needed
+        if (workgroup_hdda_should_update(hdda, thread_idx))
+        {
+            int dim = 1;
+            if (hdda.is_active)
+            {
+                pnanovdb_address_t addr = pnanovdb_readaccessor_get_value_address(grid_type, buf_scratch, acc, hdda.hdda.ijk);
+                uint64_t val_raw = pnanovdb_read_uint64(buf_scratch, addr);
+                uint skip_level = voxelbvh_get_skip_level(val_raw);
+
+                // align HDDA tmin/tmax to current voxel size
+                dim = 1 << skip_level;
+
+                s_voxel_val[thread_idx] = val_raw;
+                s_src_ijk[thread_idx] = hdda.hdda.ijk;
+            }
+            else
+            {
+                s_voxel_val[thread_idx] = ~uint64_t(0u);
+                s_src_ijk[thread_idx] = int3(0x40000000, 0x40000000, 0x40000000);
+            }
+            workgroup_hdda_update(hdda, thread_idx, rayOrigin, rayDir, rayDirInv, dim);
+        }
+
+        uint current_hdda_idx = workgroup_hdda_vote(hdda, thread_idx);
+        // cooperatively process min_voxel_val
+        if (current_hdda_idx != ~0u)
+        {
+            uint64_t voxel_val_raw = s_voxel_val[current_hdda_idx];
+            bool this_thread_active = workgroup_this_thread_active(hdda, thread_idx);
+            workgroup_gaussian_process(
+                thread_idx, this_thread_active,
+                grid,
+                worldRayOrigin, worldRayDir, worldRayDirInv,
+                view, resolution, worldRayDirCenter,
+                max(boxMinT, hdda.hdda.tmin) * rayDirMagnInv,
+                min(boxMaxT, hdda.hdda.tmax) * rayDirMagnInv,
+                voxel_val_raw,
+                s_src_ijk[current_hdda_idx],
+                sum, nominalT
+            );
+        }
+        if (sum.a <= 0.0001f)
+        {
+            workgroup_mark_done(hdda, thread_idx);
+        }
+        should_run = workgroup_hdda_step(hdda, thread_idx, rayOrigin, rayDir, rayDirInv);
+    }
+}
+
+#endif
 
 void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint level, uint n,
                   pnanovdb_coord_t ijk, inout user_state_t user_state)
@@ -616,218 +719,110 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     // assuming single grid for now
     pnanovdb_grid_handle_t grid = {};
 
-    uint64_t voxel_val_raw = 0llu;
-    int4 ijkw = int4(ijk, 0);
-
     bool this_thread_active = !pnanovdb_address_is_null(val_addr);
-
-    // Spreading load over 128 dispatches
-    this_thread_active = this_thread_active && thread_idx == constants2.pass_id;
-
-    int3 src_ijk = int3(0,0,0);
-    if (this_thread_active)
+    int4 ijkw = int4(ijk, 0);
+    if (level == 3)
     {
-        float4 color = float4(0.f, 0.f, 0.f, 0.f);
-        if (level == 3)
-        {
-            ijkw.w = 4096;
-        }
-        if (level == 2)
-        {
-            ijkw.w = 128;
-        }
-        if (level == 1)
-        {
-            ijkw.w = 8;
-        }
-        if (level == 0)
-        {
-            ijkw.w = 1;
-        }
-
-        float3 ijkf = 0.5f * float3(ijkw.xyz) + 0.5f * float3(ijkw.xyz + ijkw.w);
-        float3 worldPos = pnanovdb_grid_index_to_worldf(buf, grid, ijkf);
-
-        pnanovdb_grid_handle_t src_grid = {};
-        float3 bvh_ijkf = pnanovdb_grid_world_to_indexf(buf_scratch, src_grid, worldPos);
-        pnanovdb_tree_handle_t src_tree = pnanovdb_grid_get_tree(buf_scratch, src_grid);
-        pnanovdb_root_handle_t src_root = pnanovdb_tree_get_root(buf_scratch, src_tree);
-        pnanovdb_uint32_t src_grid_type = pnanovdb_grid_get_grid_type(buf_scratch, src_grid);
-        int3 bvh_ijk_center = int3(floor(bvh_ijkf));
-        src_ijk = bvh_ijk_center;
-        pnanovdb_address_t src_addr = pnanovdb_root_get_value_address(src_grid_type, buf_scratch, src_root, bvh_ijk_center);
-        voxel_val_raw = pnanovdb_read_uint64(buf_scratch, src_addr);
+        ijkw.w = 4096;
+    }
+    if (level == 2)
+    {
+        ijkw.w = 128;
+    }
+    if (level == 1)
+    {
+        ijkw.w = 8;
+    }
+    if (level == 0)
+    {
+        ijkw.w = 1;
     }
 
-    s_voxel_val[thread_idx] = voxel_val_raw;
-    s_ijkw[thread_idx] = ijkw;
-    s_src_ijk[thread_idx] = src_ijk;
-
-    GroupMemoryBarrierWithGroupSync();
-
-    float4 sum = float4(0.f, 0.f, 0.f, 0.f);
-    // Spreading load over 128 dispatches
-    uint s_idx = constants2.pass_id;
-    if (s_voxel_val[s_idx] != 0u)
+    float3 ray_dir = constants2.index_space_ray_direction;
+    float3 uvw = {};
+    float3 worldRayDir = {};
+    if (abs(ray_dir.x) >= abs(ray_dir.y) && abs(ray_dir.x) >= abs(ray_dir.z))
     {
-        ijkw = s_ijkw[s_idx];
-
-        float3 ray_dir = constants2.index_space_ray_direction;
-        float3 uvw = {};
-        float3 worldRayDir = {};
-        if (abs(ray_dir.x) >= abs(ray_dir.y) && abs(ray_dir.x) >= abs(ray_dir.z))
-        {
-            uvw = float3(
-                0.f,
-                (1.f / 7.f) * (thread_idx >> 4),
-                (1.f / 15.f) * (thread_idx & 15));
-            worldRayDir = float3(ray_dir.x >= 0.f ? 1.f : -1.f, 0.f, 0.f);
-        }
-        else if (abs(ray_dir.y) >= abs(ray_dir.x) && abs(ray_dir.y) >= abs(ray_dir.z))
-        {
-            uvw = float3(
-                (1.f / 7.f) * (thread_idx >> 4),
-                0.f,
-                (1.f / 15.f) * (thread_idx & 15));
-            worldRayDir = float3(0.f, ray_dir.y >= 0.f ? 1.f : -1.f, 0.f);
-        }
-        else
-        {
-            uvw = float3(
-                (1.f / 7.f) * (thread_idx >> 4),
-                (1.f / 15.f) * (thread_idx & 15),
-                0.f);
-            worldRayDir = float3(0.f, 0.f, ray_dir.z >= 0.f ? 1.f : -1.f);
-        }
-
-        const uint resolution = 4096u;
-        int3 ijk_min = ijkw.xyz;
-        int3 ijk_max = ijkw.xyz + ijkw.w;
-        float3 ijkf = (1.f - uvw) * float3(ijk_min) + uvw * float3(ijk_max);
-
-        float3 worldRayOrigin = ijkf;
-        float worldTmin = 0.f;
-        float worldTmax = float(ijkw.w);
-
-        worldRayOrigin = pnanovdb_grid_index_to_worldf(buf, grid, worldRayOrigin);
-        worldRayDir = pnanovdb_grid_index_to_world_dirf(buf, grid, worldRayDir);
-        float rayDirMagn = length(worldRayDir);
-        if (rayDirMagn > 0.f)
-        {
-            worldRayDir /= rayDirMagn;
-            worldTmin *= rayDirMagn;
-            worldTmax *= rayDirMagn;
-        }
-        float3 worldRayDirInv = float3(1.f, 1.f, 1.f) / worldRayDir;
-
-        float3 up_vec = float3(0.f, 0.f, 1.f);
-        if (abs(worldRayDir.x) <= abs(worldRayDir.y) && abs(worldRayDir.x) <= abs(worldRayDir.z))
-        {
-            up_vec = float3(1.f, 0.f, 0.f);
-        }
-        else if (abs(worldRayDir.y) <= abs(worldRayDir.x) && abs(worldRayDir.y) <= abs(worldRayDir.z))
-        {
-            up_vec = float3(0.f, 1.f, 0.f);
-        }
-        float3 x_vec = normalize(cross_product(up_vec, worldRayDir));
-        float3 y_vec = cross_product(worldRayDir, x_vec);
-
-        float4x4 view = float4x4(
-            x_vec.x, y_vec.x, worldRayDir.x, 0.f,
-            x_vec.y, y_vec.y, worldRayDir.y, 0.f,
-            x_vec.z, y_vec.z, worldRayDir.z, 0.f,
-            0.f, 0.f, 0.f, 1.f
-        );
-
-        float4 sum_local = float4(0.f, 0.f, 0.f, 1.f);
-        float nominalT_local = 0.f;
-#ifdef VOXELIZE_TRIANGLES
-        workgroup_triangle_process(thread_idx,
-                                true,
-                                grid,
-                                worldRayOrigin,
-                                worldRayDir,
-                                worldRayDirInv,
-                                worldTmin,
-                                worldTmax,
-                                s_voxel_val[s_idx],
-                                sum_local,
-                                nominalT_local);
-#else
-        workgroup_gaussian_process(thread_idx,
-                                true,
-                                grid,
-                                worldRayOrigin,
-                                worldRayDir,
-                                worldRayDirInv,
-                                view,
-                                resolution,
-                                worldRayDir, // center and ray here are the same
-                                worldTmin,
-                                worldTmax,
-                                s_voxel_val[s_idx],
-                                s_src_ijk[s_idx],
-                                sum_local,
-                                nominalT_local);
-#endif
-
-        // flip to alpha before averaging
-        sum_local.a = 1.f - sum_local.a;
-
-        s_sum[thread_idx] = sum_local;
-
-        GroupMemoryBarrierWithGroupSync();
-        if (thread_idx < 64u)
-        {
-            sum_local += s_sum[thread_idx + 64u];
-            //sum_local += s_sum[thread_idx + 128u];
-            //sum_local += s_sum[thread_idx + 192u];
-            sum_local *= 0.5f;
-        }
-        GroupMemoryBarrierWithGroupSync();
-        s_sum[thread_idx] = sum_local;
-
-        GroupMemoryBarrierWithGroupSync();
-        if (thread_idx < 16u)
-        {
-            sum_local += s_sum[thread_idx + 16u];
-            sum_local += s_sum[thread_idx + 32u];
-            sum_local += s_sum[thread_idx + 48u];
-            sum_local *= 0.25f;
-        }
-        GroupMemoryBarrierWithGroupSync();
-        s_sum[thread_idx] = sum_local;
-
-        GroupMemoryBarrierWithGroupSync();
-        if (thread_idx < 4u)
-        {
-            sum_local += s_sum[thread_idx + 4u];
-            sum_local += s_sum[thread_idx + 8u];
-            sum_local += s_sum[thread_idx + 12u];
-            sum_local *= 0.25f;
-        }
-        GroupMemoryBarrierWithGroupSync();
-        s_sum[thread_idx] = sum_local;
-
-        GroupMemoryBarrierWithGroupSync();
-        if (thread_idx == s_idx)
-        {
-            sum_local = 0.25f * (s_sum[0] + s_sum[1] + s_sum[2] + s_sum[3]);
-
-            // normalize against misses
-            if (sum_local.a != 0.f)
-            {
-                sum_local.rgb *= (1.f / sum_local.a);
-            }
-
-            sum = sum_local;
-        }
-        GroupMemoryBarrierWithGroupSync();
+        uvw = float3(
+            0.f,
+            0.5f,
+            0.5f);
+        worldRayDir = float3(ray_dir.x >= 0.f ? 1.f : -1.f, 0.f, 0.f);
     }
+    else if (abs(ray_dir.y) >= abs(ray_dir.x) && abs(ray_dir.y) >= abs(ray_dir.z))
+    {
+        uvw = float3(
+            0.5f,
+            0.f,
+            0.5f);
+        worldRayDir = float3(0.f, ray_dir.y >= 0.f ? 1.f : -1.f, 0.f);
+    }
+    else
+    {
+        uvw = float3(
+            0.5f,
+            0.5f,
+            0.f);
+        worldRayDir = float3(0.f, 0.f, ray_dir.z >= 0.f ? 1.f : -1.f);
+    }
+
+    const uint resolution = 4096u;
+    int3 ijk_min = ijkw.xyz;
+    int3 ijk_max = ijkw.xyz + ijkw.w;
+    float3 ijkf = (1.f - uvw) * float3(ijk_min) + uvw * float3(ijk_max);
+
+    float3 worldRayOrigin = ijkf;
+    float worldTmin = 0.f;
+    float worldTmax = float(ijkw.w);
+
+    worldRayOrigin = pnanovdb_grid_index_to_worldf(buf, grid, worldRayOrigin);
+    worldRayDir = pnanovdb_grid_index_to_world_dirf(buf, grid, worldRayDir);
+    float rayDirMagn = length(worldRayDir);
+    if (rayDirMagn > 0.f)
+    {
+        worldRayDir /= rayDirMagn;
+        worldTmin *= rayDirMagn;
+        worldTmax *= rayDirMagn;
+    }
+    float3 worldRayDirInv = float3(1.f, 1.f, 1.f) / worldRayDir;
+
+    float3 up_vec = float3(0.f, 0.f, 1.f);
+    if (abs(worldRayDir.x) <= abs(worldRayDir.y) && abs(worldRayDir.x) <= abs(worldRayDir.z))
+    {
+        up_vec = float3(1.f, 0.f, 0.f);
+    }
+    else if (abs(worldRayDir.y) <= abs(worldRayDir.x) && abs(worldRayDir.y) <= abs(worldRayDir.z))
+    {
+        up_vec = float3(0.f, 1.f, 0.f);
+    }
+    float3 x_vec = normalize(cross_product(up_vec, worldRayDir));
+    float3 y_vec = cross_product(worldRayDir, x_vec);
+
+    float4x4 view = float4x4(
+        x_vec.x, y_vec.x, worldRayDir.x, 0.f,
+        x_vec.y, y_vec.y, worldRayDir.y, 0.f,
+        x_vec.z, y_vec.z, worldRayDir.z, 0.f,
+        0.f, 0.f, 0.f, 1.f
+    );
+    float3 worldRayDirCenter = worldRayDir;
+
+    float4 sum = float4(0.f, 0.f, 0.f, 1.f);
+    float nominalT = 0.f;
+    ray_hdda_nanovdb(thread_idx,
+                     worldRayOrigin,
+                     worldTmin,
+                     worldRayDir,
+                     worldTmax,
+                     worldRayDirInv,
+                     view,
+                     resolution,
+                     worldRayDirCenter,
+                     sum,
+                     nominalT);
 
     if (this_thread_active)
     {
-        float4 color = float4(sum.rgb, sum.a);
+        float4 color = float4(sum.rgb, 1.f - sum.a);
         uint rgba_raw = uint(255.f * max(0.f, min(1.f, color.x))) | (uint(255.f * max(0.f, min(1.f, color.y))) << 8u) |
                         (uint(255.f * max(0.f, min(1.f, color.z))) << 16u) |
                         (uint(255.f * max(0.f, min(1.f, color.w))) << 24u);
