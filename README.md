@@ -61,6 +61,10 @@ echo $VULKAN_SDK
 ```
 pip install scikit-build wheel build numpy
 ```
+For pytest:
+```
+pip install pytest parameterized
+```
 #### Linux
 By default, editor is built with enabled `NANOVDB_EDITOR_USE_GLFW` which requires:
 ```sh
@@ -197,11 +201,6 @@ After building, run the editor app:
 The libraries can be bundled into a Python package with a wrapper for the C-type functions. The following script will automatically install scikit-build, wheel, and build dependencies:
 
 Build with `-p` to build and install the `nanovdb_editor` package.
-
-Install test only dependencies:
-```
-pip install pytest parameterized
-```
 
 #### Python Test Apps
 
