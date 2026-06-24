@@ -198,6 +198,11 @@ The libraries can be bundled into a Python package with a wrapper for the C-type
 
 Build with `-p` to build and install the `nanovdb_editor` package.
 
+Install test only dependencies:
+```
+pip install pytest parameterized
+```
+
 #### Python Test Apps
 
 ```sh
