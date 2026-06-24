@@ -649,6 +649,7 @@ void ray_hdda_nanovdb(uint thread_idx,
     bool isHit = intersect_box(rayDir, rayDirInv, bbox_minf - rayOrigin, bbox_maxf - rayOrigin, boxMinT, boxMaxT);
 
     boxMinT = max(rayMinT, boxMinT);
+    boxMaxT = min(rayMaxT, boxMaxT);
     if (boxMinT > boxMaxT)
     {
         isHit = false;
@@ -820,9 +821,15 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
                      sum,
                      nominalT);
 
+    sum.a = 1.f - sum.a;
+    if (sum.a != 0.f)
+    {
+        sum.rgb *= (1.f / sum.a);
+    }
+
     if (this_thread_active)
     {
-        float4 color = float4(sum.rgb, 1.f - sum.a);
+        float4 color = float4(sum.rgb, sum.a);
         uint rgba_raw = uint(255.f * max(0.f, min(1.f, color.x))) | (uint(255.f * max(0.f, min(1.f, color.y))) << 8u) |
                         (uint(255.f * max(0.f, min(1.f, color.z))) << 16u) |
                         (uint(255.f * max(0.f, min(1.f, color.w))) << 24u);
