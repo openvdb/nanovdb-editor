@@ -18,12 +18,22 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
 {
     if (!pnanovdb_address_is_null(val_addr))
     {
-        pnanovdb_uint64_t val_raw = pnanovdb_read_uint64(buf, val_addr);
-        uint active_level_mask = voxelbvh_get_active_level_mask(val_raw);
-        uint skip_level = voxelbvh_get_skip_level(val_raw);
-        uint dim = 1u << skip_level;
-        if (active_level_mask != 0u)
+        pnanovdb_uint32_t val_raw = pnanovdb_read_uint32(buf, val_addr);
+        if (val_raw != 0u)
         {
+            uint dim = 1;
+            if (level == 3)
+            {
+                dim = 4096;
+            }
+            if (level == 2)
+            {
+                dim = 128;
+            }
+            if (level == 1)
+            {
+                dim = 8;
+            }
             user_state.bbox_min = min(user_state.bbox_min, ijk);
             user_state.bbox_max = max(user_state.bbox_max, ijk + int(dim - 1u));
         }
