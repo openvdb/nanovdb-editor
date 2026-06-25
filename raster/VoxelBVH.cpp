@@ -2531,8 +2531,6 @@ void nanovdb_rgba8_integral_from_voxelbvh(const pnanovdb_compute_t* compute,
 
     pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
     pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
-
-
 }
 
 void nanovdb_rgba8_integral_from_voxelbvh_array(const pnanovdb_compute_t* compute,
@@ -2565,8 +2563,8 @@ void nanovdb_rgba8_integral_from_voxelbvh_array(const pnanovdb_compute_t* comput
     pnanovdb_uint64_t src_word_count = (src_nanovdb_in->element_count * src_nanovdb_in->element_size) / 4u;
 
     nanovdb_rgba8_integral_from_voxelbvh(compute, queue, voxelbvh_context, dst_nanovdb_gpu_array->device_buffer,
-                               2u * nanovdb_uint64_count, src_nanovdb_gpu_array->device_buffer, src_word_count,
-                               resolution, view_floats, view_float_count);
+                                         2u * nanovdb_uint64_count, src_nanovdb_gpu_array->device_buffer,
+                                         src_word_count, resolution, view_floats, view_float_count);
 
     gpu_array_readback(compute, queue, dst_nanovdb_gpu_array, dst_nanovdb_array);
 
