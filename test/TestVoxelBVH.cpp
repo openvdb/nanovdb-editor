@@ -776,8 +776,8 @@ void voxelbvh_test()
 
 #if 1
     pnanovdb_compute_array_t* nanovdb_rgba8_4x = nullptr;
-    voxel_bvh.nanovdb_duplicate_topology_array(&compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_meta,
-                                               resolution, transform, 16u, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE, 4u);
+    voxel_bvh.nanovdb_duplicate_topology_array(
+        &compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_meta, PNANOVDB_GRID_TYPE_RGBA8, 4u);
 
     pnanovdb_vec3_t index_space_ray_direction = { 0.f, 0.f, -1.f };
     voxel_bvh.nanovdb_rgba8_from_voxelbvh_array(
@@ -989,9 +989,8 @@ void voxelbvh_generate_rgba8()
         printf("Voxelize vert_idx(%d)\n", vert_idx);
 #if 1
         pnanovdb_compute_array_t* nanovdb_rgba8_4x = nullptr;
-        voxel_bvh.nanovdb_duplicate_topology_array(&compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_meta,
-                                                   resolution, transform, 16u, PNANOVDB_GRID_TYPE_RGBA8, PNANOVDB_TRUE,
-                                                   4u);
+        voxel_bvh.nanovdb_duplicate_topology_array(
+            &compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_meta, PNANOVDB_GRID_TYPE_RGBA8, 4u);
 
         pnanovdb_vec3_t index_space_ray_direction = { 0.f, 0.f, 1.f };
         voxel_bvh.nanovdb_rgba8_from_voxelbvh_array(
