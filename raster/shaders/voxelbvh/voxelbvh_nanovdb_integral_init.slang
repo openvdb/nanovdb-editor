@@ -256,7 +256,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         pnanovdb_grid_set_world_bbox_float(buf, grid, 0u, aabb_min.x);
         pnanovdb_grid_set_world_bbox_float(buf, grid, 1u, aabb_min.y);
         pnanovdb_grid_set_world_bbox_float(buf, grid, 2u, aabb_min.z);
-        pnanovdb_grid_set_world_bbox_float(buf, grid, 3u, abb_max.x);
+        pnanovdb_grid_set_world_bbox_float(buf, grid, 3u, aabb_max.x);
         pnanovdb_grid_set_world_bbox_float(buf, grid, 4u, aabb_max.y);
         pnanovdb_grid_set_world_bbox_float(buf, grid, 5u, aabb_max.z);
     }

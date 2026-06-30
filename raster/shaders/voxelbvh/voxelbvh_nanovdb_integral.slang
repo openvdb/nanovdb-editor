@@ -1,5 +1,13 @@
 // voxelbvh_nanovdb_integral.slang
 
+#define PNANOVDB_HLSL
+#define PNANOVDB_ADDRESS_64
+#define PNANOVDB_BUF_HLSL_64
+#define PNANOVDB_BUF_HLSL_RW
+#include "PNanoVDB.h"
+
+#define WORKGROUP_VOXELBVH_THREADS 128
+
 struct constants_t
 {
     float4x4 view;
@@ -441,7 +449,7 @@ void workgroup_gaussian_process(uint thread_idx,
     }
 }
 
-groupshared int3 s_src_ijk[PNANOVDB_ITERATE_WORKGROUP_THREADS];
+groupshared int3 s_src_ijk[WORKGROUP_VOXELBVH_THREADS];
 
 void ray_hdda_nanovdb(uint thread_idx,
                       float3 worldRayOrigin,
@@ -650,15 +658,15 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     }
     float3 worldRayDirInv = float3(1.f, 1.f, 1.f) / worldRayDir;
 
-    float4 view_x = pnanovdb_grid_index_to_world_dirf(buf, grid, view[0].xyz);
-    float4 view_y = pnanovdb_grid_index_to_world_dirf(buf, grid, view[1].xyz);
-    float4 view_z = pnanovdb_grid_index_to_world_dirf(buf, grid, view[2].xyz);
-    float4 view_w = pnanovdb_grid_index_to_worldf(buf, grid, view[3].xyz);
+    float3 view_x = pnanovdb_grid_index_to_world_dirf(buf, grid, view[0].xyz);
+    float3 view_y = pnanovdb_grid_index_to_world_dirf(buf, grid, view[1].xyz);
+    float3 view_z = pnanovdb_grid_index_to_world_dirf(buf, grid, view[2].xyz);
+    float3 view_w = pnanovdb_grid_index_to_worldf(buf, grid, view[3].xyz);
     float4x4 worldView = float4x4(
-        view_x.x, view_x.y, view_x.z, view_x.w,
-        view_y.x, view_y.y, view_y.z, view_y.w,
-        view_z.x, view_z.y, view_z.z, view_z.w,
-        view_w.x, view_w.y, view_w.z, view_w.w);
+        view_x.x, view_x.y, view_x.z, 0.f,
+        view_y.x, view_y.y, view_y.z, 0.f,
+        view_z.x, view_z.y, view_z.z, 0.f,
+        view_w.x, view_w.y, view_w.z, 1.f);
 
     float4 sum = float4(0.f, 0.f, 0.f, 1.f);
     float nominalT = 0.f;
@@ -669,7 +677,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                      worldTmax,
                      worldRayDirInv,
                      worldView,
-                     resolution,
+                     constants.resolution,
                      worldRayDir,
                      sum,
                      nominalT);
