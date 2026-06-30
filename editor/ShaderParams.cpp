@@ -36,8 +36,8 @@ static nlohmann::ordered_json* getCompiledShaderParamsObject(nlohmann::ordered_j
     return nullptr;
 }
 
-static std::optional<nlohmann::ordered_json> loadAndParseJsonFile(const std::string& relFilePath,
-                                                                  bool is_group_file = false)
+static std::optional<nlohmann::ordered_json> loadJsonFileFromShaderPath(const std::string& relFilePath,
+                                                                        bool is_group_file = false)
 {
     std::string json_filePath;
     if (is_group_file)
@@ -56,10 +56,8 @@ static std::optional<nlohmann::ordered_json> loadAndParseJsonFile(const std::str
         return std::nullopt;
     }
 
-    bool is_valid = nlohmann::json::accept(json_file);
-    if (!is_valid)
+    if (!nlohmann::json::accept(json_file))
     {
-        json_file.close();
         return std::nullopt;
     }
 
@@ -74,19 +72,51 @@ static std::optional<nlohmann::ordered_json> loadAndParseJsonFile(const std::str
     catch (const nlohmann::json::parse_error& e)
     {
         printf("Error parsing file '%s': %s\n", json_filePath.c_str(), e.what());
-        json_file.close();
-        return std::nullopt;
-    }
-
-    json_file.close();
-
-    if (!json.contains(pnanovdb_shader::SHADER_PARAM_JSON))
-    {
-        printf("Error: File '%s' should contain '%s'\n", json_filePath.c_str(), pnanovdb_shader::SHADER_PARAM_JSON);
         return std::nullopt;
     }
 
     return json;
+}
+
+static std::optional<nlohmann::ordered_json> loadAndParseJsonFile(const std::string& relFilePath,
+                                                                  bool is_group_file = false)
+{
+    std::optional<nlohmann::ordered_json> json = loadJsonFileFromShaderPath(relFilePath, is_group_file);
+    if (!json)
+    {
+        return std::nullopt;
+    }
+
+    if (!json->contains(pnanovdb_shader::SHADER_PARAM_JSON))
+    {
+        printf("Error: File should contain '%s'\n", pnanovdb_shader::SHADER_PARAM_JSON);
+        return std::nullopt;
+    }
+
+    return json;
+}
+
+std::optional<nlohmann::ordered_json> loadParamHintsJson(const std::string& shader_base_name, const char* section_key)
+{
+    if (shader_base_name.empty() || !section_key || !section_key[0])
+    {
+        return std::nullopt;
+    }
+    const std::optional<nlohmann::ordered_json> json = loadJsonFileFromShaderPath(shader_base_name);
+    if (!json || !json->contains(section_key))
+    {
+        return std::nullopt;
+    }
+    return (*json)[section_key];
+}
+
+std::optional<nlohmann::ordered_json> loadShaderParamsJson(const std::string& shader_base_name)
+{
+    if (shader_base_name.empty())
+    {
+        return std::nullopt;
+    }
+    return loadAndParseJsonFile(shader_base_name);
 }
 
 ShaderParams::~ShaderParams()
@@ -536,8 +566,22 @@ void assignValueOnIndex(void* target, const nlohmann::json& source, int index)
     memcpy(static_cast<char*>(target) + index * sizeof(T), &val, sizeof(T));
 }
 
-void assignTypedValueOnIndex(ImGuiDataType type, void* target, const nlohmann::json& source, int index)
+void assignTypedValueOnIndex(ImGuiDataType type, size_t element_size, void* target, const nlohmann::json& source, int index)
 {
+    if (type == ImGuiDataType_Float && element_size == sizeof(uint16_t))
+    {
+        float value = 0.0f;
+        try
+        {
+            value = source.at(index).get<float>();
+        }
+        catch (const nlohmann::json::out_of_range&)
+        {
+        }
+        const uint16_t bits = float_to_half_bits(value);
+        std::memcpy(static_cast<char*>(target) + static_cast<size_t>(index) * element_size, &bits, sizeof(bits));
+        return;
+    }
     switch (type)
     {
     case ImGuiDataType_S32:
@@ -551,6 +595,9 @@ void assignTypedValueOnIndex(ImGuiDataType type, void* target, const nlohmann::j
         break;
     case ImGuiDataType_U64:
         assignValueOnIndex<unsigned long long>(target, source, index);
+        break;
+    case ImGuiDataType_Double:
+        assignValueOnIndex<double>(target, source, index);
         break;
     case ImGuiDataType_Float:
     default:
@@ -567,10 +614,19 @@ void assignValue(void* target, const nlohmann::ordered_json& source, T defaultVa
 }
 
 void assignTypedValue(ImGuiDataType type,
+                      size_t element_size,
                       void* target,
                       const nlohmann::ordered_json& source,
                       const nlohmann::json& defaultValue = nlohmann::json(0))
 {
+    if (type == ImGuiDataType_Float && element_size == sizeof(uint16_t))
+    {
+        const float value =
+            source.is_number() ? source.get<float>() : (defaultValue.is_number() ? defaultValue.get<float>() : 0.0f);
+        const uint16_t bits = float_to_half_bits(value);
+        std::memcpy(target, &bits, sizeof(bits));
+        return;
+    }
     switch (type)
     {
     case ImGuiDataType_S32:
@@ -586,11 +642,66 @@ void assignTypedValue(ImGuiDataType type,
         assignValue<unsigned long long>(
             target, source, defaultValue.is_number() ? defaultValue.get<unsigned long long>() : 0ULL);
         break;
+    case ImGuiDataType_Double:
+        assignValue<double>(target, source, defaultValue.is_number() ? defaultValue.get<double>() : 0.0);
+        break;
     case ImGuiDataType_Float:
     default:
         assignValue<float>(target, source, defaultValue.is_number() ? defaultValue.get<float>() : 0.f);
         break;
     }
+}
+
+size_t ShaderParams::copy_default_params_to_buffer(const std::string& shader_name, void* dst, size_t dst_size)
+{
+    if (!dst || dst_size == 0 || !load(shader_name, false))
+    {
+        return 0;
+    }
+    const std::vector<ShaderParam>* shader_params = get(shader_name);
+    if (!shader_params)
+    {
+        return 0;
+    }
+
+    char* write_ptr = static_cast<char*>(dst);
+    size_t write_offset = 0;
+    for (const ShaderParam& shader_param : *shader_params)
+    {
+        const size_t field_size = shader_param.size * shader_param.num_elements;
+        if (write_offset > dst_size || field_size > dst_size - write_offset)
+        {
+            break;
+        }
+
+        void* field = write_ptr + write_offset;
+        std::memset(field, 0, field_size);
+        const nlohmann::json& value = shader_param.default_value;
+        if (shader_param.type == ImGuiDataType_Bool)
+        {
+            if (value.is_boolean())
+            {
+                static_cast<pnanovdb_bool_t*>(field)[0] = value.get<bool>() ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+            }
+            else if (value.is_number())
+            {
+                static_cast<pnanovdb_bool_t*>(field)[0] = value.get<int>() != 0 ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+            }
+        }
+        else if (value.is_array())
+        {
+            for (size_t i = 0; i < shader_param.num_elements; ++i)
+            {
+                assignTypedValueOnIndex(shader_param.type, shader_param.size, field, value, static_cast<int>(i));
+            }
+        }
+        else if (!value.is_null())
+        {
+            assignTypedValue(shader_param.type, shader_param.size, field, value, nlohmann::json(0));
+        }
+        write_offset += field_size;
+    }
+    return write_offset;
 }
 
 bool ShaderParams::getAllocatedPoolArray(ShaderParam& shader_param)
@@ -626,12 +737,12 @@ bool ShaderParams::getAllocatedPoolArray(ShaderParam& shader_param)
             {
                 for (int i = 0; i < shader_param.num_elements; i++)
                 {
-                    assignTypedValueOnIndex(shader_param.type, getValue(shader_param), value, i);
+                    assignTypedValueOnIndex(shader_param.type, shader_param.size, getValue(shader_param), value, i);
                 }
             }
             else
             {
-                assignTypedValue(shader_param.type, getValue(shader_param), value, nlohmann::json(0));
+                assignTypedValue(shader_param.type, shader_param.size, getValue(shader_param), value, nlohmann::json(0));
             }
         }
     }
@@ -689,12 +800,12 @@ bool ShaderParams::resetToDefaults(const std::string& shader_name)
         {
             for (int i = 0; i < shader_param.num_elements; i++)
             {
-                assignTypedValueOnIndex(shader_param.type, pool_data, value, i);
+                assignTypedValueOnIndex(shader_param.type, shader_param.size, pool_data, value, i);
             }
         }
         else
         {
-            assignTypedValue(shader_param.type, pool_data, value, nlohmann::json(0));
+            assignTypedValue(shader_param.type, shader_param.size, pool_data, value, nlohmann::json(0));
         }
     }
     return true;
@@ -730,7 +841,7 @@ static std::pair<ImGuiDataType, size_t> getScalarTypeAndSize(const std::string& 
         { "uint64", { ImGuiDataType_U64, sizeof(uint64_t) } },
         { "float16", { ImGuiDataType_Float, sizeof(float) / 2u } },
         { "float", { ImGuiDataType_Float, sizeof(float) } },
-        { "double", { ImGuiDataType_Float, sizeof(double) } }
+        { "double", { ImGuiDataType_Double, sizeof(double) } }
     };
 
     auto it = typeMap.find(type);
@@ -782,8 +893,8 @@ void ShaderParams::createScalarNParam(const std::string& name, const nlohmann::j
     shader_param.resizeData(size, shader_param.num_elements);
 
     // min/max values are set up for UI controls
-    assignTypedValue(shader_param.type, shader_param.getMin(), nlohmann::json(0));
-    assignTypedValue(shader_param.type, shader_param.getMax(), nlohmann::json(1));
+    assignTypedValue(shader_param.type, shader_param.size, shader_param.getMin(), nlohmann::json(0));
+    assignTypedValue(shader_param.type, shader_param.size, shader_param.getMax(), nlohmann::json(1));
 
     size_t existing_pool_index = findEquivalentParamPoolIndex(shader_param);
     if (existing_pool_index != SIZE_MAX)
@@ -810,31 +921,23 @@ void ShaderParams::addToScalarNParam(const std::string& name, const nlohmann::js
     shader_param.default_value = value.contains("value") ? value["value"] : nlohmann::json(0);
     shader_param.pending_value = shader_param.default_value;
 
-    assignTypedValue(shader_param.type, shader_param.getMin(), value.contains("min") ? value["min"] : nlohmann::json(0));
-    assignTypedValue(shader_param.type, shader_param.getMax(), value.contains("max") ? value["max"] : nlohmann::json(1));
+    assignTypedValue(shader_param.type, shader_param.size, shader_param.getMin(),
+                     value.contains("min") ? value["min"] : nlohmann::json(0));
+    assignTypedValue(shader_param.type, shader_param.size, shader_param.getMax(),
+                     value.contains("max") ? value["max"] : nlohmann::json(1));
 
-    shader_param.step = value.contains("step") ? value["step"].get<float>() : 0.01f;
-
+    ParamWidgetHints hints;
+    parseParamWidgetHints(value, hints);
+    shader_param.step = hints.has_step ? hints.step : 0.01f;
     if (shader_param.type != ImGuiDataType_Float)
     {
-        if (value.contains("isBool") && value["isBool"].is_boolean())
-        {
-            shader_param.is_bool = value["isBool"].get<bool>();
-        }
+        shader_param.is_bool = hints.is_bool;
     }
-
     if (shader_param.type != ImGuiDataType_Bool)
     {
-        if (value.contains("useSlider") && value["useSlider"].is_boolean())
-        {
-            shader_param.is_slider = value["useSlider"].get<bool>();
-        }
+        shader_param.is_slider = hints.use_slider;
     }
-
-    if (value.contains("hidden") && value["hidden"].is_boolean())
-    {
-        shader_param.is_hidden = value["hidden"].get<bool>();
-    }
+    shader_param.is_hidden = hints.hidden;
 }
 
 void ShaderParams::createDefaultBoolParam(const std::string& name, nlohmann::ordered_json& json_shader_params)
@@ -887,10 +990,9 @@ void ShaderParams::addToBoolParam(const std::string& name, const nlohmann::json&
         shader_param.pending_value = value["value"];
     }
 
-    if (value.contains("hidden") && value["hidden"].is_boolean())
-    {
-        shader_param.is_hidden = value["hidden"].get<bool>();
-    }
+    ParamWidgetHints hints;
+    parseParamWidgetHints(value, hints);
+    shader_param.is_hidden = hints.hidden;
 }
 
 void ShaderParams::render(const std::string& shader_name)

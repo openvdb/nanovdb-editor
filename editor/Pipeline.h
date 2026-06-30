@@ -20,22 +20,6 @@
 #include <memory>
 #include <string>
 
-// Pipeline parameter field descriptor for data-driven UI generation.
-// Each field describes one editable parameter within a pipeline's params blob.
-typedef struct pnanovdb_pipeline_param_field_t
-{
-    const char* name;
-    const char* tooltip;
-    pnanovdb_uint32_t type; // PNANOVDB_REFLECT_TYPE_FLOAT, _INT32, etc.
-    pnanovdb_uint64_t offset; // offsetof() within params data
-    float default_value;
-    float min_value;
-    float max_value;
-    float step;
-    const char* const* enum_labels;
-    pnanovdb_uint32_t enum_count;
-} pnanovdb_pipeline_param_field_t;
-
 // Opaque types for pipeline context (internal editor types)
 struct pnanovdb_renderer_t;
 typedef struct pnanovdb_renderer_t pnanovdb_renderer_t;
@@ -69,11 +53,13 @@ typedef enum pnanovdb_pipeline_voxelbvh_source_enum_t
     pnanovdb_pipeline_voxelbvh_source_gaussian_arrays = 3,
 } pnanovdb_pipeline_voxelbvh_source_t;
 
-bool pnanovdb_pipeline_voxelbvh_build_params_set_source_type(pnanovdb_pipeline_params_t* params,
-                                                             pnanovdb_pipeline_voxelbvh_source_t source);
-bool pnanovdb_pipeline_voxelbvh_build_params_set_inflation_radius(pnanovdb_pipeline_params_t* params, float radius);
-bool pnanovdb_pipeline_voxelbvh_build_params_set_resolution(pnanovdb_pipeline_params_t* params,
-                                                            pnanovdb_uint32_t resolution);
+PNANOVDB_API bool pnanovdb_pipeline_voxelbvh_build_params_set_source_type(pnanovdb_pipeline_params_t* params,
+                                                                          pnanovdb_pipeline_voxelbvh_source_t source);
+PNANOVDB_API bool pnanovdb_pipeline_voxelbvh_build_params_set_inflation_radius(pnanovdb_pipeline_params_t* params,
+                                                                               float radius);
+PNANOVDB_API bool pnanovdb_pipeline_voxelbvh_build_params_set_resolution(pnanovdb_pipeline_params_t* params,
+                                                                         pnanovdb_uint32_t resolution);
+PNANOVDB_API pnanovdb_uint32_t pnanovdb_pipeline_voxelbvh_sanitize_resolution(pnanovdb_uint32_t resolution);
 
 namespace pnanovdb_editor
 {
@@ -100,7 +86,7 @@ struct PipelineContext
 
 // C++ convenience wrappers (use C enum types directly)
 pnanovdb_pipeline_render_method_t pipeline_get_render_method(pnanovdb_pipeline_type_t render_pipeline);
-pnanovdb_pipeline_result_t pipeline_execute_process(SceneObject* obj, const PipelineContext& ctx);
+PNANOVDB_API pnanovdb_pipeline_result_t pipeline_execute_process(SceneObject* obj, const PipelineContext& ctx);
 bool pipeline_needs_process(SceneObject* obj);
 void pipeline_execute_pending(EditorSceneManager* manager, const PipelineContext& ctx);
 const char* pipeline_get_shader(const SceneObject* obj);
@@ -126,8 +112,11 @@ struct PipelineLoadRequest
     pnanovdb_pipeline_type_t process_pipeline = pnanovdb_pipeline_type_noop;
     pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_noop;
     const char* source_filepath = nullptr;
+    pnanovdb_editor_token_t* name_token = nullptr;
     const pnanovdb_pipeline_params_t* load_params = nullptr;
     const pnanovdb_pipeline_params_t* process_params = nullptr;
+    bool replace_existing = false; // Preserve the current object until a generation-matched load publishes
+    uint64_t reservation_id = 0;
 };
 
 /*!
@@ -144,6 +133,14 @@ bool pipeline_load(EditorSceneManager* scene_manager,
                    const PipelineLoadRequest& request);
 
 /*!
+    \brief Report whether a new load task can start.
+
+    Scene restoration uses this to defer rather than discard load requests while
+    the runtime's single async worker slot is occupied.
+*/
+bool pipeline_load_available();
+
+/*!
     \brief Per-frame async update: drain every worker that completed this frame,
            then poll progress for any worker still in flight.
 
@@ -158,25 +155,44 @@ bool pipeline_update(std::string& progress_text, float& progress_value);
 /*!
     \brief Create a new scene object for re-conversion with different parameters.
 
-    Copies the source filepath, pipeline type, and a deep copy of the process
-    params from the source object. The new object is marked dirty so the
-    pipeline picks it up for conversion. The caller should write desired
-    parameter values into the source object BEFORE calling this function
-    (the generic Properties UI does this on every edit).
+    Shares the source input resources and copies the complete process-stage
+    configuration. Produced outputs are cleared and each non-noop process
+    step is marked dirty so the variant rebuilds independently.
 
     \param scene_manager Scene manager to create the object in
     \param scene_token   Scene token for the new object
     \param source_name   Name token of the existing object to copy source from
     \param new_name      Name string for the new scene object
-    \param compute       Compute interface used to register the new (empty)
-                         nanovdb placeholder with scene_manager
     \return true if the object was created successfully
 */
-bool pipeline_create_variant(EditorSceneManager* scene_manager,
-                             pnanovdb_editor_token_t* scene_token,
-                             pnanovdb_editor_token_t* source_name,
-                             const char* new_name,
-                             const pnanovdb_compute_t* compute);
+PNANOVDB_API bool pipeline_create_variant(EditorSceneManager* scene_manager,
+                                          pnanovdb_editor_token_t* scene_token,
+                                          pnanovdb_editor_token_t* source_name,
+                                          const char* new_name);
+
+bool pipeline_async_process_running_for(EditorSceneManager* scene_manager,
+                                        pnanovdb_editor_token_t* scene,
+                                        pnanovdb_editor_token_t* name);
+bool pipeline_async_process_cancelling_for(EditorSceneManager* scene_manager,
+                                           pnanovdb_editor_token_t* scene,
+                                           pnanovdb_editor_token_t* name);
+
+bool pipeline_async_process_cancel_available_for(EditorSceneManager* scene_manager,
+                                                 pnanovdb_editor_token_t* scene,
+                                                 pnanovdb_editor_token_t* name);
+
+bool pipeline_cancel_async_process(EditorSceneManager* scene_manager,
+                                   pnanovdb_editor_token_t* scene,
+                                   pnanovdb_editor_token_t* name);
+
+// Retarget an in-flight process worker after the same object is renamed.
+bool pipeline_retarget_async_process_target(pnanovdb_editor_token_t* old_scene,
+                                            pnanovdb_editor_token_t* old_name,
+                                            pnanovdb_editor_token_t* new_scene,
+                                            pnanovdb_editor_token_t* new_name,
+                                            uint64_t lifetime_id);
+
+void pipeline_process_pending_user_cancels(EditorSceneManager* scene_manager);
 
 } // namespace pnanovdb_editor
 

@@ -1,17 +1,17 @@
 # Editor pipelines
 
-A **pipeline** is a single, reusable operation bound to one **stage**. It is not
-owned by a scene object — the same pipeline is shared by every
-object that uses it.
+A **pipeline** is a reusable operation bound to one **stage**, shared by every
+scene object that uses it (not owned per-object).
 
-A scene object picks one pipeline per stage, ordered load → process → render
-(any stage may be left empty). Together they turn raw data into something
-renderable.
+A scene object picks one pipeline per stage, ordered load → process → render (any
+stage may be empty), turning raw data into something renderable. The **process**
+stage may be a *chain* of several steps (see
+[Chaining process steps](#chaining-process-steps)).
 
 | Stage       | Purpose                                                  | Example |
 | ----------- | -------------------------------------------------------- | ------- |
 | **load**    | Bring data in from disk / another source.                | `mesh_load` reads a PLY into compute arrays. |
-| **process** | Transform loaded data into a GPU-renderable form.        | `voxelbvh_build` builds a BVH from a mesh. |
+| **process** | Transform loaded data into a GPU-renderable form. May chain multiple steps. | `voxelbvh_build` builds a BVH from a mesh; `voxelbvh_rgba8` then converts it to an RGBA8 grid. |
 | **render**  | Draw the processed data each frame.                      | `nanovdb_render` ray-marches a grid. |
 
 The runtime drives this on the render thread: `pipeline_init()` sets up workers,
@@ -41,62 +41,91 @@ work that would stall the render thread.
 
 2. **Params struct** (if the pipeline has tunable parameters) — put it in
    `editor/Pipeline.cpp` if only that file uses it, or in `editor/PipelineRuntime.h`
-   if a worker's `.cpp` also reads it. Declare a C-friendly POD and reflect
-   it right after:
+   if a worker's `.cpp` also reads it. Declare a C-friendly POD and reflect each
+   field right after (the Properties panel drives its widgets off this reflection):
 
 ```cpp
-struct <Name>Params { ... };
-PNANOVDB_REFLECT_STRUCT_OPAQUE_IMPL(<Name>Params)
+struct <Name>Params { float <field> = ...; };
+
+#define PNANOVDB_REFLECT_TYPE <Name>Params
+PNANOVDB_REFLECT_BEGIN()
+PNANOVDB_REFLECT_VALUE(float, <field>, 0, 0)
+PNANOVDB_REFLECT_END(0)
+#undef PNANOVDB_REFLECT_TYPE
 ```
 
-1. **Typed getters/setters** (only if another `.cpp` reads/writes the params) — in
+   (Use `PNANOVDB_REFLECT_STRUCT_OPAQUE_IMPL(<Name>Params)` only for params that are
+   never shown in the Properties panel.)
+
+3. **Typed getters/setters** (only if another `.cpp` reads/writes the params) — in
    `editor/PipelineRuntime.h`, declare `pipeline_params_get/set_<name>_<field>()`;
    guard `params->size` and operate on the opaque blob.
 
-2. **Param field descriptors** (optional; exposes params in the Properties panel) —
-   in `editor/Pipeline.cpp`. Without this the params have no UI widgets. Pass the
-   array via `PNANOVDB_PIPELINE_FIELDS(...)` in step 5:
+4. **UI hints JSON** (optional; refines how params show in the Properties panel) —
+   add a `editor/shaders/<name>.slang.json` whose `PipelineParams` object keys match the
+   struct field names. The panel renders one widget per reflected field; each entry can
+   supply `label`, `tooltip`, `min`, `max`, `step`, `isBool`, `useSlider`, and `hidden`.
+   Field entries use the same shape as `ShaderParams` in render-shader JSON; only the
+   top-level key differs. Without a JSON file the fields still render, using their
+   reflected names and default widgets.
 
-```cpp
-static const pnanovdb_pipeline_param_field_t s_<name>_param_fields[] = {
-    { "Label", "tooltip", PNANOVDB_REFLECT_TYPE_FLOAT,
-      offsetof(<Name>Params, <field>), default, min, max, step, nullptr, 0 },
-};
+```jsonc
+// editor/shaders/<name>.slang.json
+{
+    "PipelineParams": {
+        "<field>": { "label": "Label", "tooltip": "...", "min": 0, "max": 100, "step": 1 }
+    }
+}
 ```
 
 5. **Descriptor + registration** — in `editor/Pipeline.cpp`, pick the macro for your
    stage. Each builds a static descriptor and self-registers it (no central switch).
    Pass params with `PNANOVDB_PIPELINE_PARAMS(<Name>Params)` or
-   `PNANOVDB_PIPELINE_NO_PARAMS`, and fields with `PNANOVDB_PIPELINE_FIELDS(...)` or
-   `PNANOVDB_PIPELINE_NO_FIELDS`. Pass `nullptr` for `execute` when async-only.
+   `PNANOVDB_PIPELINE_NO_PARAMS`. For process pipelines, the UI-hints argument is the
+   shader/base name (e.g. `"editor/<name>.slang"`) or `nullptr` for none. Pass `nullptr`
+   for `execute` when async-only. The trailing data-kind arguments declare the pipeline's typed
+   data flow (see [Pipeline compatibility](#pipeline-compatibility-data-kinds)): each stage's
+   `outputs` and/or `inputs`.
 
 ```cpp
-// load: no shaders, no render method
+// load: no shaders, no render method; declares what it outputs
 PNANOVDB_REGISTER_LOAD_PIPELINE(
     s_<name>_descriptor, pnanovdb_pipeline_type_<name>, "Name",
     PNANOVDB_PIPELINE_PARAMS(<Name>Params),
-    execute_<name>);
+    execute_<name>,
+    pnanovdb_pipeline_data_kind_<kind>);   // outputs (or _none)
 
-// process: params map to process_params
+// process: params map to process_params; declares outputs + inputs
 PNANOVDB_REGISTER_PROCESS_PIPELINE(
     s_<name>_descriptor, pnanovdb_pipeline_type_<name>, "Name",
     s_<name>_shaders, 1,                   // or nullptr, 0 for no shaders
     PNANOVDB_PIPELINE_PARAMS(<Name>Params),
     execute_<name>,
     get_render_method_<nanovdb|gaussian>,
-    PNANOVDB_PIPELINE_FIELDS(s_<name>_param_fields));
+    "editor/<name>.slang",                 // UI-hints JSON base name, or nullptr
+    pnanovdb_pipeline_data_kind_<kind>,    // outputs (or _none)
+    pnanovdb_pipeline_data_kind_<kind>);   // inputs (bitmask; 0 = anything)
 
-// render: you pick method + param map
+// render: you pick method + param map; declares what it inputs
 PNANOVDB_REGISTER_RENDER_PIPELINE(
     s_<name>_descriptor, pnanovdb_pipeline_type_<name>, "Name",
     s_<name>_shaders, 1,
     PNANOVDB_PIPELINE_PARAMS(<Name>Params),
     execute_<name>, get_render_method_<none|nanovdb|gaussian>,
-    map_params<&SceneObject::render_params>); // or nullptr
+    map_params<&SceneObject::render_params>, // or nullptr
+    pnanovdb_pipeline_data_kind_<kind>);     // inputs (bitmask; 0 = anything)
 ```
 
 6. **UI entry point** (optional) — e.g. `mesh_import::mesh()` in
    `editor/MeshImport.cpp` builds a `PipelineLoadRequest` and calls `pipeline_load`.
+
+## Pipeline compatibility (data kinds)
+
+The Properties panel only offers pipelines that can consume an object's current data.
+Each descriptor tags its typed data flow with `pnanovdb_pipeline_data_kind_t` bits
+(in `editor/PipelineTypes.h`): **`outputs`** (the kind a stage produces; `_none` for a
+passthrough like `noop` or a terminal render) and **`inputs`** (a bitmask of accepted
+kinds; `0` = anything).
 
 ## Sync pipeline only
 
@@ -159,7 +188,27 @@ the enum + shader + shader.json, then 2 lines in `Pipeline.cpp`:
 PNANOVDB_DEFINE_PIPELINE_SHADERS(s_<name>_shaders,
     PNANOVDB_PIPELINE_SHADER("editor/<name>.slang", nullptr, PNANOVDB_TRUE));
 PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_<name>_descriptor,
-    pnanovdb_pipeline_type_<name>, "Name", s_<name>_shaders);
+    pnanovdb_pipeline_type_<name>, "Name", s_<name>_shaders,
+    pnanovdb_pipeline_data_kind_nanovdb);   // inputs
+```
+
+## Chaining process steps
+
+The process stage can run several steps in sequence, each feeding the next.
+
+### Registering a chain as a single pipeline
+
+```cpp
+static const pnanovdb_pipeline_type_t s_voxelbvh_rgba8_chain_steps[] = {
+    pnanovdb_pipeline_type_voxelbvh_build,   // step 0: build the VoxelBVH grid
+    pnanovdb_pipeline_type_voxelbvh_rgba8,   // step 1: convert it to RGBA8
+};
+PNANOVDB_REGISTER_PROCESS_CHAIN_PIPELINE(s_voxelbvh_rgba8_chain_descriptor,
+                                         pnanovdb_pipeline_type_voxelbvh_rgba8_chain,
+                                         "VoxelBVH + RGBA8",
+                                         PNANOVDB_PIPELINE_CHAIN(s_voxelbvh_rgba8_chain_steps),
+                                         pnanovdb_pipeline_data_kind_nanovdb_rgba8,        // outputs (final step)
+                                         pnanovdb_pipeline_data_kind_mesh);                 // inputs (first step)
 ```
 
 ## Reference
@@ -169,5 +218,7 @@ PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_<name>_descriptor,
 | `pnanovdb_pipeline_type_noop`           | load    | sync       | `editor/Pipeline.cpp` |
 | `pnanovdb_pipeline_type_nanovdb_render` | render  | sync       | `editor/Pipeline.cpp` |
 | `pnanovdb_pipeline_type_voxelbvh_build` | process | async-only | `editor/Pipeline.cpp`, `PipelineRuntime.{h,cpp}` |
+| `pnanovdb_pipeline_type_voxelbvh_rgba8` | process | async-only | `editor/Pipeline.cpp`, `PipelineRuntime.{h,cpp}` |
+| `pnanovdb_pipeline_type_voxelbvh_rgba8_chain` | process | chain | `editor/Pipeline.cpp` (template; expands to `voxelbvh_build` + `voxelbvh_rgba8`) |
 | `pnanovdb_pipeline_type_mesh_load`      | load    | async-only | `PipelineRuntime.{h,cpp}`, `editor/Pipeline.cpp`, `editor/MeshImport.cpp` |
 | `pnanovdb_pipeline_type_gaussian_load`  | load    | async-only | `PipelineRuntime.{h,cpp}`, `editor/Pipeline.cpp`, `editor/GaussianImport.cpp` |

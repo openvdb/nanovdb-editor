@@ -6,5 +6,19 @@
             "max": 2,
             "step": 1
         }
+    },
+    "PipelineParams": {
+        "resolution": {
+            "label": "Resolution",
+            "tooltip": "Source VoxelBVH resolution used to allocate the RGBA8 grid topology",
+            "value": 512,
+            "min": 1,
+            "max": 4096,
+            "step": 1
+        },
+        "upsample": {
+            "label": "Upsample 2x",
+            "tooltip": "Make RGBA8 grid smoother by duplicating topology at 2x resolution"
+        }
     }
 }

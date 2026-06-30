@@ -33,6 +33,7 @@ protected:
     pnanovdb_compiler_t compiler{};
     pnanovdb_compute_t compute{};
     pnanovdb_editor_t editor{};
+    pnanovdb_editor::EditorWorker worker{};
     pnanovdb_compiler_instance_t* compiler_inst = nullptr;
 
     pnanovdb_editor_token_t* scene_token = nullptr;
@@ -110,13 +111,14 @@ protected:
         ASSERT_NE(editor.impl, nullptr);
         ASSERT_NE(editor.impl->scene_manager, nullptr);
         ASSERT_NE(editor.impl->compute, nullptr);
+        worker.is_starting.store(false, std::memory_order_release);
+        editor.impl->editor_worker = &worker;
 
         // Capture the pool *before* any object exists so we record the actual
         // JSON defaults (capture_shader_default_params returns live pool
         // state, which equals defaults only on a fresh pool).
         editor_defaults = capturePoolBytes(default_editor_shader());
-        ASSERT_FALSE(editor_defaults.empty())
-            << "Could not load JSON defaults for " << default_editor_shader();
+        ASSERT_FALSE(editor_defaults.empty()) << "Could not load JSON defaults for " << default_editor_shader();
 
         scene_token = editor.get_token("reset_defaults_scene");
         name_a = editor.get_token("reset_defaults_object_a");
@@ -141,8 +143,7 @@ protected:
     {
         if (editor.impl)
         {
-            editor.remove(&editor, scene_token, name_a);
-            editor.remove(&editor, scene_token, name_b);
+            editor.impl->editor_worker = nullptr;
             pnanovdb_editor_free(&editor);
         }
         if (owned_array_a)
@@ -185,8 +186,7 @@ TEST_F(ShaderParamsResetToDefaultsTest, ResetRestoresPoolToJsonDefaults)
     ASSERT_NE(std::memcmp(stamped.data(), editor_defaults.data(), stamped.size()), 0)
         << "Precondition: stamped pool should differ from defaults";
 
-    ASSERT_TRUE(editor.impl->scene_manager->reset_shader_params_to_defaults(
-        &compute, default_editor_shader()));
+    ASSERT_TRUE(editor.impl->scene_manager->reset_shader_params_to_defaults(&compute, default_editor_shader()));
 
     const auto after = capturePoolBytes(default_editor_shader());
     ASSERT_EQ(after.size(), editor_defaults.size());
@@ -224,8 +224,7 @@ TEST_F(ShaderParamsResetToDefaultsTest, ResetRefreshesPerObjectBuffersOfAllObjec
     std::memset(ptr_b, 0xAA, copy_size);
     stampPoolWithPattern(default_editor_shader(), 0x77);
 
-    ASSERT_TRUE(editor.impl->scene_manager->reset_shader_params_to_defaults(
-        &compute, default_editor_shader()));
+    ASSERT_TRUE(editor.impl->scene_manager->reset_shader_params_to_defaults(&compute, default_editor_shader()));
 
     // refresh_params_for_shader reallocates each object's params array, so
     // the data pointer may have moved.

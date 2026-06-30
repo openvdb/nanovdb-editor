@@ -7,6 +7,8 @@
 #include "editor/EditorScene.h"
 #include "editor/EditorSceneManager.h"
 
+#include <memory>
+
 namespace pnanovdb_editor_test
 {
 
@@ -83,6 +85,27 @@ pnanovdb_bool_t get_object_process_dirty(pnanovdb_editor_t* editor,
                                                  if (obj)
                                                  {
                                                      dirty = obj->process_dirty();
+                                                 }
+                                             });
+    return dirty ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+}
+
+pnanovdb_bool_t get_process_step_dirty(pnanovdb_editor_t* editor,
+                                       pnanovdb_editor_token_t* scene,
+                                       pnanovdb_editor_token_t* name,
+                                       pnanovdb_uint32_t step_index)
+{
+    if (!editor || !editor->impl || !editor->impl->scene_manager || !scene || !name)
+    {
+        return PNANOVDB_FALSE;
+    }
+    bool dirty = false;
+    editor->impl->scene_manager->with_object(scene, name,
+                                             [&](pnanovdb_editor::SceneObject* obj)
+                                             {
+                                                 if (obj && step_index < obj->pipeline.process_count())
+                                                 {
+                                                     dirty = obj->pipeline.process_step(step_index).dirty;
                                                  }
                                              });
     return dirty ? PNANOVDB_TRUE : PNANOVDB_FALSE;
@@ -174,6 +197,142 @@ pnanovdb_bool_t append_blank_shader_override(pnanovdb_editor_t* editor,
                                                  ok = PNANOVDB_TRUE;
                                              });
     return ok;
+}
+
+size_t get_object_process_step_count(pnanovdb_editor_t* editor,
+                                     pnanovdb_editor_token_t* scene,
+                                     pnanovdb_editor_token_t* name)
+{
+    if (!editor || !editor->impl || !editor->impl->scene_manager || !scene || !name)
+    {
+        return 0u;
+    }
+    size_t count = 0u;
+    editor->impl->scene_manager->with_object(scene, name,
+                                             [&](pnanovdb_editor::SceneObject* obj)
+                                             {
+                                                 if (obj)
+                                                     count = obj->pipeline.process_count();
+                                             });
+    return count;
+}
+
+pnanovdb_pipeline_type_t get_object_process_step_type(pnanovdb_editor_t* editor,
+                                                      pnanovdb_editor_token_t* scene,
+                                                      pnanovdb_editor_token_t* name,
+                                                      size_t step_index)
+{
+    pnanovdb_pipeline_type_t type = pnanovdb_pipeline_type_noop;
+    if (!editor || !editor->impl || !editor->impl->scene_manager || !scene || !name)
+    {
+        return type;
+    }
+    editor->impl->scene_manager->with_object(scene, name,
+                                             [&](pnanovdb_editor::SceneObject* obj)
+                                             {
+                                                 if (obj && step_index < obj->pipeline.process_count())
+                                                     type = obj->pipeline.process_step(step_index).type;
+                                             });
+    return type;
+}
+
+size_t append_process_step(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
+{
+    if (!editor || !editor->impl || !editor->impl->scene_manager || !scene || !name)
+    {
+        return 0u;
+    }
+    size_t idx = 0u;
+    editor->impl->scene_manager->with_object(scene, name,
+                                             [&](pnanovdb_editor::SceneObject* obj)
+                                             {
+                                                 if (!obj)
+                                                     return;
+                                                 idx = obj->pipeline.append_process_step();
+                                                 pnanovdb_editor::PipelineStage& s = obj->pipeline.process_step(idx);
+                                                 s.type = pnanovdb_pipeline_type_noop;
+                                                 s.configured = true;
+                                                 s.dirty = false;
+                                             });
+    return idx;
+}
+
+pnanovdb_uint32_t get_object_renderable_data_kind(pnanovdb_editor_t* editor,
+                                                  pnanovdb_editor_token_t* scene,
+                                                  pnanovdb_editor_token_t* name)
+{
+    pnanovdb_uint32_t kind = pnanovdb_pipeline_data_kind_none;
+    if (!editor || !editor->impl || !editor->impl->scene_manager || !scene || !name)
+    {
+        return kind;
+    }
+    editor->impl->scene_manager->with_object(scene, name,
+                                             [&](pnanovdb_editor::SceneObject* obj)
+                                             {
+                                                 if (obj)
+                                                     kind = pnanovdb_editor::scene_object_renderable_data_kind(obj);
+                                             });
+    return kind;
+}
+
+pnanovdb_pipeline_type_t get_object_render_pipeline(pnanovdb_editor_t* editor,
+                                                    pnanovdb_editor_token_t* scene,
+                                                    pnanovdb_editor_token_t* name)
+{
+    pnanovdb_pipeline_type_t render = pnanovdb_pipeline_type_noop;
+    if (!editor || !editor->impl || !editor->impl->scene_manager || !scene || !name)
+    {
+        return render;
+    }
+    editor->impl->scene_manager->with_object(scene, name,
+                                             [&](pnanovdb_editor::SceneObject* obj)
+                                             {
+                                                 if (obj)
+                                                     render = obj->render_pipeline();
+                                             });
+    return render;
+}
+
+void sync_object_render_to_chain(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
+{
+    if (!editor || !editor->impl || !editor->impl->scene_manager || !scene || !name)
+    {
+        return;
+    }
+    editor->impl->scene_manager->with_object(scene, name,
+                                             [&](pnanovdb_editor::SceneObject* obj)
+                                             {
+                                                 if (obj)
+                                                     pnanovdb_editor::scene_object_sync_render_to_chain(obj);
+                                             });
+}
+
+void set_process_step_nanovdb_output(pnanovdb_editor_t* editor,
+                                     pnanovdb_editor_token_t* scene,
+                                     pnanovdb_editor_token_t* name,
+                                     size_t step_index,
+                                     pnanovdb_compute_array_t* array,
+                                     const pnanovdb_compute_t* compute)
+{
+    if (!editor || !editor->impl || !editor->impl->scene_manager || !scene || !name || !array)
+    {
+        return;
+    }
+    editor->impl->scene_manager->with_object(
+        scene, name,
+        [&](pnanovdb_editor::SceneObject* obj)
+        {
+            if (!obj || step_index >= obj->pipeline.process_count())
+                return;
+            std::shared_ptr<pnanovdb_compute_array_t> owner(array,
+                                                            [compute](pnanovdb_compute_array_t* a)
+                                                            {
+                                                                if (compute && a)
+                                                                    compute->destroy_array(a);
+                                                            });
+            obj->pipeline.process_step(step_index).output.set_array(pnanovdb_editor::k_stage_output_nanovdb, array, owner);
+            pnanovdb_editor::scene_object_resolve_resources(obj);
+        });
 }
 
 } // namespace pnanovdb_editor_test

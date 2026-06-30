@@ -132,11 +132,17 @@ struct ShaderParam
     }
 };
 
+PNANOVDB_SHADER_PARAMS_EXPORT_CXX std::optional<nlohmann::ordered_json> loadParamHintsJson(
+    const std::string& shader_base_name, const char* section_key);
+
+PNANOVDB_SHADER_PARAMS_EXPORT_CXX std::optional<nlohmann::ordered_json> loadShaderParamsJson(
+    const std::string& shader_base_name);
+
 class ShaderParams
 {
 public:
     ShaderParams() = default;
-    ~ShaderParams();
+    PNANOVDB_SHADER_PARAMS_EXPORT_CXX ~ShaderParams();
 
     void create(const std::string& shader_name);
     void createGroup(const std::string& group_name);
@@ -182,6 +188,9 @@ public:
     PNANOVDB_SHADER_PARAMS_EXPORT_CXX size_t copy_params_to_buffer(const std::string& shader_name,
                                                                    void* dst,
                                                                    size_t dst_size);
+    PNANOVDB_SHADER_PARAMS_EXPORT_CXX size_t copy_default_params_to_buffer(const std::string& shader_name,
+                                                                           void* dst,
+                                                                           size_t dst_size);
     void clear_pending_array_for_shader(const std::string& shader_name);
 
 private:

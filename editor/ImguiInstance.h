@@ -77,6 +77,10 @@ struct PendingState
     bool find_callable_file = false;
     bool open_file = false;
     bool save_file = false;
+    bool save_scene = false;
+    bool load_scene = false;
+    bool find_source_file = false; // Properties panel: pick a source file for the selected load pipeline
+    bool find_shader_file = false; // Properties panel: pick a shader file for the render stage
     std::string viewport_gaussian_view = "";
     std::string viewport_nanovdb_array = "";
     bool update_memory_stats = false;
@@ -140,6 +144,13 @@ struct Instance
     std::string nanovdb_filepath = ""; // filename selected in the ImGuiFileDialog
     std::string raster_filepath = "";
     std::string mesh_filepath = "";
+    std::string scene_filepath = ""; // scene JSON path selected in the ImGuiFileDialog
+    bool scene_overwrite_open_popup = false;
+    std::vector<std::string> scene_overwrite_conflicts; // existing scene names a pending load would overwrite
+
+    pnanovdb_pipeline_type_t source_load_pipeline = pnanovdb_pipeline_type_noop;
+    pnanovdb_editor_token_t* source_scene_token = nullptr;
+    pnanovdb_editor_token_t* source_name_token = nullptr;
     float raster_voxels_per_unit = pnanovdb_editor::k_default_voxels_per_unit;
     int gaussian_import_mode = static_cast<int>(pnanovdb_editor::gaussian_import::Mode::Splat);
     bool mesh_import_show_debug = false;
@@ -159,6 +170,7 @@ struct Instance
     ProgressBar progress;
 
     bool is_docking_setup = false;
+    bool reset_docking = false; // request a rebuild of the default panel layout
     bool loaded_ini_once = false;
     std::string current_profile_name = ""; // Track current profile for switching
     std::string current_ini_filename = ""; // INI filename for current profile

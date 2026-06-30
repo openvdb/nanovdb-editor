@@ -94,6 +94,9 @@ namespace pnanovdb_editor
 {
 PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor();
 
+void defer_gaussian_data_destruction(pnanovdb_editor_impl_t* impl,
+                                     std::shared_ptr<pnanovdb_raster_gaussian_data_t> owner);
+
 template <typename T>
 struct PendingData
 {

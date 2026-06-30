@@ -1,0 +1,23 @@
+{
+    "PipelineParams": {
+        "source_type": {
+            "hidden": true
+        },
+        "resolution": {
+            "label": "Resolution",
+            "tooltip": "Max BVH integer coordinate (1..4096)",
+            "value": 512,
+            "min": 1,
+            "max": 4096,
+            "step": 1
+        },
+        "inflation_radius": {
+            "label": "Inflation Radius",
+            "tooltip": "World-space inflation applied to lines/triangles. 0 = auto for Debug/Lines renders.",
+            "value": 0,
+            "min": 0,
+            "max": 100,
+            "step": 0.01
+        }
+    }
+}

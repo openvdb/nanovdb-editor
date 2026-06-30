@@ -19,6 +19,11 @@
 struct pnanovdb_voxelbvh_context_t;
 typedef struct pnanovdb_voxelbvh_context_t pnanovdb_voxelbvh_context_t;
 
+typedef pnanovdb_bool_t(PNANOVDB_ABI* pnanovdb_voxelbvh_cancel_t)(void* userdata);
+typedef void(PNANOVDB_ABI* pnanovdb_voxelbvh_progress_t)(void* userdata, float fraction);
+
+#define PNANOVDB_VOXELBVH_MAX_RESOLUTION 4096u
+
 typedef struct pnanovdb_voxelbvh_t
 {
     PNANOVDB_REFLECT_INTERFACE();
@@ -230,6 +235,14 @@ typedef struct pnanovdb_voxelbvh_t
                                                           pnanovdb_compute_array_t* dst_nanovdb_inout,
                                                           pnanovdb_compute_array_t* src_nanovdb_in);
 
+    void(PNANOVDB_ABI* context_set_cancel)(pnanovdb_voxelbvh_context_t* context,
+                                           pnanovdb_voxelbvh_cancel_t callback,
+                                           void* userdata);
+
+    void(PNANOVDB_ABI* context_set_progress)(pnanovdb_voxelbvh_context_t* context,
+                                             pnanovdb_voxelbvh_progress_t callback,
+                                             void* userdata);
+
 } pnanovdb_voxelbvh_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_voxelbvh_t
@@ -258,6 +271,8 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_duplicate_topology, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_duplicate_topology_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_rgba8_from_voxelbvh, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_rgba8_from_voxelbvh_array, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(context_set_cancel, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(context_set_progress, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE
@@ -268,13 +283,14 @@ PNANOVDB_API pnanovdb_voxelbvh_t* pnanovdb_get_voxelbvh();
 
 static void pnanovdb_voxelbvh_load(pnanovdb_voxelbvh_t* voxelbvh, const pnanovdb_compute_t* compute)
 {
-    auto get_voxelbvh = (PFN_pnanovdb_get_voxelbvh)pnanovdb_get_proc_address(compute->module, "pnanovdb_get_voxelbvh");
+    PFN_pnanovdb_get_voxelbvh get_voxelbvh =
+        (PFN_pnanovdb_get_voxelbvh)pnanovdb_get_proc_address(compute->module, "pnanovdb_get_voxelbvh");
     if (!get_voxelbvh)
     {
         printf("Error: Failed to acquire grid build\n");
         return;
     }
-    *voxelbvh = *get_voxelbvh();
+    pnanovdb_voxelbvh_t_duplicate(voxelbvh, get_voxelbvh());
 
     voxelbvh->compute = compute;
 }

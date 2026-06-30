@@ -127,14 +127,8 @@ void createMenu(imgui_instance_user::Instance* ptr)
             ImGui::MenuItem("Import Gaussian...", "", &ptr->pending.find_raster_file);
             ImGui::MenuItem("Import Mesh...", "", &ptr->pending.find_mesh_file);
             ImGui::Separator();
-            if (ImGui::MenuItem("Save INI"))
-            {
-                saveIniSettings(ptr);
-            }
-            if (ImGui::MenuItem("Load INI"))
-            {
-                // INI loading disabled
-            }
+            ImGui::MenuItem("Save Scene...", "", &ptr->pending.save_scene);
+            ImGui::MenuItem("Load Scene...", "", &ptr->pending.load_scene);
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Windows"))
@@ -155,6 +149,23 @@ void createMenu(imgui_instance_user::Instance* ptr)
                 ImGui::MenuItem(FILE_HEADER, "", &ptr->window.show_file_header);
             }
             ImGui::MenuItem(CONSOLE, "", &ptr->window.show_console);
+            if (!isViewerProfile)
+            {
+                ImGui::Separator();
+                if (ImGui::MenuItem("Save INI"))
+                {
+                    saveIniSettings(ptr);
+                }
+                if (ImGui::MenuItem("Load INI"))
+                {
+                    // INI loading disabled
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Reset Layout"))
+                {
+                    ptr->reset_docking = true;
+                }
+            }
             ImGui::EndMenu();
         }
 
@@ -1055,6 +1066,65 @@ static bool meshImportSidePane(const char* /*vFilter*/, IGFDUserDatas vUserDatas
     return true;
 }
 
+static void showSceneOverwritePopup(imgui_instance_user::Instance* ptr)
+{
+    static const char* k_popup_title = "Overwrite Scene?";
+
+    if (ptr->scene_overwrite_open_popup)
+    {
+        ptr->scene_overwrite_open_popup = false;
+        ImGui::OpenPopup(k_popup_title);
+    }
+
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    if (!ImGui::BeginPopupModal(k_popup_title, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        return;
+    }
+
+    if (ptr->scene_overwrite_conflicts.size() == 1)
+    {
+        ImGui::Text("Scene '%s' already exists.", ptr->scene_overwrite_conflicts.front().c_str());
+    }
+    else
+    {
+        ImGui::TextUnformatted("The following scenes already exist:");
+        for (const std::string& name : ptr->scene_overwrite_conflicts)
+        {
+            ImGui::BulletText("%s", name.c_str());
+        }
+    }
+    ImGui::TextUnformatted("Overwrite the existing scene(s) with the loaded file?");
+    ImGui::Separator();
+
+    const auto close = [&]()
+    {
+        ptr->scene_overwrite_conflicts.clear();
+        ImGui::CloseCurrentPopup();
+    };
+
+    if (ImGui::Button("Overwrite") && ptr->editor_scene)
+    {
+        for (const std::string& name : ptr->scene_overwrite_conflicts)
+        {
+            pnanovdb_editor_token_t* scene_token = EditorToken::getInstance().getToken(name.c_str());
+            if (scene_token)
+            {
+                ptr->editor_scene->remove_scene(scene_token);
+            }
+        }
+        load_scene_file_and_sync_viewport(*ptr->editor_scene, ptr->scene_filepath);
+        close();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel"))
+    {
+        close();
+    }
+
+    ImGui::EndPopup();
+}
+
 void showFileDialogs(imgui_instance_user::Instance* ptr)
 {
     if (ptr->pending.open_file)
@@ -1087,6 +1157,36 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
         ImGuiFileDialog::Instance()->OpenDialog(
             "SelectShaderDirectoryDlgKey", "Select Shader Directory", nullptr, config);
     }
+    if (ptr->pending.save_scene)
+    {
+        ptr->pending.save_scene = false;
+
+        IGFD::FileDialogConfig config;
+        config.path = ".";
+        config.fileName = "scene.json";
+        if (ptr->editor_scene)
+        {
+            pnanovdb_editor_token_t* scene_token = ptr->editor_scene->get_current_scene_token();
+            if (scene_token && scene_token->str && scene_token->str[0] != '\0')
+            {
+                config.fileName = std::string(scene_token->str) + ".json";
+            }
+        }
+        config.flags = ImGuiFileDialogFlags_ConfirmOverwrite;
+
+        ImGuiFileDialog::Instance()->OpenDialog(
+            "SaveSceneFileDlgKey", "Save Scene", "Scene Files (*.json){.json}", config);
+    }
+    if (ptr->pending.load_scene)
+    {
+        ptr->pending.load_scene = false;
+
+        IGFD::FileDialogConfig config;
+        config.path = ".";
+
+        ImGuiFileDialog::Instance()->OpenDialog(
+            "LoadSceneFileDlgKey", "Load Scene", "Scene Files (*.json){.json}", config);
+    }
     if (ptr->pending.find_raster_file)
     {
         ptr->pending.find_raster_file = false;
@@ -1113,6 +1213,30 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
         config.userDatas = ptr;
 
         ImGuiFileDialog::Instance()->OpenDialog("OpenMeshFileDlgKey", "Import Mesh", "Mesh Files (*.ply){.ply}", config);
+    }
+    if (ptr->pending.find_source_file)
+    {
+        ptr->pending.find_source_file = false;
+
+        IGFD::FileDialogConfig config;
+        config.path = ".";
+
+        const char* filters = "Gaussian Files (*.npy *.npz *.ply){.npy,.npz,.ply}";
+        if (ptr->source_load_pipeline == pnanovdb_pipeline_type_mesh_load)
+            filters = "Mesh Files (*.ply){.ply}";
+        else if (ptr->source_load_pipeline == pnanovdb_pipeline_type_noop)
+            filters = "NanoVDB Files (*.nvdb){.nvdb}";
+        ImGuiFileDialog::Instance()->OpenDialog("OpenSourceFileDlgKey", "Set Source File", filters, config);
+    }
+    if (ptr->pending.find_shader_file)
+    {
+        ptr->pending.find_shader_file = false;
+
+        IGFD::FileDialogConfig config;
+        config.path = pnanovdb_shader::getShaderDir();
+
+        ImGuiFileDialog::Instance()->OpenDialog(
+            "OpenShaderFileDlgKey", "Select Shader", "Slang Shaders (*.slang){.slang}", config);
     }
 
     if (ImGuiFileDialog::Instance()->IsOpened())
@@ -1168,8 +1292,9 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
 
                 if (ptr->editor_scene)
                 {
-                    ptr->editor_scene->load_gaussian_file(
-                        ptr->raster_filepath.c_str(), convert, render, ptr->raster_voxels_per_unit);
+                    ptr->editor_scene->load_gaussian_file(ptr->editor_scene->get_current_scene_token(),
+                                                          ptr->raster_filepath.c_str(), convert, render,
+                                                          ptr->raster_voxels_per_unit);
                 }
                 ptr->pending.find_raster_file = false;
             }
@@ -1192,6 +1317,65 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
                     pnanovdb_editor_token_t* scene = ptr->editor_scene->get_current_scene_token();
                     ptr->editor_scene->load_mesh_file(scene, ptr->mesh_filepath.c_str(), options);
                 }
+            }
+            ImGuiFileDialog::Instance()->Close();
+        }
+        else if (ImGuiFileDialog::Instance()->Display("OpenSourceFileDlgKey"))
+        {
+            if (ImGuiFileDialog::Instance()->IsOk() && ptr->editor_scene)
+            {
+                const std::string path = ImGuiFileDialog::Instance()->GetFilePathName();
+                pnanovdb_editor_token_t* scene = ptr->source_scene_token;
+                pnanovdb_editor_token_t* name = ptr->source_name_token;
+                bool target_exists = false;
+                if (scene && name)
+                {
+                    ptr->editor_scene->get_scene_manager()->with_object(
+                        scene, name, [&](pnanovdb_editor::SceneObject* obj) { target_exists = obj != nullptr; });
+                }
+                if (!target_exists)
+                {
+                    pnanovdb_editor::Console::getInstance().addLog(
+                        pnanovdb_editor::Console::LogLevel::Warning,
+                        "Set Source File: target object no longer exists; ignoring '%s'", path.c_str());
+                }
+                else if (ptr->source_load_pipeline == pnanovdb_pipeline_type_mesh_load)
+                {
+                    pnanovdb_editor::mesh_import::Options options;
+                    options.show_debug = ptr->mesh_import_show_debug;
+                    options.process_pipeline = pnanovdb_pipeline_type_noop;
+                    options.replace_existing = true;
+                    pnanovdb_editor::Console::getInstance().addLog("Setting source mesh '%s'", path.c_str());
+                    ptr->editor_scene->load_mesh_file(scene, path.c_str(), options, name);
+                }
+                else if (ptr->source_load_pipeline == pnanovdb_pipeline_type_noop)
+                {
+                    pnanovdb_editor::Console::getInstance().addLog("Setting source NanoVDB '%s'", path.c_str());
+                    ptr->editor_scene->load_nanovdb_file(
+                        scene, path.c_str(), pnanovdb_pipeline_type_voxelbvh_gaussians_render, name);
+                }
+                else
+                {
+                    pnanovdb_editor::Console::getInstance().addLog("Setting source Gaussian file '%s'", path.c_str());
+                    ptr->editor_scene->load_gaussian_file(scene, path.c_str(), pnanovdb_pipeline_type_noop,
+                                                          pnanovdb_pipeline_type_gaussian_splat,
+                                                          ptr->raster_voxels_per_unit, name, true);
+                }
+            }
+            ptr->source_scene_token = nullptr;
+            ptr->source_name_token = nullptr;
+            ImGuiFileDialog::Instance()->Close();
+        }
+        else if (ImGuiFileDialog::Instance()->Display("OpenShaderFileDlgKey"))
+        {
+            if (ImGuiFileDialog::Instance()->IsOk() && ptr->editor_scene)
+            {
+                const std::string path = ImGuiFileDialog::Instance()->GetFilePathName();
+                // Store the shader as a path relative to the shader dir
+                const std::string shader_name = pnanovdb_shader::getShaderName(path.c_str());
+                pnanovdb_editor::Console::getInstance().addLog("Setting shader '%s'", shader_name.c_str());
+                ptr->editor_scene->set_selected_object_shader_name(shader_name);
+                ptr->pending.update_shader = true;
             }
             ImGuiFileDialog::Instance()->Close();
         }
@@ -1222,7 +1406,35 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
             }
             ImGuiFileDialog::Instance()->Close();
         }
+        else if (ImGuiFileDialog::Instance()->Display("SaveSceneFileDlgKey"))
+        {
+            if (ImGuiFileDialog::Instance()->IsOk() && ptr->editor_scene)
+            {
+                ptr->scene_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
+                ptr->editor_scene->save_scene_file(ptr->scene_filepath);
+            }
+            ImGuiFileDialog::Instance()->Close();
+        }
+        else if (ImGuiFileDialog::Instance()->Display("LoadSceneFileDlgKey"))
+        {
+            if (ImGuiFileDialog::Instance()->IsOk() && ptr->editor_scene)
+            {
+                ptr->scene_filepath = ImGuiFileDialog::Instance()->GetFilePathName();
+                ptr->scene_overwrite_conflicts = ptr->editor_scene->find_conflicting_scene_names(ptr->scene_filepath);
+                if (ptr->scene_overwrite_conflicts.empty())
+                {
+                    load_scene_file_and_sync_viewport(*ptr->editor_scene, ptr->scene_filepath);
+                }
+                else
+                {
+                    ptr->scene_overwrite_open_popup = true;
+                }
+            }
+            ImGuiFileDialog::Instance()->Close();
+        }
     }
+
+    showSceneOverwritePopup(ptr);
 }
 
 void showAboutWindow(imgui_instance_user::Instance* ptr)

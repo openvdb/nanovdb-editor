@@ -8,6 +8,7 @@
 #include <nanovdb_editor/putil/Compute.h>
 #include <nanovdb_editor/putil/Editor.h>
 
+#include "editor/Editor.h"
 #include "EditorTestSupport.h"
 
 #include <array>
@@ -23,6 +24,7 @@ protected:
     pnanovdb_compiler_t compiler{};
     pnanovdb_compute_t compute{};
     pnanovdb_editor_t editor{};
+    pnanovdb_editor::EditorWorker worker{};
 
     pnanovdb_editor_token_t* scene_token = nullptr;
     pnanovdb_editor_token_t* name_a = nullptr;
@@ -45,6 +47,8 @@ protected:
         pnanovdb_editor_load(&editor, &compute, &compiler);
         ASSERT_NE(editor.module, nullptr);
         ASSERT_NE(editor.impl, nullptr);
+        worker.is_starting.store(false, std::memory_order_release);
+        editor.impl->editor_worker = &worker;
 
         scene_token = editor.get_token("snapshot_test_scene");
         name_a = editor.get_token("snapshot_test_object_A");
@@ -82,8 +86,7 @@ protected:
     {
         if (editor.impl)
         {
-            editor.remove(&editor, scene_token, name_a);
-            editor.remove(&editor, scene_token, name_b);
+            editor.impl->editor_worker = nullptr;
             pnanovdb_editor_free(&editor);
         }
         if (array_a)

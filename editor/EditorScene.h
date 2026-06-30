@@ -17,11 +17,15 @@
 #include "EditorImport.h"
 #include "imgui/ImguiWindow.h"
 
-#include <string>
-#include <map>
+#include <chrono>
+#include <deque>
 #include <filesystem>
-#include <variant>
+#include <map>
 #include <memory>
+#include <optional>
+#include <string>
+#include <variant>
+#include <vector>
 
 namespace imgui_instance_user
 {
@@ -119,7 +123,7 @@ public:
 
     void sync_selected_view_with_current();
     void sync_shader_params_from_editor();
-    void sync_views_from_scene_manager(); // Sync views from scene manager (for worker thread safety)
+    void sync_views_from_scene_manager(uint64_t selected_scene_id = 0, uint64_t selected_name_id = 0);
 
     // To refresh shader params after shader compile
     void reload_shader_params_for_current_view();
@@ -139,6 +143,9 @@ public:
     pnanovdb_editor_token_t* get_current_scene_token() const;
     bool rename_scene(pnanovdb_editor_token_t* old_scene_token, pnanovdb_editor_token_t* new_scene_token);
     bool remove_scene(pnanovdb_editor_token_t* scene_token);
+    bool rename_object(pnanovdb_editor_token_t* scene_token,
+                       pnanovdb_editor_token_t* old_name_token,
+                       pnanovdb_editor_token_t* new_name_token);
 
     // Get the viewport camera token for the current scene
     pnanovdb_editor_token_t* get_viewport_camera_token() const
@@ -182,7 +189,7 @@ public:
 
     // Ensure scene exists (creates with default viewport camera if needed)
     // Also registers the viewport camera with EditorSceneManager for proper removal support
-    SceneViewData* get_or_create_scene(pnanovdb_editor_token_t* scene_token);
+    SceneViewData* get_or_create_scene(pnanovdb_editor_token_t* scene_token, bool create_default_camera = true);
 
     std::vector<pnanovdb_editor_token_t*> get_all_scene_tokens() const;
 
@@ -217,20 +224,24 @@ public:
 
     void update_scene_tree_after_conversion(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token);
 
-    void handle_nanovdb_data_load(pnanovdb_editor_token_t* scene,
+    bool handle_nanovdb_data_load(pnanovdb_editor_token_t* scene,
                                   pnanovdb_compute_array_t* nanovdb_array,
                                   const char* filename,
-                                  pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_nanovdb_render);
+                                  pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_nanovdb_render,
+                                  pnanovdb_editor_token_t* name = nullptr,
+                                  uint64_t reserved_lifetime_id = 0);
 
-    void handle_gaussian_data_load(pnanovdb_editor_token_t* scene,
+    bool handle_gaussian_data_load(pnanovdb_editor_token_t* scene,
                                    pnanovdb_raster_gaussian_data_t* gaussian_data,
                                    pnanovdb_raster_shader_params_t* raster_params,
                                    const char* filename,
                                    pnanovdb_pipeline_type_t process_pipeline = pnanovdb_pipeline_type_noop,
                                    pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_gaussian_splat,
-                                   const pnanovdb_pipeline_params_t* process_params = nullptr);
+                                   const pnanovdb_pipeline_params_t* process_params = nullptr,
+                                   pnanovdb_editor_token_t* name = nullptr,
+                                   uint64_t reserved_lifetime_id = 0);
 
-    void handle_mesh_data_load(pnanovdb_editor_token_t* scene,
+    bool handle_mesh_data_load(pnanovdb_editor_token_t* scene,
                                pnanovdb_compute_array_t* indices,
                                pnanovdb_compute_array_t* positions,
                                pnanovdb_compute_array_t* colors,
@@ -238,7 +249,10 @@ public:
                                pnanovdb_pipeline_type_t render_pipeline,
                                bool is_line_indices,
                                float inflation_radius = 0.f,
-                               pnanovdb_uint32_t resolution = pnanovdb_editor::k_default_bvh_resolution);
+                               pnanovdb_uint32_t resolution = pnanovdb_editor::k_default_bvh_resolution,
+                               pnanovdb_pipeline_type_t process_pipeline = pnanovdb_pipeline_type_voxelbvh_build,
+                               pnanovdb_editor_token_t* name = nullptr,
+                               uint64_t reserved_lifetime_id = 0);
 
     // Remove object from scene (UI, loaded data, renderer state, selection)
     bool remove_object(pnanovdb_editor_token_t* scene_token, const char* name);
@@ -266,6 +280,9 @@ public:
 
     //! Add a placeholder NanoVDB entry in the scene tree (for objects whose conversion hasn't completed yet)
     void add_nanovdb_placeholder(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token);
+
+    //! Create a new, empty object (all pipeline stages set to no-op)
+    pnanovdb_editor_token_t* add_empty_object(pnanovdb_editor_token_t* scene_token);
 
     // Generic map access by type (returns variant of possible map types)
     using ViewMapVariant = std::variant<std::monostate,
@@ -305,18 +322,95 @@ public:
     void select_render_view(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
     bool load_nanovdb_file(pnanovdb_editor_token_t* scene,
                            const char* filepath,
-                           pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_nanovdb_render);
+                           pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_nanovdb_render,
+                           pnanovdb_editor_token_t* name = nullptr);
     bool save_nanovdb_file(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name, const char* filepath);
-    bool load_gaussian_file(const char* filepath,
+    bool save_nanovdb_file_stage(pnanovdb_editor_token_t* scene,
+                                 pnanovdb_editor_token_t* name,
+                                 int step_index,
+                                 const char* filepath);
+    bool load_gaussian_file(pnanovdb_editor_token_t* scene_token,
+                            const char* filepath,
                             pnanovdb_pipeline_type_t process_pipeline,
                             pnanovdb_pipeline_type_t render_pipeline,
-                            float voxels_per_unit);
+                            float voxels_per_unit,
+                            pnanovdb_editor_token_t* name = nullptr,
+                            bool replace_existing = false);
 
     bool load_mesh_file(pnanovdb_editor_token_t* scene,
                         const char* filepath,
-                        const pnanovdb_editor::mesh_import::Options& options = {});
+                        const pnanovdb_editor::mesh_import::Options& options = {},
+                        pnanovdb_editor_token_t* name = nullptr);
+
+    uint64_t reserve_async_load_target(pnanovdb_editor_token_t* scene,
+                                       pnanovdb_editor_token_t* name,
+                                       bool replace_existing);
+    bool resolve_async_load_target(uint64_t reservation_id,
+                                   pnanovdb_editor_token_t** scene,
+                                   pnanovdb_editor_token_t** name,
+                                   uint64_t* lifetime_id);
+    void finish_async_load_target(uint64_t reservation_id, bool consumed);
+
+    bool save_scene_file(const std::string& filepath);
+    bool load_scene_file(const std::string& filepath);
+    std::vector<std::string> find_conflicting_scene_names(const std::string& filepath) const;
+    void process_pending_restores();
+
+    void initialize_for_startup(bool is_viewer_profile);
+    void sync_restored_viewport_camera();
+    bool discard_untouched_startup_scene();
 
 private:
+    enum class PendingSceneLoadType
+    {
+        NanoVDB,
+        Gaussian,
+        Mesh
+    };
+
+    struct PendingSceneLoad
+    {
+        pnanovdb_editor_token_t* scene_token = nullptr;
+        pnanovdb_editor_token_t* name_token = nullptr;
+        pnanovdb_editor_token_t* started_scene_token = nullptr;
+        PendingSceneLoadType load_type = PendingSceneLoadType::NanoVDB;
+        pnanovdb_pipeline_type_t process_type = pnanovdb_pipeline_type_noop;
+        pnanovdb_pipeline_type_t render_type = pnanovdb_pipeline_type_noop;
+        float voxels_per_unit = 0.f;
+        std::string source_filepath;
+        std::string object_json;
+        uint64_t started_lifetime_id = 0;
+        uint64_t published_lifetime_id = 0;
+        bool discard = false;
+        bool cleanup_started_scene = false;
+        std::chrono::steady_clock::time_point started_at{};
+    };
+    void apply_object_restore(pnanovdb_editor_token_t* scene_token,
+                              pnanovdb_editor_token_t* name_token,
+                              const std::string& object_json);
+
+    void create_empty_object(pnanovdb_editor_token_t* scene_token,
+                             pnanovdb_editor_token_t* name_token,
+                             const std::string& object_type);
+
+    void record_async_load_publish(pnanovdb_editor_token_t* scene,
+                                   pnanovdb_editor_token_t* name,
+                                   uint64_t reserved_lifetime_id);
+
+    struct AsyncLoadTarget
+    {
+        uint64_t reservation_id = 0;
+        pnanovdb_editor_token_t* scene = nullptr;
+        pnanovdb_editor_token_t* name = nullptr;
+        uint64_t lifetime_id = 0;
+        bool replacing = false;
+    };
+    std::optional<AsyncLoadTarget> m_async_load_target;
+    uint64_t m_next_async_load_id = 1;
+
+    std::deque<PendingSceneLoad> m_pending_scene_loads;
+    std::optional<PendingSceneLoad> m_active_scene_load;
+
     void copy_shader_params(pnanovdb_pipeline_render_method_t render_method,
                             void* obj_shader_params,
                             const std::string& obj_shader_name,
