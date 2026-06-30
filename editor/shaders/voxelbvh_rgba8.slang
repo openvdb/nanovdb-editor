@@ -141,6 +141,7 @@ void ray_hdda_nanovdb(uint thread_idx,
         if (level == 1u) {hdda_dim = 8u;}
         if (level == 2u) {hdda_dim = 128u;}
         if (level == 3u) {hdda_dim = 4096u;}
+        if (level == 4u) {hdda_dim = 4096u;}
         hdda_update(hdda, rayOrigin, rayDir, rayDirInv, hdda_dim);
 
         pnanovdb_uint32_t value_raw = pnanovdb_read_uint32(buf, addr);

@@ -147,6 +147,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
                         if (level == 1u) { shift = 3; }
                         if (level == 2u) { shift = 7; }
                         if (level == 3u) { shift = 12; }
+                        if (level == 4u) { shift = 12; }
 
                         int3 ijk_upsample = int3(
                             upsample * ijk.x + (sample_i << shift),

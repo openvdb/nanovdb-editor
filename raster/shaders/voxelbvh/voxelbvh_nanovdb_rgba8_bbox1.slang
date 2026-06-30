@@ -22,18 +22,10 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
         if (val_raw != 0u)
         {
             uint dim = 1;
-            if (level == 3)
-            {
-                dim = 4096;
-            }
-            if (level == 2)
-            {
-                dim = 128;
-            }
-            if (level == 1)
-            {
-                dim = 8;
-            }
+            if (level == 4) { dim = 4096; }
+            if (level == 3) { dim = 4096; }
+            if (level == 2) { dim = 128; }
+            if (level == 1) { dim = 8; }
             user_state.bbox_min = min(user_state.bbox_min, ijk);
             user_state.bbox_max = max(user_state.bbox_max, ijk + int(dim - 1u));
         }
