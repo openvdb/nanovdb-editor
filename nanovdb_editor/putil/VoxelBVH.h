@@ -255,7 +255,6 @@ typedef struct pnanovdb_voxelbvh_t
                                                              pnanovdb_voxelbvh_context_t* context,
                                                              pnanovdb_compute_array_t** dst_nanovdb_out,
                                                              pnanovdb_compute_array_t* src_nanovdb_in,
-                                                             pnanovdb_uint64_t src_nanovdb_word_count,
                                                              pnanovdb_uint32_t resolution,
                                                              const float* view_floats,
                                                              pnanovdb_uint32_t view_float_count);
