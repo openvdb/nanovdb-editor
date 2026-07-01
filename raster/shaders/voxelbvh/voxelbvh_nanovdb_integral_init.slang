@@ -272,7 +272,10 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         root_dim1d = 256u;
     }
 
-    pnanovdb_root_set_tile_count(buf, root, root_dim1d);
+    if (thread_idx.x == 0u)
+    {
+        pnanovdb_root_set_tile_count(buf, root, root_dim1d);
+    }
     if (thread_idx.x < root_dim1d)
     {
         uint n = thread_idx.x;
@@ -283,8 +286,8 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         pnanovdb_root_tile_handle_t root_tile = pnanovdb_root_get_tile(grid_type, root, n);
 
         int3 root_coord = int3(
-            root_i * 4096u + root_ijk_min.x,
-            root_j * 4096u + root_ijk_min.y,
+            root_i * 4096 + root_ijk_min.x,
+            root_j * 4096 + root_ijk_min.y,
             root_k * 4096 + root_ijk_min.z
         );
         uint64_t key = pnanovdb_coord_to_key(root_coord);

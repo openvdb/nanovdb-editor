@@ -27,7 +27,6 @@ ConstantBuffer<constants_t> constants;
 RWStructuredBuffer<uint2> src_buf;
 RWStructuredBuffer<uint2> buf;
 
-
 #define SPHERICAL_HARMONIC_BUF src_buf
 
 #include "spherical_harmonics.slang"
@@ -626,8 +625,8 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     uint thread_idx_1d = (thread_idx.y << 4) | thread_idx.x;
 
     int3 tidx = int3(
-        (int(group_idx.x) << 3) + thread_idx.x,
-        (int(group_idx.y) << 4) + thread_idx.y,
+        (int(group_idx.x) << 4) + thread_idx.x,
+        (int(group_idx.y) << 3) + thread_idx.y,
         0
     );
 
@@ -658,6 +657,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     }
     float3 worldRayDirInv = float3(1.f, 1.f, 1.f) / worldRayDir;
 
+#if 0
     float3 view_x = pnanovdb_grid_index_to_world_dirf(buf, grid, view[0].xyz);
     float3 view_y = pnanovdb_grid_index_to_world_dirf(buf, grid, view[1].xyz);
     float3 view_z = pnanovdb_grid_index_to_world_dirf(buf, grid, view[2].xyz);
@@ -667,6 +667,26 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         view_y.x, view_y.y, view_y.z, 0.f,
         view_z.x, view_z.y, view_z.z, 0.f,
         view_w.x, view_w.y, view_w.z, 1.f);
+#else
+    float3 up_vec = float3(0.f, 0.f, 1.f);
+    if (abs(worldRayDir.x) <= abs(worldRayDir.y) && abs(worldRayDir.x) <= abs(worldRayDir.z))
+    {
+        up_vec = float3(1.f, 0.f, 0.f);
+    }
+    else if (abs(worldRayDir.y) <= abs(worldRayDir.x) && abs(worldRayDir.y) <= abs(worldRayDir.z))
+    {
+        up_vec = float3(0.f, 1.f, 0.f);
+    }
+    float3 x_vec = normalize(cross_product(up_vec, worldRayDir));
+    float3 y_vec = cross_product(worldRayDir, x_vec);
+
+    float4x4 worldView = float4x4(
+        x_vec.x, y_vec.x, worldRayDir.x, 0.f,
+        x_vec.y, y_vec.y, worldRayDir.y, 0.f,
+        x_vec.z, y_vec.z, worldRayDir.z, 0.f,
+        0.f, 0.f, 0.f, 1.f
+    );
+#endif
 
     float4 sum = float4(0.f, 0.f, 0.f, 1.f);
     float nominalT = 0.f;
