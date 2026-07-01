@@ -64,10 +64,6 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     pnanovdb_root_handle_t src_root = pnanovdb_tree_get_root(src_buf, src_tree);
     pnanovdb_grid_type_t src_grid_type = pnanovdb_grid_get_grid_type(src_buf, src_grid);
 
-    pnanovdb_grid_handle_t dst_grid = {};
-    pnanovdb_tree_handle_t dst_tree = pnanovdb_grid_get_tree(dst_buf, dst_grid);
-    pnanovdb_root_handle_t dst_root = pnanovdb_tree_get_root(dst_buf, dst_tree);
-
     uint copy_size = PNANOVDB_GRID_SIZE + PNANOVDB_TREE_SIZE;
     if (8u * thread_idx.x < copy_size)
     {
@@ -75,6 +71,10 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     }
 
     GroupMemoryBarrierWithGroupSync();
+
+    pnanovdb_grid_handle_t dst_grid = {};
+    pnanovdb_tree_handle_t dst_tree = pnanovdb_grid_get_tree(dst_buf, dst_grid);
+    pnanovdb_root_handle_t dst_root = pnanovdb_tree_get_root(dst_buf, dst_tree);
 
     pnanovdb_grid_type_t dst_grid_type = constants.dst_grid_type;
     pnanovdb_grid_set_grid_type(dst_buf, dst_grid, constants.dst_grid_type);

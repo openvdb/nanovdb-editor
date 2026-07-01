@@ -1196,7 +1196,7 @@ void voxelbvh_generate_rgba8_integral()
 
         printf("Voxelize vert_idx(%d)\n", vert_idx);
 #if 1
-        pnanovdb_uint32_t resolution = 4096u;
+        pnanovdb_uint32_t resolution = 8192u;
 
         pnanovdb_compute_array_t* nanovdb_rgba8_4x = nullptr;
         voxel_bvh.nanovdb_integral_from_voxelbvh_array(
