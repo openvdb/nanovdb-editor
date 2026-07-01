@@ -10,6 +10,7 @@
 */
 
 #include "nanovdb_editor/putil/FileFormat.h"
+#include "nanovdb_editor/putil/Compute.h"
 #ifdef NANOVDB_EDITOR_E57_FORMAT
 #    include "nanovdb_editor/fileformat/ReaderE57.h"
 #endif
@@ -27,6 +28,25 @@
 
 namespace pnanovdb_fileformat
 {
+
+struct compute_loader_t
+{
+    pnanovdb_compute_t compute = {};
+    compute_loader_t()
+    {
+        pnanovdb_compute_load(&compute, nullptr);
+    }
+    ~compute_loader_t()
+    {
+        pnanovdb_compute_free(&compute);
+    }
+};
+compute_loader_t g_compute_loader;
+
+pnanovdb_compute_array_t* create_array(size_t element_size, pnanovdb_uint64_t element_count, const void* data)
+{
+    return g_compute_loader.compute.create_array(element_size, element_count, data);
+}
 
 static const char* s_supportedExtensions[] = { ".ply", ".npz",
 #ifdef NANOVDB_EDITOR_E57_FORMAT
@@ -124,7 +144,7 @@ static pnanovdb_bool_t load_npz_file(const char* filename,
         {
             cnpy::NpyArray npz_array = npz_dict[array_name_aliased];
 
-            out_arrays[i] = new pnanovdb_compute_array_t();
+            out_arrays[i] = nullptr;
 
             size_t total_size = 1;
             size_t vector_stride = 1u;
@@ -144,17 +164,12 @@ static pnanovdb_bool_t load_npz_file(const char* filename,
 
             if (array_name == array_name_aliased)
             {
-                out_arrays[i]->element_count = total_size;
-                out_arrays[i]->element_size = npz_array.word_size;
-                out_arrays[i]->data = new char[total_size * npz_array.word_size];
-                memcpy(out_arrays[i]->data, npz_array.data<char>(), total_size * npz_array.word_size);
+                out_arrays[i] = create_array(npz_array.word_size, total_size, npz_array.data<char>());
             }
             else if (strcmp(array_name, "sh_0") == 0)
             {
                 size_t dst_size = total_size / vector_stride;
-                out_arrays[i]->element_count = dst_size;
-                out_arrays[i]->element_size = npz_array.word_size;
-                out_arrays[i]->data = new char[dst_size * npz_array.word_size];
+                out_arrays[i] = create_array(npz_array.word_size, dst_size, nullptr);
                 size_t sh_count = total_size / (vector_stride * vector_width);
                 for (size_t sh_idx = 0u; sh_idx < sh_count; sh_idx++)
                 {
@@ -166,9 +181,7 @@ static pnanovdb_bool_t load_npz_file(const char* filename,
             else if (strcmp(array_name, "sh_n") == 0)
             {
                 size_t dst_size = (total_size * (vector_stride - 1u)) / vector_stride;
-                out_arrays[i]->element_count = dst_size;
-                out_arrays[i]->element_size = npz_array.word_size;
-                out_arrays[i]->data = new char[dst_size * npz_array.word_size];
+                out_arrays[i] = create_array(npz_array.word_size, dst_size, nullptr);
                 size_t sh_count = total_size / (vector_stride * vector_width);
                 for (size_t sh_idx = 0u; sh_idx < sh_count; sh_idx++)
                 {
@@ -318,7 +331,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
             for (size_t idx = 0u; idx < element.size(); idx++)
             {
                 uint32_t val = *((uint32_t*)&element[idx]);
-                uint32_t val_new = (((val)&0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) |
+                uint32_t val_new = (((val) & 0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) |
                                    (((val >> 16u) & 0xFF) << 8u) | (((val >> 24u) & 0xFF) << 0u);
                 *((uint32_t*)&element[idx]) = val_new;
             }
@@ -449,7 +462,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
                     read_count += fread(&id, 1u, 4u, file);
                     if (is_big_endian)
                     {
-                        uint32_t id_new = (((id)&0xFF) << 24u) | (((id >> 8u) & 0xFF) << 16u) |
+                        uint32_t id_new = (((id) & 0xFF) << 24u) | (((id >> 8u) & 0xFF) << 16u) |
                                           (((id >> 16u) & 0xFF) << 8u) | (((id >> 24u) & 0xFF) << 0u);
                         id = id_new;
                     }
@@ -476,7 +489,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
                 for (int k = 0; k < 2; k++)
                 {
                     uint32_t val = v[k];
-                    v[k] = (((val)&0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) | (((val >> 16u) & 0xFF) << 8u) |
+                    v[k] = (((val) & 0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) | (((val >> 16u) & 0xFF) << 8u) |
                            (((val >> 24u) & 0xFF) << 0u);
                 }
             }
@@ -543,27 +556,19 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
 
         if (source_array && !source_array->empty())
         {
-            out_arrays[i] = new pnanovdb_compute_array_t();
-            out_arrays[i]->element_count = source_array->size();
-            out_arrays[i]->element_size = sizeof(float);
-            out_arrays[i]->data = new float[source_array->size()];
-            memcpy(out_arrays[i]->data, source_array->data(), source_array->size() * sizeof(float));
+            out_arrays[i] = create_array(sizeof(float), source_array->size(), source_array->data());
         }
         else if (source_array_uint32 && !source_array_uint32->empty())
         {
-            out_arrays[i] = new pnanovdb_compute_array_t();
             if (is_line_indices)
             {
-                out_arrays[i]->element_count = source_array_uint32->size() / 2u;
-                out_arrays[i]->element_size = 2u * sizeof(uint32_t);
+                out_arrays[i] =
+                    create_array(2u * sizeof(uint32_t), source_array_uint32->size() / 2u, source_array_uint32->data());
             }
             else
             {
-                out_arrays[i]->element_count = source_array_uint32->size();
-                out_arrays[i]->element_size = sizeof(uint32_t);
+                out_arrays[i] = create_array(sizeof(uint32_t), source_array_uint32->size(), source_array_uint32->data());
             }
-            out_arrays[i]->data = new uint32_t[source_array_uint32->size()];
-            memcpy(out_arrays[i]->data, source_array_uint32->data(), source_array_uint32->size() * sizeof(uint32_t));
         }
         else
         {
@@ -622,11 +627,7 @@ static pnanovdb_bool_t load_e57_file(const char* filename,
 
         if (source_array && element_count > 0)
         {
-            out_arrays[i] = new pnanovdb_compute_array_t();
-            out_arrays[i]->element_count = element_count;
-            out_arrays[i]->element_size = sizeof(float);
-            out_arrays[i]->data = new float[element_count];
-            memcpy(out_arrays[i]->data, source_array, element_count * sizeof(float));
+            out_arrays[i] = create_array(sizeof(float), element_count, source_array);
         }
         else
         {
@@ -650,20 +651,14 @@ static pnanovdb_bool_t load_e57_file(const char* filename,
 }
 
 template <class T>
-static void loadJsonArray(nlohmann::json& j, const char* key, pnanovdb_compute_array_t* array, const char* filename)
+static void loadJsonArray(nlohmann::json& j, const char* key, pnanovdb_compute_array_t** array, const char* filename)
 {
     if (j.contains(key))
     {
         const nlohmann::json::binary_t& buf = j[key];
-        array->element_count = (buf.size() + sizeof(T) - 1u) / sizeof(T);
-        array->element_size = sizeof(T);
-        array->data = new T[array->element_count];
-        array->filepath = filename;
-        if (array->element_count > 0u)
-        {
-            ((T*)array->data)[array->element_count - 1u] = T();
-        }
-        memcpy(array->data, buf.data(), buf.size());
+
+        *array = create_array(sizeof(T), (buf.size() + sizeof(T) - 1u) / sizeof(T), buf.data());
+        (*array)->filepath = filename;
     }
     else
     {
@@ -709,30 +704,30 @@ static pnanovdb_bool_t load_ingp_file(const char* filename,
 
         for (int i = 0; i < array_count; i++)
         {
-            out_arrays[i] = new pnanovdb_compute_array_t();
+            out_arrays[i] = nullptr;
         }
 
         // Expect the arrays to be in order: means, opacities, quaternions, scales, features
         {
             int i = 0;
             {
-                loadJsonArray<pnanovdb_vec3_t>(j, array_names[i], out_arrays[i], filename);
+                loadJsonArray<pnanovdb_vec3_t>(j, array_names[i], &out_arrays[i], filename);
                 i++;
             }
             {
-                loadJsonArray<float>(j, array_names[i], out_arrays[i], filename);
+                loadJsonArray<float>(j, array_names[i], &out_arrays[i], filename);
                 i++;
             }
             {
-                loadJsonArray<pnanovdb_vec4_t>(j, array_names[i], out_arrays[i], filename);
+                loadJsonArray<pnanovdb_vec4_t>(j, array_names[i], &out_arrays[i], filename);
                 i++;
             }
             {
-                loadJsonArray<pnanovdb_vec3_t>(j, array_names[i], out_arrays[i], filename);
+                loadJsonArray<pnanovdb_vec3_t>(j, array_names[i], &out_arrays[i], filename);
                 i++;
             }
             {
-                loadJsonArray<float>(j, array_names[i], out_arrays[i], filename);
+                loadJsonArray<float>(j, array_names[i], &out_arrays[i], filename);
                 i++;
             }
         }

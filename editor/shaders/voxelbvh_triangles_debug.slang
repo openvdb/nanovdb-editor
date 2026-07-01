@@ -202,7 +202,7 @@ void workgroup_triangle_process(uint thread_idx,
                                 inout float nominalT)
 {
     workgroup_voxelbvh_iterator_t iter = {};
-    workgroup_voxelbvh_iterator_init(iter, thread_idx, 32u, grid, voxel_val_raw);
+    workgroup_voxelbvh_iterator_init(buf, iter, thread_idx, 32u, grid, voxel_val_raw);
 
     uint prim_id_index = ~0u;
     while (workgroup_voxelbvh_iterator_get(iter, thread_idx, prim_id_index))

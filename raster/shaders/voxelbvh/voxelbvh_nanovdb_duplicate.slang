@@ -8,7 +8,7 @@ struct user_state_t
 #include "voxelbvh_nanovdb_iterate.slang"
 #include "voxelbvh_common.h"
 
-void nanovdb_set_bit(RWStructuredBuffer<uint2> write_buf, pnanovdb_address_t addr, uint bit_idx)
+void nanovdb_set_bit(pnanovdb_buf_t write_buf, pnanovdb_address_t addr, uint bit_idx)
 {
     uint64_t word_idx = (addr.byte_offset >> 3u) + (bit_idx >> 6u);
     uint64_t val = uint64_t(1u) << (bit_idx & 63u);
@@ -18,7 +18,7 @@ void nanovdb_set_bit(RWStructuredBuffer<uint2> write_buf, pnanovdb_address_t add
 }
 
 bool find_child_bit(
-    RWStructuredBuffer<uint2> lookup_buf,
+    pnanovdb_buf_t lookup_buf,
     pnanovdb_grid_handle_t grid,
     uint pass_id,
     pnanovdb_coord_t ijk,
@@ -109,7 +109,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
         {
             src_child_is_active = true;
         }
-#if 1
+#if 0
         else if (grid_type == PNANOVDB_GRID_TYPE_INT64)
         {
             // Note: assuming VoxelBVH
@@ -136,31 +136,37 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
 
         if (upsample != 0u)
         {
-            for (uint sample_idx = 0u; sample_idx < 8u; sample_idx++)
+            for (uint sample_i = 0u; sample_i < upsample; sample_i++)
             {
-                uint shift = 0u;
-                if (level == 0u) { shift = 0; }
-                if (level == 1u) { shift = 3; }
-                if (level == 2u) { shift = 7; }
-                if (level == 3u) { shift = 12; }
-
-                int3 ijk_upsample = int3(
-                    2 * ijk.x + (((sample_idx >> 2) & 1) << shift),
-                    2 * ijk.y + (((sample_idx >> 1) & 1) << shift),
-                    2 * ijk.z + (((sample_idx >> 0) & 1) << shift)
-                );
-
-                pnanovdb_address_t child_mask_addr = {};
-                uint child_mask_n = 0u;
-                if (find_child_bit(
-                    buf_scratch,
-                    dst_grid,
-                    pass_id,
-                    ijk_upsample,
-                    child_mask_addr,
-                    child_mask_n))
+                for (uint sample_j = 0u; sample_j < upsample; sample_j++)
                 {
-                    nanovdb_set_bit(buf_scratch, child_mask_addr, child_mask_n);
+                    for (uint sample_k = 0u; sample_k < upsample; sample_k++)
+                    {
+                        uint shift = 0u;
+                        if (level == 0u) { shift = 0; }
+                        if (level == 1u) { shift = 3; }
+                        if (level == 2u) { shift = 7; }
+                        if (level == 3u) { shift = 12; }
+
+                        int3 ijk_upsample = int3(
+                            upsample * ijk.x + (sample_i << shift),
+                            upsample * ijk.y + (sample_j << shift),
+                            upsample * ijk.z + (sample_k << shift)
+                        );
+
+                        pnanovdb_address_t child_mask_addr = {};
+                        uint child_mask_n = 0u;
+                        if (find_child_bit(
+                            buf_scratch,
+                            dst_grid,
+                            pass_id,
+                            ijk_upsample,
+                            child_mask_addr,
+                            child_mask_n))
+                        {
+                            nanovdb_set_bit(buf_scratch, child_mask_addr, child_mask_n);
+                        }
+                    }
                 }
             }
         }

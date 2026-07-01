@@ -61,6 +61,10 @@ echo $VULKAN_SDK
 ```
 pip install scikit-build wheel build numpy
 ```
+For pytest:
+```
+pip install pytest parameterized
+```
 #### Linux
 By default, editor is built with enabled `NANOVDB_EDITOR_USE_GLFW` which requires:
 ```sh

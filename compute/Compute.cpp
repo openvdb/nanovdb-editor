@@ -14,7 +14,123 @@
 
 #include <nanovdb/io/IO.h>
 
+#include <mutex>
 #include <stdio.h>
+#include <unordered_map>
+
+// Adding missing NanoVDB load single handle functionality
+namespace nanovdb
+{ // ==========================================================
+
+template <typename BufferT>
+GridHandle<BufferT> readSegment(std::istream& is, int n, const BufferT& pool)
+{
+    GridHandle<BufferT> gridHandle;
+    int counter = -1;
+    GridData data;
+    is.read((char*)&data, sizeof(GridData));
+    if (data.isValid())
+    {
+        if (data.mGridIndex == 0u)
+        {
+            ++counter;
+        }
+        uint64_t sum = data.mGridSize;
+        while (counter < n || data.mGridIndex + 1u < data.mGridCount)
+        { // loop over remaining raw grids in stream
+            is.seekg(data.mGridSize - sizeof(GridData), std::ios::cur); // skip grid
+            is.read((char*)&data, sizeof(GridData));
+            if (is.eof())
+            {
+                throw std::logic_error("Hit end of file before finding Nth segment");
+            }
+            if (data.mGridIndex == 0u)
+            {
+                ++counter;
+                sum = 0u;
+            }
+            sum += data.mGridSize;
+        }
+        auto buffer = BufferT::create(sum, &pool);
+        is.seekg(-int64_t(sum - data.mGridSize + sizeof(GridData)), std::ios::cur); // rewind to start
+        is.read((char*)(buffer.data()), buffer.size());
+        gridHandle = std::move(buffer);
+    }
+    else
+    {
+        is.seekg(-sizeof(GridData), std::ios::cur); // rewind
+        throw std::logic_error("This stream does not contain a valid raw grid buffer");
+    }
+    return gridHandle;
+} // void GridHandle<BufferT>::read(std::istream& is, const BufferT& pool)
+
+namespace io
+{ // ===============================================================
+
+template <typename BufferT>
+GridHandle<BufferT> readGridSegment(std::istream& is, int n, const BufferT& pool)
+{
+    GridHandle<BufferT> handle;
+    try
+    { // first try to read a raw grid buffer
+        handle = readSegment(is, n, pool);
+        // Disable updateGridCount vs original readGrid
+        // tools::updateGridCount((GridData*)handle.data(), 0u, 1u);
+    }
+    catch (const std::logic_error&)
+    {
+        Segment seg;
+        int counter = -1;
+        while (seg.read(is))
+        {
+            if (++counter == n)
+            {
+                uint64_t bufferSize = 0;
+                for (auto& m : seg.meta)
+                    bufferSize += m.gridSize;
+                auto buffer = BufferT::create(bufferSize, &pool);
+                uint64_t bufferOffset = 0;
+                for (uint16_t i = 0; i < seg.header.gridCount; ++i)
+                {
+                    auto* data = util::PtrAdd<GridData>(buffer.data(), bufferOffset);
+                    Internal::read(is, (char*)data, seg.meta[i].gridSize, seg.header.codec);
+                    tools::updateGridCount(data, uint32_t(i), uint32_t(seg.header.gridCount));
+                    bufferOffset += seg.meta[i].gridSize;
+                } // loop over grids in segment
+                handle = GridHandle<BufferT>(std::move(buffer));
+                break;
+            }
+        } // loop over segments
+        if (n != counter)
+            throw std::runtime_error("stream does not contain a #" + std::to_string(n) + " grid");
+    }
+    return handle;
+} // readGridHandle
+
+/// @brief Read the n'th grid
+template <typename BufferT>
+GridHandle<BufferT> readGridSegment(const std::string& fileName, int n, int verbose, const BufferT& buffer)
+{
+    std::ifstream is(fileName, std::ios::in | std::ios::binary);
+    if (!is.is_open())
+        throw std::ios_base::failure("Unable to open file named \"" + fileName + "\" for input");
+    auto handle = readGridSegment<BufferT>(is, n, buffer);
+    if (verbose)
+    {
+        if (n < 0)
+        {
+            std::cout << "Read all NanoGrids from the file named \"" << fileName << "\"" << std::endl;
+        }
+        else
+        {
+            std::cout << "Read NanoGrid # " << n << " from the file named \"" << fileName << "\"" << std::endl;
+        }
+    }
+    return handle; // is converted to r-value and return value is move constructed.
+} // readGridHandle
+
+}
+}
 
 namespace pnanovdb_compute
 {
@@ -65,12 +181,15 @@ void destroy_shader_context(const pnanovdb_compute_t* compute,
     }
 }
 
+pnanovdb_compute_array_t* create_array(size_t element_size, pnanovdb_uint64_t element_count, const void* data);
+
 pnanovdb_compute_array_t* load_nanovdb(const char* filepath)
 {
     nanovdb::GridHandle<nanovdb::HostBuffer> gridHandle;
+    nanovdb::HostBuffer hostBuffer;
     try
     {
-        gridHandle = nanovdb::io::readGrid(filepath, 0);
+        gridHandle = nanovdb::io::readGridSegment(filepath, 0, 0, hostBuffer);
     }
     catch (const std::ios_base::failure& e)
     {
@@ -78,12 +197,10 @@ pnanovdb_compute_array_t* load_nanovdb(const char* filepath)
         return nullptr;
     }
 
-    pnanovdb_compute_array_t* array = new pnanovdb_compute_array_t();
+    pnanovdb_compute_array_t* array =
+        create_array(sizeof(pnanovdb_uint32_t), gridHandle.bufferSize() / sizeof(pnanovdb_uint32_t), gridHandle.data());
     array->filepath = filepath;
-    array->element_size = sizeof(pnanovdb_uint32_t);
-    array->element_count = gridHandle.bufferSize() / array->element_size;
-    array->data = new char[gridHandle.bufferSize()];
-    memcpy(array->data, gridHandle.data(), gridHandle.bufferSize());
+
     return array;
 }
 
@@ -556,6 +673,37 @@ pnanovdb_bool_t dispatch_shader_on_array(const pnanovdb_compute_t* compute,
     return PNANOVDB_TRUE;
 }
 
+// #define LEAK_TRACKER
+#ifdef LEAK_TRACKER
+std::mutex g_leak_tracker_mutex;
+struct leak_tracker_t
+{
+    std::unordered_map<pnanovdb_compute_array_t*, bool> active_arrays;
+    leak_tracker_t()
+    {
+    }
+    ~leak_tracker_t()
+    {
+        std::lock_guard<std::mutex> lock(g_leak_tracker_mutex);
+        for (auto&& it : active_arrays)
+        {
+            if (it.second)
+            {
+                printf("Leak! data(%p) element_size(%zu) element_count(%zu) filepath(%s)\n", it.first->data,
+                       it.first->element_size, it.first->element_count,
+                       it.first->filepath ? it.first->filepath : "invalid");
+            }
+        }
+    }
+    void set(pnanovdb_compute_array_t* array, bool is_active)
+    {
+        std::lock_guard<std::mutex> lock(g_leak_tracker_mutex);
+        active_arrays[array] = is_active;
+    }
+};
+leak_tracker_t g_leak_tracker;
+#endif
+
 pnanovdb_compute_array_t* create_array(size_t element_size, pnanovdb_uint64_t element_count, const void* data)
 {
     pnanovdb_compute_array_t* array = new pnanovdb_compute_array_t();
@@ -576,6 +724,11 @@ pnanovdb_compute_array_t* create_array(size_t element_size, pnanovdb_uint64_t el
     {
         memset(array->data, 0, array->element_size * array->element_count);
     }
+
+#ifdef LEAK_TRACKER
+    g_leak_tracker.set(array, true);
+#endif
+
     return array;
 }
 
@@ -596,6 +749,10 @@ void destroy_array(pnanovdb_compute_array_t* array)
         delete array;
         return;
     }
+
+#ifdef LEAK_TRACKER
+    g_leak_tracker.set(array, false);
+#endif
 
     delete[] (char*)array->data;
     array->data = nullptr;

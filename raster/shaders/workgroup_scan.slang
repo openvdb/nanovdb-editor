@@ -236,7 +236,7 @@ void workgroup_scan_max(uint thread_idx, uint4 val, inout uint4 result, inout ui
 
 // ----------------------------- workgroup int max ---------------------------------------
 
-#define WORKGROUP_INT_MIN (-2147483647 - 1)
+#define WORKGROUP_INT_MIN -2147483647
 #define WORKGROUP_INT_MAX 2147483647
 
 int workgroup_int_max(int a, int b)
