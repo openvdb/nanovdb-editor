@@ -190,6 +190,33 @@ TEST(SceneSerializer, RestoredSceneWithInvalidCameraCreatesCollisionFreeViewport
     EXPECT_EQ(scene_data->cameras.count(invalid->id), 1u);
 }
 
+TEST(SceneSerializer, ViewportCameraNameRecoveryHasBoundedFailure)
+{
+    EditorSceneManager manager;
+    SceneView views;
+    pnanovdb_editor_token_t* scene = EditorToken::getInstance().getToken("exhausted viewport camera names scene");
+    SceneViewData* scene_data = views.get_or_create_scene(scene, false);
+    ASSERT_NE(scene_data, nullptr);
+    ASSERT_TRUE(scene_data->cameras.empty());
+
+    constexpr unsigned int k_candidate_count = 256u;
+    for (unsigned int suffix = 0; suffix < k_candidate_count; ++suffix)
+    {
+        const std::string name = suffix == 0 ? "Camera" : "Camera " + std::to_string(suffix);
+        pnanovdb_editor_token_t* name_token = EditorToken::getInstance().getToken(name.c_str());
+        manager.with_object_or_create(scene, name_token,
+                                      [](SceneObject* object)
+                                      {
+                                          ASSERT_NE(object, nullptr);
+                                          object->type = SceneObjectType::Array;
+                                      });
+    }
+
+    EXPECT_FALSE(normalize_scene_viewport_camera(manager, views, scene));
+    EXPECT_EQ(views.get_viewport_camera_token(scene), nullptr);
+    EXPECT_TRUE(scene_data->cameras.empty());
+}
+
 TEST(SceneSerializer, RestoredSceneWithoutViewportMarkerPromotesDeterministicCamera)
 {
     EditorSceneManager manager;

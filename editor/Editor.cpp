@@ -1132,14 +1132,6 @@ static pnanovdb_bool_t apply_load_scene(pnanovdb_editor_t* editor, const char* f
     if (!editor_scene)
         return PNANOVDB_FALSE;
 
-    std::string validation_error;
-    if (!validate_scene_file_for_load(filepath, &validation_error))
-    {
-        Console::getInstance().addLog(
-            Console::LogLevel::Error, "Load scene: '%s' is not loadable: %s", filepath, validation_error.c_str());
-        return PNANOVDB_FALSE;
-    }
-
     if (overwrite)
     {
         for (const std::string& name : editor_scene->find_conflicting_scene_names(filepath))
@@ -2233,6 +2225,19 @@ public:
         if (m_worker)
             m_worker->pipeline_params_dirty.store(true);
     }
+    bool retain_for_unmap(pnanovdb_editor_t* editor)
+    {
+        if (!m_lock.owns_lock())
+            return false;
+
+        // Resolve the thread-local entry while RAII still owns the mutex. The
+        // unordered_map lookup may allocate and throw; in that case m_lock's
+        // destructor must remain responsible for releasing the mutex.
+        int& depth = pipeline_params_map_lock_depth(editor);
+        ++depth;
+        (void)m_lock.release();
+        return true;
+    }
 
 private:
     EditorWorker* m_worker = nullptr;
@@ -2539,8 +2544,8 @@ pnanovdb_pipeline_params_t* map_process_step_params(pnanovdb_editor_t* editor,
 {
     if (!editor || !editor->impl || !scene || !name)
         return nullptr;
-    if (editor->impl->editor_worker)
-        editor->impl->editor_worker->pipeline_params_mutex.lock();
+
+    PipelineParamsLock pipeline_params_lock(editor);
 
     pnanovdb_pipeline_params_t* result = nullptr;
     editor->impl->scene_manager->with_object(scene, name,
@@ -2550,13 +2555,11 @@ pnanovdb_pipeline_params_t* map_process_step_params(pnanovdb_editor_t* editor,
                                                      result = &obj->pipeline.process_step(step_index).params;
                                              });
     if (!result)
-    {
-        if (editor->impl->editor_worker)
-            editor->impl->editor_worker->pipeline_params_mutex.unlock();
         return nullptr;
-    }
-    if (editor->impl->editor_worker)
-        pipeline_params_map_lock_depth(editor)++;
+
+    // A successful map deliberately transfers ownership to unmap_process_step_params(). Failed maps and exceptions
+    // retain normal RAII behavior, so they cannot leak the recursive mutex or disturb an enclosing map's lock depth.
+    pipeline_params_lock.retain_for_unmap(editor);
     return result;
 }
 

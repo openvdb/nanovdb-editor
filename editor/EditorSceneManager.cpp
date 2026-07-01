@@ -157,7 +157,7 @@ bool normalize_scene_viewport_camera(EditorSceneManager& scene_manager,
         }
     }
 
-    static constexpr unsigned int k_max_suffix_attempts = 10000u;
+    static constexpr unsigned int k_max_suffix_attempts = 256u;
     for (unsigned int suffix = 0; suffix < k_max_suffix_attempts; ++suffix)
     {
         const std::string name = suffix == 0 ? "Camera" : "Camera " + std::to_string(suffix);
@@ -191,6 +191,11 @@ bool normalize_scene_viewport_camera(EditorSceneManager& scene_manager,
         added->second.camera_view->configs[0].far_plane = std::numeric_limits<float>::infinity();
         return true;
     }
+
+    Console::getInstance().addLog(
+        Console::LogLevel::Warning,
+        "Cannot create a viewport camera for scene '%s': all generated names from 'Camera' through 'Camera %u' are unavailable",
+        scene_token->str ? scene_token->str : "?", k_max_suffix_attempts - 1u);
     return false;
 }
 

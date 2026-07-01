@@ -28,11 +28,13 @@
 #include <nanovdb/io/IO.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <limits>
 #include <set>
+#include <unordered_set>
 #include <vector>
 
 namespace pnanovdb_editor
@@ -74,6 +76,54 @@ static bool decode_scene_pipeline_type(const nlohmann::json& stage_json,
     }
     type = decoded;
     return true;
+}
+
+static nlohmann::json normalized_stage_params_for_load(pnanovdb_pipeline_type_t type,
+                                                       const nlohmann::json& params,
+                                                       const char* object_name)
+{
+    if (type != pnanovdb_pipeline_type_voxelbvh_build || !params.is_object())
+    {
+        return params;
+    }
+
+    nlohmann::json normalized = params;
+    const auto normalize_uint_field = [&](const char* field_name, double minimum, double maximum)
+    {
+        auto field = normalized.find(field_name);
+        if (field == normalized.end())
+        {
+            return;
+        }
+
+        const double value = field->is_number() ? field->get<double>() : -1.0;
+        if (!std::isfinite(value) || std::trunc(value) != value || value < minimum || value > maximum)
+        {
+            Console::getInstance().addLog(
+                Console::LogLevel::Warning,
+                "Load scene: object '%s' has invalid VoxelBVH %s; preserving the pipeline default",
+                object_name ? object_name : "?", field_name);
+            normalized.erase(field);
+            return;
+        }
+
+        if (field->is_number_float())
+        {
+            // Early VoxelBVH parameters represented these fields as floats.
+            // Scene files are field-based JSON, so integral legacy values can
+            // be migrated without relying on the old binary struct layout.
+            Console::getInstance().addLog(
+                Console::LogLevel::Warning,
+                "Load scene: object '%s' uses legacy floating-point VoxelBVH %s; converting it to an integer",
+                object_name ? object_name : "?", field_name);
+        }
+        *field = static_cast<pnanovdb_uint32_t>(value);
+    };
+
+    normalize_uint_field("source_type", 0.0,
+                         static_cast<double>(pnanovdb_pipeline_voxelbvh_source_gaussian_arrays));
+    normalize_uint_field("resolution", 1.0, static_cast<double>(PNANOVDB_VOXELBVH_MAX_RESOLUTION));
+    return normalized;
 }
 
 static float json_float_or(const nlohmann::json& object, const char* key, float fallback)
@@ -1137,21 +1187,33 @@ pnanovdb_editor_token_t* EditorScene::add_empty_object(pnanovdb_editor_token_t* 
         return nullptr;
     }
 
-    // Pick the first unused "Object N" name in this scene.
+    std::unordered_set<uint64_t> occupied_name_ids;
+    m_scene_manager.for_each_object(
+        [&](SceneObject* obj)
+        {
+            if (obj && obj->scene_token && obj->name_token && obj->scene_token->id == scene_token->id)
+            {
+                occupied_name_ids.insert(obj->name_token->id);
+            }
+            return true;
+        });
+
     pnanovdb_editor_token_t* name_token = nullptr;
-    for (int i = 1; i < 100000 && !name_token; ++i)
+    for (size_t i = 1; i <= occupied_name_ids.size() + 1; ++i)
     {
         const std::string candidate = "Object " + std::to_string(i);
         pnanovdb_editor_token_t* tok = EditorToken::getInstance().getToken(candidate.c_str());
-        bool exists = false;
-        m_scene_manager.with_object(scene_token, tok, [&](SceneObject* obj) { exists = (obj != nullptr); });
-        if (!exists)
+        if (tok && occupied_name_ids.find(tok->id) == occupied_name_ids.end())
         {
             name_token = tok;
+            break;
         }
     }
     if (!name_token)
     {
+        Console::getInstance().addLog(Console::LogLevel::Error,
+                                      "Add object: unable to allocate an unused name in scene '%s'",
+                                      scene_token->str ? scene_token->str : "?");
         return nullptr;
     }
 
@@ -2984,7 +3046,6 @@ void EditorScene::process_pending_restores()
         return;
     }
 
-    constexpr auto k_restore_timeout = std::chrono::seconds(60);
     const bool load_idle = pipeline_load_available();
 
     // Finish the active asynchronous import before starting the next one
@@ -3037,23 +3098,28 @@ void EditorScene::process_pending_restores()
             }
             m_active_scene_load.reset();
         }
-        else if (pending.started_at != std::chrono::steady_clock::time_point{} &&
-                 std::chrono::steady_clock::now() - pending.started_at >= k_restore_timeout && !pending.discard)
+        else if (pending.started_at != std::chrono::steady_clock::time_point{} && !pending.discard)
         {
-            Console::getInstance().addLog(Console::LogLevel::Warning, "Load scene: timed out restoring state for '%s'",
-                                          pending.name_token && pending.name_token->str ? pending.name_token->str : "?");
-
-            const bool same_target = m_async_load_target && m_async_load_target->scene && m_async_load_target->name &&
-                                     pending.scene_token && pending.name_token &&
-                                     m_async_load_target->scene->id == pending.scene_token->id &&
-                                     m_async_load_target->name->id == pending.name_token->id;
-            if (same_target)
+            constexpr auto k_restore_timeout = std::chrono::seconds(60);
+            const auto elapsed = std::chrono::steady_clock::now() - pending.started_at;
+            if (elapsed >= k_restore_timeout)
             {
-                m_scene_manager.cancel_load_target(
-                    m_async_load_target->scene, m_async_load_target->name, m_async_load_target->lifetime_id);
-                m_async_load_target.reset();
+                Console::getInstance().addLog(
+                    Console::LogLevel::Warning, "Load scene: timed out restoring state for '%s'",
+                    pending.name_token && pending.name_token->str ? pending.name_token->str : "?");
+
+                const bool same_target = m_async_load_target && m_async_load_target->scene && m_async_load_target->name &&
+                                         pending.scene_token && pending.name_token &&
+                                         m_async_load_target->scene->id == pending.scene_token->id &&
+                                         m_async_load_target->name->id == pending.name_token->id;
+                if (same_target)
+                {
+                    m_scene_manager.cancel_load_target(
+                        m_async_load_target->scene, m_async_load_target->name, m_async_load_target->lifetime_id);
+                    m_async_load_target.reset();
+                }
+                pending.discard = true;
             }
-            pending.discard = true;
         }
     }
 
@@ -3147,7 +3213,9 @@ void EditorScene::apply_object_restore(pnanovdb_editor_token_t* scene_token,
     try
     {
         auto apply_stage_params =
-            [](pnanovdb_pipeline_params_t* params, pnanovdb_pipeline_type_t type, const nlohmann::json& stage_json)
+            [name_token](pnanovdb_pipeline_params_t* params,
+                         pnanovdb_pipeline_type_t type,
+                         const nlohmann::json& stage_json)
         {
             if (!params || !params->data || !stage_json.contains("params") || !stage_json["params"].is_object())
             {
@@ -3159,7 +3227,9 @@ void EditorScene::apply_object_restore(pnanovdb_editor_token_t* scene_token,
                 const pnanovdb_pipeline_descriptor_t* desc = pnanovdb_pipeline_get_descriptor(type);
                 dt = desc ? desc->params_data_type : nullptr;
             }
-            json_to_reflect_params(stage_json["params"], dt, params->data, (size_t)params->size);
+            const nlohmann::json normalized =
+                normalized_stage_params_for_load(type, stage_json["params"], name_token->str);
+            json_to_reflect_params(normalized, dt, params->data, (size_t)params->size);
             if (type == pnanovdb_pipeline_type_gaussian_voxelize)
             {
                 pipeline_params_set_voxels_per_unit(params, pipeline_params_get_voxels_per_unit(params));

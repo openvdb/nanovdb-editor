@@ -895,15 +895,16 @@ bool VoxelBVHRgba8Worker::start(SceneObject* scene_obj,
             m_worker->updateTaskProgress(0.f, "Converting VoxelBVH to RGBA8");
 
             pnanovdb_compute_array_t* dst = nullptr;
+            const pnanovdb_uint32_t upsample_factor = m_pending_upsample ? 2u : 0u;
             m_iface->nanovdb_duplicate_topology_array(m_pending_compute, m_worker_queue, m_worker_ctx, &dst,
-                                                      m_pending_src, m_pending_resolution, PNANOVDB_GRID_TYPE_RGBA8,
-                                                      m_pending_upsample);
+                                                      m_pending_src, PNANOVDB_GRID_TYPE_RGBA8, upsample_factor);
             if (!dst)
             {
                 return false;
             }
+            const pnanovdb_vec3_t index_space_ray_direction = { 0.f, 0.f, -1.f };
             m_iface->nanovdb_rgba8_from_voxelbvh_array(
-                m_pending_compute, m_worker_queue, m_worker_ctx, dst, m_pending_src);
+                m_pending_compute, m_worker_queue, m_worker_ctx, dst, m_pending_src, index_space_ray_direction);
             m_pending_result = dst;
             return m_pending_result != nullptr;
         });
