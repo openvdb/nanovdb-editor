@@ -19,6 +19,7 @@
 
 #include <cstddef>
 #include <string>
+#include <vector>
 
 namespace pnanovdb_editor
 {
@@ -53,6 +54,7 @@ struct ParamWidgetHints
     bool is_bool = false;
     bool use_slider = false;
     bool hidden = false;
+    std::vector<std::string> components;
 };
 
 struct ReflectRenderableField

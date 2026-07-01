@@ -29,6 +29,7 @@ enum pnanovdb_pipeline_type_enum_t
     pnanovdb_pipeline_type_image2d_render = 13, // render: NanoVDB image grid (blind-metadata RGBA) to a 2D texture
     pnanovdb_pipeline_type_voxelbvh_rgba8 = 14, // process: VoxelBVH to RGBA8 NanoVDB
     pnanovdb_pipeline_type_voxelbvh_rgba8_chain = 15, // process chain: VoxelBVH build then RGBA8 conversion
+    pnanovdb_pipeline_type_voxelbvh_rgba8_render = 16, // render: RGBA8 NanoVDB with directional grid selection
     pnanovdb_pipeline_type_count
 };
 
@@ -81,7 +82,8 @@ typedef struct pnanovdb_pipeline_descriptor_t
 {
     pnanovdb_pipeline_type_t type;
     pnanovdb_pipeline_stage_t stage;
-    const char* name;
+    const char* ui_name;
+    const char* type_id;
 
     const pnanovdb_pipeline_shader_entry_t* shaders;
     pnanovdb_uint32_t shader_count;

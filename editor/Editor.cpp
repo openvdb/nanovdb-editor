@@ -2322,7 +2322,7 @@ void set_pipeline(pnanovdb_editor_t* editor,
         Console::getInstance().addLog(Console::LogLevel::Warning,
                                       "set_pipeline: pipeline type %u (%s) belongs to stage %u, not requested stage %u; "
                                       "ignoring",
-                                      (unsigned)type, descriptor->name ? descriptor->name : "?",
+                                      (unsigned)type, descriptor->ui_name ? descriptor->ui_name : "?",
                                       (unsigned)descriptor->stage, (unsigned)stage);
         return;
     }
@@ -2496,14 +2496,14 @@ void set_process_step(pnanovdb_editor_t* editor,
     {
         Console::getInstance().addLog(Console::LogLevel::Warning,
                                       "set_process_step: type %u (%s) is a chain template; use set_pipeline instead",
-                                      (unsigned)type, descriptor->name ? descriptor->name : "?");
+                                      (unsigned)type, descriptor->ui_name ? descriptor->ui_name : "?");
         return;
     }
     if (type != pnanovdb_pipeline_type_noop && descriptor->stage != pnanovdb_pipeline_stage_process)
     {
         Console::getInstance().addLog(Console::LogLevel::Warning,
                                       "set_process_step: type %u (%s) is not a process-stage pipeline; ignoring",
-                                      (unsigned)type, descriptor->name ? descriptor->name : "?");
+                                      (unsigned)type, descriptor->ui_name ? descriptor->ui_name : "?");
         return;
     }
 

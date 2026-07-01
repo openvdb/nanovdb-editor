@@ -51,13 +51,22 @@ bool restore_empty_scene_object(EditorSceneManager& scene_manager,
                                 pnanovdb_editor_token_t* name_token,
                                 const std::string& object_type);
 
-nlohmann::ordered_json reflect_params_to_json(const pnanovdb_reflect_data_type_t* data_type, const void* data, size_t size);
+nlohmann::ordered_json reflect_params_to_json(const pnanovdb_reflect_data_type_t* data_type,
+                                              const void* data,
+                                              size_t size,
+                                              const char* hints_name = nullptr);
 
-void json_to_reflect_params(const nlohmann::json& j, const pnanovdb_reflect_data_type_t* data_type, void* data, size_t size);
+void json_to_reflect_params(const nlohmann::json& j,
+                            const pnanovdb_reflect_data_type_t* data_type,
+                            void* data,
+                            size_t size,
+                            const char* hints_name = nullptr);
 
 std::string pipeline_type_name(pnanovdb_pipeline_type_t type);
 
-pnanovdb_pipeline_type_t pipeline_type_from_name(const std::string& name);
+std::string pipeline_type_id(pnanovdb_pipeline_type_t type);
+
+pnanovdb_pipeline_type_t pipeline_type_from_id(const std::string& type_id);
 
 bool pipeline_type_from_json(const nlohmann::json& stage,
                              pnanovdb_pipeline_type_t& type,

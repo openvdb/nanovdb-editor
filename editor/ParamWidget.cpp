@@ -210,6 +210,17 @@ void parseParamWidgetHints(const nlohmann::json& field, ParamWidgetHints& out)
     {
         out.hidden = field["hidden"].get<bool>();
     }
+    if (field.contains("components") && field["components"].is_array())
+    {
+        out.components.clear();
+        for (const auto& c : field["components"])
+        {
+            if (c.is_string())
+            {
+                out.components.push_back(c.get<std::string>());
+            }
+        }
+    }
 }
 
 bool param_widget_uses_bool_control(ImGuiDataType type, const ParamWidgetHints* hints)

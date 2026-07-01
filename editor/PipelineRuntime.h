@@ -556,9 +556,10 @@ public:
                const pnanovdb_pipeline_context_t* ctx,
                pnanovdb_compute_array_t* src_nanovdb,
                std::shared_ptr<pnanovdb_compute_array_t> src_owner,
-               pnanovdb_uint32_t resolution,
+               const std::vector<pnanovdb_vec3_t>& index_space_ray_directions,
                pnanovdb_bool_t upsample);
     bool handle_completion() override;
+    void report_bake_progress(float grid_fraction);
 
 protected:
     void release_resources() override;
@@ -580,9 +581,12 @@ private:
 
     pnanovdb_compute_array_t* m_pending_src = nullptr;
     std::shared_ptr<pnanovdb_compute_array_t> m_pending_src_owner;
-    pnanovdb_uint32_t m_pending_resolution = 0u;
+    std::vector<pnanovdb_vec3_t> m_pending_ray_directions;
     pnanovdb_bool_t m_pending_upsample = PNANOVDB_FALSE;
     pnanovdb_compute_array_t* m_pending_result = nullptr;
+
+    pnanovdb_uint32_t m_progress_total_grids = 1u;
+    pnanovdb_uint32_t m_progress_current_grid = 0u;
 
     std::atomic<pnanovdb_uint32_t> m_cancel{ 0u };
 };

@@ -239,7 +239,7 @@ static bool showPipelineSelector(const char* label,
             current_idx = count;
 
         types[count] = type;
-        names[count] = desc->name;
+        names[count] = desc->ui_name;
         count++;
     }
 
@@ -505,7 +505,7 @@ static void showSaveStageButton(const char* button_id,
 static const char* pipelineDisplayName(pnanovdb_pipeline_type_t type)
 {
     const auto* d = pnanovdb_pipeline_get_descriptor(type);
-    return (d && d->name) ? d->name : "None";
+    return (d && d->ui_name) ? d->ui_name : "None";
 }
 
 static SceneObjectSourceKind objectSourceKind(EditorSceneManager* scene_manager,

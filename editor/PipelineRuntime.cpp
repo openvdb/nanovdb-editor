@@ -11,6 +11,7 @@
 
 #include "Console.h"
 #include "Editor.h"
+#include "EditorImport.h"
 #include "EditorScene.h"
 #include "EditorSceneManager.h"
 #include "EditorToken.h"
@@ -20,6 +21,8 @@
 
 #include "nanovdb_editor/putil/FileFormat.h"
 
+#include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -822,10 +825,32 @@ void VoxelBVHRgba8Worker::release_resources()
 
 static void rgba8_progress_to_worker(void* userdata, float fraction)
 {
-    auto* worker = static_cast<pnanovdb_util::WorkerThread*>(userdata);
+    auto* worker = static_cast<VoxelBVHRgba8Worker*>(userdata);
     if (worker)
     {
-        worker->updateTaskProgress(fraction, "Converting VoxelBVH to RGBA8");
+        worker->report_bake_progress(fraction);
+    }
+}
+
+void VoxelBVHRgba8Worker::report_bake_progress(float grid_fraction)
+{
+    if (!m_worker)
+    {
+        return;
+    }
+    const pnanovdb_uint32_t total = m_progress_total_grids > 0u ? m_progress_total_grids : 1u;
+    const float clamped = grid_fraction < 0.f ? 0.f : (grid_fraction > 1.f ? 1.f : grid_fraction);
+    const float overall = ((float)m_progress_current_grid + clamped) / (float)total;
+    if (total > 1u)
+    {
+        char text[96];
+        snprintf(
+            text, sizeof(text), "Converting VoxelBVH to RGBA8 (%u/%u directions)", m_progress_current_grid + 1u, total);
+        m_worker->updateTaskProgress(overall, text);
+    }
+    else
+    {
+        m_worker->updateTaskProgress(overall, "Converting VoxelBVH to RGBA8");
     }
 }
 
@@ -834,7 +859,7 @@ bool VoxelBVHRgba8Worker::start(SceneObject* scene_obj,
                                 const pnanovdb_pipeline_context_t* ctx,
                                 pnanovdb_compute_array_t* src_nanovdb,
                                 std::shared_ptr<pnanovdb_compute_array_t> src_owner,
-                                pnanovdb_uint32_t resolution,
+                                const std::vector<pnanovdb_vec3_t>& index_space_ray_directions,
                                 pnanovdb_bool_t upsample)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -864,7 +889,18 @@ bool VoxelBVHRgba8Worker::start(SceneObject* scene_obj,
     set_pending_target(scene_obj, scene_manager, ctx->compute);
     m_pending_src = src_nanovdb;
     m_pending_src_owner = std::move(src_owner);
-    m_pending_resolution = resolution;
+
+    m_pending_ray_directions.clear();
+    for (const pnanovdb_vec3_t& dir : index_space_ray_directions)
+    {
+        const bool dir_is_valid = std::isfinite(dir.x) && std::isfinite(dir.y) && std::isfinite(dir.z) &&
+                                  (dir.x != 0.f || dir.y != 0.f || dir.z != 0.f);
+        m_pending_ray_directions.push_back(dir_is_valid ? dir : pnanovdb_vec3_t{ 0.f, 0.f, -1.f });
+    }
+    if (m_pending_ray_directions.empty())
+    {
+        m_pending_ray_directions.push_back(pnanovdb_vec3_t{ 0.f, 0.f, -1.f });
+    }
     m_pending_upsample = upsample;
     m_pending_result = nullptr;
     m_cancel.store(0u, std::memory_order_relaxed);
@@ -889,28 +925,77 @@ bool VoxelBVHRgba8Worker::start(SceneObject* scene_obj,
 
             if (m_iface->context_set_progress)
             {
-                m_iface->context_set_progress(m_worker_ctx, rgba8_progress_to_worker, m_worker.get());
+                m_iface->context_set_progress(m_worker_ctx, rgba8_progress_to_worker, this);
             }
 
-            m_worker->updateTaskProgress(0.f, "Converting VoxelBVH to RGBA8");
+            const pnanovdb_uint32_t upsample_factor = m_pending_upsample ? 2u : 1u;
+            const size_t dir_count = m_pending_ray_directions.size();
 
-            pnanovdb_compute_array_t* dst = nullptr;
-            const pnanovdb_uint32_t upsample_factor = m_pending_upsample ? 2u : 0u;
-            m_iface->nanovdb_duplicate_topology_array(m_pending_compute, m_worker_queue, m_worker_ctx, &dst,
-                                                      m_pending_src, PNANOVDB_GRID_TYPE_RGBA8, upsample_factor);
-            if (!dst)
+            m_progress_total_grids = (pnanovdb_uint32_t)dir_count;
+            m_progress_current_grid = 0u;
+            report_bake_progress(0.f);
+
+            std::vector<pnanovdb_compute_array_t*> grids;
+            grids.reserve(dir_count);
+            bool ok = true;
+            for (size_t i = 0; i < dir_count && ok; ++i)
             {
+                m_progress_current_grid = (pnanovdb_uint32_t)i;
+                pnanovdb_compute_array_t* dst = nullptr;
+                m_iface->nanovdb_duplicate_topology_array(m_pending_compute, m_worker_queue, m_worker_ctx, &dst,
+                                                          m_pending_src, PNANOVDB_GRID_TYPE_RGBA8, upsample_factor);
+                if (!dst)
+                {
+                    ok = false;
+                    break;
+                }
+                m_iface->nanovdb_rgba8_from_voxelbvh_array(
+                    m_pending_compute, m_worker_queue, m_worker_ctx, dst, m_pending_src, m_pending_ray_directions[i]);
+                grids.push_back(dst);
+            }
+
+            if (!ok)
+            {
+                for (pnanovdb_compute_array_t* g : grids)
+                {
+                    if (g && m_pending_compute && m_pending_compute->destroy_array)
+                    {
+                        m_pending_compute->destroy_array(g);
+                    }
+                }
                 return false;
             }
-            const pnanovdb_vec3_t index_space_ray_direction = { 0.f, 0.f, -1.f };
-            m_iface->nanovdb_rgba8_from_voxelbvh_array(
-                m_pending_compute, m_worker_queue, m_worker_ctx, dst, m_pending_src, index_space_ray_direction);
-            m_pending_result = dst;
+
+            if (grids.size() == 1u)
+            {
+                m_pending_result = grids[0];
+            }
+            else
+            {
+                m_pending_result =
+                    nanovdb_import::merge_grids(m_pending_compute, grids.data(), (pnanovdb_uint32_t)grids.size());
+                for (pnanovdb_compute_array_t* g : grids)
+                {
+                    if (g && m_pending_compute && m_pending_compute->destroy_array)
+                    {
+                        m_pending_compute->destroy_array(g);
+                    }
+                }
+            }
             return m_pending_result != nullptr;
         });
 
-    Console::getInstance().addLog(
-        "Starting VoxelBVH -> RGBA8 conversion (resolution=%u, upsample=%d)...", (unsigned)resolution, (int)upsample);
+    if (m_pending_ray_directions.size() == 1u)
+    {
+        Console::getInstance().addLog(
+            "Starting VoxelBVH -> RGBA8 conversion (ray_dir=[%.3f, %.3f, %.3f], upsample=%d)...",
+            m_pending_ray_directions[0].x, m_pending_ray_directions[0].y, m_pending_ray_directions[0].z, (int)upsample);
+    }
+    else
+    {
+        Console::getInstance().addLog("Starting VoxelBVH -> RGBA8 conversion (%zu directional grids, upsample=%d)...",
+                                      m_pending_ray_directions.size(), (int)upsample);
+    }
     request_user_cancel(scene_obj);
     return true;
 }

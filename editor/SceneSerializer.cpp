@@ -13,6 +13,7 @@
 #include "EditorSceneManager.h"
 #include "EditorToken.h"
 #include "ParamWidget.h"
+#include "PipelineParams.h"
 #include "PipelineRegistry.h"
 #include "SceneView.h"
 #include "ShaderParams.h"
@@ -24,6 +25,8 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <map>
+#include <optional>
 #include <sstream>
 #include <set>
 #include <system_error>
@@ -97,14 +100,21 @@ const pnanovdb_reflect_data_type_t* stage_params_data_type(const PipelineStage& 
     return desc ? desc->params_data_type : nullptr;
 }
 
+const char* stage_params_hints(const PipelineStage& stage)
+{
+    const pnanovdb_pipeline_descriptor_t* desc = pnanovdb_pipeline_get_descriptor(stage.type);
+    return desc ? desc->params_hints : nullptr;
+}
+
 nlohmann::ordered_json stage_to_json(const PipelineStage& stage)
 {
     nlohmann::ordered_json j;
-    j["type"] = pipeline_type_name(stage.type);
+    j["type_id"] = pipeline_type_id(stage.type);
     const pnanovdb_reflect_data_type_t* dt = stage_params_data_type(stage);
     if (dt && stage.params.data && stage.params.size > 0)
     {
-        nlohmann::ordered_json params = reflect_params_to_json(dt, stage.params.data, (size_t)stage.params.size);
+        nlohmann::ordered_json params =
+            reflect_params_to_json(dt, stage.params.data, (size_t)stage.params.size, stage_params_hints(stage));
         if (!params.empty())
         {
             j["params"] = std::move(params);
@@ -581,7 +591,54 @@ bool restore_empty_scene_object(EditorSceneManager& scene_manager,
     return true;
 }
 
-nlohmann::ordered_json reflect_params_to_json(const pnanovdb_reflect_data_type_t* data_type, const void* data, size_t size)
+namespace
+{
+struct VectorParamGroup
+{
+    std::string key;
+    std::vector<std::string> components;
+};
+
+std::vector<VectorParamGroup> load_vector_param_groups(const char* hints_name)
+{
+    std::vector<VectorParamGroup> groups;
+    if (!hints_name || !hints_name[0])
+    {
+        return groups;
+    }
+    const std::optional<nlohmann::ordered_json> section = loadParamHintsJson(hints_name, PIPELINE_PARAM_JSON);
+    if (!section || !section->is_object())
+    {
+        return groups;
+    }
+    for (const auto& [name, value] : section->items())
+    {
+        if (!value.is_object() || !value.contains("components") || !value["components"].is_array())
+        {
+            continue;
+        }
+        VectorParamGroup group;
+        group.key = name;
+        for (const auto& c : value["components"])
+        {
+            if (c.is_string())
+            {
+                group.components.push_back(c.get<std::string>());
+            }
+        }
+        if (group.components.size() >= 2)
+        {
+            groups.push_back(std::move(group));
+        }
+    }
+    return groups;
+}
+} // namespace
+
+nlohmann::ordered_json reflect_params_to_json(const pnanovdb_reflect_data_type_t* data_type,
+                                              const void* data,
+                                              size_t size,
+                                              const char* hints_name)
 {
     nlohmann::ordered_json j = nlohmann::ordered_json::object();
     if (!data_type || !data)
@@ -608,16 +665,78 @@ nlohmann::ordered_json reflect_params_to_json(const pnanovdb_reflect_data_type_t
             j[f.name] = std::move(value);
         }
     }
+
+    for (const VectorParamGroup& group : load_vector_param_groups(hints_name))
+    {
+        bool all_present = true;
+        for (const std::string& comp : group.components)
+        {
+            const auto it = j.find(comp);
+            if (it == j.end() || !it->is_number())
+            {
+                all_present = false;
+                break;
+            }
+        }
+        if (!all_present)
+        {
+            continue;
+        }
+        nlohmann::ordered_json arr = nlohmann::ordered_json::array();
+        for (const std::string& comp : group.components)
+        {
+            arr.push_back(j[comp]);
+        }
+        nlohmann::ordered_json grouped = nlohmann::ordered_json::object();
+        for (auto it = j.begin(); it != j.end(); ++it)
+        {
+            if (it.key() == group.components.front())
+            {
+                grouped[group.key] = arr;
+            }
+            else if (std::find(group.components.begin(), group.components.end(), it.key()) != group.components.end())
+            {
+                continue;
+            }
+            else
+            {
+                grouped[it.key()] = it.value();
+            }
+        }
+        j = std::move(grouped);
+    }
     return j;
 }
 
-void json_to_reflect_params(const nlohmann::json& j, const pnanovdb_reflect_data_type_t* data_type, void* data, size_t size)
+void json_to_reflect_params(const nlohmann::json& j,
+                            const pnanovdb_reflect_data_type_t* data_type,
+                            void* data,
+                            size_t size,
+                            const char* hints_name)
 {
     if (!data_type || !data || !j.is_object())
     {
         return;
     }
     unsigned char* base = static_cast<unsigned char*>(data);
+
+    std::map<std::string, const nlohmann::json*> component_values;
+    for (const VectorParamGroup& group : load_vector_param_groups(hints_name))
+    {
+        const auto it = j.find(group.key);
+        if (it == j.end() || !it->is_array() || it->size() < group.components.size())
+        {
+            continue;
+        }
+        for (size_t c = 0; c < group.components.size(); ++c)
+        {
+            if ((*it)[c].is_number())
+            {
+                component_values[group.components[c]] = &(*it)[c];
+            }
+        }
+    }
+
     for (pnanovdb_uint64_t i = 0; i < data_type->child_reflect_data_count; ++i)
     {
         const pnanovdb_reflect_data_t& f = data_type->child_reflect_datas[i];
@@ -626,7 +745,16 @@ void json_to_reflect_params(const nlohmann::json& j, const pnanovdb_reflect_data
             continue;
         }
         auto it = j.find(f.name);
-        if (it == j.end())
+        const nlohmann::json* value = (it != j.end()) ? &(*it) : nullptr;
+        if (!value)
+        {
+            const auto comp_it = component_values.find(f.name);
+            if (comp_it != component_values.end())
+            {
+                value = comp_it->second;
+            }
+        }
+        if (!value)
         {
             continue;
         }
@@ -638,7 +766,7 @@ void json_to_reflect_params(const nlohmann::json& j, const pnanovdb_reflect_data
         }
         try
         {
-            reflect_write_scalar_json(rt, base + f.data_offset, *it);
+            reflect_write_scalar_json(rt, base + f.data_offset, *value);
         }
         catch (const nlohmann::json::exception&)
         {
@@ -650,19 +778,25 @@ void json_to_reflect_params(const nlohmann::json& j, const pnanovdb_reflect_data
 std::string pipeline_type_name(pnanovdb_pipeline_type_t type)
 {
     const pnanovdb_pipeline_descriptor_t* desc = pnanovdb_pipeline_get_descriptor(type);
-    return (desc && desc->name) ? std::string(desc->name) : std::string();
+    return (desc && desc->ui_name) ? std::string(desc->ui_name) : std::string();
 }
 
-pnanovdb_pipeline_type_t pipeline_type_from_name(const std::string& name)
+std::string pipeline_type_id(pnanovdb_pipeline_type_t type)
 {
-    if (name.empty())
+    const pnanovdb_pipeline_descriptor_t* desc = pnanovdb_pipeline_get_descriptor(type);
+    return (desc && desc->type_id) ? std::string(desc->type_id) : std::string();
+}
+
+pnanovdb_pipeline_type_t pipeline_type_from_id(const std::string& type_id)
+{
+    if (type_id.empty())
     {
         return pnanovdb_pipeline_type_noop;
     }
     for (pnanovdb_uint32_t t = 0; t < pnanovdb_pipeline_type_count; ++t)
     {
         const pnanovdb_pipeline_descriptor_t* desc = pnanovdb_pipeline_get_descriptor(t);
-        if (desc && desc->name && name == desc->name)
+        if (desc && desc->type_id && type_id == desc->type_id)
         {
             return (pnanovdb_pipeline_type_t)t;
         }
@@ -686,22 +820,22 @@ bool pipeline_type_from_json(const nlohmann::json& stage, pnanovdb_pipeline_type
         return fail("stage is not an object");
     }
 
-    const auto name_it = stage.find("type");
-    if (name_it == stage.end() || !name_it->is_string())
+    const auto id_it = stage.find("type_id");
+    if (id_it == stage.end() || !id_it->is_string())
     {
-        return fail("stage has no 'type' name");
+        return fail("stage has no 'type_id'");
     }
-    const std::string name = name_it->get<std::string>();
+    const std::string type_id = id_it->get<std::string>();
     for (pnanovdb_uint32_t t = 0; t < pnanovdb_pipeline_type_count; ++t)
     {
         const pnanovdb_pipeline_descriptor_t* desc = pnanovdb_pipeline_get_descriptor(t);
-        if (desc && desc->name && name == desc->name)
+        if (desc && desc->type_id && type_id == desc->type_id)
         {
             type = static_cast<pnanovdb_pipeline_type_t>(t);
             return true;
         }
     }
-    return fail("unknown type '" + name + "'");
+    return fail("unknown type_id '" + type_id + "'");
 }
 
 nlohmann::ordered_json shader_params_to_json(ShaderParams& shader_params,

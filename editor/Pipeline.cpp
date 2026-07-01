@@ -25,6 +25,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 #include <array>
 #include <vector>
 #include <algorithm>
@@ -52,16 +53,28 @@ PNANOVDB_REFLECT_END(0)
 
 struct VoxelBVHRgba8Params
 {
-    pnanovdb_uint32_t resolution = pnanovdb_editor::k_default_bvh_resolution;
-    pnanovdb_bool_t upsample = PNANOVDB_TRUE; // duplicate topology at 2x resolution before filling
+    pnanovdb_bool_t bake_all_directions = PNANOVDB_FALSE;
+    float ray_dir_x = 0.f;
+    float ray_dir_y = 0.f;
+    float ray_dir_z = -1.f;
+    pnanovdb_bool_t upsample = PNANOVDB_TRUE;
 };
 
 #define PNANOVDB_REFLECT_TYPE VoxelBVHRgba8Params
 PNANOVDB_REFLECT_BEGIN()
-PNANOVDB_REFLECT_VALUE(pnanovdb_uint32_t, resolution, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, bake_all_directions, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, ray_dir_x, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, ray_dir_y, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, ray_dir_z, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, upsample, 0, 0)
 PNANOVDB_REFLECT_END(0)
 #undef PNANOVDB_REFLECT_TYPE
+
+// World-space view directions used by the multi-directional bake
+static const pnanovdb_vec3_t k_voxelbvh_rgba8_multi_dirs[] = {
+    { -1.f, -1.f, 0.f }, { 1.f, -1.f, 0.f }, { -1.f, 1.f, 0.f }, { 1.f, 1.f, 0.f },
+    { -1.f, 0.f, 0.f },  { 0.f, -1.f, 0.f }, { 1.f, 0.f, 0.f },  { 0.f, 1.f, 0.f },
+};
 
 
 // ============================================================================
@@ -622,19 +635,42 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_rgba8(pnanovdb_scene_object_t
         init_params_t<VoxelBVHRgba8Params>(&params);
     }
     const auto* p = static_cast<const VoxelBVHRgba8Params*>(params.data);
-    pnanovdb_uint32_t resolution = p->resolution;
-    if (resolution < 1u)
-        resolution = 1u;
-    if (resolution > pnanovdb_editor::k_max_bvh_resolution)
-        resolution = pnanovdb_editor::k_max_bvh_resolution;
+    const bool bake_all_directions = p->bake_all_directions != PNANOVDB_FALSE;
     const pnanovdb_bool_t upsample = p->upsample ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+
+    std::vector<pnanovdb_vec3_t> index_dirs;
+    if (bake_all_directions)
+    {
+        const size_t count = sizeof(k_voxelbvh_rgba8_multi_dirs) / sizeof(k_voxelbvh_rgba8_multi_dirs[0]);
+        index_dirs.reserve(count);
+        for (size_t i = 0; i < count; ++i)
+        {
+            index_dirs.push_back(nanovdb_import::world_dir_to_index_dir(src, k_voxelbvh_rgba8_multi_dirs[i]));
+        }
+    }
+    else
+    {
+        pnanovdb_vec3_t dir = { p->ray_dir_x, p->ray_dir_y, p->ray_dir_z };
+        const float len = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+        if (len > 1e-6f)
+        {
+            dir.x /= len;
+            dir.y /= len;
+            dir.z /= len;
+        }
+        else
+        {
+            dir = { 0.f, 0.f, -1.f };
+        }
+        index_dirs.push_back(dir);
+    }
 
     const bool started = with_runtime_or_warn(
         "execute_voxelbvh_rgba8",
         [&](PipelineRuntime& rt)
         {
             auto* w = rt.worker<VoxelBVHRgba8Worker>();
-            return w && w->start(scene_obj, scene_manager, ctx, src, src_owner, resolution, upsample);
+            return w && w->start(scene_obj, scene_manager, ctx, src, src_owner, index_dirs, upsample);
         });
     if (!started)
     {
@@ -1244,7 +1280,7 @@ bool pipeline_cancel_async_process(EditorSceneManager* scene_manager,
                                                         obj->process_user_cancel();
                                                 });
             const pnanovdb_pipeline_descriptor_t* desc = pnanovdb_pipeline_get_descriptor(worker->pipeline_type());
-            Console::getInstance().addLog("Cancelling %s...", (desc && desc->name) ? desc->name : "process task");
+            Console::getInstance().addLog("Cancelling %s...", (desc && desc->ui_name) ? desc->ui_name : "process task");
             if (worker->pending_completion())
             {
                 worker->handle_completion();
@@ -1468,6 +1504,8 @@ bool pipeline_create_variant(EditorSceneManager* scene_manager,
 #define PNANOVDB_PIPELINE_NO_PARAMS 0, nullptr, nullptr
 #define PNANOVDB_PIPELINE_CHAIN(arr) (arr), (sizeof(arr) / sizeof((arr)[0]))
 #define PNANOVDB_PIPELINE_NO_CHAIN nullptr, 0
+#define PNANOVDB_PIPELINE_TYPE_ID_2(x) #x
+#define PNANOVDB_PIPELINE_TYPE_ID(x) PNANOVDB_PIPELINE_TYPE_ID_2(x)
 
 // load stage: no shaders, no render method, params are never mapped to the object.
 #define PNANOVDB_REGISTER_LOAD_PIPELINE(var, type_, name_, params_, execute_, outputs_)                                \
@@ -1475,6 +1513,7 @@ bool pipeline_create_variant(EditorSceneManager* scene_manager,
         (type_),                                                                                                       \
         pnanovdb_pipeline_stage_load,                                                                                  \
         (name_),                                                                                                       \
+        PNANOVDB_PIPELINE_TYPE_ID(type_),                                                                              \
         nullptr,                                                                                                       \
         0,                                                                                                             \
         params_,                                                                                                       \
@@ -1492,19 +1531,13 @@ bool pipeline_create_variant(EditorSceneManager* scene_manager,
 #define PNANOVDB_REGISTER_PROCESS_PIPELINE(                                                                            \
     var, type_, name_, shaders_, shader_count_, params_, execute_, render_method_, params_hints_, outputs_, inputs_)   \
     static const pnanovdb_pipeline_descriptor_t var = {                                                                \
-        (type_),                                                                                                       \
-        pnanovdb_pipeline_stage_process,                                                                               \
-        (name_),                                                                                                       \
-        (shaders_),                                                                                                    \
-        (shader_count_),                                                                                               \
-        params_,                                                                                                       \
-        (execute_),                                                                                                    \
-        (render_method_),                                                                                              \
-        map_params<&SceneObject::process_params>,                                                                      \
-        (params_hints_),                                                                                               \
-        PNANOVDB_PIPELINE_NO_CHAIN,                                                                                    \
-        (outputs_),                                                                                                    \
-        (inputs_),                                                                                                     \
+        (type_),          pnanovdb_pipeline_stage_process,                                                             \
+        (name_),          PNANOVDB_PIPELINE_TYPE_ID(type_),                                                            \
+        (shaders_),       (shader_count_),                                                                             \
+        params_,          (execute_),                                                                                  \
+        (render_method_), map_params<&SceneObject::process_params>,                                                    \
+        (params_hints_),  PNANOVDB_PIPELINE_NO_CHAIN,                                                                  \
+        (outputs_),       (inputs_),                                                                                   \
     };                                                                                                                 \
     PNANOVDB_REGISTER_PIPELINE(var)
 
@@ -1512,8 +1545,19 @@ bool pipeline_create_variant(EditorSceneManager* scene_manager,
 // process sub-steps.
 #define PNANOVDB_REGISTER_PROCESS_CHAIN_PIPELINE(var, type_, name_, chain_, outputs_, inputs_)                         \
     static const pnanovdb_pipeline_descriptor_t var = {                                                                \
-        (type_),   pnanovdb_pipeline_stage_process, (name_), nullptr, 0,      PNANOVDB_PIPELINE_NO_PARAMS,             \
-        nullptr,   get_render_method_nanovdb,       nullptr, nullptr, chain_, (outputs_),                              \
+        (type_),                                                                                                       \
+        pnanovdb_pipeline_stage_process,                                                                               \
+        (name_),                                                                                                       \
+        PNANOVDB_PIPELINE_TYPE_ID(type_),                                                                              \
+        nullptr,                                                                                                       \
+        0,                                                                                                             \
+        PNANOVDB_PIPELINE_NO_PARAMS,                                                                                   \
+        nullptr,                                                                                                       \
+        get_render_method_nanovdb,                                                                                     \
+        nullptr,                                                                                                       \
+        nullptr,                                                                                                       \
+        chain_,                                                                                                        \
+        (outputs_),                                                                                                    \
         (inputs_),                                                                                                     \
     };                                                                                                                 \
     PNANOVDB_REGISTER_PIPELINE(var)
@@ -1525,6 +1569,7 @@ bool pipeline_create_variant(EditorSceneManager* scene_manager,
         (type_),                                                                                                       \
         pnanovdb_pipeline_stage_render,                                                                                \
         (name_),                                                                                                       \
+        PNANOVDB_PIPELINE_TYPE_ID(type_),                                                                              \
         (shaders_),                                                                                                    \
         (shader_count_),                                                                                               \
         params_,                                                                                                       \
@@ -1540,7 +1585,7 @@ bool pipeline_create_variant(EditorSceneManager* scene_manager,
 
 // Common render case: draw an existing NanoVDB grid with NanoVDBRenderParams.
 #define PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(var, type_, name_, shaders_, inputs_)                                \
-    PNANOVDB_REGISTER_RENDER_PIPELINE(var, (type_), (name_), (shaders_), 1,                                            \
+    PNANOVDB_REGISTER_RENDER_PIPELINE(var, type_, (name_), (shaders_), 1,                                              \
                                       PNANOVDB_PIPELINE_PARAMS(NanoVDBRenderParams), execute_nanovdb_render,           \
                                       get_render_method_nanovdb, map_params<&SceneObject::render_params>, (inputs_))
 
@@ -1580,6 +1625,9 @@ PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_triangles_debug_render_shaders,
 PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_debug_render_shaders,
                                  PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_debug.slang", nullptr, PNANOVDB_TRUE));
 
+PNANOVDB_DEFINE_PIPELINE_SHADERS(s_voxelbvh_rgba8_render_shaders,
+                                 PNANOVDB_PIPELINE_SHADER("editor/voxelbvh_rgba8.slang", nullptr, PNANOVDB_TRUE));
+
 // ============================================================================
 // Self-registering pipeline descriptors
 // ============================================================================
@@ -1595,7 +1643,14 @@ PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_nanovdb_render_descriptor,
                                           pnanovdb_pipeline_type_nanovdb_render,
                                           "NanoVDB Render",
                                           s_nanovdb_render_shaders,
-                                          pnanovdb_pipeline_data_kind_nanovdb | pnanovdb_pipeline_data_kind_nanovdb_rgba8);
+                                          pnanovdb_pipeline_data_kind_nanovdb);
+
+// Renders an RGBA8 NanoVDB image grid (packed RGBA in leaf values) with live directional grid selection.
+PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_voxelbvh_rgba8_render_descriptor,
+                                          pnanovdb_pipeline_type_voxelbvh_rgba8_render,
+                                          "NanoVDB RGBA8 Render",
+                                          s_voxelbvh_rgba8_render_shaders,
+                                          pnanovdb_pipeline_data_kind_nanovdb_rgba8);
 
 // SDF/level-set isosurface rendered via HDDA zero-crossing search.
 PNANOVDB_REGISTER_NANOVDB_RENDER_PIPELINE(s_nanovdb_surface_descriptor,

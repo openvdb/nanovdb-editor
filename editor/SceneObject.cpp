@@ -216,7 +216,11 @@ namespace
 
 pnanovdb_pipeline_type_t default_render_for_data_kind(const SceneObject* obj, pnanovdb_uint32_t kind)
 {
-    if (kind & (pnanovdb_pipeline_data_kind_nanovdb | pnanovdb_pipeline_data_kind_nanovdb_rgba8))
+    if (kind & pnanovdb_pipeline_data_kind_nanovdb_rgba8)
+    {
+        return pnanovdb_pipeline_type_voxelbvh_rgba8_render;
+    }
+    if (kind & pnanovdb_pipeline_data_kind_nanovdb)
     {
         return pnanovdb_pipeline_type_nanovdb_render;
     }

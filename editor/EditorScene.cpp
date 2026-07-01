@@ -120,8 +120,7 @@ static nlohmann::json normalized_stage_params_for_load(pnanovdb_pipeline_type_t 
         *field = static_cast<pnanovdb_uint32_t>(value);
     };
 
-    normalize_uint_field("source_type", 0.0,
-                         static_cast<double>(pnanovdb_pipeline_voxelbvh_source_gaussian_arrays));
+    normalize_uint_field("source_type", 0.0, static_cast<double>(pnanovdb_pipeline_voxelbvh_source_gaussian_arrays));
     normalize_uint_field("resolution", 1.0, static_cast<double>(PNANOVDB_VOXELBVH_MAX_RESOLUTION));
     return normalized;
 }
@@ -2880,8 +2879,9 @@ bool EditorScene::load_scene_file(const std::string& filepath)
                         const auto& stage = pj["process"][0];
                         if (stage.contains("params") && stage["params"].is_object())
                         {
-                            json_to_reflect_params(
-                                stage["params"], params.type, params.data, static_cast<size_t>(params.size));
+                            const pnanovdb_pipeline_descriptor_t* desc = pnanovdb_pipeline_get_descriptor(process0_type);
+                            json_to_reflect_params(stage["params"], params.type, params.data,
+                                                   static_cast<size_t>(params.size), desc ? desc->params_hints : nullptr);
                         }
                         process0_voxels_per_unit = pipeline_params_get_voxels_per_unit(&params);
                         pipeline_params_release(&params);
@@ -3108,8 +3108,8 @@ void EditorScene::process_pending_restores()
                     Console::LogLevel::Warning, "Load scene: timed out restoring state for '%s'",
                     pending.name_token && pending.name_token->str ? pending.name_token->str : "?");
 
-                const bool same_target = m_async_load_target && m_async_load_target->scene && m_async_load_target->name &&
-                                         pending.scene_token && pending.name_token &&
+                const bool same_target = m_async_load_target && m_async_load_target->scene &&
+                                         m_async_load_target->name && pending.scene_token && pending.name_token &&
                                          m_async_load_target->scene->id == pending.scene_token->id &&
                                          m_async_load_target->name->id == pending.name_token->id;
                 if (same_target)
@@ -3212,10 +3212,8 @@ void EditorScene::apply_object_restore(pnanovdb_editor_token_t* scene_token,
 
     try
     {
-        auto apply_stage_params =
-            [name_token](pnanovdb_pipeline_params_t* params,
-                         pnanovdb_pipeline_type_t type,
-                         const nlohmann::json& stage_json)
+        auto apply_stage_params = [name_token](pnanovdb_pipeline_params_t* params, pnanovdb_pipeline_type_t type,
+                                               const nlohmann::json& stage_json)
         {
             if (!params || !params->data || !stage_json.contains("params") || !stage_json["params"].is_object())
             {
@@ -3229,7 +3227,9 @@ void EditorScene::apply_object_restore(pnanovdb_editor_token_t* scene_token,
             }
             const nlohmann::json normalized =
                 normalized_stage_params_for_load(type, stage_json["params"], name_token->str);
-            json_to_reflect_params(normalized, dt, params->data, (size_t)params->size);
+            const pnanovdb_pipeline_descriptor_t* hints_desc = pnanovdb_pipeline_get_descriptor(type);
+            json_to_reflect_params(
+                normalized, dt, params->data, (size_t)params->size, hints_desc ? hints_desc->params_hints : nullptr);
             if (type == pnanovdb_pipeline_type_gaussian_voxelize)
             {
                 pipeline_params_set_voxels_per_unit(params, pipeline_params_get_voxels_per_unit(params));

@@ -58,23 +58,22 @@ void destroy_test_array(pnanovdb_compute_array_t*)
 {
 }
 
-const pnanovdb_pipeline_descriptor_t k_test_noop_descriptor = { pnanovdb_pipeline_type_noop,
-                                                                pnanovdb_pipeline_stage_load, "No Operation" };
+const pnanovdb_pipeline_descriptor_t k_test_noop_descriptor = { pnanovdb_pipeline_type_noop, pnanovdb_pipeline_stage_load,
+                                                                "No Operation", "pnanovdb_pipeline_type_noop" };
 const pnanovdb_pipeline_descriptor_t k_test_voxelbvh_build_descriptor = { pnanovdb_pipeline_type_voxelbvh_build,
                                                                           pnanovdb_pipeline_stage_process,
-                                                                          "VoxelBVH Build" };
+                                                                          "VoxelBVH Build",
+                                                                          "pnanovdb_pipeline_type_voxelbvh_build" };
 const pnanovdb_pipeline_shader_entry_t k_test_nanovdb_shader = { "editor/editor.slang", nullptr, PNANOVDB_TRUE };
 const pnanovdb_pipeline_shader_entry_t k_test_gaussian_shader = { "raster/gaussian_rasterize_2d.slang",
                                                                   "raster/raster2d_group", PNANOVDB_FALSE };
 const pnanovdb_pipeline_descriptor_t k_test_nanovdb_render_descriptor = {
-    pnanovdb_pipeline_type_nanovdb_render, pnanovdb_pipeline_stage_render, "NanoVDB Render", &k_test_nanovdb_shader, 1u,
+    pnanovdb_pipeline_type_nanovdb_render,   pnanovdb_pipeline_stage_render, "NanoVDB Render",
+    "pnanovdb_pipeline_type_nanovdb_render", &k_test_nanovdb_shader,         1u,
 };
 const pnanovdb_pipeline_descriptor_t k_test_gaussian_render_descriptor = {
-    pnanovdb_pipeline_type_gaussian_splat,
-    pnanovdb_pipeline_stage_render,
-    "Gaussian 2D Splatting",
-    &k_test_gaussian_shader,
-    1u,
+    pnanovdb_pipeline_type_gaussian_splat,   pnanovdb_pipeline_stage_render, "Gaussian 2D Splatting",
+    "pnanovdb_pipeline_type_gaussian_splat", &k_test_gaussian_shader,        1u,
 };
 
 void register_test_pipeline_descriptors()
@@ -894,27 +893,29 @@ TEST(SceneSerializer, PipelineStagesPersistAndResolveByTypeName)
     views.get_or_create_scene(obj.scene_token);
     const nlohmann::ordered_json doc = serialize_scenes(manager, views);
     const auto& stage = doc.at("objects").at(0).at("pipeline").at("process").at(0);
-    EXPECT_EQ(stage.at("type"), pipeline_type_name(pnanovdb_pipeline_type_voxelbvh_build));
-    EXPECT_FALSE(stage.contains("type_id"));
+    EXPECT_EQ(stage.at("type_id"), pipeline_type_id(pnanovdb_pipeline_type_voxelbvh_build));
+    EXPECT_FALSE(stage.contains("type"));
 
     pnanovdb_pipeline_type_t decoded = pnanovdb_pipeline_type_noop;
     EXPECT_TRUE(pipeline_type_from_json(stage, decoded));
     EXPECT_EQ(decoded, pnanovdb_pipeline_type_voxelbvh_build);
 
     decoded = pnanovdb_pipeline_type_nanovdb_render;
-    EXPECT_FALSE(pipeline_type_from_json(nlohmann::json{ { "type", "renamed label" } }, decoded));
+    EXPECT_FALSE(pipeline_type_from_json(
+        nlohmann::json{ { "type_id", pipeline_type_name(pnanovdb_pipeline_type_voxelbvh_build) } }, decoded));
     EXPECT_EQ(decoded, pnanovdb_pipeline_type_nanovdb_render);
 }
 
-TEST(SceneSerializer, TypeNamesDistinguishNoopFromUnknown)
+TEST(SceneSerializer, TypeIdsDistinguishNoopFromUnknown)
 {
     register_test_pipeline_descriptors();
     pnanovdb_pipeline_type_t decoded = pnanovdb_pipeline_type_nanovdb_render;
-    EXPECT_TRUE(pipeline_type_from_json(nlohmann::json{ { "type", "No Operation" } }, decoded));
+    EXPECT_TRUE(pipeline_type_from_json(
+        nlohmann::json{ { "type_id", pipeline_type_id(pnanovdb_pipeline_type_noop) } }, decoded));
     EXPECT_EQ(decoded, pnanovdb_pipeline_type_noop);
 
     decoded = pnanovdb_pipeline_type_nanovdb_render;
-    EXPECT_FALSE(pipeline_type_from_json(nlohmann::json{ { "type", "Unknown Pipeline" } }, decoded));
+    EXPECT_FALSE(pipeline_type_from_json(nlohmann::json{ { "type_id", "unknown_pipeline_id" } }, decoded));
     EXPECT_EQ(decoded, pnanovdb_pipeline_type_nanovdb_render);
 }
 

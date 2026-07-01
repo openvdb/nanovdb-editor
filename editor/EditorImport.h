@@ -48,6 +48,13 @@ PNANOVDB_API bool has_voxelbvh_mesh_metadata(const pnanovdb_compute_array_t* arr
 PNANOVDB_API bool has_voxelbvh_render_metadata(const pnanovdb_compute_array_t* array,
                                                pnanovdb_pipeline_type_t render_pipeline);
 
+PNANOVDB_API pnanovdb_vec3_t world_dir_to_index_dir(const pnanovdb_compute_array_t* src_nanovdb,
+                                                    pnanovdb_vec3_t world_dir);
+
+PNANOVDB_API pnanovdb_compute_array_t* merge_grids(const pnanovdb_compute_t* compute,
+                                                   pnanovdb_compute_array_t* const* grids,
+                                                   pnanovdb_uint32_t grid_count);
+
 bool nanovdb(EditorScene& editor_scene,
              const pnanovdb_compute_t* compute,
              pnanovdb_editor_token_t* scene,
