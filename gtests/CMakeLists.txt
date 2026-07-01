@@ -70,3 +70,20 @@ ConfigureTest(MultiEditorPipelineRuntimeTest MultiEditorPipelineRuntimeTest.cpp)
 ConfigureTest(PipelineWorkerShutdownTest PipelineWorkerShutdownTest.cpp)
 ConfigureTest(ConcurrentPipelineTest ConcurrentPipelineTest.cpp)
 ConfigureTest(PipelineApiTest PipelineApiTest.cpp EditorTestSupport.cpp GpuTestSupport.cpp)
+ConfigureTest(SceneObjectSourceTest SceneObjectSourceTest.cpp)
+ConfigureTest(SceneObjectProcessChainTest SceneObjectProcessChainTest.cpp)
+ConfigureTest(SceneObjectReplacementTest SceneObjectReplacementTest.cpp)
+ConfigureTest(AbiCompatibilityTest AbiCompatibilityTest.cpp)
+ConfigureTest(SceneSerializerTest
+  SceneSerializerTest.cpp
+  ../editor/Console.cpp
+  ../editor/CustomSceneParams.cpp
+  ../editor/EditorSceneManager.cpp
+  ../editor/ParamWidget.cpp
+  ../editor/PipelineParams.cpp
+  ../editor/PipelineRegistry.cpp
+  ../editor/SceneSerializer.cpp
+  ../editor/SceneView.cpp
+  ../editor/ShaderParams.cpp
+)
+target_link_libraries(SceneSerializerTest PRIVATE ImGuiColorTextEdit)

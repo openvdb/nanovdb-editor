@@ -12,368 +12,20 @@
 #ifndef NANOVDB_EDITOR_SCENE_MANAGER_H_HAS_BEEN_INCLUDED
 #define NANOVDB_EDITOR_SCENE_MANAGER_H_HAS_BEEN_INCLUDED
 
-#include "EditorToken.h"
+#include "SceneObject.h"
 #include "ShaderParams.h"
+#include "PipelineParams.h"
 #include "CustomSceneParams.h"
-#include "Renderer.h"
-#include "nanovdb_editor/putil/Editor.h"
-#include "PipelineTypes.h"
-#include "nanovdb_editor/putil/Raster.h"
 
-#include <cstdlib>
-#include <cstring>
+#include <cassert>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <vector>
-#include <memory>
-
-#if defined(_WIN32)
-#    define PNANOVDB_SCENE_MANAGER_EXPORT_CXX __declspec(dllexport)
-#else
-#    define PNANOVDB_SCENE_MANAGER_EXPORT_CXX __attribute__((visibility("default")))
-#endif
 
 namespace pnanovdb_editor
 {
-
-/*!
-    \brief Scene object types that can be managed
-*/
-enum class SceneObjectType
-{
-    Uninitialized, ///< Placeholder: configured but no resource attached yet
-    NanoVDB, ///< Volume data
-    GaussianData, ///< Gaussian splatting data
-    Array, ///< Generic array data
-    Camera ///< Camera view
-};
-
-/*!
-    \brief Resource data for a scene object
-*/
-struct SceneObjectResources
-{
-    // Unnamed primary data (one active based on object type)
-    pnanovdb_compute_array_t* nanovdb_array = nullptr;
-    pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr;
-    pnanovdb_camera_view_t* camera_view = nullptr;
-
-    // Named arrays - multiple arrays identified by name
-    std::map<std::string, pnanovdb_compute_array_t*> named_arrays;
-
-    // Converted/processed data (output of process pipeline)
-    pnanovdb_compute_array_t* converted_nanovdb = nullptr;
-
-    // Source file path (for re-conversion from file with different parameters)
-    std::string source_filepath;
-
-    // Ownership handles for automatic cleanup
-    std::shared_ptr<pnanovdb_compute_array_t> nanovdb_array_owner;
-    std::shared_ptr<pnanovdb_raster_gaussian_data_t> gaussian_data_owner;
-    std::shared_ptr<pnanovdb_camera_view_t> camera_view_owner;
-    std::shared_ptr<pnanovdb_compute_array_t> converted_nanovdb_owner;
-    std::map<std::string, std::shared_ptr<pnanovdb_compute_array_t>> named_array_owners;
-};
-
-/*!
-    \brief Mutable storage for a SceneObject's shader name
-*/
-struct ShaderNameStorage
-{
-    uint64_t object_key = 0;
-    pnanovdb_editor_shader_name_t value = {};
-};
-
-/*!
-    \brief Compile-time known parameters for a scene object
-*/
-struct SceneObjectParams
-{
-    // GPU-backed shader params storage
-    pnanovdb_compute_array_t* shader_params_array = nullptr;
-    std::shared_ptr<pnanovdb_compute_array_t> shader_params_array_owner;
-
-    // Typed params pointer and reflection info
-    void* shader_params = nullptr;
-    const pnanovdb_reflect_data_type_t* shader_params_data_type = nullptr;
-
-    // Associated shader name
-    std::shared_ptr<ShaderNameStorage> shader_name_storage = std::make_shared<ShaderNameStorage>();
-};
-
-/*!
-    \brief Per-shader parameter override
-*/
-struct ShaderOverride
-{
-    std::string shader_name; // Override shader name (empty = use pipeline default)
-
-    // Dynamic parameter overrides: param_name -> serialized value
-    std::map<std::string, std::vector<uint8_t>> param_overrides;
-
-    bool has_shader_override() const
-    {
-        return !shader_name.empty();
-    }
-    bool has_param_overrides() const
-    {
-        return !param_overrides.empty();
-    }
-    bool is_empty() const
-    {
-        return !has_shader_override() && !has_param_overrides();
-    }
-};
-
-/*!
-    \brief Configuration for a single pipeline stage
-
-    Owns the heap-allocated params.data via malloc/free.
-*/
-struct PipelineStage
-{
-    pnanovdb_pipeline_type_t type = pnanovdb_pipeline_type_noop;
-    pnanovdb_pipeline_params_t params = {}; // Heap-allocated stage params (data owned by this struct)
-
-    // Per-shader overrides (indexed by shader position in pipeline descriptor)
-    std::vector<ShaderOverride> shader_overrides;
-
-    bool dirty = true; // Needs re-execution
-
-    // Set once the user explicitly configures this stage via set_pipeline() or map_pipeline_params()
-    bool configured = false;
-
-    PipelineStage() = default;
-
-    ~PipelineStage()
-    {
-        free(params.data);
-    }
-
-    PipelineStage(const PipelineStage& other)
-        : type(other.type),
-          params{},
-          shader_overrides(other.shader_overrides),
-          dirty(other.dirty),
-          configured(other.configured)
-    {
-        if (other.params.data && other.params.size > 0)
-        {
-            params.data = malloc(other.params.size);
-            if (params.data)
-            {
-                memcpy(params.data, other.params.data, other.params.size);
-                params.size = other.params.size;
-                params.type = other.params.type;
-            }
-            else
-            {
-                // Keep object in a fully default/safe state if deep-copy allocation fails
-                type = pnanovdb_pipeline_type_noop;
-                params = {};
-                shader_overrides.clear();
-                dirty = true;
-                configured = false;
-            }
-        }
-    }
-
-    PipelineStage& operator=(const PipelineStage& other)
-    {
-        if (this != &other)
-        {
-            void* new_data = nullptr;
-            size_t new_size = 0;
-            const pnanovdb_reflect_data_type_t* new_type = nullptr;
-            if (other.params.data && other.params.size > 0)
-            {
-                new_data = malloc(other.params.size);
-                if (!new_data)
-                {
-                    // Allocation failed: keep current object unchanged
-                    return *this;
-                }
-                memcpy(new_data, other.params.data, other.params.size);
-                new_size = other.params.size;
-                new_type = other.params.type;
-            }
-
-            free(params.data);
-            params = {};
-            params.data = new_data;
-            params.size = new_size;
-            params.type = new_type;
-            type = other.type;
-            shader_overrides = other.shader_overrides;
-            dirty = other.dirty;
-            configured = other.configured;
-        }
-        return *this;
-    }
-
-    PipelineStage(PipelineStage&& other) noexcept
-        : type(other.type),
-          params(other.params),
-          shader_overrides(std::move(other.shader_overrides)),
-          dirty(other.dirty),
-          configured(other.configured)
-    {
-        other.params = {};
-    }
-
-    PipelineStage& operator=(PipelineStage&& other) noexcept
-    {
-        if (this != &other)
-        {
-            free(params.data);
-            type = other.type;
-            params = other.params;
-            shader_overrides = std::move(other.shader_overrides);
-            dirty = other.dirty;
-            configured = other.configured;
-            other.params = {};
-        }
-        return *this;
-    }
-};
-
-/*!
-    \brief Pipeline configuration for a scene object
-*/
-struct SceneObjectPipeline
-{
-    PipelineStage stages[pnanovdb_pipeline_stage_count];
-
-    // Convenience accessors
-    PipelineStage& load()
-    {
-        return stages[pnanovdb_pipeline_stage_load];
-    }
-    PipelineStage& process()
-    {
-        return stages[pnanovdb_pipeline_stage_process];
-    }
-    PipelineStage& render()
-    {
-        return stages[pnanovdb_pipeline_stage_render];
-    }
-    const PipelineStage& load() const
-    {
-        return stages[pnanovdb_pipeline_stage_load];
-    }
-    const PipelineStage& process() const
-    {
-        return stages[pnanovdb_pipeline_stage_process];
-    }
-    const PipelineStage& render() const
-    {
-        return stages[pnanovdb_pipeline_stage_render];
-    }
-};
-
-/*!
-    \brief A single object in the scene
-
-    Represents one object that can be tracked by the scene manager.
-*/
-struct SceneObject
-{
-    SceneObjectType type = SceneObjectType::Uninitialized; ///< Type of scene object
-    pnanovdb_editor_token_t* scene_token; ///< Scene identifier token
-    pnanovdb_editor_token_t* name_token; ///< Object name token
-
-    SceneObjectResources resources; ///< Binary data (files)
-    SceneObjectParams params; ///< Compile-time schemas (JSON)
-    SceneObjectPipeline pipeline; ///< Dynamic overrides (JSON overrides)
-
-    bool visible = true;
-
-    // Resources
-    pnanovdb_compute_array_t*& nanovdb_array()
-    {
-        return resources.nanovdb_array;
-    }
-    pnanovdb_raster_gaussian_data_t*& gaussian_data()
-    {
-        return resources.gaussian_data;
-    }
-    pnanovdb_camera_view_t*& camera_view()
-    {
-        return resources.camera_view;
-    }
-    std::map<std::string, pnanovdb_compute_array_t*>& named_arrays()
-    {
-        return resources.named_arrays;
-    }
-    pnanovdb_compute_array_t*& converted_nanovdb()
-    {
-        return resources.converted_nanovdb;
-    }
-
-    // Params
-    void*& shader_params()
-    {
-        return params.shader_params;
-    }
-    void* shader_params() const
-    {
-        return params.shader_params;
-    }
-    const pnanovdb_reflect_data_type_t*& shader_params_data_type()
-    {
-        return params.shader_params_data_type;
-    }
-    const pnanovdb_reflect_data_type_t* shader_params_data_type() const
-    {
-        return params.shader_params_data_type;
-    }
-    pnanovdb_editor_token_t*& shader_name()
-    {
-        return params.shader_name_storage->value.shader_name;
-    }
-    pnanovdb_editor_token_t* shader_name() const
-    {
-        return params.shader_name_storage->value.shader_name;
-    }
-    ShaderNameStorage& ensure_shader_name_storage()
-    {
-        if (!params.shader_name_storage)
-        {
-            params.shader_name_storage = std::make_shared<ShaderNameStorage>();
-        }
-        return *params.shader_name_storage;
-    }
-
-    // Pipeline shortcuts
-    pnanovdb_pipeline_type_t& load_pipeline()
-    {
-        return pipeline.load().type;
-    }
-    pnanovdb_pipeline_type_t& process_pipeline()
-    {
-        return pipeline.process().type;
-    }
-    pnanovdb_pipeline_type_t& render_pipeline()
-    {
-        return pipeline.render().type;
-    }
-    pnanovdb_pipeline_params_t& load_params()
-    {
-        return pipeline.load().params;
-    }
-    pnanovdb_pipeline_params_t& process_params()
-    {
-        return pipeline.process().params;
-    }
-    pnanovdb_pipeline_params_t& render_params()
-    {
-        return pipeline.render().params;
-    }
-    bool& process_dirty()
-    {
-        return pipeline.process().dirty;
-    }
-};
+class SceneView;
 
 /*!
     \brief Manages multiple scene objects using token-based lookups
@@ -402,7 +54,8 @@ struct SceneObject
     bool removed = manager.remove(scene_token, name_token);
     \endcode
 */
-class EditorSceneManager
+
+class PNANOVDB_SCENE_MANAGER_EXPORT_CXX EditorSceneManager
 {
 public:
     EditorSceneManager() = default;
@@ -410,6 +63,9 @@ public:
 
     // Shader parameters for all scenes
     ShaderParams shader_params;
+
+    // Reflection-driven Properties UI + JSON hint cache for pipeline (process-stage) params
+    PipelineParams pipeline_params;
 
     // Unified helper to create a compute-backed params array
     static pnanovdb_compute_array_t* create_params_array(const pnanovdb_compute_t* compute,
@@ -436,13 +92,11 @@ public:
         \note Exported so it can be called from gtest binaries that link
               against the editor's hidden-visibility shared library.
     */
-    PNANOVDB_SCENE_MANAGER_EXPORT_CXX bool reset_shader_params_to_defaults(const pnanovdb_compute_t* compute,
-                                                                           const char* shader_name);
+    bool reset_shader_params_to_defaults(const pnanovdb_compute_t* compute, const char* shader_name);
 
     //! Same as \ref reset_shader_params_to_defaults, applied to every shader
     //! referenced by the named group file.
-    PNANOVDB_SCENE_MANAGER_EXPORT_CXX bool reset_group_params_to_defaults(const pnanovdb_compute_t* compute,
-                                                                          const char* group_file_path);
+    bool reset_group_params_to_defaults(const pnanovdb_compute_t* compute, const char* group_file_path);
 
     /*!
         \brief Reinitialize a single object's shader params buffer from the
@@ -512,22 +166,43 @@ public:
         \note Thread-safe
         \note The manager assumes ownership and will destroy both array and params_array
     */
-    void add_nanovdb(pnanovdb_editor_token_t* scene,
+    bool add_nanovdb(pnanovdb_editor_token_t* scene,
                      pnanovdb_editor_token_t* name,
                      pnanovdb_compute_array_t* array,
                      pnanovdb_compute_array_t* params_array,
                      const pnanovdb_compute_t* compute,
-                     pnanovdb_editor_token_t* shader_name = nullptr);
+                     pnanovdb_editor_token_t* shader_name = nullptr,
+                     std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_gaussian_owner_out = nullptr);
 
     //! With explicit pipeline configuration (thread-safe, atomic)
-    void add_nanovdb(pnanovdb_editor_token_t* scene,
+    bool add_nanovdb(pnanovdb_editor_token_t* scene,
                      pnanovdb_editor_token_t* name,
                      pnanovdb_compute_array_t* array,
                      pnanovdb_compute_array_t* params_array,
                      const pnanovdb_compute_t* compute,
                      pnanovdb_editor_token_t* shader_name,
                      pnanovdb_pipeline_type_t process_pipeline,
-                     pnanovdb_pipeline_type_t render_pipeline);
+                     pnanovdb_pipeline_type_t render_pipeline,
+                     std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_gaussian_owner_out = nullptr);
+
+    bool reserve_load_target(pnanovdb_editor_token_t* scene,
+                             pnanovdb_editor_token_t* name,
+                             uint64_t* lifetime_id,
+                             bool replace_existing = false,
+                             bool* replacing = nullptr);
+
+    void cancel_load_target(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name, uint64_t lifetime_id);
+
+    bool commit_reserved_nanovdb(pnanovdb_editor_token_t* scene,
+                                 pnanovdb_editor_token_t* name,
+                                 uint64_t lifetime_id,
+                                 pnanovdb_compute_array_t* array,
+                                 pnanovdb_compute_array_t* params_array,
+                                 const pnanovdb_compute_t* compute,
+                                 pnanovdb_editor_token_t* shader_name,
+                                 pnanovdb_pipeline_type_t process_pipeline,
+                                 pnanovdb_pipeline_type_t render_pipeline,
+                                 std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_gaussian_owner_out = nullptr);
 
     /*!
         \brief Add or update Gaussian data
@@ -549,7 +224,7 @@ public:
         \note If old_owner_out is provided and an object is being replaced, the old gaussian_data_owner
               will be moved to old_owner_out for deferred destruction
     */
-    void add_gaussian_data(pnanovdb_editor_token_t* scene,
+    bool add_gaussian_data(pnanovdb_editor_token_t* scene,
                            pnanovdb_editor_token_t* name,
                            pnanovdb_raster_gaussian_data_t* gaussian_data,
                            pnanovdb_compute_array_t* params_array,
@@ -560,8 +235,22 @@ public:
                            const char* shader_name = nullptr,
                            std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_owner_out = nullptr);
 
+    bool commit_reserved_gaussian_data(pnanovdb_editor_token_t* scene,
+                                       pnanovdb_editor_token_t* name,
+                                       uint64_t lifetime_id,
+                                       pnanovdb_raster_gaussian_data_t* gaussian_data,
+                                       pnanovdb_compute_array_t* params_array,
+                                       const pnanovdb_reflect_data_type_t* shader_params_data_type,
+                                       const pnanovdb_compute_t* compute,
+                                       const pnanovdb_raster_t* raster,
+                                       pnanovdb_compute_queue_t* queue,
+                                       const char* shader_name,
+                                       pnanovdb_pipeline_type_t process_pipeline,
+                                       pnanovdb_pipeline_type_t render_pipeline,
+                                       std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_owner_out = nullptr);
+
     //! With explicit pipeline configuration (thread-safe, atomic)
-    void add_gaussian_data(pnanovdb_editor_token_t* scene,
+    bool add_gaussian_data(pnanovdb_editor_token_t* scene,
                            pnanovdb_editor_token_t* name,
                            pnanovdb_raster_gaussian_data_t* gaussian_data,
                            pnanovdb_compute_array_t* params_array,
@@ -588,7 +277,7 @@ public:
         \note The manager assumes ownership and will destroy the camera view including
               its states and configs arrays on removal
     */
-    void add_camera(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name, pnanovdb_camera_view_t* camera_view);
+    bool add_camera(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name, pnanovdb_camera_view_t* camera_view);
 
     /*!
         \brief Add a mesh (triangle or line) object backed by named arrays.
@@ -608,14 +297,26 @@ public:
 
         \note Thread-safe
     */
-    void add_mesh(pnanovdb_editor_token_t* scene,
+    bool add_mesh(pnanovdb_editor_token_t* scene,
                   pnanovdb_editor_token_t* name,
                   pnanovdb_compute_array_t* indices,
                   pnanovdb_compute_array_t* positions,
                   pnanovdb_compute_array_t* colors,
                   const pnanovdb_compute_t* compute,
                   pnanovdb_pipeline_type_t process_pipeline,
-                  pnanovdb_pipeline_type_t render_pipeline);
+                  pnanovdb_pipeline_type_t render_pipeline,
+                  std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_gaussian_owner_out = nullptr);
+
+    bool commit_reserved_mesh(pnanovdb_editor_token_t* scene,
+                              pnanovdb_editor_token_t* name,
+                              uint64_t lifetime_id,
+                              pnanovdb_compute_array_t* indices,
+                              pnanovdb_compute_array_t* positions,
+                              pnanovdb_compute_array_t* colors,
+                              const pnanovdb_compute_t* compute,
+                              pnanovdb_pipeline_type_t process_pipeline,
+                              pnanovdb_pipeline_type_t render_pipeline,
+                              std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_gaussian_owner_out = nullptr);
 
     /*!
         \brief Add an Array-typed scene object that will be filled by a
@@ -628,14 +329,30 @@ public:
         \param process_pipeline Initial process pipeline (typically
                                 pnanovdb_pipeline_type_voxelbvh_build)
         \param render_pipeline Initial render pipeline
+        \param replace_existing Whether an existing render object may be replaced
 
         \note Thread-safe
     */
-    void add_file_object(pnanovdb_editor_token_t* scene,
+    bool add_file_object(pnanovdb_editor_token_t* scene,
                          pnanovdb_editor_token_t* name,
                          const pnanovdb_compute_t* compute,
                          pnanovdb_pipeline_type_t process_pipeline,
-                         pnanovdb_pipeline_type_t render_pipeline);
+                         pnanovdb_pipeline_type_t render_pipeline,
+                         bool replace_existing = false,
+                         std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_gaussian_owner_out = nullptr);
+
+    bool stage_file_object_replacement(pnanovdb_editor_token_t* scene,
+                                       pnanovdb_editor_token_t* name,
+                                       uint64_t lifetime_id,
+                                       const pnanovdb_compute_t* compute,
+                                       pnanovdb_pipeline_type_t process_pipeline,
+                                       pnanovdb_pipeline_type_t render_pipeline);
+
+    bool finish_file_object_replacement(uint64_t lifetime_id,
+                                        bool success,
+                                        std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_gaussian_owner_out = nullptr);
+
+    bool has_file_object_replacement_in_progress() const;
 
     /*!
         \brief Register an existing camera with shared ownership
@@ -649,7 +366,7 @@ public:
 
         \note Thread-safe
     */
-    void register_camera(pnanovdb_editor_token_t* scene,
+    bool register_camera(pnanovdb_editor_token_t* scene,
                          pnanovdb_editor_token_t* name,
                          std::shared_ptr<pnanovdb_camera_view_t> camera_view_owner);
 
@@ -668,6 +385,13 @@ public:
     */
     bool remove(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
 
+    // Return the exact generation currently occupying a scene/name key.
+    uint64_t object_lifetime(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name) const;
+
+    // Remove only the exact object generation. Used by delayed cleanup so a
+    // newer object reusing the same key cannot be erased by stale work.
+    bool remove_if_lifetime(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name, uint64_t lifetime_id);
+
     /*!
         \brief Rename a scene token across all managed objects
 
@@ -684,6 +408,26 @@ public:
     bool rename_scene(pnanovdb_editor_token_t* old_scene, pnanovdb_editor_token_t* new_scene);
 
     /*!
+        \brief Rename a single object within a scene
+
+        Re-keys the object identified by (\p scene, \p old_name) so it is now
+       identified by
+        (\p scene, \p new_name), preserving all of its data. Rejected if another
+       object already uses \p new_name in \p scene.
+
+        \param scene Scene the object belongs to
+        \param old_name Current object name token
+        \param new_name Desired object name token
+        \return true on success, false on collision, invalid tokens, or if the
+       object is missing
+
+        \note Thread-safe
+    */
+    bool rename_object(pnanovdb_editor_token_t* scene,
+                       pnanovdb_editor_token_t* old_name,
+                       pnanovdb_editor_token_t* new_name);
+
+    /*!
         \brief Get object by tokens
 
         \param scene Scene token
@@ -698,23 +442,10 @@ public:
     SceneObject* get(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
 
     /*!
-        \brief Get all objects in the scene
-
-        Returns a snapshot of all object pointers. Note that these pointers
-        become invalid if objects are added/removed.
-
-        \return Vector of pointers to all scene objects
-
-        \note Thread-safe. Creates a snapshot with mutex held.
-        \warning UNSAFE: Pointers may become invalid! Use for_each_object() instead.
-    */
-    std::vector<SceneObject*> get_all_objects();
-
-    /*!
         \brief Iterate over all objects with a callback while holding the lock
 
-        Safer alternative to get_all_objects() that holds the mutex during iteration.
-        This prevents race conditions where objects might be removed during iteration.
+        Holds the mutex during iteration to prevent race conditions where objects
+        might be removed during iteration.
 
         \param callback Function called for each object. Return false to stop iteration.
 
@@ -756,6 +487,43 @@ public:
     }
 
     /*!
+        \brief Access an object by its stable lifetime, tolerating a concurrent
+       rename.
+
+        The supplied key is tried first. If that key moved, the globally unique
+        lifetime identifies the same object under its current scene/name tokens.
+
+        \note Thread-safe. Holds mutex during callback execution.
+    */
+    template <typename Func>
+    void with_object_lifetime(pnanovdb_editor_token_t* scene,
+                              pnanovdb_editor_token_t* name,
+                              uint64_t lifetime_id,
+                              Func callback)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        SceneObject* obj = nullptr;
+        auto it = m_objects.find(make_key(scene, name));
+        if (it != m_objects.end() && it->second.lifetime_id == lifetime_id)
+        {
+            obj = &it->second;
+        }
+        else if (lifetime_id != 0)
+        {
+            auto index_it = m_lifetime_to_key.find(lifetime_id);
+            if (index_it != m_lifetime_to_key.end())
+            {
+                auto candidate = m_objects.find(index_it->second);
+                if (candidate != m_objects.end() && candidate->second.lifetime_id == lifetime_id)
+                {
+                    obj = &candidate->second;
+                }
+            }
+        }
+        callback(obj);
+    }
+
+    /*!
         \brief Run a callback against an object, creating a data-less placeholder
                if none exists yet.
 
@@ -774,13 +542,26 @@ public:
         }
         else
         {
-            obj = &m_objects[key];
-            obj->type = SceneObjectType::Uninitialized;
-            obj->scene_token = scene;
-            obj->name_token = name;
-            obj->ensure_shader_name_storage().object_key = key;
+            obj = &reset_object_locked(key, scene, name, SceneObjectType::Uninitialized);
         }
         callback(obj);
+    }
+
+    /*!
+        \brief Run a callback over the whole object map while holding the lock.
+
+        \warning The callback MUST NOT call back into other EditorSceneManager
+                 methods: m_mutex is already held and is not recursive, so doing
+                 so would deadlock. Likewise, do not retain the map reference or
+                 any element pointers past the callback.
+
+        \note Thread-safe. Holds mutex for the entire callback.
+    */
+    template <typename Func>
+    void with_objects_locked(Func callback)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        callback(m_objects);
     }
 
     /*!
@@ -816,17 +597,73 @@ public:
     std::shared_ptr<CustomSceneParams> get_custom_scene_params(pnanovdb_editor_token_t* scene);
 
 private:
+    void begin_object_lifetime(SceneObject& obj, uint64_t key)
+    {
+        if (obj.lifetime_id != 0)
+        {
+            m_lifetime_to_key.erase(obj.lifetime_id);
+        }
+        obj.lifetime_id = m_next_object_lifetime_id++;
+        m_lifetime_to_key[obj.lifetime_id] = key;
+    }
+
+    void forget_object_lifetime(const SceneObject& obj)
+    {
+        if (obj.lifetime_id != 0)
+        {
+            m_lifetime_to_key.erase(obj.lifetime_id);
+        }
+    }
+
+    void reindex_object_lifetime(const SceneObject& obj, uint64_t new_key)
+    {
+        if (obj.lifetime_id != 0)
+        {
+            m_lifetime_to_key[obj.lifetime_id] = new_key;
+        }
+    }
+
+    SceneObject& reset_object_locked(uint64_t key,
+                                     pnanovdb_editor_token_t* scene,
+                                     pnanovdb_editor_token_t* name,
+                                     SceneObjectType type)
+    {
+        SceneObject& obj = m_objects[key];
+        begin_object_lifetime(obj, key);
+        obj.reset_source();
+        obj.type = type;
+        obj.scene_token = scene;
+        obj.name_token = name;
+        obj.ensure_shader_name_storage().object_key = key;
+        return obj;
+    }
+
+    template <typename Impl>
+    bool add_with_lock(pnanovdb_editor_token_t* scene,
+                       pnanovdb_editor_token_t* name,
+                       const uint64_t* reserved_lifetime,
+                       Impl&& impl)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (reserved_lifetime && !load_reservation_matches(make_key(scene, name), *reserved_lifetime))
+        {
+            return false;
+        }
+        return impl();
+    }
+
     // Private implementation helpers (called with mutex already held)
-    void add_nanovdb_impl(pnanovdb_editor_token_t* scene,
+    bool add_nanovdb_impl(pnanovdb_editor_token_t* scene,
                           pnanovdb_editor_token_t* name,
                           pnanovdb_compute_array_t* array,
                           pnanovdb_compute_array_t* params_array,
                           const pnanovdb_compute_t* compute,
                           pnanovdb_editor_token_t* shader_name,
                           pnanovdb_pipeline_type_t process_pipeline,
-                          pnanovdb_pipeline_type_t render_pipeline);
+                          pnanovdb_pipeline_type_t render_pipeline,
+                          std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_gaussian_owner_out);
 
-    void add_gaussian_data_impl(pnanovdb_editor_token_t* scene,
+    bool add_gaussian_data_impl(pnanovdb_editor_token_t* scene,
                                 pnanovdb_editor_token_t* name,
                                 pnanovdb_raster_gaussian_data_t* gaussian_data,
                                 pnanovdb_compute_array_t* params_array,
@@ -839,8 +676,23 @@ private:
                                 pnanovdb_pipeline_type_t render_pipeline,
                                 std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_owner_out);
 
+    bool load_reservation_matches(uint64_t key, uint64_t lifetime_id) const;
+    bool render_insertion_allowed(uint64_t key, pnanovdb_editor_token_t* name) const;
+    bool add_mesh_impl(pnanovdb_editor_token_t* scene,
+                       pnanovdb_editor_token_t* name,
+                       pnanovdb_compute_array_t* indices,
+                       pnanovdb_compute_array_t* positions,
+                       pnanovdb_compute_array_t* colors,
+                       const pnanovdb_compute_t* compute,
+                       pnanovdb_pipeline_type_t process_pipeline,
+                       pnanovdb_pipeline_type_t render_pipeline,
+                       std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_gaussian_owner_out);
+
     mutable std::mutex m_mutex; ///< Protects all operations
+    uint64_t m_next_object_lifetime_id = 1; ///< Assigned while holding m_mutex
     std::map<uint64_t, SceneObject> m_objects; ///< Map of objects by combined token key
+    std::map<uint64_t, uint64_t> m_lifetime_to_key; ///< lifetime_id -> current object key (live objects only)
+    std::map<uint64_t, SceneObject> m_file_replacement_backups; ///< Old objects retained by staged file builds
     std::map<uint64_t, std::shared_ptr<CustomSceneParams>> m_scene_custom_params; ///< Map of scene params by scene key
 };
 
@@ -859,8 +711,18 @@ PNANOVDB_SCENE_MANAGER_EXPORT_CXX size_t capture_shader_default_params(EditorSce
                                                                        size_t buf_size,
                                                                        void* out_buf);
 
-} // namespace pnanovdb_editor
+// Create a SceneView scene and publish each of its cameras into the manager's
+// unified object namespace before a render object is admitted.
+PNANOVDB_SCENE_MANAGER_EXPORT_CXX bool ensure_scene_with_registered_cameras(EditorSceneManager& scene_manager,
+                                                                            SceneView& scene_view,
+                                                                            pnanovdb_editor_token_t* scene_token,
+                                                                            bool create_default_camera = true);
 
-PNANOVDB_CAST_PAIR(pnanovdb_scene_object_t, pnanovdb_editor::SceneObject)
+// Ensure a restored scene has one usable viewport camera.
+PNANOVDB_SCENE_MANAGER_EXPORT_CXX bool normalize_scene_viewport_camera(EditorSceneManager& scene_manager,
+                                                                       SceneView& scene_view,
+                                                                       pnanovdb_editor_token_t* scene_token);
+
+} // namespace pnanovdb_editor
 
 #endif // NANOVDB_EDITOR_SCENE_MANAGER_H_HAS_BEEN_INCLUDED

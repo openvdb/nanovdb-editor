@@ -12,5 +12,22 @@
             "max": 11,
             "step": 1
         }
+    },
+    "PipelineParams": {
+        "bake_all_directions": {
+            "label": "All Directions",
+            "isBool": true
+        },
+        "ray_dir": {
+            "label": "Ray Dir",
+            "min": -1.0,
+            "max": 1.0,
+            "step": 0.05,
+            "components": ["ray_dir_x", "ray_dir_y", "ray_dir_z"]
+        },
+        "upsample": {
+            "label": "Upsample 2x",
+            "tooltip": "Make RGBA8 grid smoother by duplicating topology at 2x resolution"
+        }
     }
 }

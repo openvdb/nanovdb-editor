@@ -16,6 +16,9 @@
 #include "nanovdb_editor/putil/VoxelBVH.h"
 #include "nanovdb_editor/putil/WorkerThread.hpp"
 
+#include <atomic>
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <functional>
@@ -24,10 +27,21 @@
 #include <string>
 #include <vector>
 
+#if defined(_WIN32)
+#    if defined(pnanovdbeditor_EXPORTS)
+#        define PNANOVDB_PIPELINE_RUNTIME_EXPORT_CXX __declspec(dllexport)
+#    else
+#        define PNANOVDB_PIPELINE_RUNTIME_EXPORT_CXX __declspec(dllimport)
+#    endif
+#else
+#    define PNANOVDB_PIPELINE_RUNTIME_EXPORT_CXX __attribute__((visibility("default")))
+#endif
+
 namespace pnanovdb_editor
 {
 
 struct SceneObject;
+struct PipelineStage;
 class EditorSceneManager;
 class EditorScene;
 class PipelineRuntime;
@@ -44,7 +58,12 @@ struct MeshLoadParams
     pnanovdb_uint32_t show_debug = 0u; //!< nonzero -> triangles_debug_render
 };
 
-PNANOVDB_REFLECT_STRUCT_OPAQUE_IMPL(GaussianVoxelizeParams)
+#define PNANOVDB_REFLECT_TYPE GaussianVoxelizeParams
+PNANOVDB_REFLECT_BEGIN()
+PNANOVDB_REFLECT_VALUE(float, voxels_per_unit, 0, 0)
+PNANOVDB_REFLECT_END(0)
+#undef PNANOVDB_REFLECT_TYPE
+
 PNANOVDB_REFLECT_STRUCT_OPAQUE_IMPL(MeshLoadParams)
 
 namespace detail
@@ -71,14 +90,24 @@ inline bool params_field_set(pnanovdb_pipeline_params_t* params, Field Params::*
 }
 } // namespace detail
 
+inline float voxels_per_unit_clamp(float value)
+{
+    if (!std::isfinite(value))
+    {
+        return k_default_voxels_per_unit;
+    }
+    return std::clamp(value, 1.0f, 512.0f);
+}
+
 inline float pipeline_params_get_voxels_per_unit(const pnanovdb_pipeline_params_t* params)
 {
-    return detail::params_field_get(params, &GaussianVoxelizeParams::voxels_per_unit, k_default_voxels_per_unit);
+    return voxels_per_unit_clamp(
+        detail::params_field_get(params, &GaussianVoxelizeParams::voxels_per_unit, k_default_voxels_per_unit));
 }
 
 inline bool pipeline_params_set_voxels_per_unit(pnanovdb_pipeline_params_t* params, float value)
 {
-    return detail::params_field_set(params, &GaussianVoxelizeParams::voxels_per_unit, value);
+    return detail::params_field_set(params, &GaussianVoxelizeParams::voxels_per_unit, voxels_per_unit_clamp(value));
 }
 
 inline float pipeline_params_get_mesh_load_inflation_radius(const pnanovdb_pipeline_params_t* params)
@@ -210,10 +239,15 @@ struct VoxelBVHBuildRequest
     pnanovdb_compute_array_t* array_ptrs[k_max_arrays] = {};
 };
 
+inline bool voxelbvh_interface_supports_user_cancel(const pnanovdb_voxelbvh_t* iface)
+{
+    return iface && iface->context_set_cancel;
+}
+
 /*!
     \brief Base class for per-pipeline async workers.
 */
-class AsyncWorker
+class PNANOVDB_PIPELINE_RUNTIME_EXPORT_CXX AsyncWorker
 {
 public:
     virtual ~AsyncWorker() = default;
@@ -225,6 +259,7 @@ public:
 
     void cancel_and_join()
     {
+        request_cancel();
         m_worker.reset();
         m_enqueued = false;
         m_task_id = pnanovdb_util::WorkerThread::invalidTaskId();
@@ -236,13 +271,35 @@ public:
         {
             return;
         }
-        m_released = true;
-
         cancel_and_join();
-        release_resources();
+        release_after_join();
     }
 
-    bool is_running()
+    void release_after_join()
+    {
+        if (m_released)
+        {
+            return;
+        }
+        m_released = true;
+        release_resources();
+        clear_pending_cancel_ui();
+        finish_task();
+    }
+
+    void prepare_for_session()
+    {
+        if (!m_released)
+        {
+            return;
+        }
+        m_worker = std::make_unique<pnanovdb_util::WorkerThread>();
+        m_task_id = pnanovdb_util::WorkerThread::invalidTaskId();
+        m_enqueued = false;
+        m_released = false;
+    }
+
+    bool is_running() const
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         if (!m_worker || !m_enqueued)
@@ -252,13 +309,13 @@ public:
         return !m_worker->isTaskCompleted(m_task_id);
     }
 
-    bool is_completed()
+    bool is_completed() const
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         return m_worker && m_worker->isTaskCompleted(m_task_id);
     }
 
-    bool is_busy()
+    bool is_busy() const
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         return m_enqueued;
@@ -266,12 +323,27 @@ public:
 
     bool get_progress(std::string& text, float& value);
 
-    pnanovdb_uint32_t pending_scene_token_id();
-    pnanovdb_uint32_t pending_name_token_id();
+    bool pending_target_matches(uint64_t scene_id, uint64_t name_id, uint64_t lifetime_id) const;
+    bool retarget_pending_target(
+        uint64_t old_scene_id, uint64_t old_name_id, uint64_t new_scene_id, uint64_t new_name_id, uint64_t lifetime_id);
 
     virtual bool handle_completion() = 0;
 
     virtual pnanovdb_pipeline_type_t pipeline_type() const = 0;
+
+    virtual bool supports_user_cancel() const
+    {
+        return false;
+    }
+
+    void request_user_cancel(SceneObject* scene_obj = nullptr);
+    bool user_cancel_requested() const;
+
+    // Worker has a finished task waiting for handle_completion()
+    bool pending_completion() const
+    {
+        return is_busy() && is_completed();
+    }
 
     virtual void init(const PipelineContext& ctx, EditorScene* editor_scene)
     {
@@ -297,6 +369,10 @@ protected:
     {
     }
 
+    virtual void request_cancel()
+    {
+    }
+
     virtual const char* progress_waiting_text() const
     {
         return "Waiting for worker...";
@@ -309,34 +385,55 @@ protected:
 
     void set_pending_target(SceneObject* scene_obj, EditorSceneManager* scene_manager, const pnanovdb_compute_t* compute);
 
-    pnanovdb_editor_token_t* pending_scene_token() const;
-    pnanovdb_editor_token_t* pending_name_token() const;
+    void pending_target_tokens(pnanovdb_editor_token_t** scene, pnanovdb_editor_token_t** name) const;
 
     bool with_pending_object(const std::function<void(SceneObject*)>& fn);
 
+    bool with_pending_process_step(const std::function<void(SceneObject*, PipelineStage&)>& fn);
+
+    bool consume_user_cancelled();
+
+    void clear_pending_cancel_ui();
+
     void finish_task()
     {
-        m_pending_scene_token_id = 0;
-        m_pending_name_token_id = 0;
-        m_pending_scene_manager = nullptr;
-        m_pending_compute = nullptr;
-        m_enqueued = false;
+        std::lock_guard<std::mutex> lock(m_mutex);
         if (m_worker)
         {
             m_worker->removeCompletedTask(m_task_id);
         }
+        m_pending_scene_token_id = 0;
+        m_pending_name_token_id = 0;
+        m_pending_object_lifetime_id = 0;
+        m_pending_scene_manager = nullptr;
+        m_pending_compute = nullptr;
+        m_pending_process_step = -1;
+        m_pending_process_type = pnanovdb_pipeline_type_noop;
+        m_pending_process_revision = 0;
+        m_enqueued = false;
+        m_user_cancelled = false;
+        m_cancel_snapshot_restored = false;
     }
 
     std::unique_ptr<pnanovdb_util::WorkerThread> m_worker = std::make_unique<pnanovdb_util::WorkerThread>();
     pnanovdb_util::WorkerThread::TaskId m_task_id = pnanovdb_util::WorkerThread::invalidTaskId();
     bool m_enqueued = false;
-    std::mutex m_mutex;
+    mutable std::mutex m_mutex;
 
-    pnanovdb_uint32_t m_pending_scene_token_id = 0;
-    pnanovdb_uint32_t m_pending_name_token_id = 0;
+    uint64_t m_pending_scene_token_id = 0;
+    uint64_t m_pending_name_token_id = 0;
+    uint64_t m_pending_object_lifetime_id = 0;
     EditorSceneManager* m_pending_scene_manager = nullptr;
     const pnanovdb_compute_t* m_pending_compute = nullptr;
+    int m_pending_process_step = -1;
+    pnanovdb_pipeline_type_t m_pending_process_type = pnanovdb_pipeline_type_noop;
+    uint64_t m_pending_process_revision = 0;
     bool m_released = false;
+    bool m_user_cancelled = false;
+    // request_user_cancel() restores the Run snapshot immediately. Remember
+    // that fact so completion does not mistake the consumed snapshot for a
+    // configuration edit and clear dirty work that the snapshot restored.
+    bool m_cancel_snapshot_restored = false;
 };
 
 // ============================================================================
@@ -379,7 +476,7 @@ private:
 // VoxelBVHWorker - Gaussian/triangles/lines/arrays -> NanoVDB via BVH
 // ============================================================================
 
-class VoxelBVHWorker : public AsyncWorker
+class PNANOVDB_PIPELINE_RUNTIME_EXPORT_CXX VoxelBVHWorker : public AsyncWorker
 {
 public:
     static constexpr pnanovdb_pipeline_type_t kPipelineType = pnanovdb_pipeline_type_voxelbvh_build;
@@ -391,6 +488,15 @@ public:
     {
         return kPipelineType;
     }
+    bool supports_user_cancel() const override
+    {
+        return voxelbvh_interface_supports_user_cancel(m_iface);
+    }
+    void init(const PipelineContext& ctx, EditorScene* editor_scene) override
+    {
+        (void)ctx;
+        m_editor_scene = editor_scene;
+    }
 
     bool start(SceneObject* scene_obj,
                EditorSceneManager* scene_manager,
@@ -401,9 +507,71 @@ public:
 protected:
     void release_resources() override;
 
+    void request_cancel() override
+    {
+        m_cancel.store(1u, std::memory_order_relaxed);
+    }
+
     const char* progress_running_fallback_text() const override
     {
         return "Building VoxelBVH...";
+    }
+
+private:
+    void finish_file_replacement(bool success);
+
+    EditorScene* m_editor_scene = nullptr;
+    pnanovdb_voxelbvh_t* m_iface = nullptr;
+    pnanovdb_voxelbvh_context_t* m_worker_ctx = nullptr;
+    pnanovdb_compute_queue_t* m_worker_queue = nullptr;
+
+    VoxelBVHBuildRequest m_pending_request;
+    pnanovdb_compute_array_t* m_pending_result = nullptr;
+    std::atomic<pnanovdb_uint32_t> m_cancel{ 0u };
+};
+
+// ============================================================================
+// VoxelBVHRgba8Worker - VoxelBVH NanoVDB grid -> RGBA8 NanoVDB image grid
+// ============================================================================
+
+class VoxelBVHRgba8Worker : public AsyncWorker
+{
+public:
+    static constexpr pnanovdb_pipeline_type_t kPipelineType = pnanovdb_pipeline_type_voxelbvh_rgba8;
+
+    VoxelBVHRgba8Worker() = default;
+    ~VoxelBVHRgba8Worker() override;
+
+    pnanovdb_pipeline_type_t pipeline_type() const override
+    {
+        return kPipelineType;
+    }
+    bool supports_user_cancel() const override
+    {
+        return voxelbvh_interface_supports_user_cancel(m_iface);
+    }
+
+    bool start(SceneObject* scene_obj,
+               EditorSceneManager* scene_manager,
+               const pnanovdb_pipeline_context_t* ctx,
+               pnanovdb_compute_array_t* src_nanovdb,
+               std::shared_ptr<pnanovdb_compute_array_t> src_owner,
+               const std::vector<pnanovdb_vec3_t>& index_space_ray_directions,
+               pnanovdb_bool_t upsample);
+    bool handle_completion() override;
+    void report_bake_progress(float grid_fraction);
+
+protected:
+    void release_resources() override;
+
+    void request_cancel() override
+    {
+        m_cancel.store(1u, std::memory_order_relaxed);
+    }
+
+    const char* progress_running_fallback_text() const override
+    {
+        return "Converting VoxelBVH to RGBA8...";
     }
 
 private:
@@ -411,8 +579,16 @@ private:
     pnanovdb_voxelbvh_context_t* m_worker_ctx = nullptr;
     pnanovdb_compute_queue_t* m_worker_queue = nullptr;
 
-    VoxelBVHBuildRequest m_pending_request;
+    pnanovdb_compute_array_t* m_pending_src = nullptr;
+    std::shared_ptr<pnanovdb_compute_array_t> m_pending_src_owner;
+    std::vector<pnanovdb_vec3_t> m_pending_ray_directions;
+    pnanovdb_bool_t m_pending_upsample = PNANOVDB_FALSE;
     pnanovdb_compute_array_t* m_pending_result = nullptr;
+
+    pnanovdb_uint32_t m_progress_total_grids = 1u;
+    pnanovdb_uint32_t m_progress_current_grid = 0u;
+
+    std::atomic<pnanovdb_uint32_t> m_cancel{ 0u };
 };
 
 // ============================================================================
@@ -449,7 +625,9 @@ private:
                pnanovdb_pipeline_type_t process_pipeline,
                pnanovdb_pipeline_type_t render_pipeline,
                EditorSceneManager* scene_manager,
-               pnanovdb_editor_token_t* scene_token);
+               pnanovdb_editor_token_t* scene_token,
+               pnanovdb_editor_token_t* name_token,
+               uint64_t reservation_id);
 
     pnanovdb_compute_queue_t* cleanup_queue() const
     {
@@ -471,6 +649,8 @@ private:
     pnanovdb_raster_context_t* m_pending_raster_ctx = nullptr;
     pnanovdb_compute_array_t* m_pending_nanovdb_array = nullptr;
     pnanovdb_editor_token_t* m_pending_scene_token = nullptr;
+    pnanovdb_editor_token_t* m_pending_name_token = nullptr;
+    uint64_t m_pending_reservation_id = 0;
 
     // Pipeline config for pending import
     pnanovdb_pipeline_type_t m_pending_process_pipeline = pnanovdb_pipeline_type_noop;
@@ -498,7 +678,11 @@ public:
     }
     void init(const PipelineContext& ctx, EditorScene* editor_scene) override;
 
-    bool start(const char* mesh_filepath, const MeshLoadParams& load_params, pnanovdb_editor_token_t* scene_token);
+    bool start(const char* mesh_filepath,
+               const MeshLoadParams& load_params,
+               pnanovdb_editor_token_t* scene_token,
+               pnanovdb_editor_token_t* name_token,
+               uint64_t reservation_id);
 
     bool handle_completion() override;
 
@@ -524,6 +708,9 @@ private:
     std::string m_pending_filepath;
     MeshLoadParams m_pending_params{};
     pnanovdb_editor_token_t* m_pending_scene_token = nullptr;
+    pnanovdb_editor_token_t* m_pending_name_token = nullptr;
+    uint64_t m_pending_reservation_id = 0;
+    pnanovdb_pipeline_type_t m_pending_process_pipeline = pnanovdb_pipeline_type_voxelbvh_build;
 
     pnanovdb_compute_array_t* m_pending_positions = nullptr;
     pnanovdb_compute_array_t* m_pending_indices = nullptr;
@@ -606,22 +793,31 @@ public:
         return busy_worker() != nullptr;
     }
 
+    void set_editor_scene(EditorScene* editor_scene);
+    void begin_quiesce();
+    void finish_quiesce();
+    EditorScene* editor_scene() const
+    {
+        return m_editor_scene;
+    }
+
     void handle_completions()
     {
         for (const auto& w : m_workers)
         {
-            if (w && !w->is_running())
+            if (w && w->pending_completion())
             {
                 w->handle_completion();
             }
         }
     }
 
-private:
-    void shutdown();
+    void quiesce();
 
+private:
     std::vector<std::unique_ptr<AsyncWorker>> m_workers;
-    bool m_shutdown_done = false;
+    EditorScene* m_editor_scene = nullptr;
+    bool m_session_active = false;
 };
 
 // ============================================================================

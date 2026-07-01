@@ -173,7 +173,8 @@ bool SceneTree::renderSceneItem(const char* name,
                                 bool badgeVisible,
                                 bool* visibilityToggle,
                                 uint64_t* dragPayloadId,
-                                uint64_t* droppedSourceId)
+                                uint64_t* droppedSourceId,
+                                bool* renameRequested)
 {
     bool clicked = false;
     if (useIndent)
@@ -247,8 +248,8 @@ bool SceneTree::renderSceneItem(const char* name,
         ImGui::EndDragDropTarget();
     }
 
-    // Right-click context menu (only if deletion is allowed)
-    if (deleteRequested && ImGui::BeginPopupContextItem())
+    // Right-click context menu (only if an action is allowed)
+    if ((deleteRequested || renameRequested) && ImGui::BeginPopupContextItem())
     {
         if (moveUpRequested && ImGui::MenuItem("Move Up"))
         {
@@ -262,7 +263,11 @@ bool SceneTree::renderSceneItem(const char* name,
         {
             ImGui::Separator();
         }
-        if (ImGui::MenuItem("Remove"))
+        if (renameRequested && ImGui::MenuItem("Rename"))
+        {
+            *renameRequested = true;
+        }
+        if (deleteRequested && ImGui::MenuItem("Remove"))
         {
             *deleteRequested = true;
         }
@@ -533,16 +538,30 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
             ImGui::EndPopup();
         }
 
-        // Right-side "+" icon on scene root row (add new scene)
+        // Right-side buttons on scene root row: "Add Object" and "Add Scene"
         if (ptr->editor_scene)
         {
-            float iconSize = ImGui::GetFrameHeight();
-            float rightEdge = ImGui::GetWindowContentRegionMax().x;
-            float plusXPos = rightEdge - iconSize;
-            ImGui::SameLine(plusXPos);
-            ImDrawList* drawList = ImGui::GetWindowDrawList();
-            drawPlusIcon(drawList, ImGui::GetCursorScreenPos(), iconSize, 2.0f);
-            if (ImGui::InvisibleButton("##AddSceneRoot", ImVec2(iconSize, iconSize)))
+            const float spacing = ImGui::GetStyle().ItemSpacing.x;
+            const float framePadX = ImGui::GetStyle().FramePadding.x * 2.0f;
+            const float rightEdge = ImGui::GetWindowContentRegionMax().x;
+
+            const float sceneWidth = ImGui::CalcTextSize("Add Scene").x + framePadX;
+            const float objWidth = ImGui::CalcTextSize("Add Object").x + framePadX;
+            const float sceneXPos = rightEdge - sceneWidth;
+            const float objXPos = sceneXPos - objWidth - spacing;
+
+            ImGui::SameLine(objXPos);
+            if (ImGui::Button("Add Object##AddEmptyObject"))
+            {
+                ptr->editor_scene->add_empty_object(current_scene);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Add empty object (all stages No Operation)");
+            }
+
+            ImGui::SameLine(sceneXPos);
+            if (ImGui::Button("Add Scene##AddSceneRoot"))
             {
                 pnanovdb_editor_token_t* new_scene = createUniqueSceneToken(ptr->editor_scene);
                 if (new_scene)
@@ -760,13 +779,14 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                                         // Sync camera state to render settings
                                         int cameraIdx = ptr->editor_scene->get_camera_frustum_index(camera_token);
                                         // Set far plane to infinity for viewport camera
-                                        if (camera->configs && cameraIdx >= 0 && cameraIdx < camera->num_cameras)
+                                        if (camera->states && camera->configs && cameraIdx >= 0 &&
+                                            cameraIdx < camera->num_cameras)
                                         {
                                             camera->configs[cameraIdx].far_plane = PNANOVDB_CAMERA_INFINITY;
+                                            ptr->render_settings->camera_state = camera->states[cameraIdx];
+                                            ptr->render_settings->camera_config = camera->configs[cameraIdx];
+                                            ptr->render_settings->sync_camera = PNANOVDB_TRUE;
                                         }
-                                        ptr->render_settings->camera_state = camera->states[cameraIdx];
-                                        ptr->render_settings->camera_config = camera->configs[cameraIdx];
-                                        ptr->render_settings->sync_camera = PNANOVDB_TRUE;
                                     }
                                     if (canDeleteCameras && ImGui::MenuItem("Remove"))
                                     {
@@ -844,6 +864,30 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                 // Collect items to delete (can't delete while iterating)
                 std::vector<std::string> itemsToDelete;
 
+                // Inline object rename state
+                static uint64_t s_obj_rename_target_id = 0;
+                static uint64_t s_obj_rename_scene_id = 0;
+                static char s_obj_rename_buffer[128] = "";
+                static bool s_obj_rename_focus = false;
+                auto clearObjRename = []()
+                {
+                    s_obj_rename_target_id = 0;
+                    s_obj_rename_scene_id = 0;
+                    s_obj_rename_focus = false;
+                };
+                auto commitObjRename = [&](pnanovdb_editor_token_t* scene_tok, pnanovdb_editor_token_t* old_tok)
+                {
+                    if (ptr && ptr->editor_scene && scene_tok && old_tok && s_obj_rename_buffer[0])
+                    {
+                        pnanovdb_editor_token_t* new_tok = EditorToken::getInstance().getToken(s_obj_rename_buffer);
+                        if (new_tok && new_tok->id != old_tok->id)
+                        {
+                            ptr->editor_scene->rename_object(scene_tok, old_tok, new_tok);
+                        }
+                    }
+                    clearObjRename();
+                };
+
                 pnanovdb_editor_t* editor = ptr->editor_scene->get_editor();
                 pnanovdb_editor_token_t* current_scene = ptr->editor_scene->get_current_scene_token();
                 auto* scene_manager = ptr->editor_scene->get_scene_manager();
@@ -871,6 +915,7 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                     const char* badge = nullptr;
                     bool isVisible = true;
 
+                    bool object_exists = false;
                     if (scene_manager)
                     {
                         scene_manager->with_object(
@@ -879,6 +924,7 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                             {
                                 if (obj)
                                 {
+                                    object_exists = true;
                                     isVisible = obj->visible;
                                     auto rm = pnanovdb_editor::pipeline_get_render_method(obj->render_pipeline());
                                     if (rm == pnanovdb_pipeline_render_method_nanovdb)
@@ -894,6 +940,18 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                                 }
                             });
                     }
+                    if (object_exists && itemViewType == ViewType::None)
+                    {
+                        if (ptr->editor_scene->get_gaussian_views().count(token->id) > 0)
+                        {
+                            itemViewType = ViewType::GaussianScenes;
+                        }
+                        else
+                        {
+                            itemViewType = ViewType::NanoVDBs;
+                        }
+                        badge = "-";
+                    }
                     if (itemViewType == ViewType::None)
                     {
                         continue;
@@ -902,50 +960,91 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                     uint64_t droppedSourceId = 0;
 
                     ImGui::PushID((int)token->id);
-                    if (renderSceneItem(name, isSelected, indentSpacing, false, &deleteRequested, &moveUpRequested,
-                                        &moveDownRequested, badge, isVisible, &isVisible, &token->id, &droppedSourceId))
+                    bool renameRequested = false;
+                    const bool isRenameTarget = current_scene && s_obj_rename_target_id == token->id &&
+                                                s_obj_rename_scene_id == current_scene->id;
+                    if (isRenameTarget)
                     {
-                        if (editor && current_scene)
+                        ImGui::PushItemWidth(-1.0f);
+                        if (s_obj_rename_focus)
                         {
-                            // Set pending viewport so handle_pending_view_changes processes the selection
-                            if (itemViewType == ViewType::NanoVDBs)
-                                ptr->pending.viewport_nanovdb_array = name;
-                            else if (itemViewType == ViewType::GaussianScenes)
-                                ptr->pending.viewport_gaussian_view = name;
-                            pnanovdb_editor::select_render_view(editor, current_scene, token);
+                            ImGui::SetKeyboardFocusHere();
+                            s_obj_rename_focus = false;
+                        }
+                        bool commitRename = ImGui::InputText(
+                            "##RenameObjectInline", s_obj_rename_buffer, IM_ARRAYSIZE(s_obj_rename_buffer),
+                            ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+                        ImGui::PopItemWidth();
+                        if (ImGui::IsItemActive() && ImGui::IsKeyPressed(ImGuiKey_Escape))
+                        {
+                            clearObjRename();
+                        }
+                        else if (commitRename)
+                        {
+                            commitObjRename(current_scene, token);
+                        }
+                        else if (ImGui::IsItemDeactivated())
+                        {
+                            // Clicked away without pressing Enter: cancel the rename.
+                            clearObjRename();
                         }
                     }
-                    if (droppedSourceId != 0 && droppedSourceId != token->id)
+                    else
                     {
-                        pnanovdb_editor_token_t* source_token = EditorToken::getInstance().getTokenById(droppedSourceId);
-                        if (source_token)
+                        if (renderSceneItem(name, isSelected, indentSpacing, false, &deleteRequested, &moveUpRequested,
+                                            &moveDownRequested, badge, isVisible, &isVisible, &token->id,
+                                            &droppedSourceId, &renameRequested))
                         {
-                            ptr->editor_scene->move_renderable_before(current_scene, source_token, token);
+                            if (editor && current_scene)
+                            {
+                                // Set pending viewport so handle_pending_view_changes processes the selection
+                                if (itemViewType == ViewType::NanoVDBs)
+                                    ptr->pending.viewport_nanovdb_array = name;
+                                else if (itemViewType == ViewType::GaussianScenes)
+                                    ptr->pending.viewport_gaussian_view = name;
+                                pnanovdb_editor::select_render_view(editor, current_scene, token);
+                            }
                         }
-                    }
-                    if (scene_manager)
-                    {
-                        scene_manager->with_object(current_scene, token,
-                                                   [&](pnanovdb_editor::SceneObject* obj)
-                                                   {
-                                                       if (obj)
+                        if (droppedSourceId != 0 && droppedSourceId != token->id)
+                        {
+                            pnanovdb_editor_token_t* source_token =
+                                EditorToken::getInstance().getTokenById(droppedSourceId);
+                            if (source_token)
+                            {
+                                ptr->editor_scene->move_renderable_before(current_scene, source_token, token);
+                            }
+                        }
+                        if (scene_manager)
+                        {
+                            scene_manager->with_object(current_scene, token,
+                                                       [&](pnanovdb_editor::SceneObject* obj)
                                                        {
-                                                           obj->visible = isVisible;
-                                                       }
-                                                   });
-                    }
+                                                           if (obj)
+                                                           {
+                                                               obj->visible = isVisible;
+                                                           }
+                                                       });
+                        }
 
-                    if (moveUpRequested)
-                    {
-                        ptr->editor_scene->move_renderable_order(current_scene, token, -1);
-                    }
-                    if (moveDownRequested)
-                    {
-                        ptr->editor_scene->move_renderable_order(current_scene, token, +1);
-                    }
-                    if (deleteRequested)
-                    {
-                        itemsToDelete.push_back(name);
+                        if (moveUpRequested)
+                        {
+                            ptr->editor_scene->move_renderable_order(current_scene, token, -1);
+                        }
+                        if (moveDownRequested)
+                        {
+                            ptr->editor_scene->move_renderable_order(current_scene, token, +1);
+                        }
+                        if (deleteRequested)
+                        {
+                            itemsToDelete.push_back(name);
+                        }
+                        if (renameRequested)
+                        {
+                            s_obj_rename_target_id = token->id;
+                            s_obj_rename_scene_id = current_scene ? current_scene->id : 0;
+                            std::snprintf(s_obj_rename_buffer, sizeof(s_obj_rename_buffer), "%s", name);
+                            s_obj_rename_focus = true;
+                        }
                     }
                     ImGui::PopID();
                 }

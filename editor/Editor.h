@@ -17,6 +17,9 @@
 
 #include <thread>
 #include <atomic>
+#include <condition_variable>
+#include <deque>
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -52,6 +55,8 @@ struct pnanovdb_editor_impl_t
     pnanovdb_editor::EditorScene* editor_scene;
     pnanovdb_editor::ParamMapRegistry* param_map_registry;
     std::unique_ptr<pnanovdb_editor::PipelineRuntime> pipeline_runtime;
+    std::string pending_scene_path;
+    pnanovdb_bool_t pending_scene_overwrite;
 
     // Currently used by the render thread in show()
     const pnanovdb_compiler_t* compiler;
@@ -93,6 +98,9 @@ struct pnanovdb_editor_impl_t
 namespace pnanovdb_editor
 {
 PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor();
+
+void defer_gaussian_data_destruction(pnanovdb_editor_impl_t* impl,
+                                     std::shared_ptr<pnanovdb_raster_gaussian_data_t> owner);
 
 template <typename T>
 struct PendingData
@@ -143,17 +151,102 @@ struct ConstPendingData
     }
 };
 
-// Pending removal request for deferred execution
-// If name is nullptr, this signals removal of the entire scene (after all objects are removed)
-struct PendingRemoval
+struct RenderThreadTaskQueue
 {
-    pnanovdb_editor_token_t* scene;
-    pnanovdb_editor_token_t* name;
+    struct Task
+    {
+        std::function<pnanovdb_bool_t()> run;
+        bool blocking = true;
+        std::mutex mutex;
+        std::condition_variable cv;
+        bool done = false;
+        pnanovdb_bool_t result = PNANOVDB_FALSE;
+    };
+
+    std::mutex mutex;
+    std::deque<std::shared_ptr<Task>> tasks;
+    bool accepting = true;
+
+    // Any thread: enqueue and block until the render thread runs the task.
+    // Returns PNANOVDB_FALSE without running if the queue was already closed.
+    pnanovdb_bool_t run_blocking(std::function<pnanovdb_bool_t()> fn)
+    {
+        auto task = std::make_shared<Task>();
+        task->run = std::move(fn);
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            if (!accepting)
+                return PNANOVDB_FALSE;
+            tasks.push_back(task);
+        }
+        std::unique_lock<std::mutex> lock(task->mutex);
+        task->cv.wait(lock, [&task]() { return task->done; });
+        return task->result;
+    }
+
+    // Any thread: enqueue fire-and-forget work for the render thread. Dropped
+    // (never run) if the queue is closed, matching the old pending-queue teardown.
+    void run_async(std::function<void()> fn)
+    {
+        auto task = std::make_shared<Task>();
+        task->blocking = false;
+        task->run = [fn = std::move(fn)]()
+        {
+            fn();
+            return PNANOVDB_TRUE;
+        };
+        std::lock_guard<std::mutex> lock(mutex);
+        if (!accepting)
+            return;
+        tasks.push_back(std::move(task));
+    }
+
+    // Render thread: run every queued task; wake blocking callers with the result.
+    void drain()
+    {
+        for (auto& task : take())
+        {
+            const pnanovdb_bool_t result = task->run();
+            if (task->blocking)
+                complete(task, result);
+        }
+    }
+
+    // Stop accepting; fail blocking callers and drop async tasks.
+    void close()
+    {
+        for (auto& task : take(/*stop_accepting*/ true))
+        {
+            if (task->blocking)
+                complete(task, PNANOVDB_FALSE);
+        }
+    }
+
+private:
+    std::deque<std::shared_ptr<Task>> take(bool stop_accepting = false)
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (stop_accepting)
+            accepting = false;
+        std::deque<std::shared_ptr<Task>> pending;
+        pending.swap(tasks);
+        return pending;
+    }
+
+    static void complete(const std::shared_ptr<Task>& task, pnanovdb_bool_t result)
+    {
+        {
+            std::lock_guard<std::mutex> lock(task->mutex);
+            task->result = result;
+            task->done = true;
+        }
+        task->cv.notify_one();
+    }
 };
 
 struct EditorWorker
 {
-    std::thread* thread;
+    std::thread* thread = nullptr;
     std::atomic<bool> should_stop{ false };
     std::atomic<bool> is_starting{ true };
     std::atomic<bool> params_dirty{ false };
@@ -174,9 +267,7 @@ struct EditorWorker
     std::atomic<uint64_t> last_added_scene_token_id{ 0 };
     std::atomic<uint64_t> last_added_name_token_id{ 0 };
 
-    // Deferred removal queue (worker thread adds, render thread processes)
-    std::mutex pending_removals_mutex;
-    std::vector<PendingRemoval> pending_removals;
+    RenderThreadTaskQueue render_thread_tasks;
 
     pnanovdb_editor_config_t config = {};
     std::string config_ip_address;

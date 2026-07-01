@@ -22,6 +22,7 @@
 #include "Profiler.h"
 #include "ShaderCompileUtils.h"
 #include "EditorScene.h"
+#include "SceneSerializer.h"
 #include "ImguiInstance.h"
 #include "RenderSettingsConfig.h"
 
@@ -55,6 +56,12 @@ static const pnanovdb_uint32_t s_default_height = 720u;
 
 namespace pnanovdb_editor
 {
+
+void defer_gaussian_data_destruction(pnanovdb_editor_impl_t* impl, std::shared_ptr<pnanovdb_raster_gaussian_data_t> owner)
+{
+    if (impl && owner)
+        impl->gaussian_data_destruction_queue_pending.push_back(std::move(owner));
+}
 
 template <typename WorkerOp, typename ImmediateOp>
 static void dispatch_worker_or_immediate(pnanovdb_editor_t* editor, WorkerOp worker_op, ImmediateOp immediate_op)
@@ -143,6 +150,8 @@ static pnanovdb_bool_t init_impl(pnanovdb_editor_t* editor,
     editor->impl->renderer = NULL;
     editor->impl->editor_scene = NULL;
     editor->impl->param_map_registry = NULL;
+    editor->impl->pending_scene_path.clear();
+    editor->impl->pending_scene_overwrite = PNANOVDB_FALSE;
 
     return PNANOVDB_TRUE;
 }
@@ -452,10 +461,40 @@ pnanovdb_int32_t editor_get_external_active_count(void* external_active_count)
     return count;
 };
 
+static pnanovdb_bool_t apply_load_scene(pnanovdb_editor_t* editor, const char* filepath, pnanovdb_bool_t overwrite);
+static pnanovdb_bool_t apply_save_scene(pnanovdb_editor_t* editor, const char* filepath);
+
+static pnanovdb_bool_t run_on_render_thread(pnanovdb_editor_t* editor, std::function<pnanovdb_bool_t()> fn)
+{
+    EditorWorker* worker = editor->impl->editor_worker;
+    if (!worker || (worker->thread && worker->thread->get_id() == std::this_thread::get_id()))
+        return fn();
+    return worker->render_thread_tasks.run_blocking(std::move(fn));
+}
+
+static void post_to_render_thread(pnanovdb_editor_t* editor, std::function<void()> fn)
+{
+    if (editor->impl->editor_worker)
+        editor->impl->editor_worker->render_thread_tasks.run_async(std::move(fn));
+    else
+        fn();
+}
+
 void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb_editor_config_t* config)
 {
+    auto release_worker_waiters = [editor]()
+    {
+        if (editor->impl->editor_worker)
+        {
+            editor->impl->editor_worker->is_starting.store(false);
+            editor->impl->editor_worker->render_thread_tasks.close();
+        }
+    };
+
     if (!editor->impl->compute || !editor->impl->compiler || !device || !config)
     {
+        release_worker_waiters();
+        editor->impl->show_active.store(false);
         return;
     }
 
@@ -481,6 +520,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     pnanovdb_imgui_window_interface_t* imgui_window_iface = pnanovdb_imgui_get_window_interface();
     if (!imgui_window_iface)
     {
+        release_worker_waiters();
         editor->impl->show_active.store(false);
         return;
     }
@@ -494,6 +534,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
     if (!imgui_window || !imgui_user_settings)
     {
+        release_worker_waiters();
         editor->impl->show_active.store(false);
         return;
     }
@@ -517,6 +558,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
     if (!imgui_user_instance)
     {
+        release_worker_waiters();
         editor->impl->show_active.store(false);
         return;
     }
@@ -637,6 +679,13 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         pnanovdb_editor::pipeline_init(raster_init_ctx, editor->impl->editor_scene);
     }
 
+    if (!editor->impl->pending_scene_path.empty())
+    {
+        const std::string pending_path = std::move(editor->impl->pending_scene_path);
+        editor->impl->pending_scene_path.clear();
+        apply_load_scene(editor, pending_path.c_str(), editor->impl->pending_scene_overwrite);
+    }
+
     if (editor->impl->editor_worker)
     {
         // Signal that the render loop has started
@@ -659,6 +708,9 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     bool should_run = true;
     while (should_run && editor_sigint_should_run())
     {
+        if (editor->impl->editor_worker)
+            editor->impl->editor_worker->render_thread_tasks.drain();
+
         if (editor->impl->editor_worker && editor->impl->editor_worker->should_stop.load())
         {
             auto log_print = compute_interface->get_log_print(compute_context);
@@ -687,6 +739,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         editor->impl->editor_scene->process_pending_ui_changes();
 
         // handle async operations
+        pnanovdb_editor::pipeline_process_pending_user_cancels(editor->impl->scene_manager);
         bool async_in_progress =
             pnanovdb_editor::pipeline_update(imgui_user_instance->progress.text, imgui_user_instance->progress.value);
 
@@ -694,6 +747,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         {
             imgui_user_instance->progress.reset();
         }
+        editor->impl->editor_scene->process_pending_restores();
 
         // update scene
         editor->impl->editor_scene->sync_selected_view_with_current();
@@ -905,6 +959,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     {
         editor_sigint_unregister();
     }
+    release_worker_waiters();
     editor->impl->show_active.store(false);
 }
 
@@ -949,9 +1004,9 @@ void start(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovd
         editor_worker->config.ip_address = editor_worker->config_ip_address.c_str();
         editor_worker->config.ui_profile_name = editor_worker->config_ui_profile_name.c_str();
 
+        editor->impl->editor_worker = editor_worker;
         editor_worker->thread =
             new std::thread([editor, device, editor_worker]() { editor->show(editor, device, &editor_worker->config); });
-        editor->impl->editor_worker = editor_worker;
     }
     else
     {
@@ -1040,6 +1095,99 @@ pnanovdb_camera_t* get_camera(pnanovdb_editor_t* editor, pnanovdb_editor_token_t
     }
 
     return nullptr;
+}
+
+pnanovdb_bool_t load_scene(pnanovdb_editor_t* editor, const char* filepath, pnanovdb_bool_t overwrite)
+{
+    if (!editor || !editor->impl || !filepath || filepath[0] == '\0')
+        return PNANOVDB_FALSE;
+
+    std::string validation_error;
+    if (!validate_scene_file_for_load(filepath, &validation_error))
+    {
+        Console::getInstance().addLog(
+            Console::LogLevel::Error, "Load scene: '%s' is not loadable: %s", filepath, validation_error.c_str());
+        return PNANOVDB_FALSE;
+    }
+
+    if (editor->impl->editor_worker)
+    {
+        return run_on_render_thread(editor, [editor, path = std::string(filepath), overwrite]()
+                                    { return apply_load_scene(editor, path.c_str(), overwrite); });
+    }
+
+    if (!editor->impl->editor_scene)
+    {
+        editor->impl->pending_scene_path = filepath;
+        editor->impl->pending_scene_overwrite = overwrite;
+        return PNANOVDB_TRUE;
+    }
+
+    return apply_load_scene(editor, filepath, overwrite);
+}
+
+static pnanovdb_bool_t apply_load_scene(pnanovdb_editor_t* editor, const char* filepath, pnanovdb_bool_t overwrite)
+{
+    EditorScene* editor_scene = editor->impl->editor_scene;
+    if (!editor_scene)
+        return PNANOVDB_FALSE;
+
+    if (overwrite)
+    {
+        for (const std::string& name : editor_scene->find_conflicting_scene_names(filepath))
+        {
+            pnanovdb_editor_token_t* scene_token = EditorToken::getInstance().getToken(name.c_str());
+            if (scene_token)
+                editor_scene->remove_scene(scene_token);
+        }
+    }
+
+    const bool discarded_startup_scene = editor_scene->discard_untouched_startup_scene();
+    try
+    {
+        if (!editor_scene->load_scene_file(filepath))
+        {
+            if (discarded_startup_scene)
+                editor_scene->initialize_for_startup(false);
+            return PNANOVDB_FALSE;
+        }
+        editor_scene->sync_restored_viewport_camera();
+        return PNANOVDB_TRUE;
+    }
+    catch (const std::exception& e)
+    {
+        if (discarded_startup_scene)
+            editor_scene->initialize_for_startup(false);
+        Console::getInstance().addLog(Console::LogLevel::Error, "Load scene failed: %s", e.what());
+        return PNANOVDB_FALSE;
+    }
+}
+
+pnanovdb_bool_t save_scene(pnanovdb_editor_t* editor, const char* filepath)
+{
+    if (!editor || !editor->impl || !filepath || filepath[0] == '\0')
+        return PNANOVDB_FALSE;
+    if (editor->impl->editor_worker)
+    {
+        return run_on_render_thread(
+            editor, [editor, path = std::string(filepath)]() { return apply_save_scene(editor, path.c_str()); });
+    }
+    return apply_save_scene(editor, filepath);
+}
+
+static pnanovdb_bool_t apply_save_scene(pnanovdb_editor_t* editor, const char* filepath)
+{
+    if (!editor->impl->editor_scene)
+        return PNANOVDB_FALSE;
+    try
+    {
+        return editor->impl->editor_scene->save_scene_file(filepath) ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+    }
+    catch (const std::exception& e)
+    {
+        Console::getInstance().addLog(Console::LogLevel::Error, "Save scene failed: %s", e.what());
+        return PNANOVDB_FALSE;
+    }
 }
 
 // Temp: Token management
@@ -1714,27 +1862,9 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
         Console::getInstance().addLog(
             Console::LogLevel::Debug, "Found %zu objects to remove from scene", objects_to_remove.size());
 
-        dispatch_worker_or_immediate(
+        post_to_render_thread(
             editor,
-            // Worker mode: queue all removals for render thread
-            [&](EditorWorker* worker)
-            {
-                std::lock_guard<std::mutex> lock(worker->pending_removals_mutex);
-
-                // Queue each object removal
-                for (auto* obj_name : objects_to_remove)
-                {
-                    worker->pending_removals.push_back({ scene, obj_name });
-                }
-
-                // Queue scene removal (nullptr name signals to remove the scene itself after objects)
-                worker->pending_removals.push_back({ scene, nullptr });
-
-                Console::getInstance().addLog(
-                    "[API] Queued %zu object removals + scene removal for next frame", objects_to_remove.size());
-            },
-            // Non-worker mode: execute removals immediately
-            [&]()
+            [editor, scene, objects_to_remove]()
             {
                 for (auto* obj_name : objects_to_remove)
                 {
@@ -1768,17 +1898,7 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
                                   token_to_string_log(scene), (unsigned long long)scene->id, token_to_string_log(name),
                                   (unsigned long long)name->id);
 
-    dispatch_worker_or_immediate(
-        editor,
-        // Worker mode: queue removal for next frame boundary (prevents UAF)
-        [&](EditorWorker* worker)
-        {
-            Console::getInstance().addLog(Console::LogLevel::Debug, "Queuing removal for next frame");
-            std::lock_guard<std::mutex> lock(worker->pending_removals_mutex);
-            worker->pending_removals.push_back({ scene, name });
-        },
-        // Non-worker mode: execute removal immediately (same thread as render)
-        [&]() { execute_removal(editor, scene, name); });
+    post_to_render_thread(editor, [editor, scene, name]() { execute_removal(editor, scene, name); });
 }
 
 /*!
@@ -2091,6 +2211,83 @@ void unmap_pipeline_params(pnanovdb_editor_t* editor,
     }
 }
 
+class PipelineParamsLock
+{
+public:
+    explicit PipelineParamsLock(pnanovdb_editor_t* editor)
+        : m_worker(editor && editor->impl ? editor->impl->editor_worker : nullptr)
+    {
+        if (m_worker)
+            m_lock = std::unique_lock<std::recursive_mutex>(m_worker->pipeline_params_mutex);
+    }
+    void mark_pending_work() const
+    {
+        if (m_worker)
+            m_worker->pipeline_params_dirty.store(true);
+    }
+    bool retain_for_unmap(pnanovdb_editor_t* editor)
+    {
+        if (!m_lock.owns_lock())
+            return false;
+
+        // Resolve the thread-local entry while RAII still owns the mutex. The
+        // unordered_map lookup may allocate and throw; in that case m_lock's
+        // destructor must remain responsible for releasing the mutex.
+        int& depth = pipeline_params_map_lock_depth(editor);
+        ++depth;
+        (void)m_lock.release();
+        return true;
+    }
+
+private:
+    EditorWorker* m_worker = nullptr;
+    std::unique_lock<std::recursive_mutex> m_lock;
+};
+
+static void seed_voxelbvh_build_source(SceneObject* obj, PipelineStage& step)
+{
+    if (!obj || step.type != pnanovdb_pipeline_type_voxelbvh_build)
+    {
+        return;
+    }
+    switch (obj->source_kind())
+    {
+    case SceneObjectSourceKind::MeshLines:
+        pnanovdb_pipeline_voxelbvh_build_params_set_source_type(&step.params, pnanovdb_pipeline_voxelbvh_source_lines);
+        break;
+    case SceneObjectSourceKind::MeshTriangles:
+        pnanovdb_pipeline_voxelbvh_build_params_set_source_type(
+            &step.params, pnanovdb_pipeline_voxelbvh_source_triangles);
+        break;
+    case SceneObjectSourceKind::GaussianArrays:
+        pnanovdb_pipeline_voxelbvh_build_params_set_source_type(
+            &step.params, pnanovdb_pipeline_voxelbvh_source_gaussian_arrays);
+        break;
+    case SceneObjectSourceKind::GaussianFile:
+        pnanovdb_pipeline_voxelbvh_build_params_set_source_type(
+            &step.params, pnanovdb_pipeline_voxelbvh_source_gaussian_file);
+        break;
+    default:
+        break;
+    }
+}
+
+static void configure_pipeline_stage(
+    SceneObject* obj, PipelineStage& step, pnanovdb_pipeline_type_t type, bool sync_render, bool mark_dirty)
+{
+    step.type = type;
+    pnanovdb_pipeline_get_default_params(type, &step.params);
+    seed_voxelbvh_build_source(obj, step);
+    step.shader_overrides.clear();
+    step.configured = true;
+    step.dirty = mark_dirty;
+    step.bump_revision();
+    if (sync_render && obj)
+    {
+        obj->sync_render_to_chain();
+    }
+}
+
 void set_pipeline(pnanovdb_editor_t* editor,
                   pnanovdb_editor_token_t* scene,
                   pnanovdb_editor_token_t* name,
@@ -2125,29 +2322,75 @@ void set_pipeline(pnanovdb_editor_t* editor,
         Console::getInstance().addLog(Console::LogLevel::Warning,
                                       "set_pipeline: pipeline type %u (%s) belongs to stage %u, not requested stage %u; "
                                       "ignoring",
-                                      (unsigned)type, descriptor->name ? descriptor->name : "?",
+                                      (unsigned)type, descriptor->ui_name ? descriptor->ui_name : "?",
                                       (unsigned)descriptor->stage, (unsigned)stage);
         return;
     }
 
-    editor->impl->scene_manager->with_object_or_create(scene, name,
-                                                       [&](SceneObject* obj)
-                                                       {
-                                                           PipelineStage& slot = obj->pipeline.stages[stage];
-                                                           slot.configured = true;
-                                                           const bool type_changed = (slot.type != type);
-                                                           slot.type = type;
-                                                           if (!type_changed)
-                                                           {
-                                                               return;
-                                                           }
-                                                           pnanovdb_pipeline_get_default_params(type, &slot.params);
-                                                           slot.shader_overrides.clear();
-                                                           if (stage == pnanovdb_pipeline_stage_process)
-                                                           {
-                                                               obj->process_dirty() = true;
-                                                           }
-                                                       });
+    // A process-stage template pipeline expands into a chain of concrete sub-steps.
+    const bool is_chain =
+        (stage == pnanovdb_pipeline_stage_process && descriptor->chain_steps && descriptor->chain_step_count > 0);
+
+    PipelineParamsLock pipeline_params_lock(editor);
+
+    editor->impl->scene_manager->with_object_or_create(
+        scene, name,
+        [&](SceneObject* obj)
+        {
+            if (is_chain)
+            {
+                bool same_chain = obj->pipeline.process_count() == descriptor->chain_step_count;
+                for (pnanovdb_uint32_t i = 0; same_chain && i < descriptor->chain_step_count; ++i)
+                {
+                    same_chain = obj->pipeline.process_step(i).type == descriptor->chain_steps[i];
+                }
+                if (same_chain)
+                {
+                    return;
+                }
+                obj->invalidate_process_configuration_from(0);
+                obj->pipeline.extra_process.clear();
+                obj->pipeline.active_process_step = 0;
+                for (pnanovdb_uint32_t i = 0; i < descriptor->chain_step_count; ++i)
+                {
+                    const pnanovdb_pipeline_type_t step_type = descriptor->chain_steps[i];
+                    PipelineStage& step = (i == 0) ? obj->pipeline.stages[pnanovdb_pipeline_stage_process] :
+                                                     obj->pipeline.process_step(obj->pipeline.append_process_step());
+                    configure_pipeline_stage(obj, step, step_type, true, true);
+                }
+                return;
+            }
+
+            PipelineStage& slot = obj->pipeline.stages[stage];
+            const bool type_changed = (slot.type != type);
+            slot.configured = true;
+
+            const bool trimmed_chain = (stage == pnanovdb_pipeline_stage_process && !obj->pipeline.extra_process.empty());
+            if (stage == pnanovdb_pipeline_stage_process && type_changed)
+            {
+                obj->invalidate_process_configuration_from(0);
+            }
+            if (trimmed_chain)
+            {
+                obj->pipeline.extra_process.clear();
+                obj->pipeline.active_process_step = 0;
+                obj->clear_process_run_snapshot();
+                obj->resolve_resources();
+            }
+
+            if (!type_changed)
+            {
+                if (trimmed_chain)
+                {
+                    obj->sync_render_to_chain();
+                }
+                return;
+            }
+            const bool sync_render = (stage != pnanovdb_pipeline_stage_render);
+            const bool mark_dirty = (stage == pnanovdb_pipeline_stage_process);
+            configure_pipeline_stage(obj, slot, type, sync_render, mark_dirty);
+        });
+    pipeline_params_lock.mark_pending_work();
 }
 
 pnanovdb_pipeline_type_t get_pipeline(pnanovdb_editor_t* editor,
@@ -2159,6 +2402,8 @@ pnanovdb_pipeline_type_t get_pipeline(pnanovdb_editor_t* editor,
     {
         return pnanovdb_pipeline_type_noop;
     }
+
+    PipelineParamsLock pipeline_params_lock(editor);
 
     pnanovdb_pipeline_type_t result = pnanovdb_pipeline_type_noop;
     editor->impl->scene_manager->with_object(scene, name,
@@ -2184,17 +2429,186 @@ pnanovdb_pipeline_type_t get_pipeline(pnanovdb_editor_t* editor,
     return result;
 }
 
+pnanovdb_uint32_t get_process_step_count(pnanovdb_editor_t* editor,
+                                         pnanovdb_editor_token_t* scene,
+                                         pnanovdb_editor_token_t* name)
+{
+    if (!editor || !editor->impl || !scene || !name)
+    {
+        return 0u;
+    }
+    PipelineParamsLock pipeline_params_lock(editor);
+    pnanovdb_uint32_t count = 0u;
+    editor->impl->scene_manager->with_object(scene, name,
+                                             [&](SceneObject* obj)
+                                             {
+                                                 if (obj)
+                                                     count = (pnanovdb_uint32_t)obj->pipeline.process_count();
+                                             });
+    return count;
+}
+
+pnanovdb_pipeline_type_t get_process_step(pnanovdb_editor_t* editor,
+                                          pnanovdb_editor_token_t* scene,
+                                          pnanovdb_editor_token_t* name,
+                                          pnanovdb_uint32_t step_index)
+{
+    if (!editor || !editor->impl || !scene || !name)
+    {
+        return pnanovdb_pipeline_type_noop;
+    }
+    PipelineParamsLock pipeline_params_lock(editor);
+    pnanovdb_pipeline_type_t result = pnanovdb_pipeline_type_noop;
+    editor->impl->scene_manager->with_object(scene, name,
+                                             [&](SceneObject* obj)
+                                             {
+                                                 if (obj && step_index < obj->pipeline.process_count())
+                                                     result = obj->pipeline.process_step(step_index).type;
+                                             });
+    return result;
+}
+
+void set_process_step(pnanovdb_editor_t* editor,
+                      pnanovdb_editor_token_t* scene,
+                      pnanovdb_editor_token_t* name,
+                      pnanovdb_uint32_t step_index,
+                      pnanovdb_pipeline_type_t type)
+{
+    if (!editor || !editor->impl || !scene || !name)
+    {
+        return;
+    }
+    if (type >= pnanovdb_pipeline_type_count)
+    {
+        Console::getInstance().addLog(
+            Console::LogLevel::Warning, "set_process_step: pipeline type %u is out of range; ignoring", (unsigned)type);
+        return;
+    }
+    const pnanovdb_pipeline_descriptor_t* descriptor = pnanovdb_pipeline_get_descriptor(type);
+    if (!descriptor)
+    {
+        Console::getInstance().addLog(Console::LogLevel::Warning,
+                                      "set_process_step: no descriptor registered for pipeline type %u; ignoring",
+                                      (unsigned)type);
+        return;
+    }
+    if (descriptor->chain_step_count > 0)
+    {
+        Console::getInstance().addLog(Console::LogLevel::Warning,
+                                      "set_process_step: type %u (%s) is a chain template; use set_pipeline instead",
+                                      (unsigned)type, descriptor->ui_name ? descriptor->ui_name : "?");
+        return;
+    }
+    if (type != pnanovdb_pipeline_type_noop && descriptor->stage != pnanovdb_pipeline_stage_process)
+    {
+        Console::getInstance().addLog(Console::LogLevel::Warning,
+                                      "set_process_step: type %u (%s) is not a process-stage pipeline; ignoring",
+                                      (unsigned)type, descriptor->ui_name ? descriptor->ui_name : "?");
+        return;
+    }
+
+    PipelineParamsLock pipeline_params_lock(editor);
+
+    editor->impl->scene_manager->with_object_or_create(
+        scene, name,
+        [&](SceneObject* obj)
+        {
+            const size_t count = obj->pipeline.process_count();
+            if (step_index > count)
+            {
+                Console::getInstance().addLog(Console::LogLevel::Warning,
+                                              "set_process_step: step_index %u out of range (count=%zu); ignoring",
+                                              (unsigned)step_index, count);
+                return;
+            }
+            const size_t idx = (step_index == count) ? obj->pipeline.append_process_step() : (size_t)step_index;
+
+            PipelineStage& step = obj->pipeline.process_step(idx);
+            step.configured = true;
+            if (step_index < count && step.type == type)
+            {
+                return;
+            }
+            obj->invalidate_process_configuration_from(idx);
+
+            configure_pipeline_stage(obj, step, type, true, true);
+        });
+    pipeline_params_lock.mark_pending_work();
+}
+
+
+pnanovdb_pipeline_params_t* map_process_step_params(pnanovdb_editor_t* editor,
+                                                    pnanovdb_editor_token_t* scene,
+                                                    pnanovdb_editor_token_t* name,
+                                                    pnanovdb_uint32_t step_index)
+{
+    if (!editor || !editor->impl || !scene || !name)
+        return nullptr;
+
+    PipelineParamsLock pipeline_params_lock(editor);
+
+    pnanovdb_pipeline_params_t* result = nullptr;
+    editor->impl->scene_manager->with_object(scene, name,
+                                             [&](SceneObject* obj)
+                                             {
+                                                 if (obj && step_index < obj->pipeline.process_count())
+                                                     result = &obj->pipeline.process_step(step_index).params;
+                                             });
+    if (!result)
+        return nullptr;
+
+    // A successful map deliberately transfers ownership to unmap_process_step_params(). Failed maps and exceptions
+    // retain normal RAII behavior, so they cannot leak the recursive mutex or disturb an enclosing map's lock depth.
+    pipeline_params_lock.retain_for_unmap(editor);
+    return result;
+}
+
+void unmap_process_step_params(pnanovdb_editor_t* editor,
+                               pnanovdb_editor_token_t* scene,
+                               pnanovdb_editor_token_t* name,
+                               pnanovdb_uint32_t step_index)
+{
+    if (!editor || !editor->impl)
+        return;
+    if (scene && name)
+    {
+        editor->impl->scene_manager->with_object(scene, name,
+                                                 [step_index](SceneObject* obj)
+                                                 {
+                                                     if (!obj || step_index >= obj->pipeline.process_count())
+                                                         return;
+                                                     obj->invalidate_process_configuration_from(step_index);
+                                                     obj->pipeline.process_step(step_index).configured = true;
+                                                 });
+    }
+    if (editor->impl->editor_worker)
+    {
+        int& depth = pipeline_params_map_lock_depth(editor);
+        if (depth > 0)
+        {
+            --depth;
+            editor->impl->editor_worker->pipeline_params_mutex.unlock();
+            editor->impl->editor_worker->pipeline_params_dirty.store(true);
+        }
+    }
+}
+
 void mark_pipeline_dirty(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
 {
     if (!editor || !editor->impl || !scene || !name)
         return;
 
+    PipelineParamsLock pipeline_params_lock(editor);
+
     editor->impl->scene_manager->with_object(scene, name,
                                              [](SceneObject* obj)
                                              {
                                                  if (obj)
-                                                     obj->process_dirty() = true;
+                                                 {
+                                                     obj->mark_process_dirty();
+                                                 }
                                              });
+    pipeline_params_lock.mark_pending_work();
 }
 
 static void copy_error_to_buffer(const std::string& error_message, char* error_buf, pnanovdb_uint64_t error_buf_size)
@@ -2388,6 +2802,13 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
     editor.unmap_pipeline_params = unmap_pipeline_params;
     editor.set_custom_scene_params = set_custom_scene_params;
     editor.get_custom_scene_params_data_type = get_custom_scene_params_data_type;
+    editor.get_process_step_count = get_process_step_count;
+    editor.get_process_step = get_process_step;
+    editor.set_process_step = set_process_step;
+    editor.map_process_step_params = map_process_step_params;
+    editor.unmap_process_step_params = unmap_process_step_params;
+    editor.load_scene = load_scene;
+    editor.save_scene = save_scene;
 
     return &editor;
 }

@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include <string>
+
 namespace imgui_instance_user
 {
 struct Instance;
@@ -18,6 +20,15 @@ struct Instance;
 namespace pnanovdb_editor
 {
 using namespace imgui_instance_user;
+
+template <typename EditorSceneType>
+bool load_scene_file_and_sync_viewport(EditorSceneType& editor_scene, const std::string& filepath)
+{
+    if (!editor_scene.load_scene_file(filepath))
+        return false;
+    editor_scene.sync_restored_viewport_camera();
+    return true;
+}
 
 // Window rendering functions
 void saveIniSettings(Instance* ptr);
