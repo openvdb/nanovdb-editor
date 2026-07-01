@@ -270,7 +270,7 @@ pnanovdb_uint32_t get_object_renderable_data_kind(pnanovdb_editor_t* editor,
                                              [&](pnanovdb_editor::SceneObject* obj)
                                              {
                                                  if (obj)
-                                                     kind = pnanovdb_editor::scene_object_renderable_data_kind(obj);
+                                                     kind = obj->renderable_data_kind();
                                              });
     return kind;
 }
@@ -303,7 +303,7 @@ void sync_object_render_to_chain(pnanovdb_editor_t* editor, pnanovdb_editor_toke
                                              [&](pnanovdb_editor::SceneObject* obj)
                                              {
                                                  if (obj)
-                                                     pnanovdb_editor::scene_object_sync_render_to_chain(obj);
+                                                     obj->sync_render_to_chain();
                                              });
 }
 
@@ -331,7 +331,7 @@ void set_process_step_nanovdb_output(pnanovdb_editor_t* editor,
                                                                     compute->destroy_array(a);
                                                             });
             obj->pipeline.process_step(step_index).output.set_array(pnanovdb_editor::k_stage_output_nanovdb, array, owner);
-            pnanovdb_editor::scene_object_resolve_resources(obj);
+            obj->resolve_resources();
         });
 }
 

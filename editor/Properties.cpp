@@ -23,6 +23,7 @@
 #include "nanovdb_editor/putil/Reflect.h"
 
 #include <algorithm>
+#include <array>
 #include <cfloat>
 #include <cmath>
 #include <cctype>
@@ -100,7 +101,7 @@ static void applyPreset(EditorScene* editor_scene,
                                    [](SceneObject* o)
                                    {
                                        if (o)
-                                           scene_object_invalidate_process_from(o, 0);
+                                           o->invalidate_process_from(0);
                                    });
     editor->mark_pipeline_dirty(editor, scene_token, name_token);
 
@@ -368,10 +369,6 @@ static void showShaderParamsResetButton(EditorSceneManager* scene_manager,
             Console::getInstance().addLog("Failed to reset shader params for '%s'", shader_name);
         }
     }
-    if (ImGui::IsItemHovered())
-    {
-        ImGui::SetTooltip("Restore JSON-declared defaults for '%s'\nand refresh every object using it", shader_name);
-    }
 }
 
 static bool loadPipelineUsesSourceFile(pnanovdb_pipeline_type_t load_pipeline)
@@ -450,21 +447,25 @@ static std::vector<pnanovdb_pipeline_type_t> compatiblePipelineTypes(EditorScene
         return allowed;
 
     pnanovdb_uint32_t upstream = pnanovdb_pipeline_data_kind_none;
-    SceneObjectSourceKind source_kind = SceneObjectSourceKind::None;
+    std::array<bool, pnanovdb_pipeline_type_count> process_supported{};
     scene_manager->with_object(scene_token, name_token,
                                [&](SceneObject* o)
                                {
                                    if (!o)
                                        return;
-                                   source_kind = scene_object_source_kind(o);
+                                   for (int i = 0; i < pnanovdb_pipeline_type_count; ++i)
+                                   {
+                                       process_supported[(size_t)i] =
+                                           process_pipeline_supports_object(o, static_cast<pnanovdb_pipeline_type_t>(i));
+                                   }
                                    if (stage == pnanovdb_pipeline_stage_render && step == SIZE_MAX)
                                    {
-                                       upstream = scene_object_renderable_data_kind(o);
+                                       upstream = o->renderable_data_kind();
                                    }
                                    else
                                    {
                                        const size_t s = (step == SIZE_MAX) ? o->pipeline.process_count() : step;
-                                       upstream = scene_object_upstream_data_kind(o, s);
+                                       upstream = o->upstream_data_kind(s);
                                    }
                                });
     if (upstream == pnanovdb_pipeline_data_kind_none)
@@ -476,8 +477,7 @@ static std::vector<pnanovdb_pipeline_type_t> compatiblePipelineTypes(EditorScene
     {
         const auto type = static_cast<pnanovdb_pipeline_type_t>(i);
         const auto* desc = pnanovdb_pipeline_get_descriptor(type);
-        const bool supports_source =
-            stage != pnanovdb_pipeline_stage_process || process_pipeline_supports_source(source_kind, type);
+        const bool supports_source = stage != pnanovdb_pipeline_stage_process || process_supported[(size_t)i];
         if (desc && desc->stage == stage && desc->chain_step_count == 0 && supports_source &&
             (desc->inputs == 0u || (desc->inputs & upstream)))
             allowed.push_back(type);
@@ -520,7 +520,7 @@ static SceneObjectSourceKind objectSourceKind(EditorSceneManager* scene_manager,
                                {
                                    if (!o)
                                        return;
-                                   kind = scene_object_source_kind(o);
+                                   kind = o->source_kind();
                                });
     return kind;
 }
@@ -569,7 +569,7 @@ static void showPresetDropdown(EditorScene* editor_scene,
                                    [](SceneObject* o)
                                    {
                                        if (o)
-                                           scene_object_invalidate_process_from(o, 0);
+                                           o->invalidate_process_from(0);
                                    });
         editor->mark_pipeline_dirty(editor, scene_token, name_token);
         st.stage = (int)pnanovdb_pipeline_stage_process;
@@ -743,13 +743,13 @@ static void showActionBar(Instance* ptr,
     {
         const int step = st.step;
 
-        auto with_this_object = [&](void (*fn)(SceneObject*))
+        auto with_this_object = [&](void (SceneObject::*fn)())
         {
             scene_manager->with_object(scene_token, name_token,
                                        [fn](SceneObject* o)
                                        {
                                            if (o)
-                                               fn(o);
+                                               (o->*fn)();
                                        });
         };
         pnanovdb_pipeline_type_t step_type =
@@ -784,14 +784,14 @@ static void showActionBar(Instance* ptr,
             ImGui::BeginDisabled();
         if (ImGui::Button(run_id))
         {
-            with_this_object(scene_object_clear_process_cancel_state);
+            with_this_object(&SceneObject::clear_process_cancel_state);
             // Re-run only this step and the steps after it
             scene_manager->with_object(scene_token, name_token,
                                        [step](SceneObject* o)
                                        {
                                            if (!o)
                                                return;
-                                           scene_object_invalidate_process_from(o, step);
+                                           o->invalidate_process_from(step);
                                        });
         }
         if (process_active || runtime_cancelling)
@@ -799,7 +799,7 @@ static void showActionBar(Instance* ptr,
 
         if (!process_active && !runtime_cancelling)
         {
-            with_this_object(scene_object_clear_process_cancel_state);
+            with_this_object(&SceneObject::clear_process_cancel_state);
         }
         const bool cancel_enabled = process_active && cancel_available && !runtime_cancelling;
 
@@ -812,7 +812,7 @@ static void showActionBar(Instance* ptr,
         }
         if (ImGui::Button(cancel_id))
         {
-            with_this_object(scene_object_process_user_cancel);
+            with_this_object(&SceneObject::process_user_cancel);
             if (!pipeline_cancel_async_process(scene_manager, scene_token, name_token) && process_active)
             {
                 Console::getInstance().addLog(
@@ -860,7 +860,7 @@ static void showActionBar(Instance* ptr,
                                            {
                                                if (!o)
                                                    return;
-                                               scene_object_remove_process_step(o, step_index);
+                                               o->remove_process_step(step_index);
                                            });
                 st.step = 0;
             }
@@ -980,7 +980,7 @@ void Properties::showPipelinePanel(imgui_instance_user::Instance* ptr,
                                {
                                    if (!o)
                                        return;
-                                   scene_object_sync_render_to_chain(o);
+                                   o->sync_render_to_chain();
                                    load_pipeline = o->load_pipeline();
                                    process_pipeline = o->process_pipeline();
                                    render_pipeline = o->render_pipeline();

@@ -52,6 +52,8 @@ struct pnanovdb_editor_impl_t
     pnanovdb_editor::EditorScene* editor_scene;
     pnanovdb_editor::ParamMapRegistry* param_map_registry;
     std::unique_ptr<pnanovdb_editor::PipelineRuntime> pipeline_runtime;
+    std::string pending_scene_path;
+    pnanovdb_bool_t pending_scene_overwrite;
 
     // Currently used by the render thread in show()
     const pnanovdb_compiler_t* compiler;

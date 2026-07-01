@@ -146,7 +146,7 @@ TEST(SceneObjectProcessChainTest, RunRestoresDroppedPrerequisite)
     set_step(obj, 1, pnanovdb_pipeline_type_voxelbvh_rgba8, fake_array(2));
     obj.pipeline.drop_intermediate = true;
 
-    scene_object_invalidate_process_from(&obj, 1);
+    obj.invalidate_process_from(1);
 
     ASSERT_TRUE(obj.pipeline.process_run_snapshot.has_value());
     EXPECT_EQ(obj.pipeline.process_run_snapshot->from_step, 0);
@@ -162,10 +162,10 @@ TEST(SceneObjectProcessChainTest, RemoveMiddleStepRebuildsFromDroppedProducer)
     set_step(obj, 1, pnanovdb_pipeline_type_voxelbvh_rgba8, fake_array(2));
     set_step(obj, 2, pnanovdb_pipeline_type_voxelbvh_rgba8, fake_array(3));
     obj.pipeline.drop_intermediate = true;
-    scene_object_resolve_resources(&obj);
+    obj.resolve_resources();
     ASSERT_EQ(obj.nanovdb_array(), fake_array(3));
 
-    ASSERT_TRUE(scene_object_remove_process_step(&obj, 1));
+    ASSERT_TRUE(obj.remove_process_step(1));
 
     ASSERT_EQ(obj.pipeline.process_count(), 2u);
     EXPECT_EQ(obj.pipeline.process_step(1).type, pnanovdb_pipeline_type_voxelbvh_rgba8);
@@ -181,9 +181,9 @@ TEST(SceneObjectProcessChainTest, RemoveLastStepKeepsAvailableProducer)
     SceneObject obj;
     set_step(obj, 0, pnanovdb_pipeline_type_voxelbvh_build, fake_array(1));
     set_step(obj, 1, pnanovdb_pipeline_type_voxelbvh_rgba8, fake_array(2));
-    scene_object_resolve_resources(&obj);
+    obj.resolve_resources();
 
-    ASSERT_TRUE(scene_object_remove_process_step(&obj, 1));
+    ASSERT_TRUE(obj.remove_process_step(1));
 
     ASSERT_EQ(obj.pipeline.process_count(), 1u);
     EXPECT_FALSE(obj.pipeline.process_step(0).dirty);
@@ -200,7 +200,7 @@ TEST(SceneObjectProcessChainTest, RemovalKeepsRunningMissingProducerValid)
     producer.dirty = true; // queued or running
     const uint64_t revision = producer.revision;
 
-    ASSERT_TRUE(scene_object_remove_process_step(&obj, 1));
+    ASSERT_TRUE(obj.remove_process_step(1));
 
     EXPECT_TRUE(producer.dirty);
     EXPECT_EQ(producer.revision, revision);
@@ -213,12 +213,12 @@ TEST(SceneObjectProcessChainTest, MarkDirtyArmsFirstExecutableStepAfterNoop)
     set_step(obj, 1, pnanovdb_pipeline_type_voxelbvh_build, fake_array(1));
     set_step(obj, 2, pnanovdb_pipeline_type_voxelbvh_rgba8, fake_array(2));
 
-    scene_object_mark_process_dirty(&obj);
+    obj.mark_process_dirty();
 
     EXPECT_FALSE(obj.pipeline.process_step(0).dirty);
     EXPECT_TRUE(obj.pipeline.process_step(1).dirty);
     EXPECT_FALSE(obj.pipeline.process_step(2).dirty);
-    EXPECT_EQ(scene_object_next_dirty_process_step(&obj), 1);
+    EXPECT_EQ(obj.next_dirty_process_step(), 1);
 }
 
 TEST(SceneObjectProcessChainTest, Image2DRenderAcceptsGeneratedRgba8Grid)
@@ -242,7 +242,7 @@ TEST(SceneObjectProcessChainTest, OrdinaryNanoVdbIsNotCompatibleRgba8Input)
     obj.pipeline.load().output.set_array(k_stage_output_nanovdb, &array, {});
     set_step(obj, 0, pnanovdb_pipeline_type_voxelbvh_rgba8, nullptr);
     obj.pipeline.process_step(0).dirty = true;
-    scene_object_resolve_resources(&obj);
+    obj.resolve_resources();
 
     EditorSceneManager scene_manager;
     EXPECT_EQ(pipeline_execute_process(&obj, validation_context(scene_manager)), pnanovdb_pipeline_result_no_data);
@@ -313,8 +313,7 @@ TEST(SceneObjectProcessChainTest, RendererMetadataUsesRequiredCountAndValueSizeO
 
     std::vector<uint32_t> line_words = make_metadata_grid({ 8u, 4u, 8u, 4u, 4u }, { 1u, 1u, 1u, 6u, 6u });
     pnanovdb_compute_array_t line_array{ line_words.data(), sizeof(uint32_t), line_words.size() };
-    EXPECT_FALSE(
-        nanovdb_import::has_voxelbvh_render_metadata(&line_array, pnanovdb_pipeline_type_voxelbvh_lines_render));
+    EXPECT_FALSE(nanovdb_import::has_voxelbvh_render_metadata(&line_array, pnanovdb_pipeline_type_voxelbvh_lines_render));
     EXPECT_FALSE(
         nanovdb_import::has_voxelbvh_render_metadata(&line_array, pnanovdb_pipeline_type_voxelbvh_triangles_render));
 
@@ -353,7 +352,7 @@ TEST(SceneObjectProcessChainTest, LineSourceCannotEnterTriangleRgba8Worker)
     set_step(obj, 0, pnanovdb_pipeline_type_voxelbvh_build, &array);
     set_step(obj, 1, pnanovdb_pipeline_type_voxelbvh_rgba8, nullptr);
     obj.pipeline.process_step(1).dirty = true;
-    scene_object_resolve_resources(&obj);
+    obj.resolve_resources();
 
     EditorSceneManager scene_manager;
     EXPECT_EQ(pipeline_execute_process(&obj, validation_context(scene_manager)), pnanovdb_pipeline_result_no_data);
@@ -377,7 +376,7 @@ TEST(SceneObjectProcessChainTest, TriangleSourcePassesRgba8ExecutionGate)
     set_step(obj, 0, pnanovdb_pipeline_type_voxelbvh_build, &array);
     set_step(obj, 1, pnanovdb_pipeline_type_voxelbvh_rgba8, nullptr);
     obj.pipeline.process_step(1).dirty = true;
-    scene_object_resolve_resources(&obj);
+    obj.resolve_resources();
 
     EditorSceneManager scene_manager;
     EXPECT_EQ(pipeline_execute_process(&obj, validation_context(scene_manager)), pnanovdb_pipeline_result_pending);
@@ -393,7 +392,7 @@ TEST(SceneObjectProcessChainTest, CancelWithoutSnapshotPreservesNewerDownstreamW
     obj.pipeline.process_step(1).bump_revision();
     obj.pipeline.process_run_snapshot.reset();
 
-    scene_object_cancel_running_process_step_without_snapshot(&obj, 0);
+    obj.cancel_running_process_step_without_snapshot(0);
 
     EXPECT_FALSE(obj.pipeline.process_step(0).dirty);
     EXPECT_TRUE(obj.pipeline.process_step(1).dirty);
@@ -406,10 +405,10 @@ TEST(SceneObjectProcessChainTest, CancelRestoresDirtyWorkThatPredatedRun)
     set_step(obj, 1, pnanovdb_pipeline_type_voxelbvh_rgba8, fake_array(2));
     obj.pipeline.process_step(1).dirty = true;
 
-    scene_object_invalidate_process_from(&obj, 0);
+    obj.invalidate_process_from(0);
     ASSERT_TRUE(obj.pipeline.process_run_snapshot.has_value());
     obj.pipeline.active_process_step = 0;
-    scene_object_restore_process_run_snapshot(&obj);
+    obj.restore_process_run_snapshot();
 
     EXPECT_FALSE(obj.pipeline.process_step(0).dirty);
     EXPECT_TRUE(obj.pipeline.process_step(1).dirty);
@@ -423,7 +422,7 @@ TEST(SceneObjectProcessChainTest, CancelRestoresRenderConfigurationAndShaderStat
     obj.type = SceneObjectType::NanoVDB;
     obj.nanovdb_array() = fake_array(1);
     set_step(obj, 0, pnanovdb_pipeline_type_voxelbvh_build, fake_array(2));
-    scene_object_resolve_resources(&obj);
+    obj.resolve_resources();
 
     PipelineStage& render = obj.pipeline.render();
     render.type = pnanovdb_pipeline_type_voxelbvh_debug_render;
@@ -453,14 +452,14 @@ TEST(SceneObjectProcessChainTest, CancelRestoresRenderConfigurationAndShaderStat
     obj.shader_params() = shader_params_owner->data;
     obj.shader_params_data_type() = expected_shader_type;
 
-    scene_object_invalidate_process_from(&obj, 0);
+    obj.invalidate_process_from(0);
     ASSERT_TRUE(obj.pipeline.process_run_snapshot.has_value());
     ASSERT_EQ(obj.render_pipeline(), pnanovdb_pipeline_type_nanovdb_render);
     EXPECT_EQ(obj.shader_name(), nullptr);
     EXPECT_EQ(obj.shader_params(), nullptr);
     EXPECT_EQ(obj.shader_params_data_type(), nullptr);
 
-    scene_object_restore_process_run_snapshot(&obj);
+    obj.restore_process_run_snapshot();
 
     EXPECT_EQ(obj.render_pipeline(), pnanovdb_pipeline_type_voxelbvh_debug_render);
     ASSERT_EQ(obj.render_params().size, sizeof(expected_render_params));
@@ -485,17 +484,17 @@ TEST(SceneObjectProcessChainTest, CancelCompletionKeepsRestoredActiveStepDirty)
     obj.pipeline.process_step(0).dirty = true;
     obj.pipeline.process_step(1).dirty = true;
 
-    scene_object_invalidate_process_from(&obj, 0);
+    obj.invalidate_process_from(0);
     ASSERT_TRUE(obj.pipeline.process_run_snapshot.has_value());
     obj.pipeline.active_process_step = 0;
 
     // request_user_cancel restores the snapshot immediately and records that
     // it did so. Completion must not run the no-snapshot cleanup a second time.
     const bool snapshot_restored = obj.pipeline.process_run_snapshot.has_value();
-    scene_object_restore_process_run_snapshot(&obj);
+    obj.restore_process_run_snapshot();
     if (!snapshot_restored)
     {
-        scene_object_cancel_running_process_step_without_snapshot(&obj, 0);
+        obj.cancel_running_process_step_without_snapshot(0);
     }
 
     EXPECT_TRUE(obj.pipeline.process_step(0).dirty);
@@ -513,11 +512,11 @@ TEST(SceneObjectProcessChainTest, FailedStepDisarmsDownstreamChain)
     obj.pipeline.process_step(1).dirty = true;
     obj.pipeline.active_process_step = 0;
 
-    scene_object_advance_process_chain(&obj, false);
+    obj.advance_process_chain(false);
 
     EXPECT_FALSE(obj.pipeline.process_step(0).dirty);
     EXPECT_FALSE(obj.pipeline.process_step(1).dirty);
-    EXPECT_EQ(scene_object_next_dirty_process_step(&obj), -1);
+    EXPECT_EQ(obj.next_dirty_process_step(), -1);
 }
 
 } // namespace

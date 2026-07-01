@@ -1234,7 +1234,7 @@ bool EditorScene::handle_nanovdb_data_load(pnanovdb_editor_token_t* scene,
 
     if (reserved_lifetime_id)
     {
-        if (!m_scene_manager.add_nanovdb_if_reserved(scene_token, name_token, reserved_lifetime_id, nanovdb_array,
+        if (!m_scene_manager.commit_reserved_nanovdb(scene_token, name_token, reserved_lifetime_id, nanovdb_array,
                                                      params_array, m_compute, shader_name_token,
                                                      pnanovdb_pipeline_type_noop, render_pipeline, &old_gaussian_owner))
             return false;
@@ -1287,7 +1287,7 @@ bool EditorScene::handle_mesh_data_load(pnanovdb_editor_token_t* scene,
 
     if (reserved_lifetime_id)
     {
-        if (!m_scene_manager.add_mesh_if_reserved(scene_token, name_token, reserved_lifetime_id, indices, positions,
+        if (!m_scene_manager.commit_reserved_mesh(scene_token, name_token, reserved_lifetime_id, indices, positions,
                                                   colors, m_compute, process_pipeline, render_pipeline,
                                                   &old_gaussian_owner))
             return false;
@@ -1322,7 +1322,7 @@ bool EditorScene::handle_mesh_data_load(pnanovdb_editor_token_t* scene,
                 pnanovdb_pipeline_voxelbvh_build_params_set_inflation_radius(&process_params, inflation_radius);
                 pnanovdb_pipeline_voxelbvh_build_params_set_resolution(&process_params, resolution);
             }
-            scene_object_mark_process_dirty(obj);
+            obj->mark_process_dirty();
         });
 
     add_nanovdb_placeholder(scene_token, name_token);
@@ -1358,7 +1358,7 @@ bool EditorScene::handle_gaussian_data_load(pnanovdb_editor_token_t* scene,
     const char* shader_name = pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat);
     if (reserved_lifetime_id)
     {
-        if (!m_scene_manager.add_gaussian_data_if_reserved(scene_token, name_token, reserved_lifetime_id, gaussian_data,
+        if (!m_scene_manager.commit_reserved_gaussian_data(scene_token, name_token, reserved_lifetime_id, gaussian_data,
                                                            params_array, m_raster_shader_params_data_type, m_compute,
                                                            m_editor->impl->raster, m_device_queue, shader_name,
                                                            process_pipeline, render_pipeline, &old_owner))

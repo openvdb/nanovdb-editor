@@ -69,6 +69,8 @@ typedef enum pnanovdb_pipeline_data_kind_t
 
 typedef struct pnanovdb_pipeline_context_t pnanovdb_pipeline_context_t;
 
+typedef struct pnanovdb_scene_object_t pnanovdb_scene_object_t;
+
 typedef void (*pnanovdb_pipeline_init_params_fn)(pnanovdb_pipeline_params_t* params);
 typedef pnanovdb_pipeline_result_t (*pnanovdb_pipeline_execute_fn)(pnanovdb_scene_object_t* obj,
                                                                    pnanovdb_pipeline_context_t* ctx);

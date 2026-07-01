@@ -2,13 +2,29 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "editor/EditorSceneManager.h"
+#include "raster/Raster.h"
 
 #include <gtest/gtest.h>
+
+#include <cstdint>
 
 namespace pnanovdb_editor
 {
 namespace
 {
+
+int g_retained_array_destroy_count = 0;
+int g_retained_gaussian_destroy_count = 0;
+
+void count_retained_array_destroy(pnanovdb_compute_array_t*)
+{
+    ++g_retained_array_destroy_count;
+}
+
+void count_retained_gaussian_destroy(const pnanovdb_compute_t*, pnanovdb_compute_queue_t*, pnanovdb_raster_gaussian_data_t*)
+{
+    ++g_retained_gaussian_destroy_count;
+}
 
 TEST(SceneObjectReplacementTest, SourceResetClearsAliasesAndKeepsPipelineConfiguration)
 {
@@ -48,7 +64,7 @@ TEST(SceneObjectReplacementTest, SourceResetClearsAliasesAndKeepsPipelineConfigu
     obj.pipeline.process().output.set_array(k_stage_output_nanovdb, &converted, obj.resources.converted_nanovdb_owner);
     const void* configured_params = obj.pipeline.process().params.data;
 
-    scene_object_reset_source(&obj);
+    obj.reset_source();
 
     EXPECT_EQ(obj.resources.nanovdb_array, nullptr);
     EXPECT_EQ(obj.resources.gaussian_data, nullptr);
@@ -81,7 +97,7 @@ TEST(SceneObjectReplacementTest, NamedArrayCopyPreservesBorrowedAndOwnedBindings
     source.resources.named_arrays["owned"] = &owned;
     source.resources.named_array_owners["owned"] = owner;
 
-    scene_object_set_named_array_bindings(&variant, source.resources.named_arrays, source.resources.named_array_owners);
+    variant.set_named_array_bindings(source.resources.named_arrays, source.resources.named_array_owners);
 
     ASSERT_EQ(variant.resources.named_arrays.size(), 2u);
     EXPECT_EQ(variant.resources.named_arrays.at("borrowed"), &borrowed);
@@ -106,9 +122,9 @@ TEST(SceneObjectReplacementTest, AsyncLoadReservationCannotReplaceNewerObject)
     manager.cancel_load_target(&scene, &name, stale_lifetime);
     ASSERT_TRUE(manager.reserve_load_target(&scene, &name, &current_lifetime));
 
-    EXPECT_FALSE(manager.add_nanovdb_if_reserved(&scene, &name, stale_lifetime, &late, nullptr, nullptr, nullptr,
+    EXPECT_FALSE(manager.commit_reserved_nanovdb(&scene, &name, stale_lifetime, &late, nullptr, nullptr, nullptr,
                                                  pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_nanovdb_render));
-    ASSERT_TRUE(manager.add_nanovdb_if_reserved(&scene, &name, current_lifetime, &current, nullptr, nullptr, nullptr,
+    ASSERT_TRUE(manager.commit_reserved_nanovdb(&scene, &name, current_lifetime, &current, nullptr, nullptr, nullptr,
                                                 pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_nanovdb_render));
     manager.with_object(&scene, &name,
                         [&](SceneObject* obj)
@@ -139,7 +155,7 @@ TEST(SceneObjectReplacementTest, ExplicitReplacementReservationPreservesTargetUn
                             EXPECT_EQ(obj->resources.nanovdb_array, &original);
                         });
 
-    ASSERT_TRUE(manager.add_nanovdb_if_reserved(&scene, &name, lifetime, &replacement, nullptr, nullptr, nullptr,
+    ASSERT_TRUE(manager.commit_reserved_nanovdb(&scene, &name, lifetime, &replacement, nullptr, nullptr, nullptr,
                                                 pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_nanovdb_render));
     manager.with_object(&scene, &name,
                         [&](SceneObject* obj)
@@ -214,7 +230,7 @@ TEST(SceneObjectReplacementTest, RestoreStateCannotApplyToSameKeyReplacement)
     uint64_t reservation_lifetime = 0;
 
     ASSERT_TRUE(manager.reserve_load_target(&scene, &name, &reservation_lifetime));
-    ASSERT_TRUE(manager.add_nanovdb_if_reserved(&scene, &name, reservation_lifetime, &imported, nullptr, nullptr, nullptr,
+    ASSERT_TRUE(manager.commit_reserved_nanovdb(&scene, &name, reservation_lifetime, &imported, nullptr, nullptr, nullptr,
                                                 pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_nanovdb_render));
     const uint64_t published_lifetime = manager.object_lifetime(&scene, &name);
     ASSERT_NE(published_lifetime, 0u);
@@ -255,7 +271,7 @@ TEST(SceneObjectReplacementTest, AsyncLoadReservationFollowsSceneRename)
 
     ASSERT_TRUE(manager.reserve_load_target(&old_scene, &name, &lifetime));
     ASSERT_TRUE(manager.rename_scene(&old_scene, &new_scene));
-    ASSERT_TRUE(manager.add_nanovdb_if_reserved(&new_scene, &name, lifetime, &result, nullptr, nullptr, nullptr,
+    ASSERT_TRUE(manager.commit_reserved_nanovdb(&new_scene, &name, lifetime, &result, nullptr, nullptr, nullptr,
                                                 pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_nanovdb_render));
 
     manager.with_object(&old_scene, &name, [](SceneObject* obj) { EXPECT_EQ(obj, nullptr); });
@@ -322,7 +338,7 @@ TEST(SceneObjectReplacementTest, ReplacementReservationPreservesOldObjectUntilPu
 
     uint64_t initial_lifetime = 0;
     ASSERT_TRUE(manager.reserve_load_target(&scene, &name, &initial_lifetime));
-    ASSERT_TRUE(manager.add_nanovdb_if_reserved(&scene, &name, initial_lifetime, &old_array, nullptr, nullptr, nullptr,
+    ASSERT_TRUE(manager.commit_reserved_nanovdb(&scene, &name, initial_lifetime, &old_array, nullptr, nullptr, nullptr,
                                                 pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_nanovdb_render));
     uint64_t lifetime = 0;
     bool replacing = false;
@@ -346,7 +362,7 @@ TEST(SceneObjectReplacementTest, ReplacementReservationPreservesOldObjectUntilPu
                             EXPECT_EQ(obj->resources.nanovdb_array, &old_array);
                         });
 
-    ASSERT_TRUE(manager.add_nanovdb_if_reserved(&scene, &name, lifetime, &replacement_array, nullptr, nullptr, nullptr,
+    ASSERT_TRUE(manager.commit_reserved_nanovdb(&scene, &name, lifetime, &replacement_array, nullptr, nullptr, nullptr,
                                                 pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_nanovdb_render));
     manager.with_object(&scene, &name,
                         [&](SceneObject* obj)
@@ -368,12 +384,12 @@ TEST(SceneObjectReplacementTest, ReplacementReservationFollowsObjectRename)
 
     uint64_t initial_lifetime = 0;
     ASSERT_TRUE(manager.reserve_load_target(&scene, &old_name, &initial_lifetime));
-    ASSERT_TRUE(manager.add_nanovdb_if_reserved(&scene, &old_name, initial_lifetime, &old_array, nullptr, nullptr, nullptr,
+    ASSERT_TRUE(manager.commit_reserved_nanovdb(&scene, &old_name, initial_lifetime, &old_array, nullptr, nullptr, nullptr,
                                                 pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_nanovdb_render));
     uint64_t lifetime = 0;
     ASSERT_TRUE(manager.reserve_load_target(&scene, &old_name, &lifetime, true));
     ASSERT_TRUE(manager.rename_object(&scene, &old_name, &new_name));
-    ASSERT_TRUE(manager.add_nanovdb_if_reserved(&scene, &new_name, lifetime, &replacement_array, nullptr, nullptr, nullptr,
+    ASSERT_TRUE(manager.commit_reserved_nanovdb(&scene, &new_name, lifetime, &replacement_array, nullptr, nullptr, nullptr,
                                                 pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_nanovdb_render));
 
     manager.with_object(&scene, &old_name, [](SceneObject* obj) { EXPECT_EQ(obj, nullptr); });
@@ -470,6 +486,12 @@ TEST(SceneObjectReplacementTest, SuccessfulStagedGaussianFileReplacementCommitsR
     pnanovdb_compute_t compute{};
 
     ASSERT_TRUE(manager.add_nanovdb(&scene, &name, &original, nullptr, nullptr));
+    manager.with_object(&scene, &name,
+                        [](SceneObject* obj)
+                        {
+                            ASSERT_NE(obj, nullptr);
+                            obj->visible = false;
+                        });
     uint64_t reserved_lifetime = 0;
     ASSERT_TRUE(manager.reserve_load_target(&scene, &name, &reserved_lifetime, true));
     ASSERT_TRUE(manager.stage_file_object_replacement(
@@ -480,7 +502,7 @@ TEST(SceneObjectReplacementTest, SuccessfulStagedGaussianFileReplacementCommitsR
                             ASSERT_NE(obj, nullptr);
                             obj->resources.source_filepath = "replacement.ply";
                             obj->pipeline.process().output.set_array(k_stage_output_nanovdb, &result, {});
-                            scene_object_resolve_resources(obj);
+                            obj->resolve_resources();
                         });
 
     ASSERT_TRUE(manager.finish_file_object_replacement(reserved_lifetime, true));
@@ -492,7 +514,107 @@ TEST(SceneObjectReplacementTest, SuccessfulStagedGaussianFileReplacementCommitsR
                             EXPECT_EQ(obj->resources.converted_nanovdb, &result);
                             EXPECT_EQ(obj->resources.source_filepath, "replacement.ply");
                             EXPECT_NE(obj->lifetime_id, reserved_lifetime);
+                            EXPECT_FALSE(obj->visible);
                         });
+}
+
+TEST(SceneObjectReplacementTest, RemovingStagedCandidateClearsRetainedBackup)
+{
+    EditorSceneManager manager;
+    pnanovdb_editor_token_t scene{ 541u, "scene" };
+    pnanovdb_editor_token_t name{ 542u, "target" };
+    pnanovdb_compute_array_t original{};
+    pnanovdb_compute_t compute{};
+
+    ASSERT_TRUE(manager.add_nanovdb(&scene, &name, &original, nullptr, nullptr));
+    uint64_t lifetime = 0;
+    ASSERT_TRUE(manager.reserve_load_target(&scene, &name, &lifetime, true));
+    ASSERT_TRUE(manager.stage_file_object_replacement(
+        &scene, &name, lifetime, &compute, pnanovdb_pipeline_type_voxelbvh_build, pnanovdb_pipeline_type_noop));
+    ASSERT_TRUE(manager.has_file_object_replacement_in_progress());
+
+    EXPECT_TRUE(manager.remove(&scene, &name));
+    EXPECT_FALSE(manager.has_file_object_replacement_in_progress());
+    EXPECT_FALSE(manager.finish_file_object_replacement(lifetime, false));
+}
+
+TEST(SceneObjectReplacementTest, LifetimeRemovalOfStagedCandidateClearsRetainedBackup)
+{
+    EditorSceneManager manager;
+    pnanovdb_editor_token_t scene{ 543u, "scene" };
+    pnanovdb_editor_token_t name{ 544u, "target" };
+    pnanovdb_compute_array_t original{};
+    pnanovdb_compute_t compute{};
+
+    ASSERT_TRUE(manager.add_nanovdb(&scene, &name, &original, nullptr, nullptr));
+    uint64_t lifetime = 0;
+    ASSERT_TRUE(manager.reserve_load_target(&scene, &name, &lifetime, true));
+    ASSERT_TRUE(manager.stage_file_object_replacement(
+        &scene, &name, lifetime, &compute, pnanovdb_pipeline_type_voxelbvh_build, pnanovdb_pipeline_type_noop));
+    ASSERT_TRUE(manager.has_file_object_replacement_in_progress());
+
+    EXPECT_TRUE(manager.remove_if_lifetime(&scene, &name, lifetime));
+    EXPECT_FALSE(manager.has_file_object_replacement_in_progress());
+    EXPECT_FALSE(manager.finish_file_object_replacement(lifetime, false));
+}
+
+TEST(SceneObjectReplacementTest, ArrayOwnerDeduplicationIncludesRetainedReplacementBackup)
+{
+    pnanovdb_editor_token_t scene{ 545u, "scene" };
+    pnanovdb_editor_token_t original_name{ 546u, "original" };
+    pnanovdb_editor_token_t alias_name{ 547u, "alias" };
+    pnanovdb_compute_array_t shared_array{};
+    pnanovdb_compute_t compute{};
+    compute.destroy_array = count_retained_array_destroy;
+    g_retained_array_destroy_count = 0;
+
+    {
+        EditorSceneManager manager;
+        ASSERT_TRUE(manager.add_nanovdb(&scene, &original_name, &shared_array, nullptr, &compute));
+        uint64_t lifetime = 0;
+        ASSERT_TRUE(manager.reserve_load_target(&scene, &original_name, &lifetime, true));
+        ASSERT_TRUE(manager.stage_file_object_replacement(&scene, &original_name, lifetime, &compute,
+                                                          pnanovdb_pipeline_type_voxelbvh_build,
+                                                          pnanovdb_pipeline_type_noop));
+
+        ASSERT_TRUE(manager.add_nanovdb(&scene, &alias_name, &shared_array, nullptr, &compute));
+        ASSERT_TRUE(manager.finish_file_object_replacement(lifetime, false));
+        EXPECT_EQ(g_retained_array_destroy_count, 0);
+    }
+
+    EXPECT_EQ(g_retained_array_destroy_count, 1);
+}
+
+TEST(SceneObjectReplacementTest, GaussianOwnerDeduplicationIncludesRetainedReplacementBackup)
+{
+    pnanovdb_editor_token_t scene{ 548u, "scene" };
+    pnanovdb_editor_token_t original_name{ 549u, "original" };
+    pnanovdb_editor_token_t alias_name{ 550u, "alias" };
+    pnanovdb_raster::gaussian_data_t shared_gaussian_storage{};
+    pnanovdb_raster_gaussian_data_t* shared_gaussian = pnanovdb_raster::cast(&shared_gaussian_storage);
+    pnanovdb_compute_t compute{};
+    pnanovdb_raster_t raster{};
+    raster.destroy_gaussian_data = count_retained_gaussian_destroy;
+    auto* queue = reinterpret_cast<pnanovdb_compute_queue_t*>(uintptr_t{ 1 });
+    g_retained_gaussian_destroy_count = 0;
+
+    {
+        EditorSceneManager manager;
+        ASSERT_TRUE(manager.add_gaussian_data(
+            &scene, &original_name, shared_gaussian, nullptr, nullptr, &compute, &raster, queue));
+        uint64_t lifetime = 0;
+        ASSERT_TRUE(manager.reserve_load_target(&scene, &original_name, &lifetime, true));
+        ASSERT_TRUE(manager.stage_file_object_replacement(&scene, &original_name, lifetime, &compute,
+                                                          pnanovdb_pipeline_type_voxelbvh_build,
+                                                          pnanovdb_pipeline_type_noop));
+
+        ASSERT_TRUE(manager.add_gaussian_data(
+            &scene, &alias_name, shared_gaussian, nullptr, nullptr, &compute, &raster, queue));
+        ASSERT_TRUE(manager.finish_file_object_replacement(lifetime, false));
+        EXPECT_EQ(g_retained_gaussian_destroy_count, 0);
+    }
+
+    EXPECT_EQ(g_retained_gaussian_destroy_count, 1);
 }
 
 TEST(SceneObjectReplacementTest, CrossTypeReplacementHandsOffGaussianOwner)
@@ -514,7 +636,7 @@ TEST(SceneObjectReplacementTest, CrossTypeReplacementHandsOffGaussianOwner)
             [&](SceneObject* obj)
             {
                 ASSERT_NE(obj, nullptr);
-                scene_object_reset_source(obj);
+                obj->reset_source();
                 obj->type = SceneObjectType::GaussianData;
                 obj->resources.gaussian_data = gaussian;
                 obj->resources.gaussian_data_owner = std::shared_ptr<pnanovdb_raster_gaussian_data_t>(

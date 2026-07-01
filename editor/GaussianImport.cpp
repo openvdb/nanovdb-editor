@@ -107,7 +107,7 @@ bool gaussian(EditorScene& editor_scene,
                                       auto& process_params = obj->process_params();
                                       pnanovdb_pipeline_voxelbvh_build_params_set_source_type(
                                           &process_params, pnanovdb_pipeline_voxelbvh_source_gaussian_file);
-                                      scene_object_mark_process_dirty(obj);
+                                      obj->mark_process_dirty();
                                   });
 
         if (!replacing)

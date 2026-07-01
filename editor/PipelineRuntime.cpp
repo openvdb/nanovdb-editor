@@ -158,7 +158,7 @@ void AsyncWorker::request_user_cancel(SceneObject* scene_obj)
         {
             if (obj->pipeline.process_run_snapshot)
             {
-                scene_object_restore_process_run_snapshot(obj);
+                obj->restore_process_run_snapshot();
                 m_cancel_snapshot_restored = true;
             }
         });
@@ -185,12 +185,12 @@ bool AsyncWorker::consume_user_cancelled()
             {
                 if (obj->pipeline.process_run_snapshot)
                 {
-                    scene_object_restore_process_run_snapshot(obj);
+                    obj->restore_process_run_snapshot();
                 }
                 else
                 {
                     const size_t running_step = static_cast<size_t>(obj->pipeline.active_process_step);
-                    scene_object_cancel_running_process_step_without_snapshot(obj, running_step);
+                    obj->cancel_running_process_step_without_snapshot(running_step);
                 }
             });
     }
@@ -199,7 +199,7 @@ bool AsyncWorker::consume_user_cancelled()
 
 void AsyncWorker::clear_pending_cancel_ui()
 {
-    with_pending_object(scene_object_clear_process_cancel_state);
+    with_pending_object([](SceneObject* obj) { obj->clear_process_cancel_state(); });
 }
 
 bool AsyncWorker::pending_target_matches(uint64_t scene_id, uint64_t name_id, uint64_t lifetime_id) const
@@ -485,7 +485,7 @@ bool GaussianVoxelizeWorker::handle_completion()
                 float used_vpu = pipeline_params_get_voxels_per_unit(&m_pending_params);
                 float current_vpu = pipeline_params_get_voxels_per_unit(&process_step.params);
                 bool params_changed = (current_vpu != used_vpu);
-                scene_object_advance_process_chain(scene_obj, true);
+                scene_obj->advance_process_chain(true);
                 if (params_changed)
                 {
                     process_step.bump_revision();
@@ -528,7 +528,7 @@ bool GaussianVoxelizeWorker::handle_completion()
             Console::getInstance().addLog(Console::LogLevel::Error, "Gaussian->NanoVDB conversion failed");
         }
         with_pending_process_step([](SceneObject* scene_obj, PipelineStage&)
-                                  { scene_object_advance_process_chain(scene_obj, false); });
+                                  { scene_obj->advance_process_chain(false); });
     }
 
     m_pending_nanovdb_array = nullptr;
@@ -755,8 +755,8 @@ bool VoxelBVHWorker::handle_completion()
                             pending_compute->destroy_array(arr);
                     });
                 process_step.output.set_array(k_stage_output_nanovdb, result_array, owner);
-                scene_object_sync_render_to_chain(obj);
-                scene_object_advance_process_chain(obj, true);
+                obj->sync_render_to_chain();
+                obj->advance_process_chain(true);
             });
 
         if (object_found)
@@ -787,8 +787,7 @@ bool VoxelBVHWorker::handle_completion()
             Console::getInstance().addLog(
                 Console::LogLevel::Error, "VoxelBVH build of %s failed", describe_input().c_str());
         }
-        with_pending_process_step([](SceneObject* obj, PipelineStage&)
-                                  { scene_object_advance_process_chain(obj, false); });
+        with_pending_process_step([](SceneObject* obj, PipelineStage&) { obj->advance_process_chain(false); });
         finish_file_replacement(false);
     }
 
@@ -952,8 +951,8 @@ bool VoxelBVHRgba8Worker::handle_completion()
                             pending_compute->destroy_array(arr);
                     });
                 process_step.output.set_array(k_stage_output_nanovdb, result_array, owner);
-                scene_object_sync_render_to_chain(obj);
-                scene_object_advance_process_chain(obj, true);
+                obj->sync_render_to_chain();
+                obj->advance_process_chain(true);
             });
 
         if (object_found)
@@ -980,8 +979,7 @@ bool VoxelBVHRgba8Worker::handle_completion()
         {
             Console::getInstance().addLog(Console::LogLevel::Error, "VoxelBVH -> RGBA8 conversion failed");
         }
-        with_pending_process_step([](SceneObject* obj, PipelineStage&)
-                                  { scene_object_advance_process_chain(obj, false); });
+        with_pending_process_step([](SceneObject* obj, PipelineStage&) { obj->advance_process_chain(false); });
     }
 
     m_pending_src = nullptr;

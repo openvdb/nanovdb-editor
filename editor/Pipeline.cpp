@@ -99,6 +99,91 @@ bool with_runtime_or_warn(const char* fn_name, F&& fn)
 
 using namespace pnanovdb_editor;
 
+namespace
+{
+
+bool has_named_array(const SceneObject* obj, const char* name)
+{
+    if (!obj)
+        return false;
+    const auto it = obj->resources.named_arrays.find(name);
+    return it != obj->resources.named_arrays.end() && it->second != nullptr;
+}
+
+bool source_resources_available(const SceneObject* obj, SceneObjectSourceKind source)
+{
+    if (!obj)
+        return false;
+
+    switch (source)
+    {
+    case SceneObjectSourceKind::NanoVDB:
+        return obj->resources.nanovdb_array != nullptr || obj->resources.converted_nanovdb != nullptr;
+    case SceneObjectSourceKind::GaussianData:
+        return obj->resources.gaussian_data != nullptr;
+    case SceneObjectSourceKind::GaussianFile:
+        return obj->pipeline.load().type == pnanovdb_pipeline_type_gaussian_load &&
+               !obj->resources.source_filepath.empty();
+    case SceneObjectSourceKind::GaussianArrays:
+    {
+        static constexpr const char* required[] = { "means", "opacities", "quaternions", "scales", "sh_0", "sh_n" };
+        return std::all_of(
+            std::begin(required), std::end(required), [obj](const char* name) { return has_named_array(obj, name); });
+    }
+    case SceneObjectSourceKind::MeshTriangles:
+    case SceneObjectSourceKind::MeshLines:
+    {
+        if (!has_named_array(obj, "indices") || !has_named_array(obj, "positions"))
+            return false;
+        const auto* indices = obj->resources.named_arrays.at("indices");
+        const bool line_indices = indices->element_size == 2u * sizeof(uint32_t);
+        return source == SceneObjectSourceKind::MeshLines ? line_indices : !line_indices;
+    }
+    case SceneObjectSourceKind::None:
+        return false;
+    }
+    return false;
+}
+
+SceneObjectSourceKind voxelbvh_source_kind(pnanovdb_pipeline_voxelbvh_source_t source)
+{
+    switch (source)
+    {
+    case pnanovdb_pipeline_voxelbvh_source_gaussian_file:
+        return SceneObjectSourceKind::GaussianFile;
+    case pnanovdb_pipeline_voxelbvh_source_triangles:
+        return SceneObjectSourceKind::MeshTriangles;
+    case pnanovdb_pipeline_voxelbvh_source_lines:
+        return SceneObjectSourceKind::MeshLines;
+    case pnanovdb_pipeline_voxelbvh_source_gaussian_arrays:
+        return SceneObjectSourceKind::GaussianArrays;
+    }
+    return SceneObjectSourceKind::None;
+}
+
+} // namespace
+
+bool pnanovdb_editor::process_pipeline_supports_object(const SceneObject* obj, pnanovdb_pipeline_type_t type)
+{
+    if (!obj)
+        return false;
+
+    const SceneObjectSourceKind source = obj->source_kind();
+    switch (type)
+    {
+    case pnanovdb_pipeline_type_voxelbvh_rgba8:
+        return source == SceneObjectSourceKind::MeshTriangles && source_resources_available(obj, source);
+    case pnanovdb_pipeline_type_voxelbvh_build:
+        return (source == SceneObjectSourceKind::GaussianFile || source == SceneObjectSourceKind::GaussianArrays ||
+                source == SceneObjectSourceKind::MeshTriangles || source == SceneObjectSourceKind::MeshLines) &&
+               source_resources_available(obj, source);
+    case pnanovdb_pipeline_type_gaussian_voxelize:
+        return source == SceneObjectSourceKind::GaussianFile && source_resources_available(obj, source);
+    default:
+        return true;
+    }
+}
+
 // ----------------------------------------------------------------------------
 // Generic param helpers
 // ----------------------------------------------------------------------------
@@ -241,6 +326,14 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_build(pnanovdb_scene_object_t
         return pnanovdb_pipeline_result_error;
     }
     const int source_type = (int)build_params->source_type;
+    const auto source = static_cast<pnanovdb_pipeline_voxelbvh_source_t>(source_type);
+    if (!source_resources_available(scene_obj, voxelbvh_source_kind(source)))
+    {
+        Console::getInstance().addLog(
+            Console::LogLevel::Error, "VoxelBVH build: source resources are incomplete (source_type=%d)", source_type);
+        scene_obj->process_dirty() = false;
+        return pnanovdb_pipeline_result_no_data;
+    }
     const pnanovdb_uint32_t resolution = pnanovdb_pipeline_voxelbvh_sanitize_resolution(build_params->resolution);
     const float user_inflation_radius = build_params->inflation_radius;
 
@@ -458,6 +551,12 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_rgba8(pnanovdb_scene_object_t
     {
         return pnanovdb_pipeline_result_no_data;
     }
+    if (!process_pipeline_supports_object(scene_obj, pnanovdb_pipeline_type_voxelbvh_rgba8))
+    {
+        Console::getInstance().addLog(
+            Console::LogLevel::Error, "VoxelBVH->RGBA8: triangle source resources are incomplete");
+        return pnanovdb_pipeline_result_no_data;
+    }
     if (!ctx || !ctx->voxelbvh || !ctx->voxelbvh_ctx || !ctx->compute || !ctx->queue)
     {
         Console::getInstance().addLog(
@@ -506,7 +605,7 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_rgba8(pnanovdb_scene_object_t
             Console::LogLevel::Error, "VoxelBVH->RGBA8: no input NanoVDB grid available for conversion");
         return pnanovdb_pipeline_result_no_data;
     }
-    if (!has_voxelbvh_producer || scene_object_source_kind(scene_obj) != SceneObjectSourceKind::MeshTriangles ||
+    if (!has_voxelbvh_producer || scene_obj->source_kind() != SceneObjectSourceKind::MeshTriangles ||
         !nanovdb_import::has_voxelbvh_mesh_metadata(src))
     {
         Console::getInstance().addLog(
@@ -554,6 +653,14 @@ static pnanovdb_pipeline_result_t execute_gaussian_voxelize(pnanovdb_scene_objec
             (void*)scene_obj, scene_obj ? scene_obj->resources.source_filepath.c_str() : "<null>");
         if (scene_obj)
             scene_obj->process_dirty() = false;
+        return pnanovdb_pipeline_result_no_data;
+    }
+
+    if (!process_pipeline_supports_object(scene_obj, pnanovdb_pipeline_type_gaussian_voxelize))
+    {
+        Console::getInstance().addLog(
+            Console::LogLevel::Error, "Gaussian->NanoVDB skipped: source is not a complete Gaussian file object");
+        scene_obj->process_dirty() = false;
         return pnanovdb_pipeline_result_no_data;
     }
 
@@ -749,7 +856,7 @@ pnanovdb_pipeline_result_t pipeline_execute_process(SceneObject* obj, const Pipe
     if (!obj)
         return pnanovdb_pipeline_result_error;
 
-    const int step = scene_object_next_dirty_process_step(obj);
+    const int step = obj->next_dirty_process_step();
     if (step < 0)
         return pnanovdb_pipeline_result_skipped;
     obj->pipeline.active_process_step = step;
@@ -763,7 +870,7 @@ pnanovdb_pipeline_result_t pipeline_execute_process(SceneObject* obj, const Pipe
 
 bool pipeline_needs_process(SceneObject* obj)
 {
-    return scene_object_next_dirty_process_step(obj) >= 0;
+    return obj && obj->next_dirty_process_step() >= 0;
 }
 
 namespace
@@ -899,11 +1006,11 @@ void pipeline_execute_pending(EditorSceneManager* manager, const PipelineContext
                 auto result = pipeline_execute_process(obj, ctx);
                 if (result == pnanovdb_pipeline_result_success || result == pnanovdb_pipeline_result_skipped)
                 {
-                    scene_object_advance_process_chain(obj, true);
+                    obj->advance_process_chain(true);
                 }
                 else if (result == pnanovdb_pipeline_result_error || result == pnanovdb_pipeline_result_no_data)
                 {
-                    scene_object_advance_process_chain(obj, false);
+                    obj->advance_process_chain(false);
                     terminal_replacement_failures.push_back(obj->lifetime_id);
                 }
             }
@@ -1134,7 +1241,7 @@ bool pipeline_cancel_async_process(EditorSceneManager* scene_manager,
                                                 [](SceneObject* obj)
                                                 {
                                                     if (obj)
-                                                        scene_object_process_user_cancel(obj);
+                                                        obj->process_user_cancel();
                                                 });
             const pnanovdb_pipeline_descriptor_t* desc = pnanovdb_pipeline_get_descriptor(worker->pipeline_type());
             Console::getInstance().addLog("Cancelling %s...", (desc && desc->name) ? desc->name : "process task");
@@ -1220,7 +1327,7 @@ void pipeline_process_pending_user_cancels(EditorSceneManager* scene_manager)
                                                 [](SceneObject* obj)
                                                 {
                                                     if (obj)
-                                                        scene_object_clear_process_cancel_state(obj);
+                                                        obj->clear_process_cancel_state();
                                                 });
             continue;
         }
@@ -1239,7 +1346,7 @@ void pipeline_process_pending_user_cancels(EditorSceneManager* scene_manager)
                                    {
                                        if (o)
                                        {
-                                           scene_object_clear_process_cancel_state(o);
+                                           o->clear_process_cancel_state();
                                        }
                                    });
     }
@@ -1322,7 +1429,7 @@ bool pipeline_create_variant(EditorSceneManager* scene_manager,
             obj->pipeline.load() = source_load;
             obj->render_pipeline() = source_render_type;
             pnanovdb_pipeline_get_default_params(source_render_type, &obj->render_params());
-            scene_object_set_named_array_bindings(obj, source_named_arrays, source_named_array_owners);
+            obj->set_named_array_bindings(source_named_arrays, source_named_array_owners);
             obj->resources.file_backed_named_arrays = source_file_backed_named_arrays;
             obj->pipeline.process() = source_process_steps.front();
             obj->pipeline.extra_process.assign(source_process_steps.begin() + 1, source_process_steps.end());
@@ -1337,7 +1444,7 @@ bool pipeline_create_variant(EditorSceneManager* scene_manager,
                 step.bump_revision();
                 step.dirty = step.type != pnanovdb_pipeline_type_noop;
             }
-            scene_object_resolve_resources(obj);
+            obj->resolve_resources();
             configured = true;
         });
 

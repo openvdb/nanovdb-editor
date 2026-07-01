@@ -56,8 +56,7 @@ static const pnanovdb_uint32_t s_default_height = 720u;
 namespace pnanovdb_editor
 {
 
-void defer_gaussian_data_destruction(pnanovdb_editor_impl_t* impl,
-                                     std::shared_ptr<pnanovdb_raster_gaussian_data_t> owner)
+void defer_gaussian_data_destruction(pnanovdb_editor_impl_t* impl, std::shared_ptr<pnanovdb_raster_gaussian_data_t> owner)
 {
     if (impl && owner)
         impl->gaussian_data_destruction_queue_pending.push_back(std::move(owner));
@@ -150,6 +149,8 @@ static pnanovdb_bool_t init_impl(pnanovdb_editor_t* editor,
     editor->impl->renderer = NULL;
     editor->impl->editor_scene = NULL;
     editor->impl->param_map_registry = NULL;
+    editor->impl->pending_scene_path.clear();
+    editor->impl->pending_scene_overwrite = PNANOVDB_FALSE;
 
     return PNANOVDB_TRUE;
 }
@@ -459,6 +460,8 @@ pnanovdb_int32_t editor_get_external_active_count(void* external_active_count)
     return count;
 };
 
+static pnanovdb_bool_t apply_load_scene(pnanovdb_editor_t* editor, const char* filepath, pnanovdb_bool_t overwrite);
+
 void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb_editor_config_t* config)
 {
     if (!editor->impl->compute || !editor->impl->compiler || !device || !config)
@@ -591,12 +594,10 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
                                                         }
                                                     });
 
-    EditorSceneConfig scene_config{ imgui_user_instance,
-                                    editor,
-                                    imgui_user_settings,
-                                    device_queue,
-                                    compiler_inst,
-                                    pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_nanovdb_render) };
+    EditorSceneConfig scene_config{
+        imgui_user_instance, editor,        imgui_user_settings,
+        device_queue,        compiler_inst, pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_nanovdb_render)
+    };
     editor->impl->editor_scene = new EditorScene(scene_config);
 
     auto create_background = [&]()
@@ -644,6 +645,13 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         raster_init_ctx.renderer = editor->impl->renderer;
         raster_init_ctx.scene_manager = editor->impl->scene_manager;
         pnanovdb_editor::pipeline_init(raster_init_ctx, editor->impl->editor_scene);
+    }
+
+    if (!editor->impl->pending_scene_path.empty())
+    {
+        const std::string pending_path = std::move(editor->impl->pending_scene_path);
+        editor->impl->pending_scene_path.clear();
+        apply_load_scene(editor, pending_path.c_str(), editor->impl->pending_scene_overwrite);
     }
 
     if (editor->impl->editor_worker)
@@ -1055,9 +1063,21 @@ pnanovdb_camera_t* get_camera(pnanovdb_editor_t* editor, pnanovdb_editor_token_t
 
 pnanovdb_bool_t load_scene(pnanovdb_editor_t* editor, const char* filepath, pnanovdb_bool_t overwrite)
 {
-    if (!editor || !editor->impl || !editor->impl->editor_scene || !filepath || filepath[0] == '\0')
+    if (!editor || !editor->impl || !filepath || filepath[0] == '\0')
         return PNANOVDB_FALSE;
 
+    if (!editor->impl->editor_scene)
+    {
+        editor->impl->pending_scene_path = filepath;
+        editor->impl->pending_scene_overwrite = overwrite;
+        return PNANOVDB_TRUE;
+    }
+
+    return apply_load_scene(editor, filepath, overwrite);
+}
+
+static pnanovdb_bool_t apply_load_scene(pnanovdb_editor_t* editor, const char* filepath, pnanovdb_bool_t overwrite)
+{
     EditorScene* editor_scene = editor->impl->editor_scene;
     if (overwrite)
     {
@@ -1243,10 +1263,9 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
 
     // Add with deferred destruction handling (use local device_queue in case we waited for worker init)
     std::shared_ptr<pnanovdb_raster_gaussian_data_t> old_owner;
-    editor->impl->scene_manager->add_gaussian_data(scene, name, gaussian_data, raster_params_array, raster_params_dt,
-                                                   editor->impl->compute, editor->impl->raster, device_queue,
-                                                   pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat),
-                                                   &old_owner);
+    editor->impl->scene_manager->add_gaussian_data(
+        scene, name, gaussian_data, raster_params_array, raster_params_dt, editor->impl->compute, editor->impl->raster,
+        device_queue, pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat), &old_owner);
 
     // Chain old data through gaussian_data_old for deferred destruction
     if (old_owner)
@@ -2155,10 +2174,6 @@ void unmap_pipeline_params(pnanovdb_editor_t* editor,
     }
 }
 
-
-// RAII guard over the worker's pipeline-params mutex. Hold it while reading or
-// mutating a SceneObject's pipeline config; call mark_pending_work() after a
-// mutation so the worker re-applies the params.
 class PipelineParamsLock
 {
 public:
@@ -2185,7 +2200,7 @@ static void seed_voxelbvh_build_source(SceneObject* obj, PipelineStage& step)
     {
         return;
     }
-    switch (scene_object_source_kind(obj))
+    switch (obj->source_kind())
     {
     case SceneObjectSourceKind::MeshLines:
         pnanovdb_pipeline_voxelbvh_build_params_set_source_type(&step.params, pnanovdb_pipeline_voxelbvh_source_lines);
@@ -2217,9 +2232,9 @@ static void configure_pipeline_stage(
     step.configured = true;
     step.dirty = mark_dirty;
     step.bump_revision();
-    if (sync_render)
+    if (sync_render && obj)
     {
-        scene_object_sync_render_to_chain(obj);
+        obj->sync_render_to_chain();
     }
 }
 
@@ -2283,7 +2298,7 @@ void set_pipeline(pnanovdb_editor_t* editor,
                 {
                     return;
                 }
-                scene_object_invalidate_process_configuration_from(obj, 0);
+                obj->invalidate_process_configuration_from(0);
                 obj->pipeline.extra_process.clear();
                 obj->pipeline.active_process_step = 0;
                 for (pnanovdb_uint32_t i = 0; i < descriptor->chain_step_count; ++i)
@@ -2303,21 +2318,21 @@ void set_pipeline(pnanovdb_editor_t* editor,
             const bool trimmed_chain = (stage == pnanovdb_pipeline_stage_process && !obj->pipeline.extra_process.empty());
             if (stage == pnanovdb_pipeline_stage_process && type_changed)
             {
-                scene_object_invalidate_process_configuration_from(obj, 0);
+                obj->invalidate_process_configuration_from(0);
             }
             if (trimmed_chain)
             {
                 obj->pipeline.extra_process.clear();
                 obj->pipeline.active_process_step = 0;
-                scene_object_clear_process_run_snapshot(obj);
-                scene_object_resolve_resources(obj);
+                obj->clear_process_run_snapshot();
+                obj->resolve_resources();
             }
 
             if (!type_changed)
             {
                 if (trimmed_chain)
                 {
-                    scene_object_sync_render_to_chain(obj);
+                    obj->sync_render_to_chain();
                 }
                 return;
             }
@@ -2464,7 +2479,7 @@ void set_process_step(pnanovdb_editor_t* editor,
             {
                 return;
             }
-            scene_object_invalidate_process_configuration_from(obj, idx);
+            obj->invalidate_process_configuration_from(idx);
 
             configure_pipeline_stage(obj, step, type, true, true);
         });
@@ -2514,7 +2529,7 @@ void unmap_process_step_params(pnanovdb_editor_t* editor,
                                                  {
                                                      if (!obj || step_index >= obj->pipeline.process_count())
                                                          return;
-                                                     scene_object_invalidate_process_configuration_from(obj, step_index);
+                                                     obj->invalidate_process_configuration_from(step_index);
                                                      obj->pipeline.process_step(step_index).configured = true;
                                                  });
     }
@@ -2542,7 +2557,7 @@ void mark_pipeline_dirty(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* sce
                                              {
                                                  if (obj)
                                                  {
-                                                     scene_object_mark_process_dirty(obj);
+                                                     obj->mark_process_dirty();
                                                  }
                                              });
     pipeline_params_lock.mark_pending_work();

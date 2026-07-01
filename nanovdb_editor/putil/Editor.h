@@ -37,8 +37,6 @@ typedef struct pnanovdb_pipeline_params_t
 } pnanovdb_pipeline_params_t;
 
 
-typedef struct pnanovdb_scene_object_t pnanovdb_scene_object_t;
-
 struct pnanovdb_shader_params_desc_t
 {
     void* data;

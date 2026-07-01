@@ -91,6 +91,8 @@ bool pipeline_needs_process(SceneObject* obj);
 void pipeline_execute_pending(EditorSceneManager* manager, const PipelineContext& ctx);
 const char* pipeline_get_shader(const SceneObject* obj);
 
+PNANOVDB_API bool process_pipeline_supports_object(const SceneObject* obj, pnanovdb_pipeline_type_t type);
+
 // ============================================================================
 // Async pipeline interface
 // ============================================================================

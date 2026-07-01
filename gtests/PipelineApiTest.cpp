@@ -373,7 +373,6 @@ TEST_F(PipelineApiTest, ProcessStepApiAddsEditsAndMapsSteps)
 }
 
 
-
 TEST_F(PipelineApiTest, RenderComboUsesNewestProcessOutputNotConfiguredDownstream)
 {
     editor.set_process_step(&editor, scene_token, name_token, 0, pnanovdb_pipeline_type_voxelbvh_build);
