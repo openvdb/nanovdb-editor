@@ -146,7 +146,7 @@ void voxelbvh_generate_rgba8_integral();
 void voxelbvh_test()
 {
     voxelbvh_generate_rgba8_integral();
-    //voxelbvh_generate_rgba8();
+    // voxelbvh_generate_rgba8();
     return;
 
     // load compiler and compute
@@ -1118,36 +1118,31 @@ void voxelbvh_generate_rgba8_integral()
     printf("Vulkan initialized\n");
     print_memory_stats(&compute, device);
 
-    pnanovdb_compute_array_t* vert_nanovdbs[vert_count] = {};
-    for (pnanovdb_uint32_t vert_idx = 0u; vert_idx < vert_count; vert_idx++)
+    // only need to generate single VoxelBVH here
+    pnanovdb_compute_array_t* nanovdb_meta = nullptr;
     {
-        printf("ijkl from Gaussians vert_idx(%d)\n", vert_idx);
-
-        pnanovdb_camera_mat_t transform_mat = {};
-        get_transform(vert_idx, &transform_mat, 1.f);
-        float transform[16u] = {};
-        memcpy(transform, &transform_mat, sizeof(pnanovdb_camera_mat_t));
+        printf("ijkl from Gaussians\n");
 
         pnanovdb_compute_array_t* ijkl_array = nullptr;
         pnanovdb_compute_array_t* prim_id_array = nullptr;
         pnanovdb_compute_array_t* range_array = nullptr;
         pnanovdb_compute_array_t* world_bbox_array = nullptr;
         voxel_bvh.ijkl_from_gaussians_file(&compute, queue, voxelbvh_ctx, in_file, &ijkl_array, &prim_id_array,
-                                           &range_array, &world_bbox_array, resolution, prim_meta_arrays, 6u, transform,
-                                           16u);
+                                           &range_array, &world_bbox_array, resolution, prim_meta_arrays, 6u, nullptr,
+                                           0u);
 
         uint64_t range_count = range_array->element_count;
         uint64_t ijkl_count = ijkl_array->element_count;
         uint64_t* mapped_ijkl = (uint64_t*)compute.map_array(ijkl_array);
         uint64_t* mapped_range = (uint64_t*)compute.map_array(range_array);
 
-        printf("NanoVDB from ijkl vert_idx(%d)\n", vert_idx);
+        printf("NanoVDB from ijkl\n");
 
         pnanovdb_compute_array_t* built_nanovdb_array = nullptr;
         pnanovdb_compute_array_t* built_flat_range_array = nullptr;
         voxel_bvh.nanovdb_add_nodes_from_ijkl_array(&compute, queue, voxelbvh_ctx, &built_nanovdb_array,
                                                     &built_flat_range_array, ijkl_array, range_array, world_bbox_array,
-                                                    resolution, transform, 16u);
+                                                    resolution, nullptr, 0u);
 
         pnanovdb_buf_t buf =
             pnanovdb_make_buf((uint32_t*)built_nanovdb_array->data,
@@ -1188,26 +1183,10 @@ void voxelbvh_generate_rgba8_integral()
             metadata_arrays[2u + idx] = prim_meta_arrays[idx];
         }
 
-        printf("Append metadata vert_idx(%d)\n", vert_idx);
-        pnanovdb_compute_array_t* nanovdb_meta = nullptr;
+        printf("Append metadata\n");
         voxel_bvh.nanovdb_append_metadata(
             &compute, built_nanovdb_array, &nanovdb_meta, metadata_arrays, 2u + prim_meta_count);
 
-
-        printf("Voxelize vert_idx(%d)\n", vert_idx);
-#if 1
-        pnanovdb_uint32_t resolution = 8192u;
-
-        pnanovdb_compute_array_t* nanovdb_rgba8_4x = nullptr;
-        voxel_bvh.nanovdb_integral_from_voxelbvh_array(
-            &compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_meta, resolution, transform, 16u);
-
-        // compute.save_nanovdb(nanovdb_rgba8_4x, "./data/test_rgba8.nvdb");
-        vert_nanovdbs[vert_idx] = nanovdb_rgba8_4x;
-        // compute.destroy_array(nanovdb_rgba8_4x);
-#endif
-
-        compute.destroy_array(nanovdb_meta);
         for (uint32_t idx = 0u; idx < prim_meta_count; idx++)
         {
             compute.destroy_array(prim_meta_arrays[idx]);
@@ -1220,10 +1199,31 @@ void voxelbvh_generate_rgba8_integral()
 
         compute.destroy_array(built_nanovdb_array);
         compute.destroy_array(built_flat_range_array);
+    }
+
+    pnanovdb_compute_array_t* vert_nanovdbs[vert_count] = {};
+    for (pnanovdb_uint32_t vert_idx = 0u; vert_idx < vert_count; vert_idx++)
+    {
+        pnanovdb_camera_mat_t transform_mat = {};
+        get_transform(vert_idx, &transform_mat, 1.f);
+        float transform[16u] = {};
+        memcpy(transform, &transform_mat, sizeof(pnanovdb_camera_mat_t));
+
+        printf("Voxelize vert_idx(%d)\n", vert_idx);
+
+        pnanovdb_uint32_t resolution = 4096u;
+        pnanovdb_compute_array_t* nanovdb_rgba8_integral = nullptr;
+        voxel_bvh.nanovdb_integral_from_voxelbvh_array(
+            &compute, queue, voxelbvh_ctx, &nanovdb_rgba8_integral, nanovdb_meta, resolution, transform, 16u);
+
+        vert_nanovdbs[vert_idx] = nanovdb_rgba8_integral;
+        // compute.destroy_array(nanovdb_rgba8_integral);
 
         printf("End of vert_idx(%d)\n", vert_idx);
         print_memory_stats(&compute, device);
     }
+
+    compute.destroy_array(nanovdb_meta);
 
     printf("Freeing GPU device before merge\n");
     print_memory_stats(&compute, device);
