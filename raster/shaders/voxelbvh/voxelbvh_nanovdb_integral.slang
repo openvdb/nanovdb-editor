@@ -31,6 +31,67 @@ RWStructuredBuffer<uint2> buf;
 
 #include "spherical_harmonics.slang"
 
+void flush_integral(inout float4 sum, inout float nominalT, float3 worldRayOrigin, float3 worldRayDir)
+{
+    // Note: single grid assumption
+    pnanovdb_grid_handle_t grid = {};
+
+    // only write nonzero contributions
+    if (sum.a < 1.f)
+    {
+        // resolve world hit location
+        float world_hit_t = nominalT / (1.f - sum.a);
+        float3 worldHitPosf = worldRayDir * world_hit_t + worldRayOrigin;
+
+        // transform world to index
+        float3 hitidxf = pnanovdb_grid_world_to_indexf(buf, grid, worldHitPosf);
+        int3 ijk = int3(floor(hitidxf));
+
+        // topology passes
+        if (constants.pass_id < 3u)
+        {
+            pnanovdb_address_t child_mask_addr = {};
+            uint child_mask_n = 0u;
+            if (find_child_bit(
+                buf,
+                grid,
+                constants.pass_id,
+                ijk,
+                child_mask_addr,
+                child_mask_n))
+            {
+                nanovdb_set_bit(buf, child_mask_addr, child_mask_n);
+            }
+        }
+
+        // value pass
+        if (constants.pass_id == 3u)
+        {
+            pnanovdb_uint32_t grid_type = pnanovdb_grid_get_grid_type(buf, grid);
+            pnanovdb_tree_handle_t tree = pnanovdb_grid_get_tree(buf, grid);
+            pnanovdb_root_handle_t root = pnanovdb_tree_get_root(buf, tree);
+
+            uint level = 0u;
+            pnanovdb_address_t val_addr = pnanovdb_root_get_value_address_and_level(
+                grid_type, buf, root, ijk, level);
+            if (level < 4)
+            {
+                // normalize
+                sum.rgb *= (1.f / (1.f - sum.a));
+
+                float4 color = float4(sum.rgb, 1.f - sum.a);
+                uint rgba_raw = uint(255.f * max(0.f, min(1.f, color.x))) | (uint(255.f * max(0.f, min(1.f, color.y))) << 8u) |
+                                (uint(255.f * max(0.f, min(1.f, color.z))) << 16u) |
+                                (uint(255.f * max(0.f, min(1.f, color.w))) << 24u);
+                pnanovdb_write_uint32(buf, val_addr, rgba_raw);
+            }
+        }
+    }
+    // reset accumulation for next interval
+    sum = float4(0.f, 0.f, 0.f, 1.f);
+    nominalT = 0.f;
+}
+
 float3x3 quat_to_mat(float4 quatf)
 {
     float3 rot0 = float3(
@@ -185,6 +246,28 @@ void intersect_gaussian(
     float sigma = 0.5f * (conic.x * delta.x * delta.x + conic.z * delta.y * delta.y) +
                     conic.y * delta.x * delta.y;
     float alpha = min(0.999f, opacity * exp(-sigma));
+
+    // flush old integral if t value has changed too much
+    if (t > 0.f && t >= tmin && t < tmax && sum.a < 1.f)
+    {
+        float sum_t = nominalT / (1.f - sum.a);
+
+        //float3 ray_dir_orig = float3(0.f, 0.f, 1.f);
+        //pnanovdb_grid_handle_t grid = {};
+        //float3 worldRayDir = pnanovdb_grid_index_to_world_dirf(buf, grid, ray_dir_orig);
+        //float rayDirMagn = length(worldRayDir);
+        //sum_t /= rayDirMagn;
+
+        float3 pos_a = sum_t * rayDir + rayOrigin;
+        float3 pos_b = t * rayDir + rayOrigin;
+        float dist = length(pos_b - pos_a);
+
+        if (dist > 0.1f)
+        {
+            flush_integral(sum, nominalT, rayOrigin, rayDir);
+        }
+    }
+
 #if 1
     if (t > 0.f && t >= tmin && t < tmax)
     {
@@ -704,51 +787,6 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 
     if (sum.a < 1.f)
     {
-        float world_hit_t = nominalT / (1.f - sum.a);
-        // move t back to local space
-        float hit_t = world_hit_t / rayDirMagn;
-
-        float3 hitidxf = ray_dir * hit_t + ray_origin;
-        int3 ijk = int3(floor(hitidxf));
-
-        // topology passes
-        if (constants.pass_id < 3u)
-        {
-            pnanovdb_address_t child_mask_addr = {};
-            uint child_mask_n = 0u;
-            if (find_child_bit(
-                buf,
-                grid,
-                constants.pass_id,
-                ijk,
-                child_mask_addr,
-                child_mask_n))
-            {
-                nanovdb_set_bit(buf, child_mask_addr, child_mask_n);
-            }
-        }
-
-        // value pass
-        if (constants.pass_id == 3u)
-        {
-            pnanovdb_uint32_t grid_type = pnanovdb_grid_get_grid_type(buf, grid);
-            pnanovdb_tree_handle_t tree = pnanovdb_grid_get_tree(buf, grid);
-            pnanovdb_root_handle_t root = pnanovdb_tree_get_root(buf, tree);
-
-            uint level = 0u;
-            pnanovdb_address_t val_addr = pnanovdb_root_get_value_address_and_level(
-                grid_type, buf, root, ijk, level);
-            if (level < 4)
-            {
-                // normalize
-                sum.rgb *= (1.f / (1.f - sum.a));
-
-                float4 color = float4(sum.rgb, 1.f - sum.a);
-                uint rgba_raw = uint(255.f * max(0.f, min(1.f, color.x))) | (uint(255.f * max(0.f, min(1.f, color.y))) << 8u) |
-                                (uint(255.f * max(0.f, min(1.f, color.z))) << 16u) |
-                                (uint(255.f * max(0.f, min(1.f, color.w))) << 24u);
-                pnanovdb_write_uint32(buf, val_addr, rgba_raw);
-            }
-        }
+        flush_integral(sum, nominalT, worldRayOrigin, worldRayDir);
     }
 }
