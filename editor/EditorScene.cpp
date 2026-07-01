@@ -559,51 +559,6 @@ void EditorScene::process_pending_editor_changes()
             m_editor->impl->shader_params_data_type, old_shader_params_data_type);
     }
 
-    // Process pending removals (queued by worker thread)
-    // This is done on the render thread to ensure views/renderer aren't using the data
-    {
-        std::vector<pnanovdb_editor::PendingRemoval> removals_to_process;
-        {
-            std::lock_guard<std::mutex> lock(worker->pending_removals_mutex);
-            removals_to_process = std::move(worker->pending_removals);
-            worker->pending_removals.clear();
-        }
-
-        for (const auto& removal : removals_to_process)
-        {
-            if (!removal.scene)
-            {
-                Console::getInstance().addLog("[ERROR] Invalid removal request: scene is nullptr!");
-                continue;
-            }
-
-            if (removal.name)
-            {
-                // Execute object removal on render thread (safe - no UAF)
-                Console::getInstance().addLog("[Removal] Processing object removal: scene='%s', name='%s'",
-                                              removal.scene->str, removal.name->str);
-                execute_removal(m_editor, removal.scene, removal.name);
-            }
-            else
-            {
-                // name == nullptr signals full scene removal (after all objects were removed)
-                Console::getInstance().addLog("[Removal] Processing scene removal: scene='%s'", removal.scene->str);
-                if (m_editor->impl->scene_view)
-                {
-                    bool scene_removed = m_editor->impl->scene_view->remove_scene(removal.scene);
-                    if (scene_removed)
-                    {
-                        Console::getInstance().addLog(
-                            "Removed scene '%s' from SceneView on render thread", removal.scene->str);
-                    }
-                    else
-                    {
-                        Console::getInstance().addLog("Scene '%s' was not found in SceneView", removal.scene->str);
-                    }
-                }
-            }
-        }
-    }
 
     // Sync views from scene_manager if signaled (worker thread modified scene_manager)
     if (worker->views_need_sync.exchange(false, std::memory_order_acq_rel))

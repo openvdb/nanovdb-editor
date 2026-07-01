@@ -22,6 +22,7 @@
 #include "Profiler.h"
 #include "ShaderCompileUtils.h"
 #include "EditorScene.h"
+#include "SceneSerializer.h"
 #include "ImguiInstance.h"
 #include "RenderSettingsConfig.h"
 
@@ -461,11 +462,39 @@ pnanovdb_int32_t editor_get_external_active_count(void* external_active_count)
 };
 
 static pnanovdb_bool_t apply_load_scene(pnanovdb_editor_t* editor, const char* filepath, pnanovdb_bool_t overwrite);
+static pnanovdb_bool_t apply_save_scene(pnanovdb_editor_t* editor, const char* filepath);
+
+static pnanovdb_bool_t run_on_render_thread(pnanovdb_editor_t* editor, std::function<pnanovdb_bool_t()> fn)
+{
+    EditorWorker* worker = editor->impl->editor_worker;
+    if (!worker || (worker->thread && worker->thread->get_id() == std::this_thread::get_id()))
+        return fn();
+    return worker->render_thread_tasks.run_blocking(std::move(fn));
+}
+
+static void post_to_render_thread(pnanovdb_editor_t* editor, std::function<void()> fn)
+{
+    if (editor->impl->editor_worker)
+        editor->impl->editor_worker->render_thread_tasks.run_async(std::move(fn));
+    else
+        fn();
+}
 
 void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb_editor_config_t* config)
 {
+    auto release_worker_waiters = [editor]()
+    {
+        if (editor->impl->editor_worker)
+        {
+            editor->impl->editor_worker->is_starting.store(false);
+            editor->impl->editor_worker->render_thread_tasks.close();
+        }
+    };
+
     if (!editor->impl->compute || !editor->impl->compiler || !device || !config)
     {
+        release_worker_waiters();
+        editor->impl->show_active.store(false);
         return;
     }
 
@@ -491,6 +520,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     pnanovdb_imgui_window_interface_t* imgui_window_iface = pnanovdb_imgui_get_window_interface();
     if (!imgui_window_iface)
     {
+        release_worker_waiters();
         editor->impl->show_active.store(false);
         return;
     }
@@ -504,6 +534,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
     if (!imgui_window || !imgui_user_settings)
     {
+        release_worker_waiters();
         editor->impl->show_active.store(false);
         return;
     }
@@ -527,6 +558,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
     if (!imgui_user_instance)
     {
+        release_worker_waiters();
         editor->impl->show_active.store(false);
         return;
     }
@@ -676,6 +708,9 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     bool should_run = true;
     while (should_run && editor_sigint_should_run())
     {
+        if (editor->impl->editor_worker)
+            editor->impl->editor_worker->render_thread_tasks.drain();
+
         if (editor->impl->editor_worker && editor->impl->editor_worker->should_stop.load())
         {
             auto log_print = compute_interface->get_log_print(compute_context);
@@ -924,6 +959,7 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     {
         editor_sigint_unregister();
     }
+    release_worker_waiters();
     editor->impl->show_active.store(false);
 }
 
@@ -968,9 +1004,9 @@ void start(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovd
         editor_worker->config.ip_address = editor_worker->config_ip_address.c_str();
         editor_worker->config.ui_profile_name = editor_worker->config_ui_profile_name.c_str();
 
+        editor->impl->editor_worker = editor_worker;
         editor_worker->thread =
             new std::thread([editor, device, editor_worker]() { editor->show(editor, device, &editor_worker->config); });
-        editor->impl->editor_worker = editor_worker;
     }
     else
     {
@@ -1066,6 +1102,20 @@ pnanovdb_bool_t load_scene(pnanovdb_editor_t* editor, const char* filepath, pnan
     if (!editor || !editor->impl || !filepath || filepath[0] == '\0')
         return PNANOVDB_FALSE;
 
+    std::string validation_error;
+    if (!validate_scene_file_for_load(filepath, &validation_error))
+    {
+        Console::getInstance().addLog(
+            Console::LogLevel::Error, "Load scene: '%s' is not loadable: %s", filepath, validation_error.c_str());
+        return PNANOVDB_FALSE;
+    }
+
+    if (editor->impl->editor_worker)
+    {
+        return run_on_render_thread(editor, [editor, path = std::string(filepath), overwrite]()
+                                    { return apply_load_scene(editor, path.c_str(), overwrite); });
+    }
+
     if (!editor->impl->editor_scene)
     {
         editor->impl->pending_scene_path = filepath;
@@ -1079,6 +1129,17 @@ pnanovdb_bool_t load_scene(pnanovdb_editor_t* editor, const char* filepath, pnan
 static pnanovdb_bool_t apply_load_scene(pnanovdb_editor_t* editor, const char* filepath, pnanovdb_bool_t overwrite)
 {
     EditorScene* editor_scene = editor->impl->editor_scene;
+    if (!editor_scene)
+        return PNANOVDB_FALSE;
+
+    std::string validation_error;
+    if (!validate_scene_file_for_load(filepath, &validation_error))
+    {
+        Console::getInstance().addLog(
+            Console::LogLevel::Error, "Load scene: '%s' is not loadable: %s", filepath, validation_error.c_str());
+        return PNANOVDB_FALSE;
+    }
+
     if (overwrite)
     {
         for (const std::string& name : editor_scene->find_conflicting_scene_names(filepath))
@@ -1112,7 +1173,19 @@ static pnanovdb_bool_t apply_load_scene(pnanovdb_editor_t* editor, const char* f
 
 pnanovdb_bool_t save_scene(pnanovdb_editor_t* editor, const char* filepath)
 {
-    if (!editor || !editor->impl || !editor->impl->editor_scene || !filepath || filepath[0] == '\0')
+    if (!editor || !editor->impl || !filepath || filepath[0] == '\0')
+        return PNANOVDB_FALSE;
+    if (editor->impl->editor_worker)
+    {
+        return run_on_render_thread(
+            editor, [editor, path = std::string(filepath)]() { return apply_save_scene(editor, path.c_str()); });
+    }
+    return apply_save_scene(editor, filepath);
+}
+
+static pnanovdb_bool_t apply_save_scene(pnanovdb_editor_t* editor, const char* filepath)
+{
+    if (!editor->impl->editor_scene)
         return PNANOVDB_FALSE;
     try
     {
@@ -1797,27 +1870,9 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
         Console::getInstance().addLog(
             Console::LogLevel::Debug, "Found %zu objects to remove from scene", objects_to_remove.size());
 
-        dispatch_worker_or_immediate(
+        post_to_render_thread(
             editor,
-            // Worker mode: queue all removals for render thread
-            [&](EditorWorker* worker)
-            {
-                std::lock_guard<std::mutex> lock(worker->pending_removals_mutex);
-
-                // Queue each object removal
-                for (auto* obj_name : objects_to_remove)
-                {
-                    worker->pending_removals.push_back({ scene, obj_name });
-                }
-
-                // Queue scene removal (nullptr name signals to remove the scene itself after objects)
-                worker->pending_removals.push_back({ scene, nullptr });
-
-                Console::getInstance().addLog(
-                    "[API] Queued %zu object removals + scene removal for next frame", objects_to_remove.size());
-            },
-            // Non-worker mode: execute removals immediately
-            [&]()
+            [editor, scene, objects_to_remove]()
             {
                 for (auto* obj_name : objects_to_remove)
                 {
@@ -1851,17 +1906,7 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
                                   token_to_string_log(scene), (unsigned long long)scene->id, token_to_string_log(name),
                                   (unsigned long long)name->id);
 
-    dispatch_worker_or_immediate(
-        editor,
-        // Worker mode: queue removal for next frame boundary (prevents UAF)
-        [&](EditorWorker* worker)
-        {
-            Console::getInstance().addLog(Console::LogLevel::Debug, "Queuing removal for next frame");
-            std::lock_guard<std::mutex> lock(worker->pending_removals_mutex);
-            worker->pending_removals.push_back({ scene, name });
-        },
-        // Non-worker mode: execute removal immediately (same thread as render)
-        [&]() { execute_removal(editor, scene, name); });
+    post_to_render_thread(editor, [editor, scene, name]() { execute_removal(editor, scene, name); });
 }
 
 /*!

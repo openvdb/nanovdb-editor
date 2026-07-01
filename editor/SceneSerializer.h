@@ -36,6 +36,8 @@ inline constexpr int k_scene_file_version = 1;
 
 bool scene_source_path_is_available(const std::string& path) noexcept;
 
+bool validate_scene_file_for_load(const std::string& path, std::string* error_message = nullptr);
+
 bool parse_scene_object_record(const nlohmann::json& object,
                                std::string& scene_name,
                                std::string& object_name,

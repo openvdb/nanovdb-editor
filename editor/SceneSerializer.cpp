@@ -415,6 +415,84 @@ bool scene_source_path_is_available(const std::string& path) noexcept
     }
 }
 
+bool validate_scene_file_for_load(const std::string& path, std::string* error_message)
+{
+    const auto fail = [error_message](const std::string& message)
+    {
+        if (error_message)
+            *error_message = message;
+        return false;
+    };
+
+    std::ifstream file(path);
+    if (!file)
+        return fail("cannot open file");
+
+    nlohmann::json doc;
+    try
+    {
+        file >> doc;
+    }
+    catch (const nlohmann::json::exception& e)
+    {
+        return fail(std::string("invalid JSON: ") + e.what());
+    }
+
+    int serialized_version = k_scene_file_version;
+    const auto version = doc.find("version");
+    if (version != doc.end() && version->is_number_integer())
+    {
+        try
+        {
+            serialized_version = version->get<int>();
+        }
+        catch (const nlohmann::json::exception&)
+        {
+            serialized_version = k_scene_file_version;
+        }
+    }
+    if (serialized_version != k_scene_file_version)
+    {
+        return fail("unsupported file version " + std::to_string(serialized_version) + " (expected " +
+                    std::to_string(k_scene_file_version) + ")");
+    }
+
+    const auto objects = doc.find("objects");
+    if (objects == doc.end() || !objects->is_array())
+        return fail("file has no 'objects' array");
+
+    bool has_valid_scene = false;
+    const auto scenes = doc.find("scenes");
+    if (scenes != doc.end() && scenes->is_array())
+    {
+        for (const auto& scene : *scenes)
+        {
+            if (!scene.is_object())
+                continue;
+            const auto name = scene.find("name");
+            if (name != scene.end() && name->is_string() && !name->get_ref<const std::string&>().empty())
+                has_valid_scene = true;
+        }
+    }
+
+    if (objects->empty())
+        return has_valid_scene ? true : fail("file contains no loadable scene or object records");
+
+    for (const auto& object : *objects)
+    {
+        std::string scene_name;
+        std::string object_name;
+        std::string object_type;
+        std::string source_filepath;
+        if (parse_scene_object_record(object, scene_name, object_name, object_type, source_filepath, nullptr))
+        {
+            return true;
+        }
+    }
+
+    return fail("file contains no loadable scene or object records");
+}
+
 bool parse_scene_object_record(const nlohmann::json& object,
                                std::string& scene_name,
                                std::string& object_name,
