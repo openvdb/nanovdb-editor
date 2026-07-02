@@ -131,8 +131,8 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         pnanovdb_root_tile_handle_t root_tile = pnanovdb_root_get_tile(dst_grid_type, dst_root, n);
 
         int3 root_coord = int3(
-            root_i * 4096u + root_ijk_min.x,
-            root_j * 4096u + root_ijk_min.y,
+            root_i * 4096 + root_ijk_min.x,
+            root_j * 4096 + root_ijk_min.y,
             root_k * 4096 + root_ijk_min.z
         );
         uint64_t key = pnanovdb_coord_to_key(root_coord);
