@@ -117,7 +117,10 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         root_dim1d = 256u;
     }
 
-    pnanovdb_root_set_tile_count(dst_buf, dst_root, root_dim1d);
+    if (thread_idx.x == 0u)
+    {
+        pnanovdb_root_set_tile_count(dst_buf, dst_root, root_dim1d);
+    }
     if (thread_idx.x < root_dim1d)
     {
         uint n = thread_idx.x;
