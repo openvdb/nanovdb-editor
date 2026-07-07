@@ -64,8 +64,28 @@ void flush_integral(inout float4 sum, inout float nominalT, float3 worldRayOrigi
             }
         }
 
-        // value pass
+        // mask pass
         if (constants.pass_id == 3u)
+        {
+            pnanovdb_uint32_t grid_type = pnanovdb_grid_get_grid_type(buf, grid);
+            pnanovdb_tree_handle_t tree = pnanovdb_grid_get_tree(buf, grid);
+            pnanovdb_root_handle_t root = pnanovdb_tree_get_root(buf, tree);
+
+            uint level = 0u;
+            pnanovdb_readaccessor_t acc;
+            pnanovdb_readaccessor_init(PNANOVDB_REF(acc), root);
+            pnanovdb_address_t val_addr = pnanovdb_readaccessor_get_value_address_and_level(
+                grid_type, buf, acc, ijk, level);
+            if (level == 0u)
+            {
+                pnanovdb_address_t mask_addr = pnanovdb_address_offset(acc.leaf.address, PNANOVDB_LEAF_OFF_VALUE_MASK);
+                pnanovdb_uint32_t n = pnanovdb_leaf_coord_to_offset(ijk);
+                nanovdb_set_bit(buf, mask_addr, n);
+            }
+        }
+
+        // value pass
+        if (constants.pass_id == 4u)
         {
             pnanovdb_uint32_t grid_type = pnanovdb_grid_get_grid_type(buf, grid);
             pnanovdb_tree_handle_t tree = pnanovdb_grid_get_tree(buf, grid);
@@ -96,11 +116,14 @@ void flush_integral(inout float4 sum, inout float nominalT, float3 worldRayOrigi
                         val_index64 = pnanovdb_read_uint64(buf, val_addr);
                     }
                     // write to metadata
-                    pnanovdb_int64_t byte_offset = pnanovdb_gridblindmetadata_get_data_offset(buf, metadata);
-                    pnanovdb_address_t meta_val_addr =
-                        pnanovdb_address_offset64(metadata.address, pnanovdb_int64_as_uint64(byte_offset));
-                    meta_val_addr = pnanovdb_address_offset64(meta_val_addr, val_index64 * 4u);
-                    pnanovdb_write_uint32(buf, meta_val_addr, rgba_raw);
+                    if (val_index64 != 0llu)
+                    {
+                        pnanovdb_int64_t byte_offset = pnanovdb_gridblindmetadata_get_data_offset(buf, metadata);
+                        pnanovdb_address_t meta_val_addr =
+                            pnanovdb_address_offset64(metadata.address, pnanovdb_int64_as_uint64(byte_offset));
+                        meta_val_addr = pnanovdb_address_offset64(meta_val_addr, val_index64 * 4u);
+                        pnanovdb_write_uint32(buf, meta_val_addr, rgba_raw);
+                    }
                 }
                 else
                 {

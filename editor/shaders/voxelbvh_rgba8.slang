@@ -144,7 +144,26 @@ void ray_hdda_nanovdb(uint thread_idx,
         if (level == 4u) {hdda_dim = 4096u;}
         hdda_update(hdda, rayOrigin, rayDir, rayDirInv, hdda_dim);
 
-        pnanovdb_uint32_t value_raw = pnanovdb_read_uint32(buf, addr);
+        pnanovdb_uint32_t value_raw;
+        if (grid_type == PNANOVDB_GRID_TYPE_ONINDEX)
+        {
+            pnanovdb_uint64_t val_index64;
+            if (level == 0)
+            {
+                val_index64 = pnanovdb_leaf_onindex_get_value_index(buf, addr, hdda.ijk);
+            }
+            else
+            {
+                val_index64 = pnanovdb_read_uint64(buf, addr);
+            }
+            pnanovdb_address_t val_addr = pnanovdb_grid_get_gridblindmetadata_value_address(buf, grid, 0u);
+            val_addr = pnanovdb_address_offset64(val_addr, val_index64 * 4u);
+            value_raw = pnanovdb_read_uint32(buf, val_addr);
+        }
+        else
+        {
+            value_raw = pnanovdb_read_uint32(buf, addr);
+        }
         float4 color = float4(
             float((value_raw >> 0) & 255) * (1.f / 255.f), float((value_raw >> 8) & 255) * (1.f / 255.f),
             float((value_raw >> 16) & 255) * (1.f / 255.f), float((value_raw >> 24) & 255) * (1.f / 255.f));
