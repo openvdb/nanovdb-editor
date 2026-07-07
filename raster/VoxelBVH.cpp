@@ -2792,13 +2792,24 @@ void nanovdb_index_allocate(const pnanovdb_compute_t* compute,
         pnanovdb_compute_buffer_transient_t* total_count_transient =
             compute_interface->register_buffer_as_transient(context, total_count_out);
 
+        buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED;
+        buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+        buf_desc.structure_stride = 8u;
+        buf_desc.size_in_bytes = 2u * 256u * 8u;
+        pnanovdb_compute_buffer_t* workgroup_counter_buffer =
+            compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &buf_desc);
+
+        pnanovdb_compute_buffer_transient_t* workgroup_counter_transient =
+            compute_interface->register_buffer_as_transient(context, workgroup_counter_buffer);
+
         {
-            pnanovdb_compute_resource_t resources[5u] = {};
+            pnanovdb_compute_resource_t resources[6u] = {};
             resources[0u].buffer_transient = constant_transient;
             resources[1u].buffer_transient = nanovdb_transient;
             resources[2u].buffer_transient = node_mask_transient;
             resources[3u].buffer_transient = nanovdb_transient;
-            resources[4u].buffer_transient = total_count_transient;
+            resources[4u].buffer_transient = workgroup_counter_transient;
+            resources[5u].buffer_transient = total_count_transient;
 
             compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_index_allocate1_slang],
                                      resources, 256u, 1u, 1u, "voxelbvh_nanovdb_index_allocate1");
@@ -2809,6 +2820,7 @@ void nanovdb_index_allocate(const pnanovdb_compute_t* compute,
         }
 
         compute_interface->destroy_buffer(context, constant_buffer);
+        compute_interface->destroy_buffer(context, workgroup_counter_buffer);
     }
 
     compute_interface->destroy_buffer(context, node_mask_buffer);
