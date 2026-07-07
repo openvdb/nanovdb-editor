@@ -72,7 +72,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     uint64_t workgroup_total_count = 0llu;
     workgroup_scan_uint64(thread_idx, total_count4, scan_total_count4, workgroup_total_count);
 
-    uint64_t index_val = scan_total_count4.x - total_count4.x;
+    uint64_t index_val = scan_total_count4.x - total_count4.x + user_state.global_offset;
 
     if (level == 3u && is_active) // root
     {
