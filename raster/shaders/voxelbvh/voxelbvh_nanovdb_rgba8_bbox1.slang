@@ -1,4 +1,4 @@
-// voxelbvh_nanovdb_level_list_alloc1.slang
+// voxelbvh_nanovdb_rgba8_bbox1.slang
 
 struct user_state_t
 {
