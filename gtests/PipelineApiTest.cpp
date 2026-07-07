@@ -403,7 +403,7 @@ TEST_F(PipelineApiTest, RenderComboUsesNewestProcessOutputNotConfiguredDownstrea
 
     pnanovdb_editor_test::sync_object_render_to_chain(&editor, scene_token, name_token);
     EXPECT_EQ(pnanovdb_editor_test::get_object_render_pipeline(&editor, scene_token, name_token),
-              pnanovdb_pipeline_type_nanovdb_render);
+              pnanovdb_pipeline_type_voxelbvh_rgba8_render);
 }
 
 TEST_F(PipelineApiTest, ReplacingProcessStepClearsItsOutputAndDownstreamOutputs)

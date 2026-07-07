@@ -26,6 +26,9 @@
 #include <limits>
 #include <vector>
 
+struct ImGuiContext;
+thread_local ImGuiContext* ImGuiTLS = nullptr;
+
 namespace pnanovdb_editor
 {
 namespace
