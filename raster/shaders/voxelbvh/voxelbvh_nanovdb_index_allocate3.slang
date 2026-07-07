@@ -127,6 +127,11 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     uint64_t total_count = uint2_to_uint64_t(workgroup_counters_in[group_idx.x]);
     uint64_t scan_total_count = uint2_to_uint64_t(workgroup_counters_in[256u + group_idx.x]);
     user_state.global_offset = scan_total_count - total_count;
+    // group 0 owns background
+    if (group_idx.x == 0u)
+    {
+        user_state.global_offset += 1u;
+    }
     do_iteration(group_idx.x, thread_idx.x, user_state);
 
     if (group_idx.x == 0u && thread_idx.x == 0u)

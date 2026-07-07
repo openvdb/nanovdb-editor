@@ -19,15 +19,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     pnanovdb_grid_handle_t grid = { pnanovdb_address_null() };
     pnanovdb_uint32_t grid_type = pnanovdb_grid_get_grid_type(buf, grid);
 
-    if (level == 4u) // background
-    {
-        // allocate a single background value
-        if (n == 0u)
-        {
-            user_state.count++;
-        }
-    }
-    else if (level == 3u) // root
+    if (level == 3u) // root
     {
         // count number of root tiles with active value
         pnanovdb_root_handle_t root = {node_arr};
@@ -77,6 +69,11 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
 void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 {
     user_state_t user_state = {};
+    // group 0 owns background
+    if (group_idx.x == 0u)
+    {
+        user_state.count = 1u;
+    }
     do_iteration(group_idx.x, thread_idx.x, user_state);
 
     vector<uint64_t, 4> total_count4 = vector<uint64_t, 4>(user_state.count, 0llu, 0llu, 0llu);

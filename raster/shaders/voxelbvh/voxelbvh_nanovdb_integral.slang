@@ -116,14 +116,11 @@ void flush_integral(inout float4 sum, inout float nominalT, float3 worldRayOrigi
                         val_index64 = pnanovdb_read_uint64(buf, val_addr);
                     }
                     // write to metadata
-                    if (val_index64 != 0llu)
-                    {
-                        pnanovdb_int64_t byte_offset = pnanovdb_gridblindmetadata_get_data_offset(buf, metadata);
-                        pnanovdb_address_t meta_val_addr =
-                            pnanovdb_address_offset64(metadata.address, pnanovdb_int64_as_uint64(byte_offset));
-                        meta_val_addr = pnanovdb_address_offset64(meta_val_addr, val_index64 * 4u);
-                        pnanovdb_write_uint32(buf, meta_val_addr, rgba_raw);
-                    }
+                    pnanovdb_int64_t byte_offset = pnanovdb_gridblindmetadata_get_data_offset(buf, metadata);
+                    pnanovdb_address_t meta_val_addr =
+                        pnanovdb_address_offset64(metadata.address, pnanovdb_int64_as_uint64(byte_offset));
+                    meta_val_addr = pnanovdb_address_offset64(meta_val_addr, val_index64 * 4u);
+                    pnanovdb_write_uint32(buf, meta_val_addr, rgba_raw);
                 }
                 else
                 {
