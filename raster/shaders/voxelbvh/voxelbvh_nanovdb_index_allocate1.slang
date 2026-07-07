@@ -10,6 +10,7 @@ struct user_state_t
 #include <workgroup_scan_uint64.slang>
 
 RWStructuredBuffer<uint2> workgroup_counters_out;
+RWStructuredBuffer<uint2> total_count_out;
 
 void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint level, uint n,
                   pnanovdb_coord_t ijk, inout user_state_t user_state)
@@ -65,16 +66,11 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     {
         // count number of active values only
         pnanovdb_leaf_handle_t leaf = {node_arr};
-        if (pnanovdb_leaf_get_value_mask(buf, lower, n))
+        if (pnanovdb_leaf_get_value_mask(buf, leaf, n))
         {
             user_state.count++;
         }
     }
-}
-
-uint2 uint64_t_to_uint2(uint64_t v)
-{
-    return uint2(uint(v), uint(v >> 32u));
 }
 
 [shader("compute")][numthreads(256, 1, 1)]

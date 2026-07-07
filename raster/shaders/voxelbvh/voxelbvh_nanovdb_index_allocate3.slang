@@ -9,21 +9,14 @@ struct user_state_t
 #include "voxelbvh_common.h"
 #include <workgroup_scan_uint64.slang>
 
-RWStructuredBuffer<uint2> workgroup_counters_out;
-
-uint64_t uint2_to_uint64_t(uint2 v)
-{
-    return (uint64_t(v.y) << 32u) | uint64_t(v.x);
-}
-
-uint2 uint64_t_to_uint2(uint64_t v)
-{
-    return uint2(uint(v), uint(v >> 32u));
-}
+RWStructuredBuffer<uint2> workgroup_counters_in;
+RWStructuredBuffer<uint2> total_count_out;
 
 void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint level, uint n,
                   pnanovdb_coord_t ijk, inout user_state_t user_state)
 {
+    uint thread_idx = n & 255;
+
     // Note: single grid assumption
     pnanovdb_grid_handle_t grid = { pnanovdb_address_null() };
     pnanovdb_uint32_t grid_type = pnanovdb_grid_get_grid_type(buf, grid);
@@ -68,7 +61,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     {
         // count number of active values only
         pnanovdb_leaf_handle_t leaf = {node_arr};
-        if (pnanovdb_leaf_get_value_mask(buf, lower, n))
+        if (pnanovdb_leaf_get_value_mask(buf, leaf, n))
         {
             is_active = true;
         }
@@ -77,7 +70,7 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
     vector<uint64_t, 4> total_count4 = vector<uint64_t, 4>(is_active ? 1llu : 0llu, 0llu, 0llu, 0llu);
     vector<uint64_t, 4> scan_total_count4 = vector<uint64_t, 4>(0llu, 0llu, 0llu, 0llu);
     uint64_t workgroup_total_count = 0llu;
-    workgroup_scan_uint64(thread_idx.x, total_count4, scan_total_count4, workgroup_total_count);
+    workgroup_scan_uint64(thread_idx, total_count4, scan_total_count4, workgroup_total_count);
 
     uint64_t index_val = scan_total_count4.x - total_count4.x;
 
@@ -135,4 +128,10 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     uint64_t scan_total_count = uint2_to_uint64_t(workgroup_counters_in[256u + group_idx.x]);
     user_state.global_offset = scan_total_count - total_count;
     do_iteration(group_idx.x, thread_idx.x, user_state);
+
+    if (group_idx.x == 0u && thread_idx.x == 0u)
+    {
+        // grab last element of scan to get total
+        total_count_out[0u] = workgroup_counters_in[256u + 255u];
+    }
 }

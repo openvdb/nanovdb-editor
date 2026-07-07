@@ -263,15 +263,16 @@ typedef struct pnanovdb_voxelbvh_t
                                                pnanovdb_compute_queue_t* queue,
                                                pnanovdb_voxelbvh_context_t* context,
                                                pnanovdb_compute_buffer_t* nanovdb_inout,
-                                               pnanovdb_uint64_t nanovdb_word_count);
+                                               pnanovdb_uint64_t nanovdb_word_count,
+                                               pnanovdb_compute_buffer_t* total_count_out);
 
     void(PNANOVDB_ABI* nanovdb_allocate_metadata)(const pnanovdb_compute_t* compute,
                                                   pnanovdb_compute_queue_t* queue,
                                                   pnanovdb_voxelbvh_context_t* context,
                                                   pnanovdb_compute_buffer_t* nanovdb_inout,
                                                   pnanovdb_uint64_t nanovdb_word_count,
+                                                  pnanovdb_compute_buffer_t* total_count_in,
                                                   const pnanovdb_uint64_t* metadata_element_sizes,
-                                                  const pnanovdb_uint64_t* metadata_element_counts,
                                                   pnanovdb_uint64_t metadata_count);
 
 } pnanovdb_voxelbvh_t;

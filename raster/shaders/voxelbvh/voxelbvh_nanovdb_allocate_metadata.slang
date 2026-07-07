@@ -9,14 +9,14 @@
 struct metadata_t
 {
     pnanovdb_uint64_t element_size;
-    pnanovdb_uint64_t element_count;
-    pnanovdb_uint64_t metadata_idx;
     pnanovdb_uint64_t metadata_count;
 };
 
 StructuredBuffer<metadata_t> metadatas;
 
 RWStructuredBuffer<uint2> buf;
+
+StructuredBuffer<uint64_t> total_count_in;
 
 #include <workgroup_scan_uint64.slang>
 
@@ -45,10 +45,12 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
 
     uint64_t header_size = PNANOVDB_GRIDBLINDMETADATA_SIZE * metadata_count;
 
+    uint64_t element_count = total_count_in[0u];
+
     uint64_t data_size = 0u;
     if (thread_idx.x < metadata_count)
     {
-        data_size = metadatas[thread_idx.x].element_size * metadatas[thread_idx.x].element_count;
+        data_size = metadatas[thread_idx.x].element_size * element_count;
     }
     data_size = 32u * ((data_size + 31u) / 32u);
 
@@ -66,7 +68,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         pnanovdb_address_t meta_addr = pnanovdb_address_offset64(pnanovdb_address_null(), data_offset);
 
         pnanovdb_gridblindmetadata_set_data_offset(buf, meta, pnanovdb_address_diff(meta_addr, meta.address));
-        pnanovdb_gridblindmetadata_set_value_count(buf, meta, metadatas[thread_idx.x].element_count);
+        pnanovdb_gridblindmetadata_set_value_count(buf, meta, element_count);
         pnanovdb_gridblindmetadata_set_value_size(buf, meta, metadatas[thread_idx.x].element_size);
     }
     grid_size = grid_size + header_size + workgroup_total_count;
