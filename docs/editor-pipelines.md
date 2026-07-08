@@ -211,6 +211,8 @@ PNANOVDB_REGISTER_PROCESS_CHAIN_PIPELINE(s_voxelbvh_rgba8_chain_descriptor,
                                          pnanovdb_pipeline_data_kind_mesh);                 // inputs (first step)
 ```
 
+The chain's steps must be internally type-compatible: each step's `outputs` must
+satisfy the next step's `inputs`.
 ## Reference
 
 | Example                                 | Stage   | Sync/Async | Files |

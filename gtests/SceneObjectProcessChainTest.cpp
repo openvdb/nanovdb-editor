@@ -519,5 +519,56 @@ TEST(SceneObjectProcessChainTest, FailedStepDisarmsDownstreamChain)
     EXPECT_EQ(obj.next_dirty_process_step(), -1);
 }
 
+TEST(SceneObjectProcessChainTest, DataKindAcceptsSemantics)
+{
+    EXPECT_TRUE(pnanovdb_pipeline_data_kind_accepts(pnanovdb_pipeline_data_kind_voxelbvh, 0u));
+    EXPECT_TRUE(pnanovdb_pipeline_data_kind_accepts(pnanovdb_pipeline_data_kind_none,
+                                                    pnanovdb_pipeline_data_kind_voxelbvh));
+    EXPECT_TRUE(pnanovdb_pipeline_data_kind_accepts(pnanovdb_pipeline_data_kind_voxelbvh,
+                                                    pnanovdb_pipeline_data_kind_voxelbvh));
+    EXPECT_FALSE(pnanovdb_pipeline_data_kind_accepts(pnanovdb_pipeline_data_kind_voxelbvh,
+                                                     pnanovdb_pipeline_data_kind_gaussian));
+    EXPECT_TRUE(pnanovdb_pipeline_data_kind_accepts(
+        pnanovdb_pipeline_data_kind_voxelbvh,
+        pnanovdb_pipeline_data_kind_voxelbvh | pnanovdb_pipeline_data_kind_gaussian));
+}
+
+TEST(SceneObjectProcessChainTest, AllRegisteredChainsAreDataKindCompatible)
+{
+    ASSERT_GT(pnanovdb_pipeline_get_count(), 0u)
+        << "Pipeline registry is empty; the editor library did not self-register its pipelines";
+
+    for (int type = 0; type < pnanovdb_pipeline_type_count; ++type)
+    {
+        const pnanovdb_pipeline_descriptor_t* desc =
+            pnanovdb_pipeline_get_descriptor(static_cast<pnanovdb_pipeline_type_t>(type));
+        if (!desc || desc->chain_step_count == 0)
+        {
+            continue;
+        }
+        pnanovdb_uint32_t bad_step = 0u;
+        EXPECT_TRUE(pnanovdb_pipeline_validate_chain(desc->chain_steps, desc->chain_step_count, &bad_step))
+            << "Chain '" << (desc->ui_name ? desc->ui_name : "?") << "' is data-kind incompatible at step "
+            << bad_step;
+    }
+}
+
+TEST(SceneObjectProcessChainTest, ValidateChainRejectsIncompatibleAdjacentSteps)
+{
+    const pnanovdb_pipeline_type_t bad_chain[] = {
+        pnanovdb_pipeline_type_voxelbvh_build,
+        pnanovdb_pipeline_type_gaussian_voxelize,
+    };
+    pnanovdb_uint32_t bad_step = 0u;
+    EXPECT_FALSE(pnanovdb_pipeline_validate_chain(bad_chain, 2u, &bad_step));
+    EXPECT_EQ(bad_step, 1u);
+
+    const pnanovdb_pipeline_type_t good_chain[] = {
+        pnanovdb_pipeline_type_voxelbvh_build,
+        pnanovdb_pipeline_type_voxelbvh_rgba8,
+    };
+    EXPECT_TRUE(pnanovdb_pipeline_validate_chain(good_chain, 2u, nullptr));
+}
+
 } // namespace
 } // namespace pnanovdb_editor

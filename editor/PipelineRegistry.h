@@ -33,6 +33,12 @@ pnanovdb_pipeline_result_t pnanovdb_pipeline_execute(pnanovdb_pipeline_type_t ty
                                                      pnanovdb_pipeline_context_t* ctx);
 pnanovdb_pipeline_render_method_t pnanovdb_pipeline_get_render_method(pnanovdb_pipeline_type_t type);
 
+PNANOVDB_API pnanovdb_bool_t pnanovdb_pipeline_data_kind_accepts(pnanovdb_uint32_t upstream, pnanovdb_uint32_t inputs);
+
+PNANOVDB_API pnanovdb_bool_t pnanovdb_pipeline_validate_chain(const pnanovdb_pipeline_type_t* steps,
+                                                              pnanovdb_uint32_t step_count,
+                                                              pnanovdb_uint32_t* out_bad_step);
+
 // ============================================================================
 // Self-registration helper
 // ============================================================================

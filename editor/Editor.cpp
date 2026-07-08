@@ -2348,6 +2348,21 @@ void set_pipeline(pnanovdb_editor_t* editor,
                 {
                     return;
                 }
+                
+                pnanovdb_uint32_t bad_step = 0u;
+                if (!pnanovdb_pipeline_validate_chain(
+                        descriptor->chain_steps, descriptor->chain_step_count, &bad_step))
+                {
+                    const pnanovdb_pipeline_descriptor_t* bad_desc =
+                        pnanovdb_pipeline_get_descriptor(descriptor->chain_steps[bad_step]);
+                    Console::getInstance().addLog(
+                        Console::LogLevel::Error,
+                        "set_pipeline: chain '%s' is not data-kind compatible at step %u (%s); "
+                        "its upstream output does not match the step's accepted inputs",
+                        descriptor->ui_name ? descriptor->ui_name : "?", (unsigned)bad_step,
+                        (bad_desc && bad_desc->ui_name) ? bad_desc->ui_name : "?");
+                }
+
                 obj->invalidate_process_configuration_from(0);
                 obj->pipeline.extra_process.clear();
                 obj->pipeline.active_process_step = 0;
@@ -2529,6 +2544,21 @@ void set_process_step(pnanovdb_editor_t* editor,
             {
                 return;
             }
+
+            if (type != pnanovdb_pipeline_type_noop)
+            {
+                const pnanovdb_uint32_t upstream = obj->upstream_data_kind(idx);
+                if (!pnanovdb_pipeline_data_kind_accepts(upstream, descriptor->inputs))
+                {
+                    Console::getInstance().addLog(
+                        Console::LogLevel::Warning,
+                        "set_process_step: step %u (%s) accepts inputs 0x%x but upstream produces 0x%x; "
+                        "the step may not run until a compatible upstream is configured",
+                        (unsigned)step_index, descriptor->ui_name ? descriptor->ui_name : "?",
+                        (unsigned)descriptor->inputs, (unsigned)upstream);
+                }
+            }
+
             obj->invalidate_process_configuration_from(idx);
 
             configure_pipeline_stage(obj, step, type, true, true);
