@@ -70,6 +70,7 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         pnanovdb_gridblindmetadata_set_data_offset(buf, meta, pnanovdb_address_diff(meta_addr, meta.address));
         pnanovdb_gridblindmetadata_set_value_count(buf, meta, element_count);
         pnanovdb_gridblindmetadata_set_value_size(buf, meta, metadatas[thread_idx.x].element_size);
+        pnanovdb_gridblindmetadata_set_data_type(buf, meta, PNANOVDB_GRID_TYPE_RGBA8);
     }
     grid_size = grid_size + header_size + workgroup_total_count;
     if (thread_idx.x == 0u)

@@ -98,11 +98,12 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
                 pnanovdb_leaf_handle_t leaf = {node_arr};
                 // need to update the prefix sum based on the mask
                 uint64_t prefix_sum = 0llu;
+                uint sum = 0u;
                 for (uint word_idx = 0u; word_idx < 7u; word_idx++)
                 {
                     uint64_t val_mask = pnanovdb_read_uint64(buf,
                         pnanovdb_address_offset(leaf.address, PNANOVDB_LEAF_OFF_VALUE_MASK + 8u * word_idx));
-                    uint sum = pnanovdb_uint64_countbits(val_mask);
+                    sum += pnanovdb_uint64_countbits(val_mask);
                     prefix_sum = prefix_sum | (uint64_t(sum) << (9 * word_idx));
                 }
                 pnanovdb_write_uint64(buf, pnanovdb_address_offset(val_addr, 8u), prefix_sum);

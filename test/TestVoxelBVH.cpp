@@ -20,8 +20,10 @@
 #include <cstdint>
 #include <cstdio>
 #include <math.h>
+#include <unordered_map>
 
 #include "editor/shaders/voxelbvh_common.h"
+#include "nanovdb/PNanoVDB.h"
 
 static void save_ply(pnanovdb_compute_t& compute,
                      pnanovdb_compute_array_t* positions,
@@ -1084,6 +1086,34 @@ void voxelbvh_generate_rgba8()
     pnanovdb_compiler_free(&compiler);
 }
 
+PNANOVDB_FORCE_INLINE pnanovdb_uint64_t pnanovdb_leaf_onindex_get_value_index(pnanovdb_buf_t buf,
+                                                                              pnanovdb_address_t value_address,
+                                                                              pnanovdb_uint32_t n)
+{
+    pnanovdb_leaf_handle_t leaf = { pnanovdb_address_offset_neg(
+        value_address, PNANOVDB_GRID_TYPE_GET(PNANOVDB_GRID_TYPE_ONINDEX, leaf_off_table)) };
+
+    pnanovdb_uint32_t word_idx = n >> 6u;
+    pnanovdb_uint32_t bit_idx = n & 63u;
+    pnanovdb_uint64_t val_mask =
+        pnanovdb_read_uint64(buf, pnanovdb_address_offset(leaf.address, PNANOVDB_LEAF_OFF_VALUE_MASK + 8u * word_idx));
+    pnanovdb_uint64_t mask = pnanovdb_uint64_bit_mask(bit_idx);
+    pnanovdb_uint64_t value_index = pnanovdb_uint32_as_uint64_low(0u);
+    if (pnanovdb_uint64_any_bit(pnanovdb_uint64_and(val_mask, mask)))
+    {
+        pnanovdb_uint32_t sum = 0u;
+        sum += pnanovdb_uint64_countbits(pnanovdb_uint64_and(val_mask, pnanovdb_uint64_dec(mask)));
+        if (word_idx > 0u)
+        {
+            pnanovdb_uint64_t prefix_sum = pnanovdb_read_uint64(buf, pnanovdb_address_offset(value_address, 8u));
+            sum += pnanovdb_uint64_to_uint32_lsr(prefix_sum, 9u * (word_idx - 1u)) & 511u;
+        }
+        pnanovdb_uint64_t offset = pnanovdb_read_uint64(buf, value_address);
+        value_index = pnanovdb_uint64_offset(offset, sum);
+    }
+    return value_index;
+}
+
 void voxelbvh_generate_rgba8_integral()
 {
     // load compiler and compute
@@ -1271,6 +1301,65 @@ void voxelbvh_generate_rgba8_integral()
         vert_nanovdbs[vert_idx] = nullptr;
 
         global_offset += grid_size;
+    }
+
+    // check prefix sum
+    {
+        pnanovdb_buf_t buf = pnanovdb_make_buf(
+            (uint32_t*)merged_nanovdb->data, merged_nanovdb->element_size * merged_nanovdb->element_count / 4u);
+
+        pnanovdb_grid_handle_t grid = {};
+        pnanovdb_tree_handle_t tree = pnanovdb_grid_get_tree(buf, grid);
+        pnanovdb_root_handle_t root = pnanovdb_tree_get_root(buf, tree);
+        pnanovdb_uint32_t grid_type = pnanovdb_grid_get_grid_type(buf, grid);
+
+        std::unordered_map<uint64_t, uint64_t> meta_map;
+
+        int print_count = 64;
+        pnanovdb_uint32_t root_tile_count = pnanovdb_root_get_tile_count(buf, root);
+        for (pnanovdb_uint32_t root_n = 0u; root_n < root_tile_count; root_n++)
+        {
+            pnanovdb_root_tile_handle_t tile = pnanovdb_root_get_tile(grid_type, root, root_n);
+            pnanovdb_int64_t child = pnanovdb_root_tile_get_child(buf, tile);
+            if (child)
+            {
+                pnanovdb_upper_handle_t upper = pnanovdb_root_get_child(grid_type, buf, root, tile);
+                for (pnanovdb_uint32_t upper_n = 0u; upper_n < PNANOVDB_UPPER_TABLE_COUNT; upper_n++)
+                {
+                    if (pnanovdb_upper_get_child_mask(buf, upper, upper_n))
+                    {
+                        pnanovdb_lower_handle_t lower = pnanovdb_upper_get_child(grid_type, buf, upper, upper_n);
+                        for (pnanovdb_uint32_t lower_n = 0u; lower_n < PNANOVDB_LOWER_TABLE_COUNT; lower_n++)
+                        {
+                            if (pnanovdb_lower_get_child_mask(buf, lower, lower_n))
+                            {
+                                pnanovdb_leaf_handle_t leaf = pnanovdb_lower_get_child(grid_type, buf, lower, lower_n);
+
+                                for (pnanovdb_uint32_t leaf_n = 0u; leaf_n < PNANOVDB_LEAF_TABLE_COUNT; leaf_n++)
+                                {
+                                    pnanovdb_address_t val_addr =
+                                        pnanovdb_leaf_get_table_address(grid_type, buf, leaf, leaf_n);
+
+                                    pnanovdb_gridblindmetadata_handle_t metadata =
+                                        pnanovdb_grid_get_gridblindmetadata(buf, grid, 0u);
+                                    pnanovdb_uint64_t val_index64 =
+                                        pnanovdb_leaf_onindex_get_value_index(buf, val_addr, leaf_n);
+
+                                    meta_map[val_index64]++;
+                                    if (print_count > 0 && val_index64 != 0u && meta_map[val_index64] > 1u)
+                                    {
+                                        print_count--;
+
+                                        printf("Collision at value_index(%zu) tree(%u,%u,%u,%u) times(%zu)\n",
+                                               val_index64, root_n, upper_n, lower_n, leaf_n, meta_map[val_index64]);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     printf("Save merged grid\n");
