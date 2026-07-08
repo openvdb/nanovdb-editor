@@ -673,21 +673,9 @@ bool reflect_write_scalar_json(pnanovdb_reflect_type_t rt, unsigned char* p, con
     }
     case PNANOVDB_REFLECT_TYPE_BOOL32:
     {
-        uint32_t v = 0u;
-        if (in.is_boolean())
-        {
-            v = in.get<bool>() ? 1u : 0u;
-        }
-        else if (in.is_number_unsigned())
-        {
-            v = in.get<uint64_t>() != 0 ? 1u : 0u;
-        }
-        else if (in.is_number_integer())
-        {
-            v = in.get<int64_t>() != 0 ? 1u : 0u;
-        }
-        else
+        if (!in.is_boolean())
             return false;
+        uint32_t v = in.get<bool>() ? 1u : 0u;
         std::memcpy(p, &v, sizeof(v));
         return true;
     }

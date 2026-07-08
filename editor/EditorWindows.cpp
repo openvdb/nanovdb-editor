@@ -1079,6 +1079,7 @@ static void showSceneOverwritePopup(imgui_instance_user::Instance* ptr)
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     if (!ImGui::BeginPopupModal(k_popup_title, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
+        ptr->scene_overwrite_conflicts.clear();
         return;
     }
 

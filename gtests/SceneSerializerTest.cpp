@@ -91,6 +91,35 @@ void register_test_editor_startup_pipeline_descriptors()
     pnanovdb_pipeline_register(&k_test_gaussian_render_descriptor);
 }
 
+struct RoundTripScalarParams
+{
+    pnanovdb_bool_t flag_on = PNANOVDB_FALSE;
+    pnanovdb_bool_t flag_off = PNANOVDB_TRUE;
+    float f = 0.f;
+    double d = 0.0;
+    pnanovdb_int32_t i32 = 0;
+    pnanovdb_uint32_t u32 = 0u;
+    pnanovdb_int64_t i64 = 0;
+    pnanovdb_uint64_t u64 = 0u;
+    pnanovdb_uint8_t u8 = 0u;
+    pnanovdb_uint16_t u16 = 0u;
+};
+
+#define PNANOVDB_REFLECT_TYPE RoundTripScalarParams
+PNANOVDB_REFLECT_BEGIN()
+PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, flag_on, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, flag_off, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, f, 0, 0)
+PNANOVDB_REFLECT_VALUE(double, d, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_int32_t, i32, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_uint32_t, u32, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_int64_t, i64, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_uint64_t, u64, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_uint8_t, u8, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_uint16_t, u16, 0, 0)
+PNANOVDB_REFLECT_END(0)
+#undef PNANOVDB_REFLECT_TYPE
+
 TEST(SceneSerializer, PreservesEmptyScenesAndCameras)
 {
     EditorSceneManager manager;
@@ -809,6 +838,57 @@ TEST(SceneSerializer, MalformedReflectedScalarsPreserveExistingValues)
     uint8_t narrow = 17u;
     EXPECT_FALSE(reflect_write_scalar_json(PNANOVDB_REFLECT_TYPE_UINT8, &narrow, nlohmann::json(256u)));
     EXPECT_EQ(narrow, 17u);
+}
+
+TEST(SceneSerializer, ReflectedScalarsRoundTripPreservesBoolAndNumerics)
+{
+    RoundTripScalarParams original{};
+    original.flag_on = PNANOVDB_TRUE;
+    original.flag_off = PNANOVDB_FALSE;
+    original.f = 0.15625f;
+    original.d = 3.141592653589793;
+    original.i32 = -123456;
+    original.u32 = 4000000000u;
+    original.i64 = -9000000000000000000ll;
+    original.u64 = 18000000000000000000ull;
+    original.u8 = 200u;
+    original.u16 = 60000u;
+
+    const nlohmann::ordered_json j =
+        reflect_params_to_json(PNANOVDB_REFLECT_DATA_TYPE(RoundTripScalarParams), &original, sizeof(original));
+
+    ASSERT_TRUE(j.at("flag_on").is_boolean());
+    ASSERT_TRUE(j.at("flag_off").is_boolean());
+    EXPECT_TRUE(j.at("flag_on").get<bool>());
+    EXPECT_FALSE(j.at("flag_off").get<bool>());
+
+    RoundTripScalarParams restored{};
+    json_to_reflect_params(j, PNANOVDB_REFLECT_DATA_TYPE(RoundTripScalarParams), &restored, sizeof(restored));
+
+    EXPECT_EQ(restored.flag_on, PNANOVDB_TRUE);
+    EXPECT_EQ(restored.flag_off, PNANOVDB_FALSE);
+    EXPECT_FLOAT_EQ(restored.f, original.f);
+    EXPECT_DOUBLE_EQ(restored.d, original.d);
+    EXPECT_EQ(restored.i32, original.i32);
+    EXPECT_EQ(restored.u32, original.u32);
+    EXPECT_EQ(restored.i64, original.i64);
+    EXPECT_EQ(restored.u64, original.u64);
+    EXPECT_EQ(restored.u8, original.u8);
+    EXPECT_EQ(restored.u16, original.u16);
+    EXPECT_EQ(0, std::memcmp(&original, &restored, sizeof(original)));
+}
+
+TEST(SceneSerializer, ReflectedBoolRejectsNonBooleanJson)
+{
+    RoundTripScalarParams params{};
+    params.flag_on = PNANOVDB_TRUE;
+    json_to_reflect_params(
+        nlohmann::json{ { "flag_on", 0 } }, PNANOVDB_REFLECT_DATA_TYPE(RoundTripScalarParams), &params, sizeof(params));
+    EXPECT_EQ(params.flag_on, PNANOVDB_TRUE);
+
+    EXPECT_FALSE(reflect_write_scalar_json(
+        PNANOVDB_REFLECT_TYPE_BOOL32, reinterpret_cast<unsigned char*>(&params.flag_on), nlohmann::json(1)));
+    EXPECT_EQ(params.flag_on, PNANOVDB_TRUE);
 }
 
 TEST(SceneSerializer, ShortShaderArraysPreserveRemainingDefaults)
