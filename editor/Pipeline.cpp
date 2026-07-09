@@ -185,7 +185,9 @@ bool pnanovdb_editor::process_pipeline_supports_object(const SceneObject* obj, p
     switch (type)
     {
     case pnanovdb_pipeline_type_voxelbvh_rgba8:
-        return source == SceneObjectSourceKind::MeshTriangles && source_resources_available(obj, source);
+        return (source == SceneObjectSourceKind::MeshTriangles || source == SceneObjectSourceKind::GaussianFile ||
+                source == SceneObjectSourceKind::GaussianArrays) &&
+               source_resources_available(obj, source);
     case pnanovdb_pipeline_type_voxelbvh_build:
         return (source == SceneObjectSourceKind::GaussianFile || source == SceneObjectSourceKind::GaussianArrays ||
                 source == SceneObjectSourceKind::MeshTriangles || source == SceneObjectSourceKind::MeshLines) &&
@@ -566,8 +568,7 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_rgba8(pnanovdb_scene_object_t
     }
     if (!process_pipeline_supports_object(scene_obj, pnanovdb_pipeline_type_voxelbvh_rgba8))
     {
-        Console::getInstance().addLog(
-            Console::LogLevel::Error, "VoxelBVH->RGBA8: triangle source resources are incomplete");
+        Console::getInstance().addLog(Console::LogLevel::Error, "VoxelBVH->RGBA8: source resources are incomplete");
         return pnanovdb_pipeline_result_no_data;
     }
     if (!ctx || !ctx->voxelbvh || !ctx->voxelbvh_ctx || !ctx->compute || !ctx->queue)
@@ -618,11 +619,14 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_rgba8(pnanovdb_scene_object_t
             Console::LogLevel::Error, "VoxelBVH->RGBA8: no input NanoVDB grid available for conversion");
         return pnanovdb_pipeline_result_no_data;
     }
-    if (!has_voxelbvh_producer || scene_obj->source_kind() != SceneObjectSourceKind::MeshTriangles ||
-        !nanovdb_import::has_voxelbvh_mesh_metadata(src))
+    const SceneObjectSourceKind src_kind = scene_obj->source_kind();
+    const bool supported_src_kind = src_kind == SceneObjectSourceKind::MeshTriangles ||
+                                    src_kind == SceneObjectSourceKind::GaussianFile ||
+                                    src_kind == SceneObjectSourceKind::GaussianArrays;
+    if (!has_voxelbvh_producer || !supported_src_kind || !nanovdb_import::has_voxelbvh_mesh_metadata(src))
     {
         Console::getInstance().addLog(
-            Console::LogLevel::Error, "VoxelBVH->RGBA8: input is not a supported triangle VoxelBVH grid");
+            Console::LogLevel::Error, "VoxelBVH->RGBA8: input is not a supported VoxelBVH grid");
         return pnanovdb_pipeline_result_no_data;
     }
 

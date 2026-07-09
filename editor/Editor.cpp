@@ -2348,19 +2348,17 @@ void set_pipeline(pnanovdb_editor_t* editor,
                 {
                     return;
                 }
-                
+
                 pnanovdb_uint32_t bad_step = 0u;
-                if (!pnanovdb_pipeline_validate_chain(
-                        descriptor->chain_steps, descriptor->chain_step_count, &bad_step))
+                if (!pnanovdb_pipeline_validate_chain(descriptor->chain_steps, descriptor->chain_step_count, &bad_step))
                 {
                     const pnanovdb_pipeline_descriptor_t* bad_desc =
                         pnanovdb_pipeline_get_descriptor(descriptor->chain_steps[bad_step]);
-                    Console::getInstance().addLog(
-                        Console::LogLevel::Error,
-                        "set_pipeline: chain '%s' is not data-kind compatible at step %u (%s); "
-                        "its upstream output does not match the step's accepted inputs",
-                        descriptor->ui_name ? descriptor->ui_name : "?", (unsigned)bad_step,
-                        (bad_desc && bad_desc->ui_name) ? bad_desc->ui_name : "?");
+                    Console::getInstance().addLog(Console::LogLevel::Error,
+                                                  "set_pipeline: chain '%s' is not data-kind compatible at step %u (%s); "
+                                                  "its upstream output does not match the step's accepted inputs",
+                                                  descriptor->ui_name ? descriptor->ui_name : "?", (unsigned)bad_step,
+                                                  (bad_desc && bad_desc->ui_name) ? bad_desc->ui_name : "?");
                 }
 
                 obj->invalidate_process_configuration_from(0);

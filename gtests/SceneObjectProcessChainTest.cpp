@@ -522,12 +522,12 @@ TEST(SceneObjectProcessChainTest, FailedStepDisarmsDownstreamChain)
 TEST(SceneObjectProcessChainTest, DataKindAcceptsSemantics)
 {
     EXPECT_TRUE(pnanovdb_pipeline_data_kind_accepts(pnanovdb_pipeline_data_kind_voxelbvh, 0u));
-    EXPECT_TRUE(pnanovdb_pipeline_data_kind_accepts(pnanovdb_pipeline_data_kind_none,
-                                                    pnanovdb_pipeline_data_kind_voxelbvh));
-    EXPECT_TRUE(pnanovdb_pipeline_data_kind_accepts(pnanovdb_pipeline_data_kind_voxelbvh,
-                                                    pnanovdb_pipeline_data_kind_voxelbvh));
-    EXPECT_FALSE(pnanovdb_pipeline_data_kind_accepts(pnanovdb_pipeline_data_kind_voxelbvh,
-                                                     pnanovdb_pipeline_data_kind_gaussian));
+    EXPECT_TRUE(
+        pnanovdb_pipeline_data_kind_accepts(pnanovdb_pipeline_data_kind_none, pnanovdb_pipeline_data_kind_voxelbvh));
+    EXPECT_TRUE(pnanovdb_pipeline_data_kind_accepts(
+        pnanovdb_pipeline_data_kind_voxelbvh, pnanovdb_pipeline_data_kind_voxelbvh));
+    EXPECT_FALSE(pnanovdb_pipeline_data_kind_accepts(
+        pnanovdb_pipeline_data_kind_voxelbvh, pnanovdb_pipeline_data_kind_gaussian));
     EXPECT_TRUE(pnanovdb_pipeline_data_kind_accepts(
         pnanovdb_pipeline_data_kind_voxelbvh,
         pnanovdb_pipeline_data_kind_voxelbvh | pnanovdb_pipeline_data_kind_gaussian));
@@ -548,8 +548,7 @@ TEST(SceneObjectProcessChainTest, AllRegisteredChainsAreDataKindCompatible)
         }
         pnanovdb_uint32_t bad_step = 0u;
         EXPECT_TRUE(pnanovdb_pipeline_validate_chain(desc->chain_steps, desc->chain_step_count, &bad_step))
-            << "Chain '" << (desc->ui_name ? desc->ui_name : "?") << "' is data-kind incompatible at step "
-            << bad_step;
+            << "Chain '" << (desc->ui_name ? desc->ui_name : "?") << "' is data-kind incompatible at step " << bad_step;
     }
 }
 
