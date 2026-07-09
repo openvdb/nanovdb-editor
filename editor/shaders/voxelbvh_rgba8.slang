@@ -131,6 +131,10 @@ void ray_hdda_nanovdb(uint thread_idx,
     hdda_t hdda = {};
     hdda_init(hdda, rayOrigin, rayDir, rayDirInv, boxMinT);
 
+    float prev_tmin = -3.0e38f;
+    const uint k_max_hdda_steps = 1024u;
+    uint step_count = 0u;
+
     bool should_run = isHit;
     while(should_run)
     {
@@ -167,6 +171,18 @@ void ray_hdda_nanovdb(uint thread_idx,
 
         hdda_step(hdda, rayOrigin, rayDir, rayDirInv, hdda_dim);
         if (hdda.tmin > boxMaxT)
+        {
+            should_run = false;
+        }
+
+        if (!(hdda.tmin > prev_tmin))
+        {
+            should_run = false;
+        }
+        prev_tmin = hdda.tmin;
+
+        step_count++;
+        if (step_count >= k_max_hdda_steps)
         {
             should_run = false;
         }
