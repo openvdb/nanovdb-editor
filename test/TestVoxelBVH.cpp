@@ -1140,10 +1140,10 @@ void voxelbvh_generate_rgba8_integral()
     static const pnanovdb_uint32_t prim_meta_count = 6u;
     pnanovdb_compute_array_t* prim_meta_arrays[prim_meta_count] = {};
 
-    // const pnanovdb_uint32_t resolution = 2048u;
-    const pnanovdb_uint32_t resolution = 512u;
-    // const char* in_file = "./data/garden_eps2d03.ply";
-    const char* in_file = "./data/dozer__segment.ply";
+    const pnanovdb_uint32_t resolution = 2048u;
+    // const pnanovdb_uint32_t resolution = 512u;
+    const char* in_file = "./data/garden_eps2d03.ply";
+    // const char* in_file = "./data/dozer__segment.ply";
 
     printf("Vulkan initialized\n");
     print_memory_stats(&compute, device);
@@ -1243,7 +1243,7 @@ void voxelbvh_generate_rgba8_integral()
 
         printf("Voxelize vert_idx(%d)\n", vert_idx);
 
-        pnanovdb_uint32_t resolution = 4096u;
+        pnanovdb_uint32_t resolution = 2u * 4096u;
         pnanovdb_compute_array_t* nanovdb_rgba8_integral = nullptr;
         voxel_bvh.nanovdb_integral_from_voxelbvh_array(
             &compute, queue, voxelbvh_ctx, &nanovdb_rgba8_integral, nanovdb_meta, resolution, transform, 16u);

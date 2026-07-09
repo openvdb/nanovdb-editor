@@ -169,6 +169,13 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         // Take bounding sphere to NDC space
         float3 aabb_center = 0.5f * (aabb_max + aabb_min);
         float3 aabb_halfsize = 0.5f * (aabb_max - aabb_min);
+
+        // DEBUG: focus around origin
+#if 0
+        aabb_center = float3(0.f, 0.f, 0.f);
+        aabb_halfsize = float3(5.f, 5.f, 5.f);
+#endif
+
         float radius = length(aabb_halfsize);
         float r_inv = 1.f / radius;
         float4x4 src_to_ndc = float4x4(

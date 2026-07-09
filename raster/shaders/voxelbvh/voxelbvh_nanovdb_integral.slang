@@ -837,9 +837,10 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
         0
     );
 
-    integrate_direction(thread_idx_1d, tidx, normalize(float3(-0.5f, -0.5f, 1.f)));
-    integrate_direction(thread_idx_1d, tidx, normalize(float3(-0.5f,  0.5f, 1.f)));
-    integrate_direction(thread_idx_1d, tidx, normalize(float3( 0.5f, -0.5f, 1.f)));
-    integrate_direction(thread_idx_1d, tidx, normalize(float3( 0.5f,  0.5f, 1.f)));
+    const float k = 0.1f;
+    //integrate_direction(thread_idx_1d, tidx, normalize(float3(-k, -k, 1.f)));
+    //integrate_direction(thread_idx_1d, tidx, normalize(float3(-k,  k, 1.f)));
+    //integrate_direction(thread_idx_1d, tidx, normalize(float3( k, -k, 1.f)));
+    //integrate_direction(thread_idx_1d, tidx, normalize(float3( k,  k, 1.f)));
     integrate_direction(thread_idx_1d, tidx, float3(0.f, 0.f, 1.f));
 }
