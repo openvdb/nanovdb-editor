@@ -747,19 +747,9 @@ bool find_child_bit(
     return !pnanovdb_address_is_null(child_mask_addr);
 }
 
-[shader("compute")][numthreads(16, 8, 1)]
-void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
+void integrate_direction(uint thread_idx_1d, int3 tidx, float3 ray_dir)
 {
-    uint thread_idx_1d = (thread_idx.y << 4) | thread_idx.x;
-
-    int3 tidx = int3(
-        (int(group_idx.x) << 4) + thread_idx.x,
-        (int(group_idx.y) << 3) + thread_idx.y,
-        0
-    );
-
     float3 ray_origin = float3(tidx) + 0.5f;
-    float3 ray_dir = float3(0.f, 0.f, 1.f);
     float4x4 view = float4x4(
         1.f, 0.f, 0.f, 0.f,
         0.f, 1.f, 0.f, 0.f,
@@ -834,4 +824,22 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
     {
         flush_integral(sum, nominalT, worldRayOrigin, worldRayDir);
     }
+}
+
+[shader("compute")][numthreads(16, 8, 1)]
+void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
+{
+    uint thread_idx_1d = (thread_idx.y << 4) | thread_idx.x;
+
+    int3 tidx = int3(
+        (int(group_idx.x) << 4) + thread_idx.x,
+        (int(group_idx.y) << 3) + thread_idx.y,
+        0
+    );
+
+    integrate_direction(thread_idx_1d, tidx, normalize(float3(-0.5f, -0.5f, 1.f)));
+    integrate_direction(thread_idx_1d, tidx, normalize(float3(-0.5f,  0.5f, 1.f)));
+    integrate_direction(thread_idx_1d, tidx, normalize(float3( 0.5f, -0.5f, 1.f)));
+    integrate_direction(thread_idx_1d, tidx, normalize(float3( 0.5f,  0.5f, 1.f)));
+    integrate_direction(thread_idx_1d, tidx, float3(0.f, 0.f, 1.f));
 }

@@ -837,9 +837,9 @@ static const pnanovdb_vec3_t verts[12u] = {
 static const float sphere_radius = sqrt(g*g + 1.f);
 #else
 static const pnanovdb_uint32_t vert_count = 8u;
-static const pnanovdb_vec3_t verts[8u] = { { -1.f, -1.f, 0.f }, { 1.f, -1.f, 0.f }, { -1.f, 1.f, 0.f },
-                                           { 1.f, 1.f, 0.f },   { -1.f, 0.f, 0.f }, { 0.f, -1.f, 0.f },
-                                           { 1.f, 0.f, 0.f },   { 0.f, 1.f, 0.f } };
+static const pnanovdb_vec3_t verts[8u] = { { -1.f, 0.f, 0.f }, { 0.f, -1.f, 0.f },  { 1.f, 0.f, 0.f },
+                                           { 0.f, 1.f, 0.f },  { -1.f, -1.f, 0.f }, { 1.f, -1.f, 0.f },
+                                           { -1.f, 1.f, 0.f }, { 1.f, 1.f, 0.f } };
 #endif
 
 static void get_transform(pnanovdb_uint32_t vert_idx, pnanovdb_camera_mat_t* transform, float aniso)
@@ -1231,8 +1231,10 @@ void voxelbvh_generate_rgba8_integral()
         compute.destroy_array(built_flat_range_array);
     }
 
-    pnanovdb_compute_array_t* vert_nanovdbs[vert_count] = {};
-    for (pnanovdb_uint32_t vert_idx = 0u; vert_idx < vert_count; vert_idx++)
+    static const pnanovdb_uint32_t l_vert_count = 1u;
+
+    pnanovdb_compute_array_t* vert_nanovdbs[l_vert_count] = {};
+    for (pnanovdb_uint32_t vert_idx = 0u; vert_idx < l_vert_count; vert_idx++)
     {
         pnanovdb_camera_mat_t transform_mat = {};
         get_transform(vert_idx, &transform_mat, 1.f);
@@ -1270,7 +1272,7 @@ void voxelbvh_generate_rgba8_integral()
     printf("Merge grids\n");
     // for each NanoVDB, set grid idx and count
     pnanovdb_uint64_t total_size = 0llu;
-    for (pnanovdb_uint32_t vert_idx = 0u; vert_idx < vert_count; vert_idx++)
+    for (pnanovdb_uint32_t vert_idx = 0u; vert_idx < l_vert_count; vert_idx++)
     {
         pnanovdb_buf_t buf =
             pnanovdb_make_buf((uint32_t*)vert_nanovdbs[vert_idx]->data,
@@ -1278,7 +1280,7 @@ void voxelbvh_generate_rgba8_integral()
 
         pnanovdb_grid_handle_t grid = {};
         pnanovdb_grid_set_grid_index(buf, grid, vert_idx);
-        pnanovdb_grid_set_grid_count(buf, grid, 8u);
+        pnanovdb_grid_set_grid_count(buf, grid, l_vert_count);
         total_size += pnanovdb_grid_get_grid_size(buf, grid);
     }
 
@@ -1286,7 +1288,7 @@ void voxelbvh_generate_rgba8_integral()
     pnanovdb_compute_array_t* merged_nanovdb = compute.create_array(8u, merged_uint64_count, nullptr);
 
     pnanovdb_uint64_t global_offset = 0llu;
-    for (pnanovdb_uint32_t vert_idx = 0u; vert_idx < vert_count; vert_idx++)
+    for (pnanovdb_uint32_t vert_idx = 0u; vert_idx < l_vert_count; vert_idx++)
     {
         pnanovdb_buf_t buf =
             pnanovdb_make_buf((uint32_t*)vert_nanovdbs[vert_idx]->data,
@@ -1303,7 +1305,8 @@ void voxelbvh_generate_rgba8_integral()
         global_offset += grid_size;
     }
 
-    // check prefix sum
+// check prefix sum
+#if 0
     {
         pnanovdb_buf_t buf = pnanovdb_make_buf(
             (uint32_t*)merged_nanovdb->data, merged_nanovdb->element_size * merged_nanovdb->element_count / 4u);
@@ -1361,6 +1364,7 @@ void voxelbvh_generate_rgba8_integral()
             }
         }
     }
+#endif
 
     printf("Save merged grid\n");
 
