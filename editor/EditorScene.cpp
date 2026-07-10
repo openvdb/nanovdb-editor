@@ -3357,6 +3357,7 @@ void EditorScene::apply_object_restore(pnanovdb_editor_token_t* scene_token,
                         apply_stage_params(p, t, steps[i]);
                         m_editor->unmap_process_step_params(m_editor, scene_token, name_token, i);
                     }
+                }
 
                 const size_t desired_step_count = steps.size();
                 m_scene_manager.with_object(scene_token, name_token,
