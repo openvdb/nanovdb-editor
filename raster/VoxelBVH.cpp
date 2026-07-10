@@ -2264,12 +2264,23 @@ static pnanovdb_compute_array_t* nanovdb_from_gaussians_file(const pnanovdb_comp
     pnanovdb_compute_array_t* range_array = nullptr;
     pnanovdb_compute_array_t* world_bbox_array = nullptr;
     pnanovdb_compute_array_t* gaussian_arrays[6] = {};
+    const auto cleanup_gaussian_arrays = [&]()
+    {
+        for (pnanovdb_uint32_t idx = 0u; idx < 6u; idx++)
+        {
+            if (gaussian_arrays[idx])
+            {
+                compute->destroy_array(gaussian_arrays[idx]);
+            }
+        }
+    };
 
     ijkl_from_gaussians_file(compute, queue, voxelbvh_context, filename, &ijkl_array, &prim_id_array, &range_array,
                              &world_bbox_array, resolution, gaussian_arrays, 6u, nullptr, 0u);
 
     if (!ijkl_array)
     {
+        cleanup_gaussian_arrays();
         return nullptr;
     }
 
@@ -2277,13 +2288,7 @@ static pnanovdb_compute_array_t* nanovdb_from_gaussians_file(const pnanovdb_comp
         nanovdb_from_ijkl_and_metadata(compute, queue, voxelbvh_context, ijkl_array, prim_id_array, range_array,
                                        world_bbox_array, gaussian_arrays, 6u, resolution);
 
-    for (pnanovdb_uint32_t idx = 0u; idx < 6u; idx++)
-    {
-        if (gaussian_arrays[idx])
-        {
-            compute->destroy_array(gaussian_arrays[idx]);
-        }
-    }
+    cleanup_gaussian_arrays();
     return nanovdb_meta;
 }
 

@@ -666,7 +666,7 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_rgba8(pnanovdb_scene_object_t
         {
             dir = { 0.f, 0.f, -1.f };
         }
-        index_dirs.push_back(dir);
+        index_dirs.push_back(nanovdb_import::world_dir_to_index_dir(src, dir));
     }
 
     const bool started = with_runtime_or_warn(

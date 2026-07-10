@@ -1125,7 +1125,7 @@ static void showSceneOverwritePopup(imgui_instance_user::Instance* ptr)
                     ptr->editor_scene->remove_scene(scene_token);
                 }
             }
-            load_scene_file_and_sync_viewport(*ptr->editor_scene, ptr->scene_filepath);
+            ptr->editor_scene->load_scene_file_and_sync_viewport(ptr->scene_filepath);
             close();
         }
     }
@@ -1437,7 +1437,7 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
                 ptr->scene_overwrite_conflicts = ptr->editor_scene->find_conflicting_scene_names(ptr->scene_filepath);
                 if (ptr->scene_overwrite_conflicts.empty())
                 {
-                    load_scene_file_and_sync_viewport(*ptr->editor_scene, ptr->scene_filepath);
+                    ptr->editor_scene->load_scene_file_and_sync_viewport(ptr->scene_filepath);
                 }
                 else
                 {

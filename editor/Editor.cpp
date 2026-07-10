@@ -1146,25 +1146,7 @@ static pnanovdb_bool_t apply_load_scene(pnanovdb_editor_t* editor, const char* f
         }
     }
 
-    const bool discarded_startup_scene = editor_scene->discard_untouched_startup_scene();
-    try
-    {
-        if (!editor_scene->load_scene_file(filepath))
-        {
-            if (discarded_startup_scene)
-                editor_scene->initialize_for_startup(false);
-            return PNANOVDB_FALSE;
-        }
-        editor_scene->sync_restored_viewport_camera();
-        return PNANOVDB_TRUE;
-    }
-    catch (const std::exception& e)
-    {
-        if (discarded_startup_scene)
-            editor_scene->initialize_for_startup(false);
-        Console::getInstance().addLog(Console::LogLevel::Error, "Load scene failed: %s", e.what());
-        return PNANOVDB_FALSE;
-    }
+    return editor_scene->load_scene_file_and_sync_viewport(filepath) ? PNANOVDB_TRUE : PNANOVDB_FALSE;
 }
 
 pnanovdb_bool_t save_scene(pnanovdb_editor_t* editor, const char* filepath)

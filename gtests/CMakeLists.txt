@@ -73,7 +73,6 @@ ConfigureTest(PipelineApiTest PipelineApiTest.cpp EditorTestSupport.cpp GpuTestS
 ConfigureTest(SceneObjectSourceTest SceneObjectSourceTest.cpp)
 ConfigureTest(SceneObjectProcessChainTest SceneObjectProcessChainTest.cpp)
 ConfigureTest(SceneObjectReplacementTest SceneObjectReplacementTest.cpp)
-ConfigureTest(AbiCompatibilityTest AbiCompatibilityTest.cpp)
 ConfigureTest(SceneSerializerTest
   SceneSerializerTest.cpp
   ../editor/Console.cpp

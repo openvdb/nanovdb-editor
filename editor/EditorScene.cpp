@@ -78,53 +78,6 @@ static bool decode_scene_pipeline_type(const nlohmann::json& stage_json,
     return true;
 }
 
-static nlohmann::json normalized_stage_params_for_load(pnanovdb_pipeline_type_t type,
-                                                       const nlohmann::json& params,
-                                                       const char* object_name)
-{
-    if (type != pnanovdb_pipeline_type_voxelbvh_build || !params.is_object())
-    {
-        return params;
-    }
-
-    nlohmann::json normalized = params;
-    const auto normalize_uint_field = [&](const char* field_name, double minimum, double maximum)
-    {
-        auto field = normalized.find(field_name);
-        if (field == normalized.end())
-        {
-            return;
-        }
-
-        const double value = field->is_number() ? field->get<double>() : -1.0;
-        if (!std::isfinite(value) || std::trunc(value) != value || value < minimum || value > maximum)
-        {
-            Console::getInstance().addLog(
-                Console::LogLevel::Warning,
-                "Load scene: object '%s' has invalid VoxelBVH %s; preserving the pipeline default",
-                object_name ? object_name : "?", field_name);
-            normalized.erase(field);
-            return;
-        }
-
-        if (field->is_number_float())
-        {
-            // Early VoxelBVH parameters represented these fields as floats.
-            // Scene files are field-based JSON, so integral legacy values can
-            // be migrated without relying on the old binary struct layout.
-            Console::getInstance().addLog(
-                Console::LogLevel::Warning,
-                "Load scene: object '%s' uses legacy floating-point VoxelBVH %s; converting it to an integer",
-                object_name ? object_name : "?", field_name);
-        }
-        *field = static_cast<pnanovdb_uint32_t>(value);
-    };
-
-    normalize_uint_field("source_type", 0.0, static_cast<double>(pnanovdb_pipeline_voxelbvh_source_gaussian_arrays));
-    normalize_uint_field("resolution", 1.0, static_cast<double>(PNANOVDB_VOXELBVH_MAX_RESOLUTION));
-    return normalized;
-}
-
 static float json_float_or(const nlohmann::json& object, const char* key, float fallback)
 {
     auto it = object.find(key);
@@ -1557,6 +1510,10 @@ void EditorScene::initialize_for_startup(bool is_viewer_profile)
 
 void EditorScene::sync_restored_viewport_camera()
 {
+    for (pnanovdb_editor_token_t* scene_token : m_scene_view.get_all_scene_tokens())
+    {
+        normalize_scene_viewport_camera(m_scene_manager, m_scene_view, scene_token);
+    }
     sync_editor_camera_from_scene();
     apply_editor_camera_to_viewport();
 }
@@ -2924,7 +2881,7 @@ bool EditorScene::load_scene_file(const std::string& filepath)
             }
 
             const bool scene_existed = m_scene_view.get_scene_data(scene_token) != nullptr;
-            SceneViewData* target_scene = get_or_create_scene(scene_token);
+            SceneViewData* target_scene = get_or_create_scene(scene_token, false);
             const bool created_scene_for_object =
                 !scene_existed && target_scene && created_object_scene_ids.insert(scene_token->id).second;
             if (created_scene_for_object)
@@ -2960,6 +2917,33 @@ bool EditorScene::load_scene_file(const std::string& filepath)
     Console::getInstance().addLog("Loading scene '%s' (%zu scene(s), %zu object(s) queued, %zu restored)",
                                   filepath.c_str(), restored_scenes, queued, restored);
     return restored_scenes + queued + restored > 0;
+}
+
+bool EditorScene::load_scene_file_and_sync_viewport(const std::string& filepath)
+{
+    const bool discarded_startup_scene = discard_untouched_startup_scene();
+    try
+    {
+        if (!load_scene_file(filepath))
+        {
+            if (discarded_startup_scene)
+            {
+                initialize_for_startup(false);
+            }
+            return false;
+        }
+        sync_restored_viewport_camera();
+        return true;
+    }
+    catch (const std::exception& e)
+    {
+        if (discarded_startup_scene)
+        {
+            initialize_for_startup(false);
+        }
+        Console::getInstance().addLog(Console::LogLevel::Error, "Load scene failed: %s", e.what());
+        return false;
+    }
 }
 
 bool EditorScene::can_load_scene_file(const std::string& filepath, std::string* error_message) const
@@ -3297,11 +3281,9 @@ void EditorScene::apply_object_restore(pnanovdb_editor_token_t* scene_token,
                 const pnanovdb_pipeline_descriptor_t* desc = pnanovdb_pipeline_get_descriptor(type);
                 dt = desc ? desc->params_data_type : nullptr;
             }
-            const nlohmann::json normalized =
-                normalized_stage_params_for_load(type, stage_json["params"], name_token->str);
             const pnanovdb_pipeline_descriptor_t* hints_desc = pnanovdb_pipeline_get_descriptor(type);
-            json_to_reflect_params(
-                normalized, dt, params->data, (size_t)params->size, hints_desc ? hints_desc->params_hints : nullptr);
+            json_to_reflect_params(stage_json["params"], dt, params->data, (size_t)params->size,
+                                   hints_desc ? hints_desc->params_hints : nullptr);
             if (type == pnanovdb_pipeline_type_gaussian_voxelize)
             {
                 pipeline_params_set_voxels_per_unit(params, pipeline_params_get_voxels_per_unit(params));
@@ -3360,17 +3342,17 @@ void EditorScene::apply_object_restore(pnanovdb_editor_token_t* scene_token,
                 }
 
                 const size_t desired_step_count = steps.size();
-                m_scene_manager.with_object(scene_token, name_token,
-                                            [desired_step_count](SceneObject* o)
-                                            {
-                                                if (!o)
-                                                    return;
-                                                while (o->pipeline.process_count() > 1 &&
-                                                       o->pipeline.process_count() > desired_step_count)
-                                                {
-                                                    o->remove_process_step(o->pipeline.process_count() - 1);
-                                                }
-                                            });
+                m_scene_manager.with_object(
+                    scene_token, name_token,
+                    [desired_step_count](SceneObject* o)
+                    {
+                        if (!o)
+                            return;
+                        while (o->pipeline.process_count() > 1 && o->pipeline.process_count() > desired_step_count)
+                        {
+                            o->remove_process_step(o->pipeline.process_count() - 1);
+                        }
+                    });
             }
 
             if (pj.contains("drop_intermediate") && pj["drop_intermediate"].is_boolean())

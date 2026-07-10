@@ -143,11 +143,6 @@ struct VoxelBVHBuildRequest
     pnanovdb_compute_array_t* array_ptrs[k_max_arrays] = {};
 };
 
-inline bool voxelbvh_interface_supports_user_cancel(const pnanovdb_voxelbvh_t* iface)
-{
-    return iface && iface->context_set_cancel;
-}
-
 /*!
     \brief Base class for per-pipeline async workers.
 */
@@ -394,7 +389,7 @@ public:
     }
     bool supports_user_cancel() const override
     {
-        return voxelbvh_interface_supports_user_cancel(m_iface);
+        return true;
     }
     void init(const PipelineContext& ctx, EditorScene* editor_scene) override
     {
@@ -452,7 +447,7 @@ public:
     }
     bool supports_user_cancel() const override
     {
-        return voxelbvh_interface_supports_user_cancel(m_iface);
+        return true;
     }
 
     bool start(SceneObject* scene_obj,
