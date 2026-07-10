@@ -29,6 +29,10 @@
 struct ImGuiContext;
 thread_local ImGuiContext* ImGuiTLS = nullptr;
 
+extern "C" void pnanovdb_imgui_set_system_clipboard(const char*)
+{
+}
+
 namespace pnanovdb_editor
 {
 namespace
@@ -875,7 +879,10 @@ TEST(SceneSerializer, ReflectedScalarsRoundTripPreservesBoolAndNumerics)
     EXPECT_EQ(restored.u64, original.u64);
     EXPECT_EQ(restored.u8, original.u8);
     EXPECT_EQ(restored.u16, original.u16);
-    EXPECT_EQ(0, std::memcmp(&original, &restored, sizeof(original)));
+
+    const nlohmann::ordered_json restored_json =
+        reflect_params_to_json(PNANOVDB_REFLECT_DATA_TYPE(RoundTripScalarParams), &restored, sizeof(restored));
+    EXPECT_EQ(restored_json, j);
 }
 
 TEST(SceneSerializer, ReflectedBoolRejectsNonBooleanJson)

@@ -83,7 +83,12 @@ ConfigureTest(SceneSerializerTest
   ../editor/PipelineParams.cpp
   ../editor/PipelineRegistry.cpp
   ../editor/SceneSerializer.cpp
+  ../editor/SceneObject.cpp
   ../editor/SceneView.cpp
   ../editor/ShaderParams.cpp
 )
+get_target_property(_scene_serializer_test_libs SceneSerializerTest LINK_LIBRARIES)
+list(REMOVE_ITEM _scene_serializer_test_libs pnanovdbeditor)
+set_target_properties(SceneSerializerTest PROPERTIES LINK_LIBRARIES "${_scene_serializer_test_libs}")
+target_compile_definitions(SceneSerializerTest PRIVATE pnanovdbeditor_EXPORTS)
 target_link_libraries(SceneSerializerTest PRIVATE ImGuiColorTextEdit)

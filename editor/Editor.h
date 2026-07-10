@@ -207,6 +207,7 @@ struct RenderThreadTaskQueue
         for (auto& task : take())
         {
             const pnanovdb_bool_t result = task->run();
+            task->run = nullptr;
             if (task->blocking)
                 complete(task, result);
         }
@@ -217,6 +218,7 @@ struct RenderThreadTaskQueue
     {
         for (auto& task : take(/*stop_accepting*/ true))
         {
+            task->run = nullptr;
             if (task->blocking)
                 complete(task, PNANOVDB_FALSE);
         }

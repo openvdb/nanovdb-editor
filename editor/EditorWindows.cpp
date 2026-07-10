@@ -1365,6 +1365,7 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
             }
             ptr->source_scene_token = nullptr;
             ptr->source_name_token = nullptr;
+            ptr->source_load_pipeline = pnanovdb_pipeline_type_noop;
             ImGuiFileDialog::Instance()->Close();
         }
         else if (ImGuiFileDialog::Instance()->Display("OpenShaderFileDlgKey"))

@@ -59,8 +59,12 @@ namespace pnanovdb_editor
 
 void defer_gaussian_data_destruction(pnanovdb_editor_impl_t* impl, std::shared_ptr<pnanovdb_raster_gaussian_data_t> owner)
 {
-    if (impl && owner)
-        impl->gaussian_data_destruction_queue_pending.push_back(std::move(owner));
+    if (!impl || !owner)
+        return;
+
+    if (impl->gaussian_data_old)
+        impl->gaussian_data_destruction_queue_pending.push_back(std::move(impl->gaussian_data_old));
+    impl->gaussian_data_old = std::move(owner);
 }
 
 template <typename WorkerOp, typename ImmediateOp>
@@ -1335,12 +1339,7 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
     // Chain old data through gaussian_data_old for deferred destruction
     if (old_owner)
     {
-        if (editor->impl->gaussian_data_old)
-        {
-            // If gaussian_data_old already has data, add it to pending queue first
-            editor->impl->gaussian_data_destruction_queue_pending.push_back(std::move(editor->impl->gaussian_data_old));
-        }
-        editor->impl->gaussian_data_old = std::move(old_owner);
+        defer_gaussian_data_destruction(editor->impl, std::move(old_owner));
     }
 
     Console::getInstance().addLog(
@@ -1504,11 +1503,7 @@ void add_gaussian_data_3(pnanovdb_editor_t* editor,
 
     if (old_owner)
     {
-        if (editor->impl->gaussian_data_old)
-        {
-            editor->impl->gaussian_data_destruction_queue_pending.push_back(std::move(editor->impl->gaussian_data_old));
-        }
-        editor->impl->gaussian_data_old = std::move(old_owner);
+        defer_gaussian_data_destruction(editor->impl, std::move(old_owner));
     }
 
     Console::getInstance().addLog(

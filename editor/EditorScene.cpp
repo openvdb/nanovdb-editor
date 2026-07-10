@@ -1264,7 +1264,7 @@ bool EditorScene::handle_nanovdb_data_load(pnanovdb_editor_token_t* scene,
             return false;
     }
     if (old_gaussian_owner)
-        m_editor->impl->gaussian_data_destruction_queue_pending.push_back(std::move(old_gaussian_owner));
+        defer_gaussian_data_destruction(m_editor->impl, std::move(old_gaussian_owner));
 
     m_scene_manager.with_object(scene_token, name_token,
                                 [filename](SceneObject* obj)
@@ -1316,7 +1316,7 @@ bool EditorScene::handle_mesh_data_load(pnanovdb_editor_token_t* scene,
             return false;
     }
     if (old_gaussian_owner)
-        m_editor->impl->gaussian_data_destruction_queue_pending.push_back(std::move(old_gaussian_owner));
+        defer_gaussian_data_destruction(m_editor->impl, std::move(old_gaussian_owner));
 
     const bool builds_voxelbvh = (process_pipeline == pnanovdb_pipeline_type_voxelbvh_build);
     const pnanovdb_pipeline_voxelbvh_source_t source_type =
@@ -1416,7 +1416,7 @@ bool EditorScene::handle_gaussian_data_load(pnanovdb_editor_token_t* scene,
                                 });
 
     if (old_owner)
-        m_editor->impl->gaussian_data_destruction_queue_pending.push_back(std::move(old_owner));
+        defer_gaussian_data_destruction(m_editor->impl, std::move(old_owner));
 
     // Register in SceneView (for scene tree display)
     m_scene_view.add_gaussian_to_scene(
@@ -2923,19 +2923,17 @@ bool EditorScene::load_scene_file(const std::string& filepath)
                 }
             }
 
-            // Only accepted records may create a scene/default camera. Validation
-            // above intentionally has no SceneView side effects.
             const bool scene_existed = m_scene_view.get_scene_data(scene_token) != nullptr;
             SceneViewData* target_scene = get_or_create_scene(scene_token);
-            if (!scene_existed && target_scene && created_object_scene_ids.insert(scene_token->id).second)
+            const bool created_scene_for_object =
+                !scene_existed && target_scene && created_object_scene_ids.insert(scene_token->id).second;
+            if (created_scene_for_object)
             {
                 ++restored_scenes;
                 if (!m_scene_view.get_current_scene_token())
                     m_scene_view.set_current_scene(scene_token);
             }
-            // A file may omit `scenes`, so creating the target scene above can
-            // synthesize and register its default Camera after the first name
-            // check. Recheck the unified namespace before restoring this record.
+            pending.cleanup_started_scene = created_scene_for_object;
             if (reject_name_conflict())
             {
                 continue;
@@ -3073,9 +3071,30 @@ void EditorScene::process_pending_restores()
                 {
                     remove_object(import_scene, pending.name_token->str);
                 }
-                if (pending.cleanup_started_scene)
+                if (pending.cleanup_started_scene && import_scene)
                 {
-                    m_scene_view.remove_scene(import_scene);
+                    const SceneViewData* started_data = m_scene_view.get_scene_data(import_scene);
+                    const bool started_scene_empty = started_data && started_data->nanovdbs.empty() &&
+                                                     started_data->gaussians.empty() &&
+                                                     started_data->renderable_order.empty();
+                    if (started_scene_empty)
+                    {
+                        std::vector<pnanovdb_editor_token_t*> started_scene_objects;
+                        m_scene_manager.for_each_object(
+                            [&](SceneObject* obj)
+                            {
+                                if (obj && obj->scene_token && obj->scene_token->id == import_scene->id && obj->name_token)
+                                {
+                                    started_scene_objects.push_back(obj->name_token);
+                                }
+                                return true;
+                            });
+                        for (pnanovdb_editor_token_t* obj_token : started_scene_objects)
+                        {
+                            m_scene_manager.remove(import_scene, obj_token);
+                        }
+                        m_scene_view.remove_scene(import_scene);
+                    }
                 }
                 if (retargeted && !pending.discard)
                 {

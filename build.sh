@@ -177,7 +177,7 @@ function build_python_module() {
     fi
 
     if $verbose; then
-        PIP_ARGS+=(--config-settings=cmake.verbose=true)
+        PIP_ARGS+=(--config-settings=build.verbose=true)
         PIP_ARGS+=(-v)
     fi
 
