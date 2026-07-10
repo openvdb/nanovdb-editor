@@ -353,6 +353,7 @@ public:
 
     bool save_scene_file(const std::string& filepath);
     bool load_scene_file(const std::string& filepath);
+    bool can_load_scene_file(const std::string& filepath, std::string* error_message = nullptr) const;
     std::vector<std::string> find_conflicting_scene_names(const std::string& filepath) const;
     void process_pending_restores();
 

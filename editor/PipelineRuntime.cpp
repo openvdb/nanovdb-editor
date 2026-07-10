@@ -142,12 +142,8 @@ bool AsyncWorker::get_progress(std::string& text, float& value)
     return true;
 }
 
-void AsyncWorker::request_user_cancel(SceneObject* scene_obj)
+void AsyncWorker::request_user_cancel()
 {
-    if (scene_obj && !scene_obj->pipeline.process_user_cancel_requested)
-    {
-        return;
-    }
     if (m_user_cancelled)
     {
         request_cancel();
@@ -436,7 +432,11 @@ bool GaussianVoxelizeWorker::start(SceneObject* scene_obj,
 
     Console::getInstance().addLog("Starting re-conversion from '%s' (voxels_per_unit=%.1f, voxel_size=%.6f)...",
                                   m_pending_filepath.c_str(), vpu, voxel_sz);
-    request_user_cancel(scene_obj);
+
+    if (scene_obj->pipeline.process_user_cancel_requested)
+    {
+        request_user_cancel();
+    }
     return true;
 }
 
@@ -706,7 +706,10 @@ bool VoxelBVHWorker::start(SceneObject* scene_obj,
     {
         Console::getInstance().addLog("Starting VoxelBVH build (%s)...", voxelbvh_source_label(m_pending_request.source));
     }
-    request_user_cancel(scene_obj);
+    if (scene_obj->pipeline.process_user_cancel_requested)
+    {
+        request_user_cancel();
+    }
     return true;
 }
 
@@ -996,7 +999,10 @@ bool VoxelBVHRgba8Worker::start(SceneObject* scene_obj,
         Console::getInstance().addLog("Starting VoxelBVH -> RGBA8 conversion (%zu directional grids, upsample=%d)...",
                                       m_pending_ray_directions.size(), (int)upsample);
     }
-    request_user_cancel(scene_obj);
+    if (scene_obj->pipeline.process_user_cancel_requested)
+    {
+        request_user_cancel();
+    }
     return true;
 }
 

@@ -1106,16 +1106,28 @@ static void showSceneOverwritePopup(imgui_instance_user::Instance* ptr)
 
     if (ImGui::Button("Overwrite") && ptr->editor_scene)
     {
-        for (const std::string& name : ptr->scene_overwrite_conflicts)
+        std::string load_error;
+        if (!ptr->editor_scene->can_load_scene_file(ptr->scene_filepath, &load_error))
         {
-            pnanovdb_editor_token_t* scene_token = EditorToken::getInstance().getToken(name.c_str());
-            if (scene_token)
-            {
-                ptr->editor_scene->remove_scene(scene_token);
-            }
+            pnanovdb_editor::Console::getInstance().addLog(
+                pnanovdb_editor::Console::LogLevel::Error,
+                "Load scene: keeping existing scene(s); '%s' cannot be loaded (%s)", ptr->scene_filepath.c_str(),
+                load_error.c_str());
+            close();
         }
-        load_scene_file_and_sync_viewport(*ptr->editor_scene, ptr->scene_filepath);
-        close();
+        else
+        {
+            for (const std::string& name : ptr->scene_overwrite_conflicts)
+            {
+                pnanovdb_editor_token_t* scene_token = EditorToken::getInstance().getToken(name.c_str());
+                if (scene_token)
+                {
+                    ptr->editor_scene->remove_scene(scene_token);
+                }
+            }
+            load_scene_file_and_sync_viewport(*ptr->editor_scene, ptr->scene_filepath);
+            close();
+        }
     }
     ImGui::SameLine();
     if (ImGui::Button("Cancel"))

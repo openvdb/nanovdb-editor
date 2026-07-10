@@ -2962,6 +2962,59 @@ bool EditorScene::load_scene_file(const std::string& filepath)
     return restored_scenes + queued + restored > 0;
 }
 
+bool EditorScene::can_load_scene_file(const std::string& filepath, std::string* error_message) const
+{
+    const auto fail = [&](std::string message) -> bool
+    {
+        if (error_message)
+        {
+            *error_message = std::move(message);
+        }
+        return false;
+    };
+
+    std::ifstream file(filepath);
+    if (!file)
+    {
+        return fail("cannot open file");
+    }
+
+    nlohmann::json doc;
+    try
+    {
+        file >> doc;
+    }
+    catch (const nlohmann::json::exception& e)
+    {
+        return fail(std::string("invalid JSON: ") + e.what());
+    }
+
+    int serialized_version = k_scene_file_version;
+    if (doc.contains("version") && doc["version"].is_number_integer())
+    {
+        try
+        {
+            serialized_version = doc["version"].get<int>();
+        }
+        catch (const nlohmann::json::exception&)
+        {
+            serialized_version = k_scene_file_version;
+        }
+    }
+    if (serialized_version != k_scene_file_version)
+    {
+        return fail("unsupported file version " + std::to_string(serialized_version) + " (expected " +
+                    std::to_string(k_scene_file_version) + ")");
+    }
+
+    if (!doc.contains("objects") || !doc["objects"].is_array())
+    {
+        return fail("no 'objects' array");
+    }
+
+    return true;
+}
+
 std::vector<std::string> EditorScene::find_conflicting_scene_names(const std::string& filepath) const
 {
     std::vector<std::string> conflicts;
@@ -3304,7 +3357,19 @@ void EditorScene::apply_object_restore(pnanovdb_editor_token_t* scene_token,
                         apply_stage_params(p, t, steps[i]);
                         m_editor->unmap_process_step_params(m_editor, scene_token, name_token, i);
                     }
-                }
+
+                const size_t desired_step_count = steps.size();
+                m_scene_manager.with_object(scene_token, name_token,
+                                            [desired_step_count](SceneObject* o)
+                                            {
+                                                if (!o)
+                                                    return;
+                                                while (o->pipeline.process_count() > 1 &&
+                                                       o->pipeline.process_count() > desired_step_count)
+                                                {
+                                                    o->remove_process_step(o->pipeline.process_count() - 1);
+                                                }
+                                            });
             }
 
             if (pj.contains("drop_intermediate") && pj["drop_intermediate"].is_boolean())

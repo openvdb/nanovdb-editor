@@ -1050,8 +1050,13 @@ void pipeline_execute_pending(EditorSceneManager* manager, const PipelineContext
                 }
                 else if (result == pnanovdb_pipeline_result_error || result == pnanovdb_pipeline_result_no_data)
                 {
+                    const int failing_step = obj->pipeline.active_process_step;
                     obj->advance_process_chain(false);
-                    terminal_replacement_failures.push_back(obj->lifetime_id);
+
+                    if (failing_step <= 0)
+                    {
+                        terminal_replacement_failures.push_back(obj->lifetime_id);
+                    }
                 }
             }
             return true;
@@ -1503,7 +1508,6 @@ bool pipeline_create_variant(EditorSceneManager* scene_manager,
 // ============================================================================
 // Pipeline descriptor + registration macros
 // ============================================================================
-
 #define PNANOVDB_PIPELINE_PARAMS(T) sizeof(T), PNANOVDB_REFLECT_DATA_TYPE(T), init_params_t<T>
 #define PNANOVDB_PIPELINE_NO_PARAMS 0, nullptr, nullptr
 #define PNANOVDB_PIPELINE_CHAIN(arr) (arr), (sizeof(arr) / sizeof((arr)[0]))

@@ -99,13 +99,14 @@ void renderParamWidget(const ParamWidgetSpec& spec)
     if (is_half)
     {
         std::vector<float> values(spec.element_count);
+        std::vector<uint16_t> original_bits(spec.element_count);
         for (size_t i = 0; i < spec.element_count; ++i)
         {
             uint16_t bits = 0;
             std::memcpy(&bits, static_cast<const char*>(spec.value) + i * sizeof(bits), sizeof(bits));
+            original_bits[i] = bits;
             values[i] = half_bits_to_float(bits);
         }
-        const std::vector<float> original_values = values;
         float min_value = 0.0f;
         float max_value = 0.0f;
         const void* min_ptr = nullptr;
@@ -130,14 +131,13 @@ void renderParamWidget(const ParamWidgetSpec& spec)
         float_spec.min_value = min_ptr;
         float_spec.max_value = max_ptr;
         renderParamWidget(float_spec);
-        if (std::memcmp(values.data(), original_values.data(), values.size() * sizeof(float)) == 0)
-        {
-            return;
-        }
         for (size_t i = 0; i < spec.element_count; ++i)
         {
             const uint16_t bits = float_to_half_bits(values[i]);
-            std::memcpy(static_cast<char*>(spec.value) + i * sizeof(bits), &bits, sizeof(bits));
+            if (bits != original_bits[i])
+            {
+                std::memcpy(static_cast<char*>(spec.value) + i * sizeof(bits), &bits, sizeof(bits));
+            }
         }
         return;
     }

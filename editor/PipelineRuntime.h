@@ -240,7 +240,7 @@ public:
         return false;
     }
 
-    void request_user_cancel(SceneObject* scene_obj = nullptr);
+    void request_user_cancel();
     bool user_cancel_requested() const;
 
     // Worker has a finished task waiting for handle_completion()

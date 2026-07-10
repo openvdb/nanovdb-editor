@@ -212,6 +212,9 @@ jobs:
           python-version: '3.11'
 
       - name: Build NanoVDB Editor Python module
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "15.0"
+          CMAKE_ARGS: "-DCMAKE_OSX_DEPLOYMENT_TARGET=15.0"
         run: |
           set -e
           chmod +x ./build.sh
