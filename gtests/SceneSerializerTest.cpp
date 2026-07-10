@@ -8,7 +8,6 @@
 #include "editor/SceneView.h"
 #include "editor/ParamWidget.h"
 #include "editor/PipelineRegistry.h"
-#include "editor/PipelineRuntime.h"
 
 #include "nanovdb_editor/putil/Shader.hpp"
 #include "nanovdb_editor/putil/Compiler.h"

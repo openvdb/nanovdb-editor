@@ -696,8 +696,8 @@ jobs:
 
       - name: Install CMake (system)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake pkg-config libgl1-mesa-dev
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::ForceIPv4=true update
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::ForceIPv4=true install -y cmake pkg-config libgl1-mesa-dev
           cmake --version
 
       - name: Build NanoVDB Editor Python module
