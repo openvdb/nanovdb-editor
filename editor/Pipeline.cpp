@@ -1775,6 +1775,13 @@ PNANOVDB_REGISTER_PROCESS_CHAIN_PIPELINE(s_voxelbvh_rgba8_chain_descriptor,
                                          pnanovdb_pipeline_data_kind_mesh);
 
 
+PNANOVDB_REGISTER_LOAD_PIPELINE(s_nanovdb_load_descriptor,
+                                pnanovdb_pipeline_type_nanovdb_load,
+                                "NanoVDB Load",
+                                PNANOVDB_PIPELINE_NO_PARAMS,
+                                nullptr,
+                                pnanovdb_pipeline_data_kind_nanovdb);
+
 PNANOVDB_REGISTER_LOAD_PIPELINE(s_mesh_load_descriptor,
                                 pnanovdb_pipeline_type_mesh_load,
                                 "Mesh PLY Load",

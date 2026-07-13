@@ -76,9 +76,52 @@ static const PipelinePreset k_pipeline_presets[] = {
       pnanovdb_pipeline_type_voxelbvh_lines_render, true, sourceKindBit(SceneObjectSourceKind::MeshLines) },
     { "VoxelBVH + RGBA8", pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_voxelbvh_rgba8_chain,
       pnanovdb_pipeline_type_nanovdb_render, false, sourceKindBit(SceneObjectSourceKind::MeshTriangles) },
-    { "NanoVDB", pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_nanovdb_render, true,
-      sourceKindBit(SceneObjectSourceKind::NanoVDB) },
+    { "NanoVDB", pnanovdb_pipeline_type_nanovdb_load, pnanovdb_pipeline_type_noop,
+      pnanovdb_pipeline_type_nanovdb_render, true, sourceKindBit(SceneObjectSourceKind::NanoVDB) },
 };
+
+static bool reimportSourceForPreset(EditorScene* editor_scene,
+                                    EditorSceneManager* scene_manager,
+                                    pnanovdb_editor_token_t* scene_token,
+                                    pnanovdb_editor_token_t* name_token,
+                                    const PipelinePreset& preset)
+{
+    if (!editor_scene || !scene_manager)
+        return false;
+
+    if (preset.process != pnanovdb_pipeline_type_noop)
+        return false;
+
+    const pnanovdb_pipeline_render_method_t method = pipeline_get_render_method(preset.render);
+
+    std::string source_filepath;
+    bool resident = true;
+    scene_manager->with_object(scene_token, name_token,
+                               [&](SceneObject* o)
+                               {
+                                   if (!o)
+                                       return;
+                                   source_filepath = o->resources.source_filepath;
+                                   if (method == pnanovdb_pipeline_render_method_gaussian)
+                                       resident = o->gaussian_data() != nullptr;
+                                   else if (method == pnanovdb_pipeline_render_method_nanovdb)
+                                       resident = o->nanovdb_array() != nullptr || o->converted_nanovdb() != nullptr;
+                               });
+
+    if (resident || source_filepath.empty())
+        return false;
+
+    if (preset.load == pnanovdb_pipeline_type_gaussian_load)
+    {
+        editor_scene->load_gaussian_file(scene_token, source_filepath.c_str(), preset.process, preset.render, 0.f,
+                                         name_token, /*replace_existing*/ true);
+    }
+    else
+    {
+        editor_scene->load_nanovdb_file(scene_token, source_filepath.c_str(), preset.render, name_token);
+    }
+    return true;
+}
 
 static void applyPreset(EditorScene* editor_scene,
                         EditorSceneManager* scene_manager,
@@ -90,6 +133,16 @@ static void applyPreset(EditorScene* editor_scene,
     pnanovdb_editor_t* editor = editor_scene ? editor_scene->get_editor() : nullptr;
     if (!editor)
         return;
+
+    if (reimportSourceForPreset(editor_scene, scene_manager, scene_token, name_token, preset))
+    {
+        if (const char* s = pnanovdb_pipeline_get_shader_name(preset.render))
+            editor_scene->set_selected_object_shader_name(s);
+        st.stage = (int)pnanovdb_pipeline_stage_render;
+        st.step = 0;
+        Console::getInstance().addLog("Applied preset '%s' (re-imported source data from file)", preset.label);
+        return;
+    }
 
     if (preset.set_load)
         editor->set_pipeline(editor, scene_token, name_token, pnanovdb_pipeline_stage_load, preset.load);
@@ -374,7 +427,7 @@ static void showShaderParamsResetButton(EditorSceneManager* scene_manager,
 static bool loadPipelineUsesSourceFile(pnanovdb_pipeline_type_t load_pipeline)
 {
     return load_pipeline == pnanovdb_pipeline_type_mesh_load || load_pipeline == pnanovdb_pipeline_type_gaussian_load ||
-           load_pipeline == pnanovdb_pipeline_type_noop;
+           load_pipeline == pnanovdb_pipeline_type_nanovdb_load || load_pipeline == pnanovdb_pipeline_type_noop;
 }
 
 static const char* pipelineDisplayName(pnanovdb_pipeline_type_t type);

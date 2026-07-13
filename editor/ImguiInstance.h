@@ -79,6 +79,7 @@ struct PendingState
     bool save_file = false;
     bool save_scene = false;
     bool load_scene = false;
+    bool new_scene = false;
     bool find_source_file = false; // Properties panel: pick a source file for the selected load pipeline
     bool find_shader_file = false; // Properties panel: pick a shader file for the render stage
     std::string viewport_gaussian_view = "";

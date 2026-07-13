@@ -218,6 +218,7 @@ satisfy the next step's `inputs`.
 | Example                                 | Stage   | Sync/Async | Files |
 | --------------------------------------- | ------- | ---------- | ----- |
 | `pnanovdb_pipeline_type_noop`           | load    | sync       | `editor/Pipeline.cpp` |
+| `pnanovdb_pipeline_type_nanovdb_load`   | load    | sync       | `editor/Pipeline.cpp` (native NanoVDB; no conversion work) |
 | `pnanovdb_pipeline_type_nanovdb_render` | render  | sync       | `editor/Pipeline.cpp` |
 | `pnanovdb_pipeline_type_voxelbvh_build` | process | async-only | `editor/Pipeline.cpp`, `PipelineRuntime.{h,cpp}` |
 | `pnanovdb_pipeline_type_voxelbvh_rgba8` | process | async-only | `editor/Pipeline.cpp`, `PipelineRuntime.{h,cpp}` |

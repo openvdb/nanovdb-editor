@@ -127,6 +127,7 @@ void createMenu(imgui_instance_user::Instance* ptr)
             ImGui::MenuItem("Import Gaussian...", "", &ptr->pending.find_raster_file);
             ImGui::MenuItem("Import Mesh...", "", &ptr->pending.find_mesh_file);
             ImGui::Separator();
+            ImGui::MenuItem("New Scene", "", &ptr->pending.new_scene);
             ImGui::MenuItem("Save Scene...", "", &ptr->pending.save_scene);
             ImGui::MenuItem("Load Scene...", "", &ptr->pending.load_scene);
             ImGui::EndMenu();
@@ -1066,9 +1067,104 @@ static bool meshImportSidePane(const char* /*vFilter*/, IGFDUserDatas vUserDatas
     return true;
 }
 
+static void showNewScenePopup(imgui_instance_user::Instance* ptr)
+{
+    static const char* k_popup_title = "New Scene";
+    static char s_new_scene_name[128] = "";
+    static bool s_focus_input = false;
+
+    if (ptr->pending.new_scene)
+    {
+        ptr->pending.new_scene = false;
+        std::snprintf(s_new_scene_name, sizeof(s_new_scene_name), "%s", pnanovdb_editor::DEFAULT_SCENE_NAME);
+        s_focus_input = true;
+        ImGui::OpenPopup(k_popup_title);
+    }
+
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    if (!ImGui::BeginPopupModal(k_popup_title, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        return;
+    }
+
+    ImGui::TextUnformatted("Scene name:");
+    if (s_focus_input)
+    {
+        ImGui::SetKeyboardFocusHere();
+        s_focus_input = false;
+    }
+    ImGui::PushItemWidth(240.0f);
+    const bool submitted = ImGui::InputText("##NewSceneName", s_new_scene_name, IM_ARRAYSIZE(s_new_scene_name),
+                                            ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+    ImGui::PopItemWidth();
+
+    const bool has_name = s_new_scene_name[0] != '\0';
+
+    // Detect whether a scene with this name already exists (would be replaced).
+    pnanovdb_editor_token_t* candidate =
+        (has_name && ptr->editor_scene) ? EditorToken::getInstance().getToken(s_new_scene_name) : nullptr;
+    bool name_exists = false;
+    if (candidate && ptr->editor_scene)
+    {
+        for (pnanovdb_editor_token_t* token : ptr->editor_scene->get_all_scene_tokens())
+        {
+            if (token && token->id == candidate->id)
+            {
+                name_exists = true;
+                break;
+            }
+        }
+    }
+
+    if (!has_name)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.2f, 0.2f, 1.0f));
+        ImGui::TextUnformatted("Name must not be empty.");
+        ImGui::PopStyleColor();
+    }
+    else if (name_exists)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.7f, 0.2f, 1.0f));
+        ImGui::Text("Scene '%s' already exists and will be lost.", s_new_scene_name);
+        ImGui::PopStyleColor();
+    }
+
+    ImGui::Separator();
+
+    const auto create = [&]()
+    {
+        if (!candidate || !ptr->editor_scene)
+        {
+            return;
+        }
+        // Replace any existing scene with the same name, then create a fresh one
+        // and select it -- consistent with the "Add Scene" button behaviour.
+        if (name_exists)
+        {
+            ptr->editor_scene->remove_scene(candidate);
+        }
+        ptr->editor_scene->set_current_scene(candidate);
+        ptr->editor_scene->get_or_create_scene(candidate);
+        ImGui::CloseCurrentPopup();
+    };
+
+    const char* create_label = name_exists ? "Overwrite" : "Create";
+    if (ImGui::Button(create_label) || (submitted && has_name))
+    {
+        create();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel"))
+    {
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+}
+
 static void showSceneOverwritePopup(imgui_instance_user::Instance* ptr)
 {
-    static const char* k_popup_title = "Overwrite Scene?";
+    static const char* k_popup_title = "Replace Scene?";
 
     if (ptr->scene_overwrite_open_popup)
     {
@@ -1095,7 +1191,8 @@ static void showSceneOverwritePopup(imgui_instance_user::Instance* ptr)
             ImGui::BulletText("%s", name.c_str());
         }
     }
-    ImGui::TextUnformatted("Overwrite the existing scene(s) with the loaded file?");
+    ImGui::TextUnformatted(
+        "Replace the existing scene(s) with the ones from this file? Any unsaved changes will be lost.");
     ImGui::Separator();
 
     const auto close = [&]()
@@ -1104,7 +1201,7 @@ static void showSceneOverwritePopup(imgui_instance_user::Instance* ptr)
         ImGui::CloseCurrentPopup();
     };
 
-    if (ImGui::Button("Overwrite") && ptr->editor_scene)
+    if (ImGui::Button("Replace") && ptr->editor_scene)
     {
         std::string load_error;
         if (!ptr->editor_scene->can_load_scene_file(ptr->scene_filepath, &load_error))
@@ -1237,7 +1334,8 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
         const char* filters = "Gaussian Files (*.npy *.npz *.ply){.npy,.npz,.ply}";
         if (ptr->source_load_pipeline == pnanovdb_pipeline_type_mesh_load)
             filters = "Mesh Files (*.ply){.ply}";
-        else if (ptr->source_load_pipeline == pnanovdb_pipeline_type_noop)
+        else if (ptr->source_load_pipeline == pnanovdb_pipeline_type_nanovdb_load ||
+                 ptr->source_load_pipeline == pnanovdb_pipeline_type_noop)
             filters = "NanoVDB Files (*.nvdb){.nvdb}";
         ImGuiFileDialog::Instance()->OpenDialog("OpenSourceFileDlgKey", "Set Source File", filters, config);
     }
@@ -1361,7 +1459,8 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
                     pnanovdb_editor::Console::getInstance().addLog("Setting source mesh '%s'", path.c_str());
                     ptr->editor_scene->load_mesh_file(scene, path.c_str(), options, name);
                 }
-                else if (ptr->source_load_pipeline == pnanovdb_pipeline_type_noop)
+                else if (ptr->source_load_pipeline == pnanovdb_pipeline_type_nanovdb_load ||
+                         ptr->source_load_pipeline == pnanovdb_pipeline_type_noop)
                 {
                     pnanovdb_editor::Console::getInstance().addLog("Setting source NanoVDB '%s'", path.c_str());
                     ptr->editor_scene->load_nanovdb_file(
@@ -1448,6 +1547,7 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
         }
     }
 
+    showNewScenePopup(ptr);
     showSceneOverwritePopup(ptr);
 }
 

@@ -30,6 +30,7 @@ enum pnanovdb_pipeline_type_enum_t
     pnanovdb_pipeline_type_voxelbvh_rgba8 = 14, // process: VoxelBVH to RGBA8 NanoVDB
     pnanovdb_pipeline_type_voxelbvh_rgba8_chain = 15, // process chain: VoxelBVH build then RGBA8 conversion
     pnanovdb_pipeline_type_voxelbvh_rgba8_render = 16, // render: RGBA8 NanoVDB with directional grid selection
+    pnanovdb_pipeline_type_nanovdb_load = 17, // load: NanoVDB grid
     pnanovdb_pipeline_type_count
 };
 

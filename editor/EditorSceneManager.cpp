@@ -844,6 +844,7 @@ bool EditorSceneManager::add_nanovdb_impl(pnanovdb_editor_token_t* scene,
     obj.shader_params_data_type() = nullptr;
     obj.shader_name() = shader_name;
 
+    apply_default_stage(obj.pipeline.load(), pnanovdb_pipeline_type_nanovdb_load);
     apply_default_stage(obj.pipeline.process(), process_pipeline);
     apply_default_stage(obj.pipeline.render(), render_pipeline);
     obj.mark_process_dirty();
