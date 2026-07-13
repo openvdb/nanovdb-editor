@@ -456,7 +456,7 @@ public:
                pnanovdb_compute_array_t* src_nanovdb,
                std::shared_ptr<pnanovdb_compute_array_t> src_owner,
                const std::vector<pnanovdb_vec3_t>& index_space_ray_directions,
-               pnanovdb_bool_t upsample);
+               pnanovdb_uint32_t upsample_factor);
     bool handle_completion() override;
     void report_bake_progress(float grid_fraction);
 
@@ -481,7 +481,7 @@ private:
     pnanovdb_compute_array_t* m_pending_src = nullptr;
     std::shared_ptr<pnanovdb_compute_array_t> m_pending_src_owner;
     std::vector<pnanovdb_vec3_t> m_pending_ray_directions;
-    pnanovdb_bool_t m_pending_upsample = PNANOVDB_FALSE;
+    pnanovdb_uint32_t m_pending_upsample_factor = 1u;
     pnanovdb_compute_array_t* m_pending_result = nullptr;
 
     pnanovdb_uint32_t m_progress_total_grids = 1u;

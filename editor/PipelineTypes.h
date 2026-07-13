@@ -112,4 +112,7 @@ inline constexpr float k_default_voxel_size = 1.f / k_default_voxels_per_unit;
 
 inline constexpr pnanovdb_uint32_t k_default_bvh_resolution = 512u; //!< 1..k_max_bvh_resolution
 inline constexpr pnanovdb_uint32_t k_max_bvh_resolution = 4096u;
+
+inline constexpr pnanovdb_uint32_t k_default_voxelbvh_rgba8_upsample = 2u; //!< 1..k_max_voxelbvh_rgba8_upsample
+inline constexpr pnanovdb_uint32_t k_max_voxelbvh_rgba8_upsample = 4u;
 } // namespace pnanovdb_editor

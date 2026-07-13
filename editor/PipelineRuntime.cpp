@@ -863,7 +863,7 @@ bool VoxelBVHRgba8Worker::start(SceneObject* scene_obj,
                                 pnanovdb_compute_array_t* src_nanovdb,
                                 std::shared_ptr<pnanovdb_compute_array_t> src_owner,
                                 const std::vector<pnanovdb_vec3_t>& index_space_ray_directions,
-                                pnanovdb_bool_t upsample)
+                                pnanovdb_uint32_t upsample_factor)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -904,7 +904,10 @@ bool VoxelBVHRgba8Worker::start(SceneObject* scene_obj,
     {
         m_pending_ray_directions.push_back(pnanovdb_vec3_t{ 0.f, 0.f, -1.f });
     }
-    m_pending_upsample = upsample;
+    m_pending_upsample_factor =
+        upsample_factor < 1u ?
+            1u :
+            (upsample_factor > k_max_voxelbvh_rgba8_upsample ? k_max_voxelbvh_rgba8_upsample : upsample_factor);
     m_pending_result = nullptr;
     m_cancel.store(0u, std::memory_order_relaxed);
     m_enqueued = true;
@@ -931,7 +934,7 @@ bool VoxelBVHRgba8Worker::start(SceneObject* scene_obj,
                 m_iface->context_set_progress(m_worker_ctx, rgba8_progress_to_worker, this);
             }
 
-            const pnanovdb_uint32_t upsample_factor = m_pending_upsample ? 2u : 1u;
+            const pnanovdb_uint32_t upsample_factor = m_pending_upsample_factor;
             const size_t dir_count = m_pending_ray_directions.size();
 
             m_progress_total_grids = (pnanovdb_uint32_t)dir_count;
@@ -991,13 +994,14 @@ bool VoxelBVHRgba8Worker::start(SceneObject* scene_obj,
     if (m_pending_ray_directions.size() == 1u)
     {
         Console::getInstance().addLog(
-            "Starting VoxelBVH -> RGBA8 conversion (ray_dir=[%.3f, %.3f, %.3f], upsample=%d)...",
-            m_pending_ray_directions[0].x, m_pending_ray_directions[0].y, m_pending_ray_directions[0].z, (int)upsample);
+            "Starting VoxelBVH -> RGBA8 conversion (ray_dir=[%.3f, %.3f, %.3f], upsample=%ux)...",
+            m_pending_ray_directions[0].x, m_pending_ray_directions[0].y, m_pending_ray_directions[0].z,
+            m_pending_upsample_factor);
     }
     else
     {
-        Console::getInstance().addLog("Starting VoxelBVH -> RGBA8 conversion (%zu directional grids, upsample=%d)...",
-                                      m_pending_ray_directions.size(), (int)upsample);
+        Console::getInstance().addLog("Starting VoxelBVH -> RGBA8 conversion (%zu directional grids, upsample=%ux)...",
+                                      m_pending_ray_directions.size(), m_pending_upsample_factor);
     }
     if (scene_obj->pipeline.process_user_cancel_requested)
     {

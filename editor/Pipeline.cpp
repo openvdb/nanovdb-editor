@@ -57,7 +57,7 @@ struct VoxelBVHRgba8Params
     float ray_dir_x = 0.f;
     float ray_dir_y = 0.f;
     float ray_dir_z = -1.f;
-    pnanovdb_bool_t upsample = PNANOVDB_TRUE;
+    pnanovdb_uint32_t upsample = pnanovdb_editor::k_default_voxelbvh_rgba8_upsample;
 };
 
 #define PNANOVDB_REFLECT_TYPE VoxelBVHRgba8Params
@@ -66,7 +66,7 @@ PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, bake_all_directions, 0, 0)
 PNANOVDB_REFLECT_VALUE(float, ray_dir_x, 0, 0)
 PNANOVDB_REFLECT_VALUE(float, ray_dir_y, 0, 0)
 PNANOVDB_REFLECT_VALUE(float, ray_dir_z, 0, 0)
-PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, upsample, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_uint32_t, upsample, 0, 0)
 PNANOVDB_REFLECT_END(0)
 #undef PNANOVDB_REFLECT_TYPE
 
@@ -640,7 +640,15 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_rgba8(pnanovdb_scene_object_t
     }
     const auto* p = static_cast<const VoxelBVHRgba8Params*>(params.data);
     const bool bake_all_directions = p->bake_all_directions != PNANOVDB_FALSE;
-    const pnanovdb_bool_t upsample = p->upsample ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+    pnanovdb_uint32_t upsample_factor = p->upsample;
+    if (upsample_factor < 1u)
+    {
+        upsample_factor = 1u;
+    }
+    else if (upsample_factor > k_max_voxelbvh_rgba8_upsample)
+    {
+        upsample_factor = k_max_voxelbvh_rgba8_upsample;
+    }
 
     std::vector<pnanovdb_vec3_t> index_dirs;
     if (bake_all_directions)
@@ -674,7 +682,7 @@ static pnanovdb_pipeline_result_t execute_voxelbvh_rgba8(pnanovdb_scene_object_t
         [&](PipelineRuntime& rt)
         {
             auto* w = rt.worker<VoxelBVHRgba8Worker>();
-            return w && w->start(scene_obj, scene_manager, ctx, src, src_owner, index_dirs, upsample);
+            return w && w->start(scene_obj, scene_manager, ctx, src, src_owner, index_dirs, upsample_factor);
         });
     if (!started)
     {

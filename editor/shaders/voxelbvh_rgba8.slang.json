@@ -26,8 +26,11 @@
             "components": ["ray_dir_x", "ray_dir_y", "ray_dir_z"]
         },
         "upsample": {
-            "label": "Upsample 2x",
-            "tooltip": "Make RGBA8 grid smoother by duplicating topology at 2x resolution"
+            "label": "Upsample",
+            "tooltip": "Make RGBA8 grid smoother by duplicating topology at Nx resolution (1 = off)",
+            "min": 1,
+            "max": 4,
+            "step": 1
         }
     }
 }
