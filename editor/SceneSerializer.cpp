@@ -959,16 +959,23 @@ bool apply_shader_params_json(const std::vector<ShaderParam>& params,
         auto it = j.find(p.name);
         if (it != j.end())
         {
+            const nlohmann::json* value = &(*it);
+            nlohmann::json bool_integer_value;
+            if (p.is_bool && p.num_elements == 1 && it->is_boolean() && p.type != ImGuiDataType_Bool)
+            {
+                bool_integer_value = it->get<bool>() ? 1u : 0u;
+                value = &bool_integer_value;
+            }
             if (p.num_elements == 1)
             {
-                write_shader_scalar(p.type, p.size, bytes.data() + offset, *it);
+                write_shader_scalar(p.type, p.size, bytes.data() + offset, *value);
             }
-            else if (it->is_array())
+            else if (value->is_array())
             {
-                const size_t count = std::min(p.num_elements, it->size());
+                const size_t count = std::min(p.num_elements, value->size());
                 for (size_t e = 0; e < count; ++e)
                 {
-                    write_shader_scalar(p.type, p.size, bytes.data() + offset + e * p.size, (*it)[e]);
+                    write_shader_scalar(p.type, p.size, bytes.data() + offset + e * p.size, (*value)[e]);
                 }
             }
         }

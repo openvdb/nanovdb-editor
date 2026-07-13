@@ -916,6 +916,24 @@ TEST(SceneSerializer, ShortShaderArraysPreserveRemainingDefaults)
     EXPECT_EQ(actual, (std::array<float, 4>{ 9.f, 2.f, 3.f, 4.f }));
 }
 
+TEST(SceneSerializer, BoolHintedIntegerShaderParamsAcceptBooleanJson)
+{
+    ShaderParam enable_slice_plane;
+    enable_slice_plane.name = "enable_slice_plane";
+    enable_slice_plane.type = ImGuiDataType_U32;
+    enable_slice_plane.is_bool = true;
+    enable_slice_plane.resizeData(sizeof(uint32_t), 1u);
+
+    uint32_t restored_value = 1u;
+    std::vector<unsigned char> restored(sizeof(restored_value));
+    std::memcpy(restored.data(), &restored_value, sizeof(restored_value));
+    ASSERT_TRUE(
+        apply_shader_params_json({ enable_slice_plane }, nlohmann::json{ { "enable_slice_plane", false } }, restored));
+
+    std::memcpy(&restored_value, restored.data(), sizeof(restored_value));
+    EXPECT_EQ(restored_value, 0u);
+}
+
 TEST(SceneSerializer, PartialShaderRestoreUsesDeclaredDefaultsNotSharedPool)
 {
     ShaderParams shader_params;

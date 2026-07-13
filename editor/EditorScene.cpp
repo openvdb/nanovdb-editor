@@ -476,6 +476,70 @@ void EditorScene::load_view_into_editor_and_ui(SceneObject* scene_obj)
     //   3. When user moves viewport (sync_scene_camera_from_editor in render loop)
 }
 
+void EditorScene::sync_restored_object_view_state(pnanovdb_editor_token_t* scene_token,
+                                                  pnanovdb_editor_token_t* name_token)
+{
+    if (!scene_token || !name_token)
+    {
+        return;
+    }
+
+    m_scene_manager.with_object(
+        scene_token, name_token,
+        [&](SceneObject* restored_obj)
+        {
+            if (!restored_obj)
+            {
+                return;
+            }
+
+            const auto render_method = pipeline_get_render_method(restored_obj->render_pipeline());
+            if (render_method == pnanovdb_pipeline_render_method_nanovdb)
+            {
+                const auto& owner = restored_obj->resources.nanovdb_array_owner ?
+                                        restored_obj->resources.nanovdb_array_owner :
+                                        restored_obj->resources.converted_nanovdb_owner;
+                if (owner)
+                {
+                    NanoVDBContext context{ owner, restored_obj->shader_params(),
+                                            restored_obj->params.shader_params_array_owner };
+                    if (NanoVDBContext* existing = m_scene_view.get_nanovdb(scene_token, name_token))
+                    {
+                        *existing = context;
+                    }
+                    else
+                    {
+                        m_scene_view.add_nanovdb(scene_token, name_token, context);
+                    }
+                }
+            }
+            else if (render_method == pnanovdb_pipeline_render_method_gaussian &&
+                     restored_obj->resources.gaussian_data_owner)
+            {
+                GaussianDataContext context{ restored_obj->resources.gaussian_data_owner,
+                                             static_cast<pnanovdb_raster_shader_params_t*>(restored_obj->shader_params()) };
+                if (GaussianDataContext* existing = m_scene_view.get_gaussian(scene_token, name_token))
+                {
+                    *existing = context;
+                }
+                else
+                {
+                    m_scene_view.add_gaussian(scene_token, name_token, context);
+                }
+            }
+
+            const pnanovdb_editor_token_t* active_scene =
+                m_render_view_selection.scene_token ? m_render_view_selection.scene_token : get_current_scene_token();
+            const bool is_active_render_view = m_render_view_selection.name_token && active_scene &&
+                                               m_render_view_selection.name_token->id == name_token->id &&
+                                               active_scene->id == scene_token->id;
+            if (is_active_render_view)
+            {
+                load_view_into_editor_and_ui(restored_obj);
+            }
+        });
+}
+
 bool EditorScene::handle_pending_view_changes()
 {
     // Handle UI-triggered view changes (from scene tree)
@@ -3400,6 +3464,7 @@ void EditorScene::apply_object_restore(pnanovdb_editor_token_t* scene_token,
                 m_editor, scene_token, name_token, obj["visible"].get<bool>() ? PNANOVDB_TRUE : PNANOVDB_FALSE);
         }
 
+        sync_restored_object_view_state(scene_token, name_token);
         m_editor->mark_pipeline_dirty(m_editor, scene_token, name_token);
     }
     catch (const nlohmann::json::exception& e)

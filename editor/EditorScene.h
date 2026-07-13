@@ -421,6 +421,7 @@ private:
     void sync_current_view_state(SyncDirection sync_direction);
     void clear_editor_view_state();
     void load_view_into_editor_and_ui(SceneObject* scene_obj);
+    void sync_restored_object_view_state(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token);
     bool handle_pending_view_changes();
 
     // Sync editor's camera from current scene's viewport camera
