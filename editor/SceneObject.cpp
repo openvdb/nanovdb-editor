@@ -326,6 +326,11 @@ void SceneObject::sync_render_to_chain()
         return;
     }
 
+    if (next_dirty_process_step() >= 0)
+    {
+        return;
+    }
+
     const pnanovdb_pipeline_type_t new_render = default_render_pipeline(kind);
     if (new_render == pnanovdb_pipeline_type_noop || new_render == render_pipeline())
     {
@@ -334,7 +339,14 @@ void SceneObject::sync_render_to_chain()
 
     render_pipeline() = new_render;
     pnanovdb_pipeline_get_default_params(new_render, &render_params());
-    shader_name() = nullptr;
+    if (const char* default_shader = pnanovdb_pipeline_get_shader_name(new_render))
+    {
+        shader_name() = EditorToken::getInstance().getToken(default_shader);
+    }
+    else
+    {
+        shader_name() = nullptr;
+    }
     shader_params() = nullptr;
     shader_params_data_type() = nullptr;
 }

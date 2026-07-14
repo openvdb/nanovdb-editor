@@ -1076,6 +1076,33 @@ void pipeline_execute_pending(EditorSceneManager* manager, const PipelineContext
     }
 }
 
+namespace
+{
+
+bool pipeline_shader_compatible_with_render(pnanovdb_pipeline_type_t render_pipeline, const char* shader_name)
+{
+    if (!shader_name || shader_name[0] == '\0')
+    {
+        return false;
+    }
+
+    const pnanovdb_pipeline_render_method_t method = pipeline_get_render_method(render_pipeline);
+    const bool is_raster_shader = (std::strncmp(shader_name, "raster/", 7) == 0);
+    const bool is_editor_shader = (std::strncmp(shader_name, "editor/", 7) == 0);
+
+    if (method == pnanovdb_pipeline_render_method_nanovdb)
+    {
+        return !is_raster_shader;
+    }
+    if (method == pnanovdb_pipeline_render_method_gaussian)
+    {
+        return is_raster_shader || !is_editor_shader;
+    }
+    return true;
+}
+
+} // namespace
+
 const char* pipeline_get_shader(const SceneObject* obj)
 {
     if (!obj)
@@ -1083,17 +1110,25 @@ const char* pipeline_get_shader(const SceneObject* obj)
         return nullptr;
     }
 
+    const auto& render_stage = obj->pipeline.render();
+
     // Priority 1: Check obj->params.shader_name (user-set via Properties panel)
     if (obj->shader_name() && obj->shader_name()->str && obj->shader_name()->str[0] != '\0')
     {
-        return obj->shader_name()->str;
+        if (pipeline_shader_compatible_with_render(render_stage.type, obj->shader_name()->str))
+        {
+            return obj->shader_name()->str;
+        }
     }
 
     // Priority 2: Check render stage shader overrides
-    const auto& render_stage = obj->pipeline.render();
     if (!render_stage.shader_overrides.empty() && render_stage.shader_overrides[0].has_shader_override())
     {
-        return render_stage.shader_overrides[0].shader_name.c_str();
+        const char* override_shader = render_stage.shader_overrides[0].shader_name.c_str();
+        if (pipeline_shader_compatible_with_render(render_stage.type, override_shader))
+        {
+            return override_shader;
+        }
     }
 
     // Priority 3: Fall back to pipeline's default shader

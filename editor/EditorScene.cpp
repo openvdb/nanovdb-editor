@@ -1388,7 +1388,11 @@ bool EditorScene::handle_gaussian_data_load(pnanovdb_editor_token_t* scene,
 
     // Add with explicit pipeline configuration
     std::shared_ptr<pnanovdb_raster_gaussian_data_t> old_owner;
-    const char* shader_name = pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat);
+    const char* shader_name = pnanovdb_pipeline_get_shader_name(render_pipeline);
+    if (!shader_name)
+    {
+        shader_name = pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat);
+    }
     if (reserved_lifetime_id)
     {
         if (!m_scene_manager.commit_reserved_gaussian_data(scene_token, name_token, reserved_lifetime_id, gaussian_data,
