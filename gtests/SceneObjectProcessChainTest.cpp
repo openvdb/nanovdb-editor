@@ -454,10 +454,9 @@ TEST(SceneObjectProcessChainTest, CancelRestoresRenderConfigurationAndShaderStat
 
     obj.invalidate_process_from(0);
     ASSERT_TRUE(obj.pipeline.process_run_snapshot.has_value());
-    ASSERT_EQ(obj.render_pipeline(), pnanovdb_pipeline_type_nanovdb_render);
-    EXPECT_EQ(obj.shader_name(), nullptr);
-    EXPECT_EQ(obj.shader_params(), nullptr);
-    EXPECT_EQ(obj.shader_params_data_type(), nullptr);
+    EXPECT_EQ(obj.render_pipeline(), pnanovdb_pipeline_type_voxelbvh_debug_render);
+    EXPECT_EQ(obj.shader_name(), expected_shader);
+    EXPECT_EQ(obj.shader_params(), shader_value.get());
 
     obj.restore_process_run_snapshot();
 

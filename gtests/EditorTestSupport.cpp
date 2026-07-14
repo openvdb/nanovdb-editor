@@ -330,7 +330,9 @@ void set_process_step_nanovdb_output(pnanovdb_editor_t* editor,
                                                                 if (compute && a)
                                                                     compute->destroy_array(a);
                                                             });
-            obj->pipeline.process_step(step_index).output.set_array(pnanovdb_editor::k_stage_output_nanovdb, array, owner);
+            pnanovdb_editor::PipelineStage& step = obj->pipeline.process_step(step_index);
+            step.output.set_array(pnanovdb_editor::k_stage_output_nanovdb, array, owner);
+            step.dirty = false;
             obj->resolve_resources();
         });
 }
