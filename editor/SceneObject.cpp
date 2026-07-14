@@ -306,6 +306,27 @@ pnanovdb_uint32_t renderable_data_kind_from_outputs(SceneObject* obj)
     return obj->upstream_data_kind(0);
 }
 
+int newest_process_output_step(SceneObject* obj)
+{
+    if (!obj)
+    {
+        return -1;
+    }
+    for (size_t i = obj->pipeline.process_count(); i-- > 0;)
+    {
+        const PipelineStage& stage = obj->pipeline.process_step(i);
+        if (stage.type == pnanovdb_pipeline_type_noop)
+        {
+            continue;
+        }
+        if (stage.output.get_array(k_stage_output_nanovdb) != nullptr || stage.output.gaussian != nullptr)
+        {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
 } // namespace
 
 pnanovdb_pipeline_type_t SceneObject::default_render_pipeline(pnanovdb_uint32_t kind) const
@@ -326,7 +347,9 @@ void SceneObject::sync_render_to_chain()
         return;
     }
 
-    if (next_dirty_process_step() >= 0)
+    const int dirty_step = next_dirty_process_step();
+    const int output_step = newest_process_output_step(this);
+    if (dirty_step >= 0 && (output_step < 0 || dirty_step <= output_step))
     {
         return;
     }
