@@ -139,25 +139,35 @@ static void initializeDocking(Instance* ptr)
     }
 #endif
 
-    bool hasIniOnDisk = false;
     ImGuiIO& io = ImGui::GetIO();
-    if (io.IniFilename && *io.IniFilename)
+    if (ptr->is_docking_setup && !ptr->reset_docking)
     {
-        FILE* f = fopen(io.IniFilename, "rb");
-        if (f)
+        return;
+    }
+
+    if (!ptr->reset_docking)
+    {
+        ImGuiDockNode* dockspace_node = ImGui::DockBuilderGetNode(dockspace_id);
+        const bool has_saved_layout = dockspace_node && dockspace_node->IsSplitNode();
+        if (has_saved_layout)
         {
-            hasIniOnDisk = true;
-            fclose(f);
+            ptr->is_docking_setup = true;
+            return;
         }
     }
 
-    if (!hasIniOnDisk && !ptr->is_docking_setup)
+    if (io.DisplaySize.x <= 0.f || io.DisplaySize.y <= 0.f)
+    {
+        return;
+    }
+
     {
         // setup docking once
         ptr->is_docking_setup = true;
+        ptr->reset_docking = false;
 
-        float window_width = ImGui::GetIO().DisplaySize.x;
-        float window_height = ImGui::GetIO().DisplaySize.y;
+        float window_width = io.DisplaySize.x;
+        float window_height = io.DisplaySize.y;
 
 #ifdef INIT_VIEWER_DOCKING
         float left_dock_width = window_width * 0.20f;
@@ -225,15 +235,15 @@ static void initializeDocking(Instance* ptr)
         ImGui::DockBuilderSetNodeSize(dock_id_right, ImVec2(right_dock_width, window_height));
 
         ImGuiID dock_id_right_top = dock_id_right;
-        ImGuiID dock_id_right_scene =
+        ImGuiID dock_id_right_lower =
             ImGui::DockBuilderSplitNode(dock_id_right_top, ImGuiDir_Down, 0.75f, nullptr, &dock_id_right_top);
         ImGui::DockBuilderDockWindow(SCENE_PARAMS, dock_id_right_top);
-        ImGui::DockBuilderDockWindow(SCENE, dock_id_right_scene);
+        ImGui::DockBuilderDockWindow(PROPERTIES, dock_id_right_lower);
 
-        ImGuiID dock_id_right_bottom =
+        ImGuiID dock_id_right_upper =
             ImGui::DockBuilderSplitNode(dock_id_right_top, ImGuiDir_Down, 0.6f, nullptr, &dock_id_right_top);
-        ImGui::DockBuilderSetNodeSize(dock_id_right_bottom, ImVec2(window_width, bottom_right_height));
-        ImGui::DockBuilderDockWindow(PROPERTIES, dock_id_right_bottom);
+        ImGui::DockBuilderSetNodeSize(dock_id_right_upper, ImVec2(window_width, bottom_right_height));
+        ImGui::DockBuilderDockWindow(SCENE, dock_id_right_upper);
 
         ImGuiID dock_id_bottom = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Down, 0.f, nullptr, &dockspace_id);
         ImGui::DockBuilderSetNodeSize(dock_id_bottom, ImVec2(window_width, bottom_dock_height));

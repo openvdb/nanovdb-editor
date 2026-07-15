@@ -37,8 +37,6 @@ typedef struct pnanovdb_pipeline_params_t
 } pnanovdb_pipeline_params_t;
 
 
-typedef struct pnanovdb_scene_object_t pnanovdb_scene_object_t;
-
 struct pnanovdb_shader_params_desc_t
 {
     void* data;
@@ -246,6 +244,35 @@ typedef struct pnanovdb_editor_t
                                                            pnanovdb_uint64_t error_buf_size);
     const pnanovdb_reflect_data_type_t*(PNANOVDB_ABI* get_custom_scene_params_data_type)(pnanovdb_editor_t* editor,
                                                                                          pnanovdb_editor_token_t* scene);
+
+    pnanovdb_uint32_t(PNANOVDB_ABI* get_process_step_count)(pnanovdb_editor_t* editor,
+                                                            pnanovdb_editor_token_t* scene,
+                                                            pnanovdb_editor_token_t* name);
+
+    pnanovdb_pipeline_type_t(PNANOVDB_ABI* get_process_step)(pnanovdb_editor_t* editor,
+                                                             pnanovdb_editor_token_t* scene,
+                                                             pnanovdb_editor_token_t* name,
+                                                             pnanovdb_uint32_t step_index);
+
+    void(PNANOVDB_ABI* set_process_step)(pnanovdb_editor_t* editor,
+                                         pnanovdb_editor_token_t* scene,
+                                         pnanovdb_editor_token_t* name,
+                                         pnanovdb_uint32_t step_index,
+                                         pnanovdb_pipeline_type_t type);
+
+    pnanovdb_pipeline_params_t*(PNANOVDB_ABI* map_process_step_params)(pnanovdb_editor_t* editor,
+                                                                       pnanovdb_editor_token_t* scene,
+                                                                       pnanovdb_editor_token_t* name,
+                                                                       pnanovdb_uint32_t step_index);
+
+    void(PNANOVDB_ABI* unmap_process_step_params)(pnanovdb_editor_t* editor,
+                                                  pnanovdb_editor_token_t* scene,
+                                                  pnanovdb_editor_token_t* name,
+                                                  pnanovdb_uint32_t step_index);
+
+    pnanovdb_bool_t(PNANOVDB_ABI* load_scene)(pnanovdb_editor_t* editor, const char* filepath, pnanovdb_bool_t overwrite);
+    pnanovdb_bool_t(PNANOVDB_ABI* save_scene)(pnanovdb_editor_t* editor, const char* filepath);
+
 } pnanovdb_editor_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_editor_t
@@ -290,6 +317,13 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(map_pipeline_params, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(unmap_pipeline_params, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(set_custom_scene_params, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_custom_scene_params_data_type, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(get_process_step_count, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(get_process_step, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(set_process_step, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(map_process_step_params, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(unmap_process_step_params, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(load_scene, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(save_scene, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE
@@ -344,6 +378,12 @@ static inline void pnanovdb_editor_free(pnanovdb_editor_t* editor)
     }
 
     editor->shutdown(editor);
+
+    if (editor->impl)
+    {
+        // show() is still active.
+        return;
+    }
 
     pnanovdb_free_library(editor->module);
 }

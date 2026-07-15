@@ -22,7 +22,11 @@ namespace pnanovdb_editor
 {
 namespace mesh_import
 {
-bool mesh(const pnanovdb_compute_t* compute, pnanovdb_editor_token_t* scene, const char* filepath, const Options& options)
+bool mesh(const pnanovdb_compute_t* compute,
+          pnanovdb_editor_token_t* scene,
+          const char* filepath,
+          const Options& options,
+          pnanovdb_editor_token_t* name)
 {
     if (!scene || !filepath || !compute)
         return false;
@@ -35,10 +39,12 @@ bool mesh(const pnanovdb_compute_t* compute, pnanovdb_editor_token_t* scene, con
 
     PipelineLoadRequest request;
     request.load_pipeline = pnanovdb_pipeline_type_mesh_load;
-    request.process_pipeline = pnanovdb_pipeline_type_voxelbvh_build;
+    request.process_pipeline = options.process_pipeline;
     request.render_pipeline = pnanovdb_pipeline_type_voxelbvh_triangles_render;
     request.source_filepath = filepath;
+    request.name_token = name;
     request.load_params = &load_params;
+    request.replace_existing = options.replace_existing;
 
     const bool started = pipeline_load(/*scene_manager*/ nullptr, scene, request);
     pipeline_params_release(&load_params);

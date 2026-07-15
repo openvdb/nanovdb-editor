@@ -123,3 +123,40 @@ pnanovdb_pipeline_render_method_t pnanovdb_pipeline_get_render_method(pnanovdb_p
         return pnanovdb_pipeline_render_method_none;
     return desc->get_render_method();
 }
+
+pnanovdb_bool_t pnanovdb_pipeline_data_kind_accepts(pnanovdb_uint32_t upstream, pnanovdb_uint32_t inputs)
+{
+    if (inputs == 0u || upstream == pnanovdb_pipeline_data_kind_none)
+    {
+        return PNANOVDB_TRUE;
+    }
+    return (inputs & upstream) != 0u ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+}
+
+pnanovdb_bool_t pnanovdb_pipeline_validate_chain(const pnanovdb_pipeline_type_t* steps,
+                                                 pnanovdb_uint32_t step_count,
+                                                 pnanovdb_uint32_t* out_bad_step)
+{
+    pnanovdb_uint32_t upstream = pnanovdb_pipeline_data_kind_none;
+    for (pnanovdb_uint32_t i = 0; i < step_count; ++i)
+    {
+        const pnanovdb_pipeline_descriptor_t* desc = pnanovdb_pipeline_get_descriptor(steps[i]);
+        if (!desc)
+        {
+            continue;
+        }
+        if (!pnanovdb_pipeline_data_kind_accepts(upstream, desc->inputs))
+        {
+            if (out_bad_step)
+            {
+                *out_bad_step = i;
+            }
+            return PNANOVDB_FALSE;
+        }
+        if (desc->outputs != pnanovdb_pipeline_data_kind_none)
+        {
+            upstream = desc->outputs;
+        }
+    }
+    return PNANOVDB_TRUE;
+}

@@ -1,6 +1,8 @@
 # Copyright Contributors to the OpenVDB Project
 # SPDX-License-Identifier: Apache-2.0
 
+import os
+
 from ctypes import (
     Structure,
     POINTER,
@@ -287,6 +289,28 @@ class pnanovdb_Editor(Structure):
                 POINTER(EditorToken),  # name
             ),
         ),
+        # Function pointers added after the Python wrapper's token API. Keep
+        # opaque entries for APIs not wrapped here so later offsets stay exact.
+        ("set_pipeline", c_void_p),
+        ("get_pipeline", c_void_p),
+        ("mark_pipeline_dirty", c_void_p),
+        ("add_nanovdb_3", c_void_p),
+        ("add_gaussian_data_3", c_void_p),
+        ("set_visible", c_void_p),
+        ("get_visible", c_void_p),
+        ("add_named_array", c_void_p),
+        ("get_named_array", c_void_p),
+        ("map_pipeline_params", c_void_p),
+        ("unmap_pipeline_params", c_void_p),
+        ("set_custom_scene_params", c_void_p),
+        ("get_custom_scene_params_data_type", c_void_p),
+        ("get_process_step_count", c_void_p),
+        ("get_process_step", c_void_p),
+        ("set_process_step", c_void_p),
+        ("map_process_step_params", c_void_p),
+        ("unmap_process_step_params", c_void_p),
+        ("load_scene", CFUNCTYPE(c_int32, c_void_p, c_char_p, c_int32)),
+        ("save_scene", CFUNCTYPE(c_int32, c_void_p, c_char_p)),
     ]
 
 
@@ -455,6 +479,18 @@ class Editor:
         """Stop the editor."""
         stop_func = self._editor.contents.stop
         stop_func(self._editor)
+
+    def load_scene(self, filepath, overwrite=False) -> bool:
+        """Load a scene through the active editor worker.
+
+        When overwrite is True, any existing scene whose name collides with the
+        file is replaced; otherwise colliding names are merged/skipped.
+        """
+        return bool(self._editor.contents.load_scene(self._editor, os.fsencode(filepath), 1 if overwrite else 0))
+
+    def save_scene(self, filepath) -> bool:
+        """Save all scenes through the active editor worker."""
+        return bool(self._editor.contents.save_scene(self._editor, os.fsencode(filepath)))
 
     def get_nanovdb(self) -> pnanovdb_ComputeArray:
         if self._last_nanovdb_array is None:

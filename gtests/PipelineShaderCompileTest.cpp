@@ -84,7 +84,7 @@ TEST_F(PipelineShaderCompileTest, AllRegisteredPipelineShadersCompile)
             continue;
         }
 
-        const char* pipeline_name = desc->name ? desc->name : "?";
+        const char* pipeline_name = desc->ui_name ? desc->ui_name : "?";
         for (pnanovdb_uint32_t s = 0; s < desc->shader_count; ++s)
         {
             const char* shader_name = desc->shaders[s].shader_name;

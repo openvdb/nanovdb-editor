@@ -77,8 +77,9 @@ public:
     SceneView();
     ~SceneView() = default;
 
-    // Scene management
-    SceneViewData* get_or_create_scene(pnanovdb_editor_token_t* scene_token);
+    // Create the interactive default scene outside the viewer profile.
+    void initialize_for_startup(bool is_viewer_profile);
+    SceneViewData* get_or_create_scene(pnanovdb_editor_token_t* scene_token, bool create_default_camera = true);
 
     // Get current scene (defaults to default scene if none set)
     SceneViewData* get_current_scene();
@@ -105,6 +106,9 @@ public:
 
     // Get all scene tokens
     std::vector<pnanovdb_editor_token_t*> get_all_scene_tokens() const;
+
+    // Read-only access used by scene serialization.
+    const SceneViewData* get_scene_data(pnanovdb_editor_token_t* scene_token) const;
 
     // Check if any scenes exist
     bool has_scenes() const
@@ -182,6 +186,11 @@ public:
     // Remove entire scene
     bool remove_scene(pnanovdb_editor_token_t* scene_token);
     bool rename_scene(pnanovdb_editor_token_t* old_scene_token, pnanovdb_editor_token_t* new_scene_token);
+
+    // Re-key an object's view entries within a scene.
+    bool rename_object(pnanovdb_editor_token_t* scene_token,
+                       pnanovdb_editor_token_t* old_name_token,
+                       pnanovdb_editor_token_t* new_name_token);
 
     // Ordered renderable views (NanoVDB + Gaussian) for a scene.
     std::vector<pnanovdb_editor_token_t*> get_ordered_renderable_views(pnanovdb_editor_token_t* scene_token) const;

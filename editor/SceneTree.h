@@ -55,7 +55,8 @@ private:
                          bool badgeVisible = true,
                          bool* visibilityToggle = nullptr,
                          uint64_t* dragPayloadId = nullptr,
-                         uint64_t* droppedSourceId = nullptr);
+                         uint64_t* droppedSourceId = nullptr,
+                         bool* renameRequested = nullptr);
 
     bool renderTreeNodeHeader(const char* label,
                               bool* visibilityCheckbox = nullptr,

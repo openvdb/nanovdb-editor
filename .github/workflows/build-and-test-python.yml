@@ -212,6 +212,9 @@ jobs:
           python-version: '3.11'
 
       - name: Build NanoVDB Editor Python module
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "15.0"
+          CMAKE_ARGS: "-DCMAKE_OSX_DEPLOYMENT_TARGET=15.0"
         run: |
           set -e
           chmod +x ./build.sh
@@ -696,8 +699,8 @@ jobs:
 
       - name: Install CMake (system)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake pkg-config libgl1-mesa-dev
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::ForceIPv4=true update
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::ForceIPv4=true install -y cmake pkg-config libgl1-mesa-dev
           cmake --version
 
       - name: Build NanoVDB Editor Python module
@@ -749,4 +752,9 @@ jobs:
           python3 -c 'import nanovdb_editor; print("SUCCESS: Module imported on ARM64")'
           export PYTHONFAULTHANDLER=1
           export PYTHONUNBUFFERED=1
+          # The hosted Linux ARM64 runner has repeatedly lost communication while
+          # running the native streaming/encoding smoke tests. Keep the rest of
+          # the ARM64 Python suite active here; the streaming smoke tests still
+          # run on Linux x86_64, macOS, Windows, and Windows ARM64.
+          export NANOVDB_EDITOR_SKIP_STREAMING_SMOKE_TESTS=1
           python3 -X faulthandler -m pytest pytests -vvv -s -ra --tb=long --timeout=300 --timeout-method=thread
