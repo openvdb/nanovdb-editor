@@ -15,6 +15,7 @@
 #include "EditorParamMapRegistry.h"
 #include "Renderer.h"
 #include "Pipeline.h"
+#include "PipelineRegistry.h"
 #include "PipelineRuntime.h"
 
 #include "ShaderMonitor.h"
@@ -2718,6 +2719,31 @@ pnanovdb_bool_t get_visible(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* 
     return result;
 }
 
+pnanovdb_bool_t get_pipeline_type(pnanovdb_editor_t*, pnanovdb_editor_token_t* name, pnanovdb_pipeline_type_t* out_type)
+{
+    if (!name || !name->str || !out_type)
+    {
+        return PNANOVDB_FALSE;
+    }
+
+    for (pnanovdb_uint32_t type = 0; type < pnanovdb_pipeline_type_count; ++type)
+    {
+        const pnanovdb_pipeline_descriptor_t* desc = pnanovdb_pipeline_get_descriptor(type);
+        if (!desc)
+        {
+            continue;
+        }
+
+        if (desc->type_id && std::strcmp(name->str, desc->type_id) == 0)
+        {
+            *out_type = static_cast<pnanovdb_pipeline_type_t>(type);
+            return PNANOVDB_TRUE;
+        }
+    }
+
+    return PNANOVDB_FALSE;
+}
+
 void add_named_array(pnanovdb_editor_t* editor,
                      pnanovdb_editor_token_t* scene,
                      pnanovdb_editor_token_t* object_name,
@@ -2796,6 +2822,7 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
     editor.unmap_params = unmap_params;
     editor.set_pipeline = set_pipeline;
     editor.get_pipeline = get_pipeline;
+    editor.get_pipeline_type = get_pipeline_type;
     editor.mark_pipeline_dirty = mark_pipeline_dirty;
     editor.add_nanovdb_3 = add_nanovdb_3;
     editor.add_gaussian_data_3 = add_gaussian_data_3;

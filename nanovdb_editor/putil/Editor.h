@@ -273,6 +273,10 @@ typedef struct pnanovdb_editor_t
     pnanovdb_bool_t(PNANOVDB_ABI* load_scene)(pnanovdb_editor_t* editor, const char* filepath, pnanovdb_bool_t overwrite);
     pnanovdb_bool_t(PNANOVDB_ABI* save_scene)(pnanovdb_editor_t* editor, const char* filepath);
 
+    pnanovdb_bool_t(PNANOVDB_ABI* get_pipeline_type)(pnanovdb_editor_t* editor,
+                                                     pnanovdb_editor_token_t* name,
+                                                     pnanovdb_pipeline_type_t* out_type);
+
 } pnanovdb_editor_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_editor_t
@@ -324,6 +328,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(map_process_step_params, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(unmap_process_step_params, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(load_scene, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(save_scene, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(get_pipeline_type, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE

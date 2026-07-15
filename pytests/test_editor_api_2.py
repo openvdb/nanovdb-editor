@@ -98,6 +98,19 @@ class TestEditorAPI2:
         # Different names should have different IDs
         assert token1.contents.id != token2.contents.id, "Different names should produce different token IDs"
 
+    def test_get_pipeline_type(self):
+        """Resolve pipeline enum values from token strings only."""
+        noop_token = self.editor.get_token("pnanovdb_pipeline_type_noop")
+        surface_token = self.editor.get_token("pnanovdb_pipeline_type_nanovdb_surface")
+        assert self.editor.get_pipeline_type(noop_token) == 0
+        assert self.editor.get_pipeline_type(surface_token) == 12
+
+        with pytest.raises(ValueError, match="Unknown pipeline type"):
+            self.editor.get_pipeline_type(self.editor.get_token("NanoVDB Surface (SDF)"))
+
+        with pytest.raises(ValueError, match="Unknown pipeline type"):
+            self.editor.get_pipeline_type(self.editor.get_token("unknown_pipeline_id"))
+
     def test_get_camera(self):
         """Test get_camera API - retrieves camera for a given scene."""
         self.start_editor()
