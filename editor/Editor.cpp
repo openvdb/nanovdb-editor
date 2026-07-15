@@ -2719,9 +2719,9 @@ pnanovdb_bool_t get_visible(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* 
     return result;
 }
 
-pnanovdb_bool_t get_pipeline_type(pnanovdb_editor_t*, const char* name, pnanovdb_pipeline_type_t* out_type)
+pnanovdb_bool_t get_pipeline_type(pnanovdb_editor_t*, pnanovdb_editor_token_t* name, pnanovdb_pipeline_type_t* out_type)
 {
-    if (!name || !out_type)
+    if (!name || !name->str || !out_type)
     {
         return PNANOVDB_FALSE;
     }
@@ -2734,7 +2734,7 @@ pnanovdb_bool_t get_pipeline_type(pnanovdb_editor_t*, const char* name, pnanovdb
             continue;
         }
 
-        if (desc->type_id && std::strcmp(name, desc->type_id) == 0)
+        if (desc->type_id && std::strcmp(name->str, desc->type_id) == 0)
         {
             *out_type = static_cast<pnanovdb_pipeline_type_t>(type);
             return PNANOVDB_TRUE;
