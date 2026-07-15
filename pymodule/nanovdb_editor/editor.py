@@ -311,6 +311,7 @@ class pnanovdb_Editor(Structure):
         ("unmap_process_step_params", c_void_p),
         ("load_scene", CFUNCTYPE(c_int32, c_void_p, c_char_p, c_int32)),
         ("save_scene", CFUNCTYPE(c_int32, c_void_p, c_char_p)),
+        ("get_pipeline_type", CFUNCTYPE(c_int32, c_void_p, c_char_p, POINTER(c_uint32))),
     ]
 
 
@@ -491,6 +492,14 @@ class Editor:
     def save_scene(self, filepath) -> bool:
         """Save all scenes through the active editor worker."""
         return bool(self._editor.contents.save_scene(self._editor, os.fsencode(filepath)))
+
+    def get_pipeline_type(self, name) -> int:
+        """Resolve a pipeline enum value from its token string."""
+        pipeline_type = c_uint32()
+        ok = self._editor.contents.get_pipeline_type(self._editor, os.fsencode(name), byref(pipeline_type))
+        if not ok:
+            raise ValueError(f"Unknown pipeline type: {name!r}")
+        return int(pipeline_type.value)
 
     def get_nanovdb(self) -> pnanovdb_ComputeArray:
         if self._last_nanovdb_array is None:

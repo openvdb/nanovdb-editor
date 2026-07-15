@@ -582,3 +582,27 @@ TEST(NanoVDBEditor, MarkPipelineDirtyKicksScheduler)
     pnanovdb_compute_free(&compute);
     pnanovdb_compiler_free(&compiler);
 }
+
+TEST_F(PipelineApiTest, GetPipelineTypeResolvesEnumTokenOnly)
+{
+    pnanovdb_pipeline_type_t resolved = pnanovdb_pipeline_type_nanovdb_render;
+
+    EXPECT_EQ(editor.get_pipeline_type(&editor, "pnanovdb_pipeline_type_nanovdb_surface", &resolved),
+              PNANOVDB_TRUE);
+    EXPECT_EQ(resolved, pnanovdb_pipeline_type_nanovdb_surface);
+
+    resolved = pnanovdb_pipeline_type_nanovdb_render;
+    EXPECT_EQ(editor.get_pipeline_type(&editor, "pnanovdb_pipeline_type_noop", &resolved), PNANOVDB_TRUE);
+    EXPECT_EQ(resolved, pnanovdb_pipeline_type_noop);
+
+    resolved = pnanovdb_pipeline_type_nanovdb_render;
+    EXPECT_EQ(editor.get_pipeline_type(&editor, "NanoVDB Surface (SDF)", &resolved), PNANOVDB_FALSE);
+    EXPECT_EQ(resolved, pnanovdb_pipeline_type_nanovdb_render);
+
+    resolved = pnanovdb_pipeline_type_nanovdb_render;
+    EXPECT_EQ(editor.get_pipeline_type(&editor, "unknown_pipeline_id", &resolved), PNANOVDB_FALSE);
+    EXPECT_EQ(resolved, pnanovdb_pipeline_type_nanovdb_render);
+
+    EXPECT_EQ(editor.get_pipeline_type(&editor, nullptr, &resolved), PNANOVDB_FALSE);
+    EXPECT_EQ(editor.get_pipeline_type(&editor, "pnanovdb_pipeline_type_noop", nullptr), PNANOVDB_FALSE);
+}
