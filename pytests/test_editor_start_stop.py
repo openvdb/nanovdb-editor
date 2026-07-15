@@ -3,10 +3,21 @@
 
 import nanovdb_editor as nve  # type: ignore
 
+import os
 import platform
 from time import sleep
 
+import pytest
 
+
+def _skip_streaming_smoke_tests() -> bool:
+    return os.environ.get("NANOVDB_EDITOR_SKIP_STREAMING_SMOKE_TESTS", "0") == "1"
+
+
+@pytest.mark.skipif(
+    _skip_streaming_smoke_tests(),
+    reason="Streaming smoke tests are disabled for runners where the native streaming loop can destabilize the host",
+)
 def test_editor_start_stop():
     compiler = nve.Compiler()
     compiler.create_instance()

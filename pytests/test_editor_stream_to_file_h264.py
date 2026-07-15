@@ -18,10 +18,18 @@ def _windows_h264_enabled() -> bool:
     return os.environ.get("NANOVDB_EDITOR_WINDOWS_H264", "0") == "1"
 
 
+def _skip_streaming_smoke_tests() -> bool:
+    return os.environ.get("NANOVDB_EDITOR_SKIP_STREAMING_SMOKE_TESTS", "0") == "1"
+
+
 def _contains_h264_start_code(payload: bytes) -> bool:
     return b"\x00\x00\x00\x01" in payload or b"\x00\x00\x01" in payload
 
 
+@pytest.mark.skipif(
+    _skip_streaming_smoke_tests(),
+    reason="Streaming smoke tests are disabled for runners where the native streaming loop can destabilize the host",
+)
 @pytest.mark.skipif(
     platform.system() == "Windows" and not _windows_h264_enabled(),
     reason="Windows H264 test requires a vcpkg-backed OpenH264-enabled build",
