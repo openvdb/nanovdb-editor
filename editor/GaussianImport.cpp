@@ -37,7 +37,9 @@ bool gaussian(EditorScene& editor_scene,
               const char* filepath,
               pnanovdb_pipeline_type_t process_pipeline,
               pnanovdb_pipeline_type_t render_pipeline,
-              float voxels_per_unit)
+              float voxels_per_unit,
+              pnanovdb_editor_token_t* name,
+              bool replace_existing)
 {
     if (!scene || !filepath || !compute)
     {
@@ -52,11 +54,47 @@ bool gaussian(EditorScene& editor_scene,
 
     if (process_pipeline == pnanovdb_pipeline_type_voxelbvh_build)
     {
-        std::filesystem::path fs_path(filepath);
-        std::string view_name = fs_path.stem().string();
-        pnanovdb_editor_token_t* name_token = EditorToken::getInstance().getToken(view_name.c_str());
+        pnanovdb_editor_token_t* name_token = name;
+        if (!name_token)
+        {
+            const std::string stem = std::filesystem::path(filepath).stem().string();
+            name_token = EditorToken::getInstance().getToken(stem.c_str());
+        }
 
-        scene_manager.add_file_object(scene, name_token, compute, process_pipeline, render_pipeline);
+        if (!name_token)
+        {
+            return false;
+        }
+
+        bool replacing = false;
+        uint64_t reserved_lifetime = 0;
+        bool added = false;
+        if (replace_existing && scene_manager.reserve_load_target(scene, name_token, &reserved_lifetime, true, &replacing))
+        {
+            if (replacing)
+            {
+                added = scene_manager.stage_file_object_replacement(
+                    scene, name_token, reserved_lifetime, compute, process_pipeline, render_pipeline);
+            }
+            else
+            {
+                scene_manager.cancel_load_target(scene, name_token, reserved_lifetime);
+                added =
+                    scene_manager.add_file_object(scene, name_token, compute, process_pipeline, render_pipeline, false);
+            }
+        }
+        else if (!replace_existing)
+        {
+            added = scene_manager.add_file_object(scene, name_token, compute, process_pipeline, render_pipeline, false);
+        }
+
+        if (!added)
+        {
+            Console::getInstance().addLog(Console::LogLevel::Error,
+                                          "Cannot load Gaussian file: object name '%s' is already in use",
+                                          name_token && name_token->str ? name_token->str : "?");
+            return false;
+        }
 
         const std::string filepath_copy = filepath;
         scene_manager.with_object(scene, name_token,
@@ -69,11 +107,14 @@ bool gaussian(EditorScene& editor_scene,
                                       auto& process_params = obj->process_params();
                                       pnanovdb_pipeline_voxelbvh_build_params_set_source_type(
                                           &process_params, pnanovdb_pipeline_voxelbvh_source_gaussian_file);
-                                      obj->process_dirty() = true;
+                                      obj->mark_process_dirty();
                                   });
 
-        editor_scene.add_nanovdb_placeholder(scene, name_token);
-        editor_scene.select_render_view(scene, name_token);
+        if (!replacing)
+        {
+            editor_scene.add_nanovdb_placeholder(scene, name_token);
+            editor_scene.select_render_view(scene, name_token);
+        }
 
         Console::getInstance().addLog("Loaded Gaussian file '%s' (VoxelBVH build pipeline)", filepath);
         return true;
@@ -88,7 +129,9 @@ bool gaussian(EditorScene& editor_scene,
     request.process_pipeline = process_pipeline;
     request.render_pipeline = render_pipeline;
     request.source_filepath = filepath;
+    request.name_token = name;
     request.process_params = &process_params;
+    request.replace_existing = replace_existing;
 
     const bool started = pipeline_load(&scene_manager, scene, request);
     pipeline_params_release(&process_params);

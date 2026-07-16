@@ -75,6 +75,22 @@ struct gaussian_data_t
 
 PNANOVDB_CAST_PAIR(pnanovdb_raster_gaussian_data_t, gaussian_data_t)
 
+struct gaussian_cpu_array_binding_t
+{
+    const char* name;
+    pnanovdb_compute_array_t* gaussian_data_t::*member;
+};
+
+static const gaussian_cpu_array_binding_t s_gaussian_cpu_array_bindings[] = {
+    { "means", &gaussian_data_t::means_cpu_array },
+    { "opacities", &gaussian_data_t::opacities_cpu_array },
+    { "quaternions", &gaussian_data_t::quaternions_cpu_array },
+    { "scales", &gaussian_data_t::scales_cpu_array },
+    { "sh_0", &gaussian_data_t::sh_0_cpu_array },
+    { "sh_n", &gaussian_data_t::sh_n_cpu_array },
+    { "colors", &gaussian_data_t::colors_cpu_array },
+};
+
 pnanovdb_raster_context_t* create_context(const pnanovdb_compute_t* compute, pnanovdb_compute_queue_t* queue);
 
 void destroy_context(const pnanovdb_compute_t* compute,

@@ -1,0 +1,12 @@
+{
+    "PipelineParams": {
+        "voxels_per_unit": {
+            "label": "Voxels/Unit",
+            "tooltip": "Higher = finer detail, more memory",
+            "value": 128,
+            "min": 1,
+            "max": 512,
+            "step": 1
+        }
+    }
+}

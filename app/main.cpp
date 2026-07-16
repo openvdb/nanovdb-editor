@@ -25,12 +25,66 @@
 #include <vector>
 #include <chrono>
 #include <thread>
+#include <filesystem>
 
 #define CONVERT_NODE2 1
+
+namespace
+{
+constexpr const char* k_startup_scene_path = "scene.json";
+
+bool load_startup_scene_if_present(pnanovdb_editor_t& editor, const std::string& scene_file)
+{
+    const std::string path = scene_file.empty() ? k_startup_scene_path : scene_file;
+    if (!std::filesystem::exists(path))
+    {
+        return false;
+    }
+
+    printf("Startup scene found: '%s'\n", path.c_str());
+    const bool loaded = editor.load_scene(&editor, path.c_str(), PNANOVDB_TRUE) != PNANOVDB_FALSE;
+    printf("Startup scene load: %s\n", loaded ? "true" : "false");
+    return loaded;
+}
+
+void load_default_nanovdb(pnanovdb_editor_t& editor,
+                          const pnanovdb_compute_t& compute,
+                          const char* file,
+                          const std::string& shader_name)
+{
+    pnanovdb_compute_array_t* data_nanovdb = compute.load_nanovdb(file);
+    if (!data_nanovdb)
+    {
+        printf("Failed to load default NanoVDB: '%s'\n", file ? file : "");
+        return;
+    }
+
+    pnanovdb_editor_token_t* scene_main = editor.get_token("main");
+    pnanovdb_editor_token_t* volume_token = editor.get_token("dragon");
+
+    editor.add_nanovdb_2(&editor, scene_main, volume_token, data_nanovdb);
+
+    if (!shader_name.empty())
+    {
+        pnanovdb_editor_shader_name_t* mapped = (pnanovdb_editor_shader_name_t*)editor.map_params(
+            &editor, scene_main, volume_token, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t));
+        if (mapped)
+        {
+            mapped->shader_name = editor.get_token(shader_name.c_str());
+            editor.unmap_params(&editor, scene_main, volume_token);
+        }
+    }
+
+    compute.destroy_array(data_nanovdb);
+}
+} // namespace
 
 struct NanoVDBEditorArgs : public argparse::Args
 {
     std::string& input_file = kwarg("i,input", "Input NanoVDB file path").set_default("./data/dragon.nvdb");
+    std::string& scene_file =
+        kwarg("scene", "Scene JSON file path to load on startup; if omitted, ./scene.json is loaded when present")
+            .set_default("");
     bool& convert_node2 = flag("c,convert", "Convert to Node2 format").set_default(false);
     std::string& convert_node2_output_file = kwarg("o,output", "Convert to Node2 output file path").set_default("");
     bool& headless = flag("headless", "Run in headless mode").set_default(false);
@@ -50,6 +104,7 @@ int main(int argc, char* argv[])
 
     printf("NanoVDB Editor starting...\n");
     printf("Input file: '%s'\n", args.input_file.c_str());
+    printf("Scene file: '%s'\n", args.scene_file.empty() ? k_startup_scene_path : args.scene_file.c_str());
     if (!args.convert_node2_output_file.empty())
     {
         printf("Output file: '%s'\n", args.convert_node2_output_file.c_str());
@@ -109,27 +164,10 @@ int main(int argc, char* argv[])
         pnanovdb_editor_t editor = {};
         pnanovdb_editor_load(&editor, &compute, &compiler);
 
-#if 1
-        pnanovdb_compute_array_t* data_nanovdb = compute.load_nanovdb(file);
-
-        pnanovdb_editor_token_t* scene_main = editor.get_token("main");
-        pnanovdb_editor_token_t* volume_token = editor.get_token("dragon");
-
-        editor.add_nanovdb_2(&editor, scene_main, volume_token, data_nanovdb);
-
-        if (!args.shader_name.empty())
+        if (!load_startup_scene_if_present(editor, args.scene_file))
         {
-            pnanovdb_editor_shader_name_t* mapped = (pnanovdb_editor_shader_name_t*)editor.map_params(
-                &editor, scene_main, volume_token, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t));
-            if (mapped)
-            {
-                mapped->shader_name = editor.get_token(args.shader_name.c_str());
-                editor.unmap_params(&editor, scene_main, volume_token);
-            }
+            load_default_nanovdb(editor, compute, file, args.shader_name);
         }
-
-        compute.destroy_array(data_nanovdb);
-#endif
 
         editor.show(&editor, device, &config);
 
@@ -172,25 +210,10 @@ int main(int argc, char* argv[])
 
             pnanovdb_editor_load(&inst.editor, &inst.compute, &inst.compiler);
 
-            inst.nanovdb_array = inst.compute.load_nanovdb(file);
-
-            pnanovdb_editor_token_t* scene_token = inst.editor.get_token("main");
-            pnanovdb_editor_token_t* volume_token = inst.editor.get_token("dragon");
-            inst.editor.add_nanovdb_2(&inst.editor, scene_token, volume_token, inst.nanovdb_array);
-
-            if (!args.shader_name.empty())
+            if (!load_startup_scene_if_present(inst.editor, args.scene_file))
             {
-                pnanovdb_editor_shader_name_t* mapped = (pnanovdb_editor_shader_name_t*)inst.editor.map_params(
-                    &inst.editor, scene_token, volume_token, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t));
-                if (mapped)
-                {
-                    mapped->shader_name = inst.editor.get_token(args.shader_name.c_str());
-                    inst.editor.unmap_params(&inst.editor, scene_token, volume_token);
-                }
+                load_default_nanovdb(inst.editor, inst.compute, file, args.shader_name);
             }
-
-            inst.compute.destroy_array(inst.nanovdb_array);
-            inst.nanovdb_array = nullptr;
 
             pnanovdb_editor_config_t config = {};
             config.ip_address = args.ip_address.c_str();

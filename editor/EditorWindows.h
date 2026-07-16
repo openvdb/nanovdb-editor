@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include <string>
+
 namespace imgui_instance_user
 {
 struct Instance;

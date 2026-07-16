@@ -50,6 +50,11 @@ pnanovdb_bool_t get_object_process_dirty(pnanovdb_editor_t* editor,
                                          pnanovdb_editor_token_t* scene,
                                          pnanovdb_editor_token_t* name);
 
+pnanovdb_bool_t get_process_step_dirty(pnanovdb_editor_t* editor,
+                                       pnanovdb_editor_token_t* scene,
+                                       pnanovdb_editor_token_t* name,
+                                       pnanovdb_uint32_t step_index);
+
 size_t get_object_pipeline_params_size(pnanovdb_editor_t* editor,
                                        pnanovdb_editor_token_t* scene,
                                        pnanovdb_editor_token_t* name,
@@ -69,6 +74,34 @@ pnanovdb_bool_t append_blank_shader_override(pnanovdb_editor_t* editor,
                                              pnanovdb_editor_token_t* scene,
                                              pnanovdb_editor_token_t* name,
                                              pnanovdb_pipeline_stage_t stage);
+
+size_t get_object_process_step_count(pnanovdb_editor_t* editor,
+                                     pnanovdb_editor_token_t* scene,
+                                     pnanovdb_editor_token_t* name);
+
+pnanovdb_pipeline_type_t get_object_process_step_type(pnanovdb_editor_t* editor,
+                                                      pnanovdb_editor_token_t* scene,
+                                                      pnanovdb_editor_token_t* name,
+                                                      size_t step_index);
+
+size_t append_process_step(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
+
+pnanovdb_uint32_t get_object_renderable_data_kind(pnanovdb_editor_t* editor,
+                                                  pnanovdb_editor_token_t* scene,
+                                                  pnanovdb_editor_token_t* name);
+
+pnanovdb_pipeline_type_t get_object_render_pipeline(pnanovdb_editor_t* editor,
+                                                    pnanovdb_editor_token_t* scene,
+                                                    pnanovdb_editor_token_t* name);
+
+void sync_object_render_to_chain(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
+
+void set_process_step_nanovdb_output(pnanovdb_editor_t* editor,
+                                     pnanovdb_editor_token_t* scene,
+                                     pnanovdb_editor_token_t* name,
+                                     size_t step_index,
+                                     pnanovdb_compute_array_t* array,
+                                     const pnanovdb_compute_t* compute);
 
 } // namespace pnanovdb_editor_test
 

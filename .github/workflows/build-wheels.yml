@@ -159,7 +159,7 @@ jobs:
             cibw_environment: >
               CMAKE_ARGS="-DNANOVDB_EDITOR_PYPI_BUILD=ON -DNANOVDB_EDITOR_BUILD_TESTS=OFF -DFETCHCONTENT_QUIET=OFF"
               CPM_SOURCE_CACHE=/tmp/cpm-cache
-          - os: macos-latest
+          - os: macos-15
             arch: ""
             cibw_build: "cp311-macosx_*"
             cibw_environment: >

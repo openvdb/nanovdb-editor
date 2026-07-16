@@ -23,10 +23,6 @@ struct constants2_t
 
 ConstantBuffer<constants2_t> constants2;
 
-//#define VOXELIZE_TRIANGLES
-
-#ifdef VOXELIZE_TRIANGLES
-
 // based on: https://iquilezles.org/articles/intersectors/
 float3 intersect_triangle( in float3 ro, in float3 rd, in float3 v0, in float3 v1, in float3 v2 )
 {
@@ -104,15 +100,13 @@ void intersect_triangle(
     }
 }
 
-groupshared uint64_t s_voxel_val[PNANOVDB_ITERATE_WORKGROUP_THREADS];
-
-struct prim_t
+struct tri_prim_t
 {
     uint id_a;
     uint id_b;
     uint id_c;
 };
-groupshared prim_t s_prims[PNANOVDB_ITERATE_WORKGROUP_THREADS];
+groupshared tri_prim_t s_tri_prims[PNANOVDB_ITERATE_WORKGROUP_THREADS];
 
 void workgroup_triangle_process(uint thread_idx,
                                 bool this_thread_active,
@@ -142,9 +136,9 @@ void workgroup_triangle_process(uint thread_idx,
             pnanovdb_uint32_t id_b = pnanovdb_read_uint32(buf_scratch, pnanovdb_address_offset(index_addr, 12u * prim_id + 4u));
             pnanovdb_uint32_t id_c = pnanovdb_read_uint32(buf_scratch, pnanovdb_address_offset(index_addr, 12u * prim_id + 8u));
 
-            s_prims[thread_idx].id_a = id_a;
-            s_prims[thread_idx].id_b = id_b;
-            s_prims[thread_idx].id_c = id_c;
+            s_tri_prims[thread_idx].id_a = id_a;
+            s_tri_prims[thread_idx].id_b = id_b;
+            s_tri_prims[thread_idx].id_c = id_c;
         }
 
         GroupMemoryBarrierWithGroupSync();
@@ -158,9 +152,9 @@ void workgroup_triangle_process(uint thread_idx,
             {
                 intersect_triangle(
                     grid,
-                    s_prims[s_idx].id_a,
-                    s_prims[s_idx].id_b,
-                    s_prims[s_idx].id_c,
+                    s_tri_prims[s_idx].id_a,
+                    s_tri_prims[s_idx].id_b,
+                    s_tri_prims[s_idx].id_c,
                     worldRayOrigin,
                     worldTmin,
                     worldRayDir,
@@ -177,8 +171,6 @@ void workgroup_triangle_process(uint thread_idx,
         workgroup_voxelbvh_iterator_step(iter);
     }
 }
-
-#else
 
 #define SPHERICAL_HARMONIC_BUF buf_scratch
 
@@ -620,6 +612,9 @@ void ray_hdda_nanovdb(uint thread_idx,
     pnanovdb_root_handle_t root = pnanovdb_tree_get_root(buf_scratch, tree);
     pnanovdb_grid_type_t grid_type = pnanovdb_grid_get_grid_type(buf_scratch, grid);
 
+    uint blind_count = pnanovdb_grid_get_blind_metadata_count(buf_scratch, grid);
+    bool is_triangles = blind_count < 8u;
+
     pnanovdb_readaccessor_t acc;
     pnanovdb_readaccessor_init(PNANOVDB_REF(acc), root);
 
@@ -690,17 +685,32 @@ void ray_hdda_nanovdb(uint thread_idx,
         {
             uint64_t voxel_val_raw = s_voxel_val[current_hdda_idx];
             bool this_thread_active = workgroup_this_thread_active(hdda, thread_idx);
-            workgroup_gaussian_process(
-                thread_idx, this_thread_active,
-                grid,
-                worldRayOrigin, worldRayDir, worldRayDirInv,
-                view, resolution, worldRayDirCenter,
-                max(boxMinT, hdda.hdda.tmin) * rayDirMagnInv,
-                min(boxMaxT, hdda.hdda.tmax) * rayDirMagnInv,
-                voxel_val_raw,
-                s_src_ijk[current_hdda_idx],
-                sum, nominalT
-            );
+            if (is_triangles)
+            {
+                workgroup_triangle_process(
+                    thread_idx, this_thread_active,
+                    grid,
+                    worldRayOrigin, worldRayDir, worldRayDirInv,
+                    max(boxMinT, hdda.hdda.tmin) * rayDirMagnInv,
+                    min(boxMaxT, hdda.hdda.tmax) * rayDirMagnInv,
+                    voxel_val_raw,
+                    sum, nominalT
+                );
+            }
+            else
+            {
+                workgroup_gaussian_process(
+                    thread_idx, this_thread_active,
+                    grid,
+                    worldRayOrigin, worldRayDir, worldRayDirInv,
+                    view, resolution, worldRayDirCenter,
+                    max(boxMinT, hdda.hdda.tmin) * rayDirMagnInv,
+                    min(boxMaxT, hdda.hdda.tmax) * rayDirMagnInv,
+                    voxel_val_raw,
+                    s_src_ijk[current_hdda_idx],
+                    sum, nominalT
+                );
+            }
         }
         if (sum.a <= 0.0001f)
         {
@@ -709,8 +719,6 @@ void ray_hdda_nanovdb(uint thread_idx,
         should_run = workgroup_hdda_step(hdda, thread_idx, rayOrigin, rayDir, rayDirInv);
     }
 }
-
-#endif
 
 void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint level, uint n,
                   pnanovdb_coord_t ijk, inout user_state_t user_state)

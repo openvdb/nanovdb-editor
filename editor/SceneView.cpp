@@ -44,8 +44,30 @@ static void erase_renderable_id(SceneViewData* scene, uint64_t token_id)
     order.erase(std::remove(order.begin(), order.end(), token_id), order.end());
 }
 
+template <typename Context, typename Map, typename OtherMap>
+static void replace_renderable_context(
+    SceneViewData* scene, uint64_t token_id, const Context& context, Map& map, OtherMap& other_map)
+{
+    other_map.erase(token_id);
+    map[token_id] = context;
+    append_renderable_id(scene, token_id);
+}
+
 SceneView::SceneView()
 {
+}
+
+void SceneView::initialize_for_startup(bool is_viewer_profile)
+{
+    if (!is_viewer_profile)
+    {
+        pnanovdb_editor_token_t* default_scene = EditorToken::getInstance().getToken(DEFAULT_SCENE_NAME);
+        get_or_create_scene(default_scene);
+        if (!get_current_scene_token())
+        {
+            set_current_scene(default_scene);
+        }
+    }
 }
 
 template <typename MapType>
@@ -56,7 +78,7 @@ static auto find_in_map(MapType& map, uint64_t token_id) -> decltype(&map.begin(
 }
 
 // Scene management
-SceneViewData* SceneView::get_or_create_scene(pnanovdb_editor_token_t* scene_token)
+SceneViewData* SceneView::get_or_create_scene(pnanovdb_editor_token_t* scene_token, bool create_default_camera)
 {
     if (!scene_token)
     {
@@ -84,11 +106,16 @@ SceneViewData* SceneView::get_or_create_scene(pnanovdb_editor_token_t* scene_tok
     // New scene being created - initialize it with a default camera
     SceneViewData& new_scene = m_scene_view_data[scene_token->id];
 
-    // Create the initial camera and mark it as viewport
-    pnanovdb_editor_token_t* camera_token = add_new_camera(scene_token, nullptr);
-    if (camera_token)
+    // Normal interactive scenes start with a viewport camera. Scene restore
+    // supplies its serialized cameras instead, avoiding a synthetic name
+    // collision with the saved default camera.
+    if (create_default_camera)
     {
-        new_scene.viewport_camera_token_id = camera_token->id;
+        pnanovdb_editor_token_t* camera_token = add_new_camera(scene_token, nullptr);
+        if (camera_token)
+        {
+            new_scene.viewport_camera_token_id = camera_token->id;
+        }
     }
 
     return &new_scene;
@@ -110,6 +137,11 @@ const SceneViewData* SceneView::get_scene(pnanovdb_editor_token_t* scene_token) 
 
     auto it = m_scene_view_data.find(scene_token->id);
     return (it != m_scene_view_data.end()) ? &it->second : nullptr;
+}
+
+const SceneViewData* SceneView::get_scene_data(pnanovdb_editor_token_t* scene_token) const
+{
+    return get_scene(scene_token);
 }
 
 SceneViewData* SceneView::get_current_scene()
@@ -315,7 +347,13 @@ pnanovdb_editor_token_t* SceneView::get_viewport_camera_token(pnanovdb_editor_to
 void SceneView::set_viewport_camera(pnanovdb_editor_token_t* camera_token)
 {
     SceneViewData* scene = get_current_scene();
-    if (scene && camera_token)
+    if (!scene)
+        return;
+    if (!camera_token)
+    {
+        scene->viewport_camera_token_id = 0;
+    }
+    else
     {
         // Verify camera exists in this scene
         if (scene->cameras.find(camera_token->id) != scene->cameras.end())
@@ -328,7 +366,13 @@ void SceneView::set_viewport_camera(pnanovdb_editor_token_t* camera_token)
 void SceneView::set_viewport_camera(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* camera_token)
 {
     SceneViewData* scene = get_scene(scene_token);
-    if (scene && camera_token)
+    if (!scene)
+        return;
+    if (!camera_token)
+    {
+        scene->viewport_camera_token_id = 0;
+    }
+    else
     {
         // Verify camera exists in this scene
         if (scene->cameras.find(camera_token->id) != scene->cameras.end())
@@ -412,8 +456,7 @@ void SceneView::add_gaussian(pnanovdb_editor_token_t* name_token, const Gaussian
     SceneViewData* scene = get_current_scene();
     if (scene)
     {
-        scene->gaussians[name_token->id] = ctx;
-        append_renderable_id(scene, name_token->id);
+        replace_renderable_context(scene, name_token->id, ctx, scene->gaussians, scene->nanovdbs);
     }
 }
 
@@ -426,9 +469,8 @@ void SceneView::add_gaussian(pnanovdb_editor_token_t* scene_token,
     SceneViewData* scene = get_or_create_scene(scene_token);
     if (scene)
     {
-        scene->gaussians[name_token->id] = ctx;
+        replace_renderable_context(scene, name_token->id, ctx, scene->gaussians, scene->nanovdbs);
         scene->last_added_view_token_id = name_token->id;
-        append_renderable_id(scene, name_token->id);
         set_current_scene(scene_token);
     }
 }
@@ -472,8 +514,7 @@ void SceneView::add_nanovdb(pnanovdb_editor_token_t* name_token, const NanoVDBCo
     SceneViewData* scene = get_current_scene();
     if (scene)
     {
-        scene->nanovdbs[name_token->id] = ctx;
-        append_renderable_id(scene, name_token->id);
+        replace_renderable_context(scene, name_token->id, ctx, scene->nanovdbs, scene->gaussians);
     }
 }
 
@@ -486,9 +527,8 @@ void SceneView::add_nanovdb(pnanovdb_editor_token_t* scene_token,
     SceneViewData* scene = get_or_create_scene(scene_token);
     if (scene)
     {
-        scene->nanovdbs[name_token->id] = ctx;
+        replace_renderable_context(scene, name_token->id, ctx, scene->nanovdbs, scene->gaussians);
         scene->last_added_view_token_id = name_token->id;
-        append_renderable_id(scene, name_token->id);
         set_current_scene(scene_token);
     }
 }
@@ -1001,6 +1041,65 @@ bool SceneView::rename_scene(pnanovdb_editor_token_t* old_scene_token, pnanovdb_
         m_default_scene_token = new_scene_token;
     }
 
+    return true;
+}
+
+bool SceneView::rename_object(pnanovdb_editor_token_t* scene_token,
+                              pnanovdb_editor_token_t* old_name_token,
+                              pnanovdb_editor_token_t* new_name_token)
+{
+    if (!scene_token || !old_name_token || !new_name_token)
+    {
+        return false;
+    }
+    if (old_name_token->id == new_name_token->id)
+    {
+        return true;
+    }
+
+    auto it = m_scene_view_data.find(scene_token->id);
+    if (it == m_scene_view_data.end())
+    {
+        return false;
+    }
+    SceneViewData& data = it->second;
+    const uint64_t old_id = old_name_token->id;
+    const uint64_t new_id = new_name_token->id;
+
+    auto move_entry = [old_id, new_id](auto& container)
+    {
+        auto e = container.find(old_id);
+        if (e == container.end())
+        {
+            return;
+        }
+        auto node = container.extract(e);
+        node.key() = new_id;
+        container.insert(std::move(node));
+    };
+    move_entry(data.nanovdbs);
+    move_entry(data.gaussians);
+    move_entry(data.cameras);
+
+    for (uint64_t& id : data.renderable_order)
+    {
+        if (id == old_id)
+        {
+            id = new_id;
+        }
+    }
+    if (data.last_added_view_token_id == old_id)
+    {
+        data.last_added_view_token_id = new_id;
+    }
+    if (data.current_view_token_id == old_id)
+    {
+        data.current_view_token_id = new_id;
+    }
+    if (data.viewport_camera_token_id == old_id)
+    {
+        data.viewport_camera_token_id = new_id;
+    }
     return true;
 }
 

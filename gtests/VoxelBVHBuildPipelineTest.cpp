@@ -16,6 +16,7 @@
 
 #include <nanovdb/PNanoVDB.h>
 
+#include "editor/EditorImport.h"
 #include "GpuTestSupport.h"
 
 #include <cmath>
@@ -418,6 +419,7 @@ TEST_F(VoxelBVHBuildPipelineTest, TrianglesSynthetic)
         &rt().compute, rt().queue, rt().voxelbvh_ctx, indices, positions, colors, inflation_radius, resolution);
 
     expect_nanovdb_populated(nanovdb_array, /*min_bytes=*/4096u);
+    EXPECT_TRUE(pnanovdb_editor::nanovdb_import::has_voxelbvh_mesh_metadata(nanovdb_array));
 
     rt().compute.destroy_array(nanovdb_array);
     rt().compute.destroy_array(colors);
