@@ -801,8 +801,11 @@ void EditorScene::sync_views_from_scene_manager(uint64_t selected_scene_id, uint
             return true;
         });
 
-    // After syncing, if worker specified a view to select, do so
-    if (last_added_scene_token && last_added_name_token)
+    // After syncing, if worker specified a view to select, take over the viewport
+    // only when no render view (pipeline) has been selected yet. This makes a
+    // freshly added object appear automatically when nothing is shown, without
+    // stealing an existing selection on subsequent adds.
+    if (last_added_scene_token && last_added_name_token && !m_render_view_selection.is_valid())
     {
         pnanovdb_editor_token_t* old_scene = m_scene_view.get_current_scene_token();
         m_scene_view.set_current_scene(last_added_scene_token);
