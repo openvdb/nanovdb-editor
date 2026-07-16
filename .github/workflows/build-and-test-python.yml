@@ -736,8 +736,8 @@ jobs:
 
       - name: Install Vulkan runtime
         run: |
-          sudo apt-get update
-          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::ForceIPv4=true update
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::ForceIPv4=true install -y mesa-vulkan-drivers vulkan-tools
 
       - name: Download wheel artifact
         uses: actions/download-artifact@v4
