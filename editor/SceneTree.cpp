@@ -505,40 +505,7 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
         const char* scene_name =
             (current_scene && current_scene->str) ? current_scene->str : pnanovdb_editor::DEFAULT_SCENE_NAME;
 
-        bool isRootSelected = isSelectedInCurrentScene(scene_name, ptr, ViewType::Root);
-        bool rootNodeOpen = renderTreeNodeHeader(scene_name, nullptr, isRootSelected, true);
-
-        bool removeSceneRequested = false;
-        if (current_scene && ImGui::BeginPopupContextItem("##SceneRootContextMenu"))
-        {
-            if (ImGui::MenuItem("Rename Scene"))
-            {
-                s_scene_rename_target = current_scene;
-                std::snprintf(s_scene_rename_buffer, sizeof(s_scene_rename_buffer), "%s",
-                              current_scene->str ? current_scene->str : "");
-                s_scene_rename_error.clear();
-                s_scene_rename_focus_input = true;
-            }
-
-            size_t scene_count = ptr->editor_scene->get_all_scene_tokens().size();
-            bool canRemoveScene = scene_count > 0;
-            if (!canRemoveScene)
-            {
-                ImGui::BeginDisabled();
-            }
-            if (ImGui::MenuItem("Remove Scene"))
-            {
-                removeSceneRequested = true;
-            }
-            if (!canRemoveScene)
-            {
-                ImGui::EndDisabled();
-            }
-
-            ImGui::EndPopup();
-        }
-
-        // Right-side buttons on scene root row: "Add Object" and "Add Scene"
+        // Buttons row above scene root: "Add Object" and "Add Scene"
         if (ptr->editor_scene)
         {
             const float spacing = ImGui::GetStyle().ItemSpacing.x;
@@ -574,6 +541,39 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
             {
                 ImGui::SetTooltip("Add new scene");
             }
+        }
+
+        bool isRootSelected = isSelectedInCurrentScene(scene_name, ptr, ViewType::Root);
+        bool rootNodeOpen = renderTreeNodeHeader(scene_name, nullptr, isRootSelected, true);
+
+        bool removeSceneRequested = false;
+        if (current_scene && ImGui::BeginPopupContextItem("##SceneRootContextMenu"))
+        {
+            if (ImGui::MenuItem("Rename Scene"))
+            {
+                s_scene_rename_target = current_scene;
+                std::snprintf(s_scene_rename_buffer, sizeof(s_scene_rename_buffer), "%s",
+                              current_scene->str ? current_scene->str : "");
+                s_scene_rename_error.clear();
+                s_scene_rename_focus_input = true;
+            }
+
+            size_t scene_count = ptr->editor_scene->get_all_scene_tokens().size();
+            bool canRemoveScene = scene_count > 0;
+            if (!canRemoveScene)
+            {
+                ImGui::BeginDisabled();
+            }
+            if (ImGui::MenuItem("Remove Scene"))
+            {
+                removeSceneRequested = true;
+            }
+            if (!canRemoveScene)
+            {
+                ImGui::EndDisabled();
+            }
+
+            ImGui::EndPopup();
         }
 
         if (removeSceneRequested && current_scene)

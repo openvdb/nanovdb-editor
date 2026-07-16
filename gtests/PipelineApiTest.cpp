@@ -229,6 +229,49 @@ TEST_F(PipelineApiTest, ConfigureBeforeAddLeavesObjectTypeUndefined)
     editor.remove(&editor, pending_scene, pending_name);
 }
 
+TEST_F(PipelineApiTest, AddNanoVDB3UsesRenderPipelineDefaultShader)
+{
+    auto expect_default_shader = [&](const char* object_name, pnanovdb_pipeline_type_t render_pipeline)
+    {
+        pnanovdb_editor_token_t* object_token = editor.get_token(object_name);
+        ASSERT_NE(object_token, nullptr);
+
+        editor.add_nanovdb_3(
+            &editor, scene_token, object_token, owned_array, pnanovdb_pipeline_type_noop, render_pipeline);
+
+        pnanovdb_editor_shader_name_t* shader_name = (pnanovdb_editor_shader_name_t*)editor.map_params(
+            &editor, scene_token, object_token, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t));
+        ASSERT_NE(shader_name, nullptr);
+        ASSERT_NE(shader_name->shader_name, nullptr);
+        ASSERT_STREQ(shader_name->shader_name->str, pnanovdb_pipeline_get_shader_name(render_pipeline));
+        editor.unmap_params(&editor, scene_token, object_token);
+
+        editor.remove(&editor, scene_token, object_token);
+    };
+
+    expect_default_shader("pipeline_api_surface_object", pnanovdb_pipeline_type_nanovdb_surface);
+    expect_default_shader("pipeline_api_render_object", pnanovdb_pipeline_type_nanovdb_render);
+}
+
+TEST_F(PipelineApiTest, AddNanoVDB3EnforcesRequestedPipelineAsConfigured)
+{
+    pnanovdb_editor_token_t* object_token = editor.get_token("pipeline_api_enforce_object");
+    ASSERT_NE(object_token, nullptr);
+
+    editor.add_nanovdb_2(&editor, scene_token, object_token, owned_array);
+    editor.set_pipeline(
+        &editor, scene_token, object_token, pnanovdb_pipeline_stage_render, pnanovdb_pipeline_type_image2d_render);
+    ASSERT_EQ(editor.get_pipeline(&editor, scene_token, object_token, pnanovdb_pipeline_stage_render),
+              pnanovdb_pipeline_type_image2d_render);
+
+    editor.add_nanovdb_3(&editor, scene_token, object_token, owned_array, pnanovdb_pipeline_type_noop,
+                         pnanovdb_pipeline_type_nanovdb_surface);
+    EXPECT_EQ(editor.get_pipeline(&editor, scene_token, object_token, pnanovdb_pipeline_stage_render),
+              pnanovdb_pipeline_type_nanovdb_surface);
+
+    editor.remove(&editor, scene_token, object_token);
+}
+
 
 TEST_F(PipelineApiTest, SetProcessChainExpandsIntoSteps)
 {
