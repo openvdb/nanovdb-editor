@@ -33,7 +33,7 @@ protected:
     pnanovdb_compiler_t compiler{};
     pnanovdb_compute_t compute{};
     pnanovdb_editor_t editor{};
-    pnanovdb_editor::EditorWorker worker{};
+    std::shared_ptr<pnanovdb_editor::EditorWorker> worker;
     pnanovdb_compiler_instance_t* compiler_inst = nullptr;
 
     pnanovdb_editor_token_t* scene_token = nullptr;
@@ -111,8 +111,10 @@ protected:
         ASSERT_NE(editor.impl, nullptr);
         ASSERT_NE(editor.impl->scene_manager, nullptr);
         ASSERT_NE(editor.impl->compute, nullptr);
-        worker.is_starting.store(false, std::memory_order_release);
-        editor.impl->editor_worker = &worker;
+        worker = std::make_shared<pnanovdb_editor::EditorWorker>();
+        worker->is_starting.store(false, std::memory_order_release);
+        worker->render_thread_id.store(std::this_thread::get_id());
+        editor.impl->editor_worker = worker.get();
 
         // Capture the pool *before* any object exists so we record the actual
         // JSON defaults (capture_shader_default_params returns live pool
@@ -144,6 +146,7 @@ protected:
         if (editor.impl)
         {
             editor.impl->editor_worker = nullptr;
+            worker.reset();
             pnanovdb_editor_free(&editor);
         }
         if (owned_array_a)

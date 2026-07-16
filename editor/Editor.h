@@ -18,6 +18,7 @@
 #include <thread>
 #include <atomic>
 #include <condition_variable>
+#include <future>
 #include <deque>
 #include <functional>
 #include <string>
@@ -25,6 +26,8 @@
 #include <vector>
 #include <mutex>
 #include <memory>
+#include <exception>
+#include <cstdio>
 
 namespace pnanovdb_editor
 {
@@ -39,16 +42,20 @@ class PipelineRuntime;
 
 // Thread Synchronization Model
 // ----------------------------
-// External Caller            Render Thread
-// ━━━━━━━━━━━━━              ━━━━━━━━━━━━━
-// add_xyz()                  show() render loop
-//   └─ scene_manager (mutex)   ├─ scen_views (no mutex, render thread only)
-//   └─ set views_need_sync ───►└─ sync_views_from_scene_manager()
-//                                    └─ for_each_object() (mutex held)
+// External Caller                    Render Thread
+// ━━━━━━━━━━━━━                      ━━━━━━━━━━━━━
+// add_xyz()                          show() render loop
+//   └─ on_render_thread(body) ──────► drains render_thread_tasks, runs body:
+//        (marshaled + blocks           ├─ scene_manager (mutex)
+//         until body completes)        └─ scene_views (no mutex, render thread only)
+//
+// When no render loop exists yet, on_render_thread() runs the body inline on the caller.
 
 struct pnanovdb_editor_impl_t
 {
-    pnanovdb_editor::EditorWorker* editor_worker;
+    pnanovdb_editor::EditorWorker* editor_worker = nullptr;
+    std::mutex editor_worker_lifecycle_mutex;
+    std::mutex editor_worker_stop_mutex;
     pnanovdb_editor::EditorSceneManager* scene_manager;
     pnanovdb_editor::SceneView* scene_view;
     pnanovdb_editor::Renderer* renderer;
@@ -57,6 +64,9 @@ struct pnanovdb_editor_impl_t
     std::unique_ptr<pnanovdb_editor::PipelineRuntime> pipeline_runtime;
     std::string pending_scene_path;
     pnanovdb_bool_t pending_scene_overwrite;
+
+    uint64_t startup_view_scene_id;
+    uint64_t startup_view_name_id;
 
     // Currently used by the render thread in show()
     const pnanovdb_compiler_t* compiler;
@@ -101,55 +111,6 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor();
 
 void defer_gaussian_data_destruction(pnanovdb_editor_impl_t* impl,
                                      std::shared_ptr<pnanovdb_raster_gaussian_data_t> owner);
-
-template <typename T>
-struct PendingData
-{
-    std::atomic<T*> pending_data{ nullptr };
-
-    T* set_pending(T* data)
-    {
-        return pending_data.exchange(data, std::memory_order_acq_rel);
-    }
-
-    // Returns true if there was pending data, and updates current_data/old_data
-    bool process_pending(T*& current_data, T*& old_data)
-    {
-        T* data = pending_data.exchange(nullptr, std::memory_order_acq_rel);
-        if (data)
-        {
-            old_data = current_data;
-            current_data = data;
-            return true;
-        }
-        return false;
-    }
-};
-
-template <typename T>
-struct ConstPendingData
-{
-    std::atomic<const T*> pending_data{ nullptr };
-
-    // Returns previous pointer (if any) so caller can release it if needed
-    const T* set_pending(const T* data)
-    {
-        return pending_data.exchange(data, std::memory_order_acq_rel);
-    }
-
-    // Returns true if there was pending data, and updates current_data/old_data
-    bool process_pending(const T*& current_data, const T*& old_data)
-    {
-        const T* data = pending_data.exchange(nullptr, std::memory_order_acq_rel);
-        if (data)
-        {
-            old_data = current_data;
-            current_data = data;
-            return true;
-        }
-        return false;
-    }
-};
 
 struct RenderThreadTaskQueue
 {
@@ -206,7 +167,21 @@ struct RenderThreadTaskQueue
     {
         for (auto& task : take())
         {
-            const pnanovdb_bool_t result = task->run();
+            pnanovdb_bool_t result = PNANOVDB_FALSE;
+            try
+            {
+                result = task->run();
+            }
+            catch (const std::exception& e)
+            {
+                fprintf(stderr, "[nanovdb_editor] render thread task threw: %s\n", e.what());
+                result = PNANOVDB_FALSE;
+            }
+            catch (...)
+            {
+                fprintf(stderr, "[nanovdb_editor] render thread task threw an unknown exception\n");
+                result = PNANOVDB_FALSE;
+            }
             task->run = nullptr;
             if (task->blocking)
                 complete(task, result);
@@ -249,25 +224,19 @@ private:
 struct EditorWorker
 {
     std::thread* thread = nullptr;
+    // true when show() runs on a background thread spawned by start() (headless)
+    // false when the render loop runs inline on the GUI thread
+    bool spawned = false;
+    std::atomic<std::thread::id> render_thread_id{};
     std::atomic<bool> should_stop{ false };
     std::atomic<bool> is_starting{ true };
+    // signalled when a show() finishes, so stop() on another thread can wait for the loop to release the worker
+    std::promise<void> finished_promise;
+    std::future<void> finished_future = finished_promise.get_future();
     std::atomic<bool> params_dirty{ false };
-    std::atomic<bool> views_need_sync{ false }; // Signal that views need to sync from scene_manager
     std::recursive_mutex shader_params_mutex; // TODO: Use mutex per map_params()/unmap_params() call
     std::recursive_mutex pipeline_params_mutex; // Protects pipeline stage params during map/unmap
     std::atomic<bool> pipeline_params_dirty{ false }; // Signal that pipeline params were modified
-    PendingData<pnanovdb_compute_array_t> pending_nanovdb;
-    PendingData<pnanovdb_compute_array_t> pending_data_array;
-    PendingData<pnanovdb_raster_gaussian_data_t> pending_gaussian_data;
-    PendingData<pnanovdb_camera_t> pending_camera;
-    PendingData<pnanovdb_camera_view_t> pending_camera_view[32];
-    std::atomic<uint32_t> pending_camera_view_idx;
-    PendingData<void> pending_shader_params;
-    ConstPendingData<pnanovdb_reflect_data_type_t> pending_shader_params_data_type;
-
-    // Track last added view to auto-select after sync
-    std::atomic<uint64_t> last_added_scene_token_id{ 0 };
-    std::atomic<uint64_t> last_added_name_token_id{ 0 };
 
     RenderThreadTaskQueue render_thread_tasks;
 

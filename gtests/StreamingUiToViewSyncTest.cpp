@@ -96,9 +96,10 @@ TEST(StreamingUiToViewSync, PoolMutationPropagatesToObjectBufferEachFrame)
 
     editor.start(&editor, device, &cfg);
 
-    ASSERT_NE(editor.impl->editor_worker, nullptr) << "Streaming mode must create an EditorWorker";
+    pnanovdb_editor::EditorWorker* worker = editor.impl->editor_worker;
+    ASSERT_NE(worker, nullptr) << "Streaming mode must create an EditorWorker";
 
-    ASSERT_TRUE(wait_until([&]() { return !editor.impl->editor_worker->is_starting.load(); }, kWorkerStartupTimeout))
+    ASSERT_TRUE(wait_until([&]() { return !worker->is_starting.load(); }, kWorkerStartupTimeout))
         << "Editor worker did not finish starting";
 
     pnanovdb_editor_token_t* scene_token = editor.get_token("ui_sync_streaming_scene");

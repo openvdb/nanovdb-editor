@@ -19,6 +19,7 @@ namespace pnanovdb_editor
 {
 
 class ParamMapRegistry;
+struct EditorWorker;
 
 enum class ParamMapKind : uint8_t
 {
@@ -43,11 +44,13 @@ struct ParamMapKey
 };
 
 // Per-thread record of a successful map_params(), consumed by unmap_params().
-// locked_worker_mutex tells unmap whether it must also release the worker mutex.
+// worker identifies which worker's mutex to release; unmap only touches it while it is
+// still the editor's published worker, so a concurrent stop()/teardown cannot free it
+// underneath the unlock.
 struct ParamMapFrame
 {
     ParamMapKey key;
-    bool locked_worker_mutex;
+    EditorWorker* worker = nullptr;
 };
 
 // Owned by pnanovdb_editor_impl_t::param_map_registry; created/destroyed by editor init()/shutdown().
