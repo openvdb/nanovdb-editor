@@ -201,6 +201,8 @@ public:
                                   pnanovdb_editor_token_t* scene_token = nullptr);
     SceneSelection get_properties_selection() const;
 
+    void focus_added_object_in_properties(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token);
+
     void set_render_view(ViewType type,
                          pnanovdb_editor_token_t* name_token,
                          pnanovdb_editor_token_t* scene_token = nullptr);

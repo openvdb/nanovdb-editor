@@ -887,14 +887,20 @@ static void showActionBar(Instance* ptr,
         // New: create a variant from the primary step's params.
         if (step == 0)
         {
-            ImGui::SameLine();
             char new_id[32];
-            snprintf(new_id, sizeof(new_id), "New##new%s", suffix);
+            snprintf(new_id, sizeof(new_id), "New variant##new%s", suffix);
             if (ImGui::Button(new_id))
                 processNewVariant(ptr, scene_manager, scene_token, name_token, step_type);
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Create a named variant to compare different process settings");
+            }
         }
 
-        ImGui::SameLine();
+        if (step == 0)
+        {
+            ImGui::SameLine();
+        }
         char save_id[48];
         snprintf(save_id, sizeof(save_id), "Save NanoVDB##psave%d%s", step, suffix);
         showSaveStageButton(save_id, editor_scene, scene_token, name_token, (size_t)step);
@@ -1400,6 +1406,13 @@ void Properties::showCameraViews(imgui_instance_user::Instance* ptr)
             }
         }
     }
+}
+
+void Properties::selectPipelineStage(uint64_t object_name_id, int stage, int step)
+{
+    PropertiesPanelState& st = m_panel_state[object_name_id];
+    st.stage = stage;
+    st.step = step;
 }
 
 void Properties::render(imgui_instance_user::Instance* ptr)
