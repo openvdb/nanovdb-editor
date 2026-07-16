@@ -1,7 +1,6 @@
 [build-system]
 requires = [
     "scikit-build-core",
-    "cmake>=3.25,<4.4; platform_system=='Windows'",
     "numpy>=1.19.0",
 ]
 build-backend = "scikit_build_core.build"

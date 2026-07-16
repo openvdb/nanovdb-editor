@@ -514,6 +514,12 @@ jobs:
       with:
         package-dir: pymodule
 
+    - name: Install CMake and Ninja (Windows)
+      if: runner.os == 'Windows'
+      uses: lukka/get-cmake@latest
+      with:
+        cmakeVersion: "3.31.6"
+
     - name: Build Windows wheels
       if: runner.os == 'Windows'
       uses: pypa/cibuildwheel@v2.23.3
@@ -527,8 +533,6 @@ jobs:
             if errorlevel 1 exit /b 1
           )
           call C:\vcpkg\bootstrap-vcpkg.bat
-          if errorlevel 1 exit /b 1
-          python -m pip install "cmake>=3.25,<4.4"
           if errorlevel 1 exit /b 1
           cmake --version
           if errorlevel 1 exit /b 1
