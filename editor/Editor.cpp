@@ -1389,10 +1389,12 @@ void add_nanovdb_3(pnanovdb_editor_t* editor,
         Console::LogLevel::Debug, "add_nanovdb_3: scene='%s', name='%s', process=%d, render=%d",
         token_to_string_log(scene), token_to_string_log(name), (int)process_pipeline, (int)render_pipeline);
 
+    const char* render_shader_name = pnanovdb_pipeline_get_shader_name(render_pipeline);
+    const char* render_shader_group = pnanovdb_pipeline_get_shader_group(render_pipeline);
     pnanovdb_compute_array_t* params_array = editor->impl->scene_manager->create_initialized_shader_params(
-        editor->impl->compute, editor->impl->shader_name.c_str(), nullptr, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
+        editor->impl->compute, render_shader_name, render_shader_group, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
 
-    pnanovdb_editor_token_t* shader_name_token = get_token(editor->impl->shader_name.c_str());
+    pnanovdb_editor_token_t* shader_name_token = render_shader_name ? get_token(render_shader_name) : nullptr;
     editor->impl->scene_manager->add_nanovdb(
         scene, name, array, params_array, editor->impl->compute, shader_name_token, process_pipeline, render_pipeline);
 
