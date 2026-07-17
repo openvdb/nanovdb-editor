@@ -96,7 +96,7 @@ TEST(StreamingUiToViewSync, PoolMutationPropagatesToObjectBufferEachFrame)
 
     editor.start(&editor, device, &cfg);
 
-    pnanovdb_editor::EditorWorker* worker = editor.impl->editor_worker;
+    std::shared_ptr<pnanovdb_editor::EditorWorker> worker = editor.impl->editor_worker;
     ASSERT_NE(worker, nullptr) << "Streaming mode must create an EditorWorker";
 
     ASSERT_TRUE(wait_until([&]() { return !worker->is_starting.load(); }, kWorkerStartupTimeout))

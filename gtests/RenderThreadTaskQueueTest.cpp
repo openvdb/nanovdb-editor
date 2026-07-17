@@ -11,6 +11,7 @@
 #include <future>
 #include <mutex>
 #include <stdexcept>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -191,6 +192,128 @@ TEST(RenderThreadTaskQueue, ThrowingTaskReportsFailureAndDoesNotStopDrain)
     if (later_status == std::future_status::ready)
         EXPECT_EQ(later.get(), PNANOVDB_TRUE);
     EXPECT_EQ(later_run_count.load(std::memory_order_relaxed), 1);
+}
+
+TEST(RenderThreadTaskQueue, ThrowingTaskLogsTelemetryToStderr)
+{
+    RenderThreadTaskQueue queue;
+    testing::internal::CaptureStderr();
+
+    auto caller = std::async(
+        std::launch::async, [&queue]()
+        { return queue.run_blocking([]() -> pnanovdb_bool_t { throw std::runtime_error("boom-telemetry-marker"); }); });
+    ASSERT_TRUE(wait_until_queued(queue, 1));
+    queue.drain();
+
+    const std::future_status status = caller.wait_for(2s);
+    ASSERT_EQ(status, std::future_status::ready);
+    EXPECT_EQ(caller.get(), PNANOVDB_FALSE);
+
+    const std::string err = testing::internal::GetCapturedStderr();
+    EXPECT_NE(err.find("render thread task threw"), std::string::npos) << "stderr was: " << err;
+    EXPECT_NE(err.find("boom-telemetry-marker"), std::string::npos) << "stderr was: " << err;
+}
+
+TEST(RenderThreadTaskQueue, ThrowingNonStdExceptionLogsTelemetryToStderr)
+{
+    RenderThreadTaskQueue queue;
+    testing::internal::CaptureStderr();
+
+    auto caller =
+        std::async(std::launch::async, [&queue]() { return queue.run_blocking([]() -> pnanovdb_bool_t { throw 42; }); });
+    ASSERT_TRUE(wait_until_queued(queue, 1));
+    queue.drain();
+
+    const std::future_status status = caller.wait_for(2s);
+    ASSERT_EQ(status, std::future_status::ready);
+    EXPECT_EQ(caller.get(), PNANOVDB_FALSE);
+
+    const std::string err = testing::internal::GetCapturedStderr();
+    EXPECT_NE(err.find("unknown exception"), std::string::npos) << "stderr was: " << err;
+}
+
+TEST(RenderThreadTaskQueue, ThrowingAsyncTaskLogsTelemetryToStderr)
+{
+    RenderThreadTaskQueue queue;
+    testing::internal::CaptureStderr();
+
+    queue.run_async([]() { throw std::runtime_error("async-telemetry-marker"); });
+    ASSERT_TRUE(wait_until_queued(queue, 1));
+    queue.drain();
+
+    const std::string err = testing::internal::GetCapturedStderr();
+    EXPECT_NE(err.find("render thread task threw"), std::string::npos) << "stderr was: " << err;
+    EXPECT_NE(err.find("async-telemetry-marker"), std::string::npos) << "stderr was: " << err;
+}
+
+TEST(RenderThreadTaskQueue, ConcurrentBlockingCallersMatchRunResultContractAcrossClose)
+{
+    RenderThreadTaskQueue queue;
+    constexpr int producer_count = 8;
+    constexpr int per_producer = 250;
+    constexpr int total = producer_count * per_producer;
+
+    std::vector<std::atomic<int>> run_counts(total);
+    std::vector<std::atomic<int>> results(total); // -1 = not returned, 0 = FALSE, 1 = TRUE
+    for (int i = 0; i < total; ++i)
+    {
+        run_counts[i].store(0, std::memory_order_relaxed);
+        results[i].store(-1, std::memory_order_relaxed);
+    }
+
+    std::atomic<bool> keep_draining{ true };
+    std::thread render_thread(
+        [&queue, &keep_draining]()
+        {
+            while (keep_draining.load(std::memory_order_relaxed))
+            {
+                queue.drain();
+                std::this_thread::yield();
+            }
+            queue.drain(); // final sweep for anything enqueued right before shutdown
+        });
+
+    std::vector<std::thread> producers;
+    producers.reserve(producer_count);
+    for (int p = 0; p < producer_count; ++p)
+    {
+        producers.emplace_back(
+            [&queue, &run_counts, &results, p]()
+            {
+                for (int i = 0; i < per_producer; ++i)
+                {
+                    const int id = p * per_producer + i;
+                    const pnanovdb_bool_t r = queue.run_blocking(
+                        [&run_counts, id]()
+                        {
+                            run_counts[id].fetch_add(1, std::memory_order_relaxed);
+                            return PNANOVDB_TRUE;
+                        });
+                    results[id].store(r == PNANOVDB_TRUE ? 1 : 0, std::memory_order_relaxed);
+                }
+            });
+    }
+
+    // Close mid-flight so some tasks are accepted/run and some are rejected/dropped.
+    std::this_thread::sleep_for(15ms);
+    queue.close();
+
+    for (auto& producer : producers)
+        producer.join();
+    keep_draining.store(false, std::memory_order_relaxed);
+    render_thread.join();
+
+    for (int id = 0; id < total; ++id)
+    {
+        const int runs = run_counts[id].load(std::memory_order_relaxed);
+        const int result = results[id].load(std::memory_order_relaxed);
+        EXPECT_LE(runs, 1) << "task " << id << " ran more than once";
+        EXPECT_NE(result, -1) << "producer for task " << id << " never returned (possible hang)";
+        if (result == 1)
+            EXPECT_EQ(runs, 1) << "task " << id << " reported success but did not run exactly once";
+        if (result == 0)
+            EXPECT_EQ(runs, 0) << "task " << id << " reported failure but ran";
+    }
 }
 
 } // namespace

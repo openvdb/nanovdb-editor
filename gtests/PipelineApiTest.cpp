@@ -53,7 +53,7 @@ protected:
         ASSERT_NE(editor.impl, nullptr);
         worker->is_starting.store(false, std::memory_order_release);
         worker->render_thread_id = std::this_thread::get_id();
-        editor.impl->editor_worker = worker.get();
+        editor.impl->editor_worker = worker;
 
         scene_token = editor.get_token("pipeline_api_scene");
         name_token = editor.get_token("pipeline_api_object");

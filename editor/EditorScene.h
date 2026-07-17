@@ -444,6 +444,13 @@ private:
                                     const char* name,
                                     pnanovdb_editor_token_t* scene_token,
                                     const char* log_message);
+
+    // Push a single scene-manager object's resources into the SceneView; returns true if it was a camera.
+    bool sync_object_into_view(SceneObject* obj);
+
+    // Switch to the added object's scene and select an appropriate content view.
+    void select_view_for_added_object(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name, bool added_camera);
+
     bool is_switching_scenes(pnanovdb_editor_token_t* from_scene, pnanovdb_editor_token_t* to_scene) const;
     pnanovdb_editor_token_t* find_next_available_view(pnanovdb_editor_token_t* scene_token) const;
     pnanovdb_editor_token_t* find_any_view_in_scene(pnanovdb_editor_token_t* scene_token) const;

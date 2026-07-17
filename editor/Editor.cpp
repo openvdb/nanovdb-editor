@@ -193,9 +193,15 @@ void init(pnanovdb_editor_t* editor)
     editor->impl->renderer = new Renderer();
 }
 
+static std::shared_ptr<EditorWorker> get_worker(pnanovdb_editor_t* editor)
+{
+    std::lock_guard<std::mutex> lock(editor->impl->editor_worker_lifecycle_mutex);
+    return editor->impl->editor_worker;
+}
+
 void shutdown(pnanovdb_editor_t* editor)
 {
-    if (editor->impl->editor_worker)
+    if (get_worker(editor))
     {
         editor->stop(editor);
     }
@@ -461,7 +467,7 @@ pnanovdb_int32_t editor_get_external_active_count(void* external_active_count)
         return 0;
     }
 
-    auto worker = editor->impl->editor_worker;
+    auto worker = get_worker(editor);
     if (!worker)
     {
         return 0;
@@ -480,51 +486,50 @@ static pnanovdb_bool_t apply_save_scene(pnanovdb_editor_t* editor, const char* f
 
 // Runs inline when the caller already owns the render thread (or no render loop exists yet),
 // otherwise marshals onto the render loop and blocks until it finishes.
-static void on_render_thread(pnanovdb_editor_t* editor, std::function<void()> fn)
-{
-    EditorWorker* worker = editor->impl->editor_worker;
-    if (!worker || worker->render_thread_id.load() == std::this_thread::get_id())
-    {
-        fn();
-        return;
-    }
-    worker->render_thread_tasks.run_blocking(
-        [fn = std::move(fn)]()
-        {
-            fn();
-            return PNANOVDB_TRUE;
-        });
-}
-
-
 static pnanovdb_bool_t run_on_render_thread(pnanovdb_editor_t* editor, std::function<pnanovdb_bool_t()> fn)
 {
-    EditorWorker* worker = editor->impl->editor_worker;
-    if (!worker || worker->render_thread_id.load() == std::this_thread::get_id())
-        return fn();
-    return worker->render_thread_tasks.run_blocking(std::move(fn));
+    std::shared_ptr<EditorWorker> worker = get_worker(editor);
+    if (worker && worker->render_thread_id.load() != std::this_thread::get_id())
+    {
+        return worker->render_thread_tasks.run_blocking(std::move(fn));
+    }
+    return fn();
+}
+
+static void on_render_thread(pnanovdb_editor_t* editor, std::function<void()> fn)
+{
+    run_on_render_thread(editor,
+                         [fn = std::move(fn)]()
+                         {
+                             fn();
+                             return PNANOVDB_TRUE;
+                         });
 }
 
 // Same dispatch, fire-and-forget (no result, no blocking) for work whose completion the
 // caller does not need to wait on (e.g. removals).
 static void post_to_render_thread(pnanovdb_editor_t* editor, std::function<void()> fn)
 {
-    EditorWorker* worker = editor->impl->editor_worker;
-    if (!worker || worker->render_thread_id.load() == std::this_thread::get_id())
-        fn();
-    else
+    std::shared_ptr<EditorWorker> worker = get_worker(editor);
+    if (worker && worker->render_thread_id.load() != std::this_thread::get_id())
+    {
         worker->render_thread_tasks.run_async(std::move(fn));
+    }
+    else
+    {
+        fn();
+    }
 }
 
 void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb_editor_config_t* config)
 {
-    EditorWorker* worker;
+    std::shared_ptr<EditorWorker> worker;
     {
         std::lock_guard<std::mutex> lifecycle_lock(editor->impl->editor_worker_lifecycle_mutex);
         worker = editor->impl->editor_worker;
         if (!worker)
         {
-            worker = new EditorWorker();
+            worker = std::make_shared<EditorWorker>();
             editor->impl->editor_worker = worker;
         }
 
@@ -537,7 +542,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         worker->render_thread_id.store(std::thread::id{});
         worker->render_thread_tasks.close();
 
-        const bool delete_worker = !worker->spawned;
         {
             std::lock_guard<std::mutex> lifecycle_lock(editor->impl->editor_worker_lifecycle_mutex);
             editor->impl->show_active.store(false);
@@ -548,11 +552,6 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         }
 
         worker->finished_promise.set_value();
-        if (delete_worker)
-        {
-            std::lock_guard<std::mutex> stop_lock(editor->impl->editor_worker_stop_mutex);
-            delete worker;
-        }
     };
 
     if (!editor->impl->compute || !editor->impl->compiler || !device || !config)
@@ -1039,7 +1038,7 @@ void start(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovd
     if (!editor || !editor->impl || !config)
         return;
 
-    EditorWorker* editor_worker;
+    std::shared_ptr<EditorWorker> editor_worker;
     {
         std::lock_guard<std::mutex> stop_lock(editor->impl->editor_worker_stop_mutex);
         std::lock_guard<std::mutex> lifecycle_lock(editor->impl->editor_worker_lifecycle_mutex);
@@ -1053,27 +1052,21 @@ void start(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovd
         editor->impl->config.ip_address = editor->impl->config_ip_address.c_str();
         editor->impl->config.ui_profile_name = editor->impl->config_ui_profile_name.c_str();
 
-        editor_worker = new EditorWorker();
+        editor_worker = std::make_shared<EditorWorker>();
         editor_worker->spawned = config->headless == PNANOVDB_TRUE;
-        editor_worker->config = *config;
-        editor_worker->config_ip_address = config->ip_address ? std::string(config->ip_address) : std::string();
-        editor_worker->config_ui_profile_name =
-            config->ui_profile_name ? std::string(config->ui_profile_name) : std::string();
-        editor_worker->config.ip_address = editor_worker->config_ip_address.c_str();
-        editor_worker->config.ui_profile_name = editor_worker->config_ui_profile_name.c_str();
         editor->impl->editor_worker = editor_worker;
         editor->impl->show_active.store(true);
 
         if (editor_worker->spawned)
         {
-            editor_worker->thread = new std::thread([editor, device, editor_worker]()
-                                                    { editor->show(editor, device, &editor_worker->config); });
+            editor_worker->thread =
+                new std::thread([editor, device]() { editor->show(editor, device, &editor->impl->config); });
         }
     }
 
     if (!editor_worker->spawned)
     {
-        editor->show(editor, device, &editor_worker->config);
+        editor->show(editor, device, &editor->impl->config);
     }
 }
 
@@ -1083,7 +1076,7 @@ void stop(pnanovdb_editor_t* editor)
         return;
 
     std::lock_guard<std::mutex> stop_lock(editor->impl->editor_worker_stop_mutex);
-    EditorWorker* editor_worker;
+    std::shared_ptr<EditorWorker> editor_worker;
     {
         std::lock_guard<std::mutex> lifecycle_lock(editor->impl->editor_worker_lifecycle_mutex);
         editor_worker = editor->impl->editor_worker;
@@ -1093,7 +1086,7 @@ void stop(pnanovdb_editor_t* editor)
         editor_worker->render_thread_tasks.close();
     }
 
-    if (editor_worker->thread)
+    if (editor_worker->spawned)
     {
         if (editor_worker->thread->get_id() == std::this_thread::get_id())
         {
@@ -1110,7 +1103,8 @@ void stop(pnanovdb_editor_t* editor)
                 editor->impl->editor_worker = nullptr;
             }
         }
-        delete editor_worker;
+        // join() has released the render thread's lease; the worker is freed when
+        // editor_worker (and any surviving map-frame leases) drop.
         return;
     }
 
@@ -1200,7 +1194,7 @@ pnanovdb_bool_t load_scene(pnanovdb_editor_t* editor, const char* filepath, pnan
         return PNANOVDB_FALSE;
     }
 
-    if (editor->impl->editor_worker)
+    if (get_worker(editor))
     {
         return run_on_render_thread(editor, [editor, path = std::string(filepath), overwrite]()
                                     { return apply_load_scene(editor, path.c_str(), overwrite); });
@@ -1239,7 +1233,7 @@ pnanovdb_bool_t save_scene(pnanovdb_editor_t* editor, const char* filepath)
 {
     if (!editor || !editor->impl || !filepath || filepath[0] == '\0')
         return PNANOVDB_FALSE;
-    if (editor->impl->editor_worker)
+    if (get_worker(editor))
     {
         return run_on_render_thread(
             editor, [editor, path = std::string(filepath)]() { return apply_save_scene(editor, path.c_str()); });
@@ -1834,7 +1828,7 @@ void* map_params(pnanovdb_editor_t* editor,
         return nullptr;
     }
 
-    EditorWorker* worker = editor->impl->editor_worker;
+    std::shared_ptr<EditorWorker> worker = get_worker(editor);
     if (worker)
     {
         // Held across the map/unmap window; released by the paired unmap_params()
@@ -1931,21 +1925,14 @@ void unmap_params(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pna
 
     if (frame.worker)
     {
-        // Only touch the captured worker while it is still the published one. Teardown
-        // (stop()/show() unwind) unpublishes under this mutex before deleting, so an
-        // identity match while holding the lock means it cannot be freed here.
-        std::lock_guard<std::mutex> lifecycle_lock(editor->impl->editor_worker_lifecycle_mutex);
-        if (editor->impl->editor_worker == frame.worker)
-        {
-            frame.worker->shader_params_mutex.unlock();
-            frame.worker->params_dirty.store(true);
-        }
+        frame.worker->shader_params_mutex.unlock();
+        frame.worker->params_dirty.store(true);
     }
 }
 
-static std::vector<EditorWorker*>& pipeline_params_map_workers(pnanovdb_editor_t* editor)
+static std::vector<std::shared_ptr<EditorWorker>>& pipeline_params_map_workers(pnanovdb_editor_t* editor)
 {
-    thread_local std::unordered_map<pnanovdb_editor_t*, std::vector<EditorWorker*>> s_workers;
+    thread_local std::unordered_map<pnanovdb_editor_t*, std::vector<std::shared_ptr<EditorWorker>>> s_workers;
     return s_workers[editor];
 }
 
@@ -1999,7 +1986,7 @@ pnanovdb_pipeline_params_t* map_pipeline_params(pnanovdb_editor_t* editor,
         return nullptr;
     }
 
-    EditorWorker* worker = editor->impl->editor_worker;
+    std::shared_ptr<EditorWorker> worker = get_worker(editor);
     if (!worker)
     {
         // Non-worker mode: return params without locking
@@ -2099,15 +2086,10 @@ void unmap_pipeline_params(pnanovdb_editor_t* editor,
     auto& workers = pipeline_params_map_workers(editor);
     if (!workers.empty())
     {
-        EditorWorker* worker = workers.back();
+        std::shared_ptr<EditorWorker> worker = workers.back();
         workers.pop_back();
-        // Only touch the worker while it is still the published one (see unmap_params).
-        std::lock_guard<std::mutex> lifecycle_lock(editor->impl->editor_worker_lifecycle_mutex);
-        if (editor->impl->editor_worker == worker)
-        {
-            worker->pipeline_params_mutex.unlock();
-            worker->pipeline_params_dirty.store(true);
-        }
+        worker->pipeline_params_mutex.unlock();
+        worker->pipeline_params_dirty.store(true);
     }
     else
     {
@@ -2120,7 +2102,7 @@ class PipelineParamsLock
 {
 public:
     explicit PipelineParamsLock(pnanovdb_editor_t* editor)
-        : m_worker(editor && editor->impl ? editor->impl->editor_worker : nullptr)
+        : m_worker(editor && editor->impl ? get_worker(editor) : nullptr)
     {
         if (m_worker)
             m_lock = std::unique_lock<std::recursive_mutex>(m_worker->pipeline_params_mutex);
@@ -2144,7 +2126,7 @@ public:
     }
 
 private:
-    EditorWorker* m_worker = nullptr;
+    std::shared_ptr<EditorWorker> m_worker;
     std::unique_lock<std::recursive_mutex> m_lock;
 };
 
@@ -2517,15 +2499,10 @@ void unmap_process_step_params(pnanovdb_editor_t* editor,
     auto& workers = pipeline_params_map_workers(editor);
     if (!workers.empty())
     {
-        EditorWorker* worker = workers.back();
+        std::shared_ptr<EditorWorker> worker = workers.back();
         workers.pop_back();
-        // Only touch the worker while it is still the published one (see unmap_params).
-        std::lock_guard<std::mutex> lifecycle_lock(editor->impl->editor_worker_lifecycle_mutex);
-        if (editor->impl->editor_worker == worker)
-        {
-            worker->pipeline_params_mutex.unlock();
-            worker->pipeline_params_dirty.store(true);
-        }
+        worker->pipeline_params_mutex.unlock();
+        worker->pipeline_params_dirty.store(true);
     }
 }
 

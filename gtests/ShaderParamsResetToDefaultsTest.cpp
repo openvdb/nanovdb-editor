@@ -114,7 +114,7 @@ protected:
         worker = std::make_shared<pnanovdb_editor::EditorWorker>();
         worker->is_starting.store(false, std::memory_order_release);
         worker->render_thread_id.store(std::this_thread::get_id());
-        editor.impl->editor_worker = worker.get();
+        editor.impl->editor_worker = worker;
 
         // Capture the pool *before* any object exists so we record the actual
         // JSON defaults (capture_shader_default_params returns live pool

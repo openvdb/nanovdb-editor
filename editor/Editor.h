@@ -53,7 +53,7 @@ class PipelineRuntime;
 
 struct pnanovdb_editor_impl_t
 {
-    pnanovdb_editor::EditorWorker* editor_worker = nullptr;
+    std::shared_ptr<pnanovdb_editor::EditorWorker> editor_worker;
     std::mutex editor_worker_lifecycle_mutex;
     std::mutex editor_worker_stop_mutex;
     pnanovdb_editor::EditorSceneManager* scene_manager;
@@ -128,21 +128,34 @@ struct RenderThreadTaskQueue
     std::deque<std::shared_ptr<Task>> tasks;
     bool accepting = true;
 
+    // Any thread: enqueue a blocking task and return its handle to wait on later.
+    // Returns nullptr (without enqueuing) if the queue was already closed.
+    std::shared_ptr<Task> enqueue_blocking(std::function<pnanovdb_bool_t()> fn)
+    {
+        auto task = std::make_shared<Task>();
+        task->run = std::move(fn);
+        std::lock_guard<std::mutex> lock(mutex);
+        if (!accepting)
+            return nullptr;
+        tasks.push_back(task);
+        return task;
+    }
+
+    // Any thread: block until the render thread runs the task (or the queue closes).
+    static pnanovdb_bool_t wait_blocking(const std::shared_ptr<Task>& task)
+    {
+        if (!task)
+            return PNANOVDB_FALSE;
+        std::unique_lock<std::mutex> lock(task->mutex);
+        task->cv.wait(lock, [&task]() { return task->done; });
+        return task->result;
+    }
+
     // Any thread: enqueue and block until the render thread runs the task.
     // Returns PNANOVDB_FALSE without running if the queue was already closed.
     pnanovdb_bool_t run_blocking(std::function<pnanovdb_bool_t()> fn)
     {
-        auto task = std::make_shared<Task>();
-        task->run = std::move(fn);
-        {
-            std::lock_guard<std::mutex> lock(mutex);
-            if (!accepting)
-                return PNANOVDB_FALSE;
-            tasks.push_back(task);
-        }
-        std::unique_lock<std::mutex> lock(task->mutex);
-        task->cv.wait(lock, [&task]() { return task->done; });
-        return task->result;
+        return wait_blocking(enqueue_blocking(std::move(fn)));
     }
 
     // Any thread: enqueue fire-and-forget work for the render thread. Dropped
@@ -239,10 +252,6 @@ struct EditorWorker
     std::atomic<bool> pipeline_params_dirty{ false }; // Signal that pipeline params were modified
 
     RenderThreadTaskQueue render_thread_tasks;
-
-    pnanovdb_editor_config_t config = {};
-    std::string config_ip_address;
-    std::string config_ui_profile_name;
 };
 
 // ------------------------------------------------ Token Utilities

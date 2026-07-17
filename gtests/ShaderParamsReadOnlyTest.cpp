@@ -50,7 +50,7 @@ protected:
         worker = std::make_shared<pnanovdb_editor::EditorWorker>();
         worker->is_starting.store(false, std::memory_order_release);
         worker->render_thread_id.store(std::this_thread::get_id());
-        editor.impl->editor_worker = worker.get();
+        editor.impl->editor_worker = worker;
 
         scene_token = editor.get_token("snapshot_test_scene");
         name_a = editor.get_token("snapshot_test_object_A");

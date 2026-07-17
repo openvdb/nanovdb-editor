@@ -659,7 +659,11 @@ void EditorScene::sync_selected_view_with_current()
 
 void EditorScene::sync_shader_params_from_editor()
 {
-    EditorWorker* worker = m_editor->impl->editor_worker;
+    std::shared_ptr<EditorWorker> worker;
+    {
+        std::lock_guard<std::mutex> lifecycle_lock(m_editor->impl->editor_worker_lifecycle_mutex);
+        worker = m_editor->impl->editor_worker;
+    }
     if (worker)
     {
         std::lock_guard<std::recursive_mutex> lock(worker->shader_params_mutex);
@@ -701,39 +705,7 @@ void EditorScene::sync_views_from_scene_manager(uint64_t selected_scene_id, uint
     m_scene_manager.for_each_object(
         [this](SceneObject* obj)
         {
-            if (!obj || !obj->scene_token || !obj->name_token || !obj->name_token->str)
-            {
-                return true;
-            }
-
-            if (obj->type == SceneObjectType::Camera)
-            {
-                if (obj->camera_view() && obj->resources.camera_view_owner)
-                {
-                    m_scene_view.sync_camera_owner(obj->scene_token, obj->name_token, obj->resources.camera_view_owner);
-                }
-            }
-            else
-            {
-                auto render_method = pipeline_get_render_method(obj->render_pipeline());
-                bool has_nanovdb = (obj->nanovdb_array() && obj->resources.nanovdb_array_owner) ||
-                                   (obj->converted_nanovdb() && obj->resources.converted_nanovdb_owner);
-                if (render_method == pnanovdb_pipeline_render_method_nanovdb && has_nanovdb)
-                {
-                    const auto& owner = obj->resources.nanovdb_array_owner ? obj->resources.nanovdb_array_owner :
-                                                                             obj->resources.converted_nanovdb_owner;
-                    NanoVDBContext ctx{ owner, obj->shader_params(), obj->params.shader_params_array_owner };
-                    m_scene_view.add_nanovdb(obj->scene_token, obj->name_token, ctx);
-                }
-                else if (render_method == pnanovdb_pipeline_render_method_gaussian && obj->gaussian_data() &&
-                         obj->resources.gaussian_data_owner)
-                {
-                    GaussianDataContext ctx{ obj->resources.gaussian_data_owner,
-                                             (pnanovdb_raster_shader_params_t*)obj->shader_params() };
-                    m_scene_view.add_gaussian(obj->scene_token, obj->name_token, ctx);
-                }
-            }
-
+            sync_object_into_view(obj);
             return true;
         });
 
@@ -802,46 +774,42 @@ void EditorScene::sync_views_from_scene_manager(uint64_t selected_scene_id, uint
     }
 }
 
-void EditorScene::sync_object_from_scene_manager(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
+bool EditorScene::sync_object_into_view(SceneObject* obj)
 {
-    if (!scene || !name)
-        return;
+    if (!obj || !obj->scene_token || !obj->name_token || !obj->name_token->str)
+        return false;
 
-    bool added_camera = false;
-    m_scene_manager.with_object(
-        scene, name,
-        [this, &added_camera](SceneObject* obj)
-        {
-            if (!obj || !obj->scene_token || !obj->name_token || !obj->name_token->str)
-                return;
+    if (obj->type == SceneObjectType::Camera)
+    {
+        if (obj->camera_view() && obj->resources.camera_view_owner)
+            m_scene_view.sync_camera_owner(obj->scene_token, obj->name_token, obj->resources.camera_view_owner);
+        return true;
+    }
 
-            if (obj->type == SceneObjectType::Camera)
-            {
-                added_camera = true;
-                if (obj->camera_view() && obj->resources.camera_view_owner)
-                    m_scene_view.sync_camera_owner(obj->scene_token, obj->name_token, obj->resources.camera_view_owner);
-                return;
-            }
+    const auto render_method = pipeline_get_render_method(obj->render_pipeline());
+    const bool has_nanovdb = (obj->nanovdb_array() && obj->resources.nanovdb_array_owner) ||
+                             (obj->converted_nanovdb() && obj->resources.converted_nanovdb_owner);
+    if (render_method == pnanovdb_pipeline_render_method_nanovdb && has_nanovdb)
+    {
+        const auto& owner = obj->resources.nanovdb_array_owner ? obj->resources.nanovdb_array_owner :
+                                                                 obj->resources.converted_nanovdb_owner;
+        NanoVDBContext ctx{ owner, obj->shader_params(), obj->params.shader_params_array_owner };
+        m_scene_view.add_nanovdb(obj->scene_token, obj->name_token, ctx);
+    }
+    else if (render_method == pnanovdb_pipeline_render_method_gaussian && obj->gaussian_data() &&
+             obj->resources.gaussian_data_owner)
+    {
+        GaussianDataContext ctx{ obj->resources.gaussian_data_owner,
+                                 (pnanovdb_raster_shader_params_t*)obj->shader_params() };
+        m_scene_view.add_gaussian(obj->scene_token, obj->name_token, ctx);
+    }
+    return false;
+}
 
-            const auto render_method = pipeline_get_render_method(obj->render_pipeline());
-            const bool has_nanovdb = (obj->nanovdb_array() && obj->resources.nanovdb_array_owner) ||
-                                     (obj->converted_nanovdb() && obj->resources.converted_nanovdb_owner);
-            if (render_method == pnanovdb_pipeline_render_method_nanovdb && has_nanovdb)
-            {
-                const auto& owner = obj->resources.nanovdb_array_owner ? obj->resources.nanovdb_array_owner :
-                                                                         obj->resources.converted_nanovdb_owner;
-                NanoVDBContext ctx{ owner, obj->shader_params(), obj->params.shader_params_array_owner };
-                m_scene_view.add_nanovdb(obj->scene_token, obj->name_token, ctx);
-            }
-            else if (render_method == pnanovdb_pipeline_render_method_gaussian && obj->gaussian_data() &&
-                     obj->resources.gaussian_data_owner)
-            {
-                GaussianDataContext ctx{ obj->resources.gaussian_data_owner,
-                                         (pnanovdb_raster_shader_params_t*)obj->shader_params() };
-                m_scene_view.add_gaussian(obj->scene_token, obj->name_token, ctx);
-            }
-        });
-
+void EditorScene::select_view_for_added_object(pnanovdb_editor_token_t* scene,
+                                               pnanovdb_editor_token_t* name,
+                                               bool added_camera)
+{
     pnanovdb_editor_token_t* old_scene = m_scene_view.get_current_scene_token();
     m_scene_view.set_current_scene(scene);
     if (is_switching_scenes(old_scene, scene))
@@ -866,6 +834,18 @@ void EditorScene::sync_object_from_scene_manager(pnanovdb_editor_token_t* scene,
 
     if (content)
         select_render_view(scene, content);
+}
+
+void EditorScene::sync_object_from_scene_manager(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
+{
+    if (!scene || !name)
+        return;
+
+    bool added_camera = false;
+    m_scene_manager.with_object(
+        scene, name, [this, &added_camera](SceneObject* obj) { added_camera = sync_object_into_view(obj); });
+
+    select_view_for_added_object(scene, name, added_camera);
 }
 
 void EditorScene::reload_shader_params_for_current_view()

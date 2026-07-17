@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <stddef.h>
+#include <memory>
 
 namespace pnanovdb_editor
 {
@@ -44,13 +45,12 @@ struct ParamMapKey
 };
 
 // Per-thread record of a successful map_params(), consumed by unmap_params().
-// worker identifies which worker's mutex to release; unmap only touches it while it is
-// still the editor's published worker, so a concurrent stop()/teardown cannot free it
-// underneath the unlock.
+// The shared_ptr holds a lease on the worker whose mutex was locked, so unmap_params()
+// can always release that exact worker even if stop()/teardown unpublished it in between.
 struct ParamMapFrame
 {
     ParamMapKey key;
-    EditorWorker* worker = nullptr;
+    std::shared_ptr<EditorWorker> worker;
 };
 
 // Owned by pnanovdb_editor_impl_t::param_map_registry; created/destroyed by editor init()/shutdown().
