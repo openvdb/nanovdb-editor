@@ -53,5 +53,17 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
         );
     }
 
-    texture_out[tidx] = value;
+    // `value` is straight-alpha RGBA (alpha 1 == opaque). The editor composites objects into a shared
+    // texture using the premultiplied-color / alpha-as-transmittance convention (see editor.slang and
+    // editor_surface.slang): stored .rgb is premultiplied and stored .a is remaining transmittance
+    // (0 == opaque, 1 == fully transparent), and each object over-blends the previously rendered content
+    // when composite != 0. Previously this shader stored the raw straight-alpha value, which ignored the
+    // convention and the composite flag: transparent pixels painted opaque black over the 3D scene and
+    // the per-pixel alpha never blended. Convert to (premultiplied rgb, transmittance) and over-blend.
+    float3 premult_rgb = value.rgb * value.a;
+    float transmittance = 1.f - value.a;
+
+    float4 background = (editor_params.composite != 0u) ? texture_out[tidx] : float4(0.f, 0.f, 0.f, 1.f);
+
+    texture_out[tidx] = float4(premult_rgb + transmittance * background.rgb, transmittance * background.a);
 }
