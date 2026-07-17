@@ -16,6 +16,7 @@ option(NANOVDB_EDITOR_DIST_PACKAGE "Create distribution package" OFF)
 option(NANOVDB_EDITOR_FORCE_REBUILD_DEPS "Force rebuild all dependencies (clears dependencies cache)" OFF)
 option(NANOVDB_EDITOR_USE_GLFW "Use GLFW, not needed for streaming only, when OFF, Vulkan loadeer is built to ensure streaming compatibility" ON)
 option(NANOVDB_EDITOR_BUILD_SLANG_FROM_SOURCE "Build Slang from source instead of downloading prebuilt binaries (Linux x86 only; intended for wheel builds)" OFF)
+option(NANOVDB_EDITOR_PUBLIC_HEADERS_ONLY "Only configure the public header interface target" OFF)
 set(NANOVDB_SLANG_IMAGE_ROOT_DIR "" CACHE PATH "Path to a prebuilt Slang package root containing include/ and lib/ directories on Unix-like platforms, or include/ and bin/ directories on Windows")
 
 # On Windows, H264 support relies on the vcpkg-packaged OpenH264 library instead
@@ -157,3 +158,4 @@ message(STATUS "  Slang Debug Output: ${NANOVDB_EDITOR_SLANG_DEBUG_OUTPUT}")
 message(STATUS "  Use GLFW: ${NANOVDB_EDITOR_USE_GLFW}")
 message(STATUS "  H264 Support: ${NANOVDB_EDITOR_USE_H264}")
 message(STATUS "  Build Tests: ${NANOVDB_EDITOR_BUILD_TESTS}")
+message(STATUS "  Public Headers Only: ${NANOVDB_EDITOR_PUBLIC_HEADERS_ONLY}")
