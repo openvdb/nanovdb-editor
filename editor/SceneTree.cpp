@@ -462,7 +462,9 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
             }
             else
             {
-                ImGui::PushItemWidth(-1.0f);
+                const float iconSize = ImGui::GetFrameHeight();
+                const float spacing = ImGui::GetStyle().ItemSpacing.x;
+                ImGui::PushItemWidth(-(iconSize + spacing));
                 if (ImGui::BeginCombo("##SceneSelector", current_scene_name))
                 {
                     for (auto* scene_token : scene_tokens)
@@ -482,6 +484,18 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
                     ImGui::EndCombo();
                 }
                 ImGui::PopItemWidth();
+
+                ImGui::SameLine(0.0f, spacing);
+                ImDrawList* drawList = ImGui::GetWindowDrawList();
+                drawPlusIcon(drawList, ImGui::GetCursorScreenPos(), iconSize, 2.0f);
+                if (ImGui::InvisibleButton("##AddScene", ImVec2(iconSize, iconSize)))
+                {
+                    createAndSelectScene();
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Add new scene");
+                }
             }
 
             if (!s_scene_rename_error.empty())
@@ -505,50 +519,17 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
         const char* scene_name =
             (current_scene && current_scene->str) ? current_scene->str : pnanovdb_editor::DEFAULT_SCENE_NAME;
 
-        // Buttons row above scene root: "Add Object" and "Add Scene"
-        if (ptr->editor_scene)
-        {
-            const float spacing = ImGui::GetStyle().ItemSpacing.x;
-            const float framePadX = ImGui::GetStyle().FramePadding.x * 2.0f;
-            const float rightEdge = ImGui::GetWindowContentRegionMax().x;
-
-            const float sceneWidth = ImGui::CalcTextSize("Add Scene").x + framePadX;
-            const float objWidth = ImGui::CalcTextSize("Add Object").x + framePadX;
-            const float sceneXPos = rightEdge - sceneWidth;
-            const float objXPos = sceneXPos - objWidth - spacing;
-
-            ImGui::SameLine(objXPos);
-            if (ImGui::Button("Add Object##AddEmptyObject"))
-            {
-                ptr->editor_scene->add_empty_object(current_scene);
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Add empty object (all stages No Operation)");
-            }
-
-            ImGui::SameLine(sceneXPos);
-            if (ImGui::Button("Add Scene##AddSceneRoot"))
-            {
-                pnanovdb_editor_token_t* new_scene = createUniqueSceneToken(ptr->editor_scene);
-                if (new_scene)
-                {
-                    ptr->editor_scene->set_current_scene(new_scene);
-                    ptr->editor_scene->get_or_create_scene(new_scene);
-                }
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Add new scene");
-            }
-        }
-
         bool isRootSelected = isSelectedInCurrentScene(scene_name, ptr, ViewType::Root);
         bool rootNodeOpen = renderTreeNodeHeader(scene_name, nullptr, isRootSelected, true);
 
         bool removeSceneRequested = false;
         if (current_scene && ImGui::BeginPopupContextItem("##SceneRootContextMenu"))
         {
+            if (ImGui::MenuItem("Add Object"))
+            {
+                ptr->editor_scene->add_empty_object(current_scene);
+            }
+            ImGui::Separator();
             if (ImGui::MenuItem("Rename Scene"))
             {
                 s_scene_rename_target = current_scene;
@@ -574,6 +555,24 @@ void SceneTree::render(imgui_instance_user::Instance* ptr)
             }
 
             ImGui::EndPopup();
+        }
+
+        if (ptr->editor_scene && current_scene)
+        {
+            const float iconSize = ImGui::GetFrameHeight();
+            const float rightEdge = ImGui::GetWindowContentRegionMax().x;
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+            ImGui::SameLine(rightEdge - iconSize);
+            drawPlusIcon(drawList, ImGui::GetCursorScreenPos(), iconSize, 2.0f);
+            if (ImGui::InvisibleButton("##AddEmptyObject", ImVec2(iconSize, iconSize)))
+            {
+                ptr->editor_scene->add_empty_object(current_scene);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Add empty object");
+            }
         }
 
         if (removeSceneRequested && current_scene)

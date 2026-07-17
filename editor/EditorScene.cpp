@@ -22,6 +22,7 @@
 #include "PipelineRuntime.h"
 #include "PipelineRegistry.h"
 #include "SceneSerializer.h"
+#include "Properties.h"
 
 #include "raster/Raster.h"
 
@@ -801,10 +802,12 @@ void EditorScene::sync_views_from_scene_manager(uint64_t selected_scene_id, uint
             return true;
         });
 
-    // After syncing, if worker specified a view to select, take over the viewport
-    // only when no render view (pipeline) has been selected yet. This makes a
-    // freshly added object appear automatically when nothing is shown, without
-    // stealing an existing selection on subsequent adds.
+    // Viewport selection is updated only when nothing is shown yet
+    if (last_added_scene_token && last_added_name_token)
+    {
+        focus_added_object_in_properties(last_added_scene_token, last_added_name_token);
+    }
+
     if (last_added_scene_token && last_added_name_token && !m_render_view_selection.is_valid())
     {
         pnanovdb_editor_token_t* old_scene = m_scene_view.get_current_scene_token();
@@ -859,7 +862,6 @@ void EditorScene::sync_views_from_scene_manager(uint64_t selected_scene_id, uint
         if (view_to_select && view_type != ViewType::None)
         {
             m_scene_view.set_current_view(last_added_scene_token, view_to_select);
-            set_properties_selection(view_type, view_to_select, last_added_scene_token);
             set_render_view(view_type, view_to_select, last_added_scene_token);
         }
     }
@@ -2237,6 +2239,24 @@ void EditorScene::set_properties_selection(ViewType type,
 SceneSelection EditorScene::get_properties_selection() const
 {
     return m_view_selection;
+}
+
+void EditorScene::focus_added_object_in_properties(pnanovdb_editor_token_t* scene_token,
+                                                   pnanovdb_editor_token_t* name_token)
+{
+    if (!scene_token || !name_token)
+    {
+        return;
+    }
+
+    const ViewType view_type = determine_view_type(name_token, scene_token);
+    if (view_type == ViewType::None)
+    {
+        return;
+    }
+
+    set_properties_selection(view_type, name_token, scene_token);
+    Properties::getInstance().selectPipelineStage(name_token->id, (int)pnanovdb_pipeline_stage_render, 0);
 }
 
 void EditorScene::set_render_view(ViewType type, pnanovdb_editor_token_t* name_token, pnanovdb_editor_token_t* scene_token)

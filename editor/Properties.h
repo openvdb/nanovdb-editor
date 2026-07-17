@@ -51,6 +51,7 @@ public:
     }
 
     void render(imgui_instance_user::Instance* ptr);
+    void selectPipelineStage(uint64_t object_name_id, int stage, int step = 0);
 
 private:
     Properties() = default;
