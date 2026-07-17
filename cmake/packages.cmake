@@ -24,37 +24,52 @@ CPMAddPackage(
     DOWNLOAD_ONLY YES
 )
 
-set(ZLIB_VERSION 1.3.1)
-CPMAddPackage(
-    NAME zlib
-    URL
-        https://github.com/madler/zlib/archive/refs/tags/v${ZLIB_VERSION}.tar.gz
-        https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz
-        https://www.zlib.net/fossils/zlib-${ZLIB_VERSION}.tar.gz
-    VERSION ${ZLIB_VERSION}
-    OPTIONS
-        "SKIP_INSTALL_LIBRARIES OFF"
-        "SKIP_INSTALL_ALL OFF"
-        "ZLIB_BUILD_EXAMPLES OFF"
-)
+option(NANOVDB_EDITOR_USE_EXTERNAL_ZLIB
+    "Reuse an externally-provided ZLIB instead of vendoring a private static zlib" OFF)
 
-# Blosc depends on zlib, so ensure it's available and configure paths
-if(zlib_ADDED)
-    set(ZLIB_ROOT ${zlib_SOURCE_DIR})
-    set(ZLIB_INCLUDE_DIR "${zlib_SOURCE_DIR};${zlib_BINARY_DIR}")
-    set(ZLIB_LIBRARY zlibstatic)
-    # Ensure zlib is configured properly for blosc
-    if(TARGET zlibstatic)
-        set_target_properties(zlibstatic PROPERTIES POSITION_INDEPENDENT_CODE ON)
+# Auto-detect a parent-provided ZLIB target so consumers don't have to set the option
+if(NOT NANOVDB_EDITOR_USE_EXTERNAL_ZLIB AND (TARGET ZLIB::ZLIB OR TARGET zlibstatic))
+    set(NANOVDB_EDITOR_USE_EXTERNAL_ZLIB ON)
+endif()
+
+if(NANOVDB_EDITOR_USE_EXTERNAL_ZLIB)
+    if(NOT TARGET ZLIB::ZLIB)
+        find_package(ZLIB REQUIRED)
     endif()
+    message(STATUS "nanovdb-editor: reusing external ZLIB; not vendoring a private zlib")
+else()
+    set(ZLIB_VERSION 1.3.1)
+    CPMAddPackage(
+        NAME zlib
+        URL
+            https://github.com/madler/zlib/archive/refs/tags/v${ZLIB_VERSION}.tar.gz
+            https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz
+            https://www.zlib.net/fossils/zlib-${ZLIB_VERSION}.tar.gz
+        VERSION ${ZLIB_VERSION}
+        OPTIONS
+            "SKIP_INSTALL_LIBRARIES OFF"
+            "SKIP_INSTALL_ALL OFF"
+            "ZLIB_BUILD_EXAMPLES OFF"
+    )
 
-    # Set ZLIB cache variables immediately for packages that use find_package(ZLIB)
-    set(ZLIB_FOUND TRUE CACHE BOOL "ZLIB found" FORCE)
-    set(ZLIB_LIBRARIES zlibstatic CACHE STRING "ZLIB libraries" FORCE)
-    set(ZLIB_INCLUDE_DIRS "${zlib_SOURCE_DIR};${zlib_BINARY_DIR}" CACHE STRING "ZLIB include directories" FORCE)
-    set(ZLIB_VERSION_STRING ${ZLIB_VERSION} CACHE STRING "ZLIB version" FORCE)
-    set(ZLIB_LIBRARY zlibstatic CACHE STRING "ZLIB library target" FORCE)
-    set(ZLIB_INCLUDE_DIR "${zlib_SOURCE_DIR};${zlib_BINARY_DIR}" CACHE STRING "ZLIB include directory" FORCE)
+    # Blosc depends on zlib, so ensure it's available and configure paths
+    if(zlib_ADDED)
+        set(ZLIB_ROOT ${zlib_SOURCE_DIR})
+        set(ZLIB_INCLUDE_DIR "${zlib_SOURCE_DIR};${zlib_BINARY_DIR}")
+        set(ZLIB_LIBRARY zlibstatic)
+        # Ensure zlib is configured properly for blosc
+        if(TARGET zlibstatic)
+            set_target_properties(zlibstatic PROPERTIES POSITION_INDEPENDENT_CODE ON)
+        endif()
+
+        # Set ZLIB cache variables immediately for packages that use find_package(ZLIB)
+        set(ZLIB_FOUND TRUE CACHE BOOL "ZLIB found" FORCE)
+        set(ZLIB_LIBRARIES zlibstatic CACHE STRING "ZLIB libraries" FORCE)
+        set(ZLIB_INCLUDE_DIRS "${zlib_SOURCE_DIR};${zlib_BINARY_DIR}" CACHE STRING "ZLIB include directories" FORCE)
+        set(ZLIB_VERSION_STRING ${ZLIB_VERSION} CACHE STRING "ZLIB version" FORCE)
+        set(ZLIB_LIBRARY zlibstatic CACHE STRING "ZLIB library target" FORCE)
+        set(ZLIB_INCLUDE_DIR "${zlib_SOURCE_DIR};${zlib_BINARY_DIR}" CACHE STRING "ZLIB include directory" FORCE)
+    endif()
 endif()
 
 # miniz - required by Slang for ZIP/compression functionality when building Slang from source
@@ -562,6 +577,13 @@ if(cnpy_ADDED AND zlib_ADDED)
         target_include_directories(cnpy-static PRIVATE ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
         target_link_libraries(cnpy-static zlibstatic)
     endif()
+elseif(cnpy_ADDED AND TARGET ZLIB::ZLIB)
+    if(TARGET cnpy)
+        target_link_libraries(cnpy ZLIB::ZLIB)
+    endif()
+    if(TARGET cnpy-static)
+        target_link_libraries(cnpy-static ZLIB::ZLIB)
+    endif()
 endif()
 
 CPMAddPackage(
@@ -850,6 +872,9 @@ if(blosc_ADDED)
             target_include_directories(blosc_static PRIVATE ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
             # Use plain signature to match existing usage in blosc CMakeLists.txt
             target_link_libraries(blosc_static zlibstatic)
+        elseif(TARGET ZLIB::ZLIB)
+            # External/parent-provided zlib.
+            target_link_libraries(blosc_static ZLIB::ZLIB)
         endif()
     endif()
 endif()
