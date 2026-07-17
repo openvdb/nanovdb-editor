@@ -521,20 +521,12 @@ static void post_to_render_thread(pnanovdb_editor_t* editor, std::function<void(
     }
 }
 
-void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb_editor_config_t* config)
+static void run_show_loop(pnanovdb_editor_t* editor,
+                          pnanovdb_compute_device_t* device,
+                          pnanovdb_editor_config_t* config,
+                          const std::shared_ptr<EditorWorker>& worker)
 {
-    std::shared_ptr<EditorWorker> worker;
-    {
-        std::lock_guard<std::mutex> lifecycle_lock(editor->impl->editor_worker_lifecycle_mutex);
-        worker = editor->impl->editor_worker;
-        if (!worker)
-        {
-            worker = std::make_shared<EditorWorker>();
-            editor->impl->editor_worker = worker;
-        }
-
-        worker->render_thread_id.store(std::this_thread::get_id());
-    }
+    worker->render_thread_id.store(std::this_thread::get_id());
 
     auto release_worker_waiters = [editor, worker]()
     {
@@ -1023,6 +1015,28 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
     release_worker_waiters();
 }
 
+void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb_editor_config_t* config)
+{
+    if (!editor || !editor->impl)
+        return;
+
+    std::shared_ptr<EditorWorker> worker;
+    {
+        std::lock_guard<std::mutex> lifecycle_lock(editor->impl->editor_worker_lifecycle_mutex);
+        if (editor->impl->editor_worker)
+        {
+            Console::getInstance().addLog(Console::LogLevel::Warning,
+                                          "show: render loop is already active; ignoring duplicate call");
+            return;
+        }
+
+        worker = std::make_shared<EditorWorker>();
+        editor->impl->editor_worker = worker;
+    }
+
+    run_show_loop(editor, device, config, worker);
+}
+
 pnanovdb_int32_t get_resolved_port(pnanovdb_editor_t* editor, pnanovdb_bool_t should_wait)
 {
     while (should_wait && editor->impl->show_active.load() &&
@@ -1059,14 +1073,15 @@ void start(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovd
 
         if (editor_worker->spawned)
         {
-            editor_worker->thread =
-                new std::thread([editor, device]() { editor->show(editor, device, &editor->impl->config); });
+            editor_worker->thread = new std::thread(
+                [editor, device, editor_worker]()
+                { run_show_loop(editor, device, &editor->impl->config, editor_worker); });
         }
     }
 
     if (!editor_worker->spawned)
     {
-        editor->show(editor, device, &editor->impl->config);
+        run_show_loop(editor, device, &editor->impl->config, editor_worker);
     }
 }
 
