@@ -36,6 +36,7 @@ if(NANOVDB_EDITOR_USE_EXTERNAL_ZLIB)
     if(NOT TARGET ZLIB::ZLIB)
         find_package(ZLIB REQUIRED)
     endif()
+    set(NANOVDB_EDITOR_ZLIB_LIB ZLIB::ZLIB)
     message(STATUS "nanovdb-editor: reusing external ZLIB; not vendoring a private zlib")
 else()
     set(ZLIB_VERSION 1.3.1)
@@ -51,6 +52,8 @@ else()
             "SKIP_INSTALL_ALL OFF"
             "ZLIB_BUILD_EXAMPLES OFF"
     )
+
+    set(NANOVDB_EDITOR_ZLIB_LIB zlibstatic)
 
     # Blosc depends on zlib, so ensure it's available and configure paths
     if(zlib_ADDED)

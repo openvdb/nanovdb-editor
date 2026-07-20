@@ -230,7 +230,7 @@ create_nanovdb_library(pnanovdbfileformat
     LIBS
         nlohmann_json::nlohmann_json
         cnpy-static
-        zlibstatic
+        ${NANOVDB_EDITOR_ZLIB_LIB}
     DEFINITIONS
         $<$<BOOL:${NANOVDB_EDITOR_E57_FORMAT}>:NANOVDB_EDITOR_E57_FORMAT>
 )
