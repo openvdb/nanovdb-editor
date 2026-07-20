@@ -661,6 +661,7 @@ private:
                           pnanovdb_editor_token_t* shader_name,
                           pnanovdb_pipeline_type_t process_pipeline,
                           pnanovdb_pipeline_type_t render_pipeline,
+                          bool force_pipelines,
                           std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_gaussian_owner_out);
 
     bool add_gaussian_data_impl(pnanovdb_editor_token_t* scene,

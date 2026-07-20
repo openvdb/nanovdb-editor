@@ -424,6 +424,7 @@ bool EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
                          {
                              return add_nanovdb_impl(scene, name, array, params_array, compute, shader_name,
                                                      pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_nanovdb_render,
+                                                     false,
                                                      old_gaussian_owner_out);
                          });
 }
@@ -443,7 +444,7 @@ bool EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
                          [&]
                          {
                              return add_nanovdb_impl(scene, name, array, params_array, compute, shader_name,
-                                                     process_pipeline, render_pipeline, old_gaussian_owner_out);
+                                                     process_pipeline, render_pipeline, true, old_gaussian_owner_out);
                          });
 }
 
@@ -524,7 +525,8 @@ bool EditorSceneManager::commit_reserved_nanovdb(pnanovdb_editor_token_t* scene,
                          [&]
                          {
                              return add_nanovdb_impl(scene, name, array, params_array, compute, shader_name,
-                                                     process_pipeline, render_pipeline, old_gaussian_owner_out);
+                                                     process_pipeline, render_pipeline, false,
+                                                     old_gaussian_owner_out);
                          });
 }
 
@@ -538,6 +540,16 @@ void apply_default_stage(PipelineStage& slot, pnanovdb_pipeline_type_t type)
     }
     slot.type = type;
     pnanovdb_pipeline_get_default_params(type, &slot.params);
+    slot.bump_revision();
+}
+
+void force_configured_stage(PipelineStage& slot, pnanovdb_pipeline_type_t type, bool dirty)
+{
+    slot.type = type;
+    pnanovdb_pipeline_get_default_params(type, &slot.params);
+    slot.shader_overrides.clear();
+    slot.configured = true;
+    slot.dirty = dirty;
     slot.bump_revision();
 }
 
@@ -817,6 +829,7 @@ bool EditorSceneManager::add_nanovdb_impl(pnanovdb_editor_token_t* scene,
                                           pnanovdb_editor_token_t* shader_name,
                                           pnanovdb_pipeline_type_t process_pipeline,
                                           pnanovdb_pipeline_type_t render_pipeline,
+                                          bool force_pipelines,
                                           std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_gaussian_owner_out)
 {
     // NOTE: Caller must hold m_mutex
@@ -845,8 +858,16 @@ bool EditorSceneManager::add_nanovdb_impl(pnanovdb_editor_token_t* scene,
     obj.shader_name() = shader_name;
 
     apply_default_stage(obj.pipeline.load(), pnanovdb_pipeline_type_nanovdb_load);
-    apply_default_stage(obj.pipeline.process(), process_pipeline);
-    apply_default_stage(obj.pipeline.render(), render_pipeline);
+    if (force_pipelines)
+    {
+        force_configured_stage(obj.pipeline.process(), process_pipeline, process_pipeline != pnanovdb_pipeline_type_noop);
+        force_configured_stage(obj.pipeline.render(), render_pipeline, false);
+    }
+    else
+    {
+        apply_default_stage(obj.pipeline.process(), process_pipeline);
+        apply_default_stage(obj.pipeline.render(), render_pipeline);
+    }
     obj.mark_process_dirty();
     restore_replacement_state(obj, replacement);
 
