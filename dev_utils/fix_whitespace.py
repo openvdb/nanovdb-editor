@@ -81,6 +81,9 @@ def should_skip_file(relative_path: Path, git_root: Path, git_files: set[Path]) 
     if matches_pattern(path, BINARY_SKIP_PATTERNS):
         return True
 
+    if path.endswith("codestyle.yml"):
+        return True
+
     if relative_path in git_files:
         return False
 
