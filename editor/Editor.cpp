@@ -205,6 +205,17 @@ void shutdown(pnanovdb_editor_t* editor)
     {
         editor->stop(editor);
     }
+
+    const size_t leaked_maps = editor->impl->param_map_registry ? param_map_active_count(editor) : 0u;
+    if (leaked_maps > 0)
+    {
+        Console::getInstance().addLog(
+            Console::LogLevel::Warning,
+            "shutdown: %zu parameter map(s) still active; unmap all params before shutting down the editor "
+            "(mapped pointers now dangle)",
+            leaked_maps);
+    }
+
     editor->impl->pipeline_runtime.reset();
     if (editor->impl->scene_view)
     {
@@ -1025,8 +1036,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
         std::lock_guard<std::mutex> lifecycle_lock(editor->impl->editor_worker_lifecycle_mutex);
         if (editor->impl->editor_worker)
         {
-            Console::getInstance().addLog(Console::LogLevel::Warning,
-                                          "show: render loop is already active; ignoring duplicate call");
+            Console::getInstance().addLog(
+                Console::LogLevel::Warning, "show: render loop is already active; ignoring duplicate call");
             return;
         }
 
@@ -1073,9 +1084,9 @@ void start(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovd
 
         if (editor_worker->spawned)
         {
-            editor_worker->thread = new std::thread(
-                [editor, device, editor_worker]()
-                { run_show_loop(editor, device, &editor->impl->config, editor_worker); });
+            editor_worker->thread =
+                new std::thread([editor, device, editor_worker]()
+                                { run_show_loop(editor, device, &editor->impl->config, editor_worker); });
         }
     }
 

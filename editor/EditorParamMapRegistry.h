@@ -84,6 +84,8 @@ PNANOVDB_API size_t shader_name_map_ref_count(pnanovdb_editor_t* editor,
 
 PNANOVDB_API size_t param_map_stack_depth(pnanovdb_editor_t* editor);
 
+size_t param_map_active_count(pnanovdb_editor_t* editor);
+
 } // namespace pnanovdb_editor
 
 #endif
