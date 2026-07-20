@@ -26,8 +26,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
-  deployments: write
+  contents: read
   pull-requests: read
   issues: read
 
@@ -40,7 +39,9 @@ jobs:
         shell: bash -el {0}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Install Vulkan dependencies
         run: |
@@ -72,7 +73,7 @@ jobs:
           bash ./scripts/ci/check_incremental_build.sh "./build.sh -r"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nanovdb-editor-build-linux
           path: |
@@ -93,7 +94,9 @@ jobs:
         shell: bash -el {0}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Install Vulkan dependencies
         run: |
@@ -120,14 +123,16 @@ jobs:
           fi
 
           echo "Found MoltenVK ICD: ${MOLTENVK_ICD}"
-          echo "VK_ICD_FILENAMES=${MOLTENVK_ICD}" >> "${GITHUB_ENV}"
-          echo "VK_DRIVER_FILES=${MOLTENVK_ICD}" >> "${GITHUB_ENV}"
-          echo "DYLD_LIBRARY_PATH=${BREW_PREFIX}/lib:${DYLD_LIBRARY_PATH:-}" >> "${GITHUB_ENV}"
-          echo "DYLD_FALLBACK_LIBRARY_PATH=${BREW_PREFIX}/lib:${DYLD_FALLBACK_LIBRARY_PATH:-}" >> "${GITHUB_ENV}"
+          {
+            echo "VK_ICD_FILENAMES=${MOLTENVK_ICD}"
+            echo "VK_DRIVER_FILES=${MOLTENVK_ICD}"
+            echo "DYLD_LIBRARY_PATH=${BREW_PREFIX}/lib:${DYLD_LIBRARY_PATH:-}"
+            echo "DYLD_FALLBACK_LIBRARY_PATH=${BREW_PREFIX}/lib:${DYLD_FALLBACK_LIBRARY_PATH:-}"
 
-          # MoltenVK log levels: 0=none 1=error 2=warning 3=info 4=debug.
-          echo "MVK_CONFIG_LOG_LEVEL=2" >> "${GITHUB_ENV}"
-          echo "MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=1" >> "${GITHUB_ENV}"
+            # MoltenVK log levels: 0=none 1=error 2=warning 3=info 4=debug.
+            echo "MVK_CONFIG_LOG_LEVEL=2"
+            echo "MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=1"
+          } >> "${GITHUB_ENV}"
           echo "MVK_CONFIG_DEBUG=0" >> "${GITHUB_ENV}"
 
       - name: Run OpenH264 regression build
@@ -149,7 +154,7 @@ jobs:
           ./build.sh -rcv
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nanovdb-editor-build-macos
           path: |
@@ -181,7 +186,9 @@ jobs:
         shell: pwsh
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up vcpkg
         run: |
@@ -217,7 +224,7 @@ jobs:
           ./scripts/ci/check_incremental_build.ps1 -Command "build.bat -r"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nanovdb-editor-build-windows
           path: |
@@ -307,7 +314,9 @@ jobs:
         shell: pwsh
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up vcpkg
         run: |
@@ -350,7 +359,7 @@ jobs:
           ./scripts/ci/check_incremental_build.ps1 -Command "build.bat -r"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nanovdb-editor-build-windows-arm64
           path: |
@@ -440,7 +449,9 @@ jobs:
         shell: bash -el {0}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Install Vulkan dependencies
         run: |
@@ -478,7 +489,7 @@ jobs:
           bash ./scripts/ci/check_incremental_build.sh "./build.sh -r"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nanovdb-editor-build-linux-arm64
           path: |

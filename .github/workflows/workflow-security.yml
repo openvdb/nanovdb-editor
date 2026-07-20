@@ -1,0 +1,75 @@
+name: Workflow Security
+
+# Why pull_request_target (not pull_request):
+#   The workflow definition and tooling come from the base branch, so a PR
+#   cannot weaken this security gate. Only the PR head's proposed workflow
+#   and composite action files are overlaid as inert data to scan; no PR-provided
+#   code is executed, no secrets are exposed, and the default token is read-only.
+on:
+  # zizmor: ignore[dangerous-triggers] Intentional pull_request_target; PR workflow/action files are overlaid as data only and never executed.
+  pull_request_target:
+    branches:
+      - '**'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  workflow-security:
+    name: Scan workflows
+    runs-on: ubuntu-latest
+    env:
+      # Pin tool versions so unrelated PRs are not broken by new diagnostics.
+      ZIZMOR_VERSION: "1.26.1"
+      ACTIONLINT_VERSION: "1.7.7"
+    steps:
+      - name: Checkout base (trusted)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      # Fetch by pull ref so forked PRs work even when their head SHA is not
+      # reachable through a branch in the base repository.
+      - name: Overlay PR workflow and action files (data only)
+        if: github.event_name == 'pull_request_target'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "refs/pull/${PR_NUMBER}/head"
+          echo "Fetched PR #${PR_NUMBER} head $(git rev-parse FETCH_HEAD) (event head: ${HEAD_SHA})"
+          rm -rf .github/workflows .github/actions
+          git checkout FETCH_HEAD -- .github/workflows .github/actions
+          echo "Scanning PR workflow and action files:"
+          ls -1R .github/workflows .github/actions
+
+      - name: Run actionlint
+        run: |
+          set -euo pipefail
+          curl -fsSL \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            -o actionlint.tar.gz
+          tar xzf actionlint.tar.gz actionlint
+          ./actionlint -color
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+
+      - name: Run zizmor
+        env:
+          # The read-only token enables zizmor's online audits.
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          uvx "zizmor==${ZIZMOR_VERSION}" --format=github .github/workflows .github/actions
