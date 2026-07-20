@@ -30,6 +30,26 @@ set(NANOVDB_EDITOR_SLANG_PROFILE "spirv_1_3" CACHE STRING "Slang shader profile 
 
 project(NanoVDBEditor LANGUAGES CXX)
 
+if(NANOVDB_EDITOR_PUBLIC_HEADERS_ONLY)
+    # Headers-only interface: expose just the public headers
+    set(NANOVDB_EDITOR_PUBLIC_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/include)
+    file(REMOVE_RECURSE ${NANOVDB_EDITOR_PUBLIC_INCLUDE_DIR}/nanovdb_editor)
+    file(MAKE_DIRECTORY ${NANOVDB_EDITOR_PUBLIC_INCLUDE_DIR})
+    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/nanovdb_editor
+        DESTINATION ${NANOVDB_EDITOR_PUBLIC_INCLUDE_DIR}
+        FILES_MATCHING
+            PATTERN "*.h"
+            PATTERN "*.hpp")
+
+    add_library(nanovdb_editor_public_headers INTERFACE)
+    add_library(nanovdb_editor::public_headers ALIAS nanovdb_editor_public_headers)
+    add_library(nanovdb_editor::nanovdb_editor ALIAS nanovdb_editor_public_headers)
+    target_include_directories(nanovdb_editor_public_headers INTERFACE ${NANOVDB_EDITOR_PUBLIC_INCLUDE_DIR})
+
+    message(STATUS "NanoVDB Editor: public headers only, installed to ${NANOVDB_EDITOR_PUBLIC_INCLUDE_DIR}/nanovdb_editor (skipping dependency resolution)")
+    return()
+endif()
+
 enable_testing()
 
 ### Directory Setup
@@ -210,7 +230,7 @@ create_nanovdb_library(pnanovdbfileformat
     LIBS
         nlohmann_json::nlohmann_json
         cnpy-static
-        zlibstatic
+        ${NANOVDB_EDITOR_ZLIB_LIB}
     DEFINITIONS
         $<$<BOOL:${NANOVDB_EDITOR_E57_FORMAT}>:NANOVDB_EDITOR_E57_FORMAT>
 )
