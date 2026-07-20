@@ -424,8 +424,7 @@ bool EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
                          {
                              return add_nanovdb_impl(scene, name, array, params_array, compute, shader_name,
                                                      pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_nanovdb_render,
-                                                     false,
-                                                     old_gaussian_owner_out);
+                                                     false, old_gaussian_owner_out);
                          });
 }
 
@@ -525,8 +524,7 @@ bool EditorSceneManager::commit_reserved_nanovdb(pnanovdb_editor_token_t* scene,
                          [&]
                          {
                              return add_nanovdb_impl(scene, name, array, params_array, compute, shader_name,
-                                                     process_pipeline, render_pipeline, false,
-                                                     old_gaussian_owner_out);
+                                                     process_pipeline, render_pipeline, false, old_gaussian_owner_out);
                          });
 }
 

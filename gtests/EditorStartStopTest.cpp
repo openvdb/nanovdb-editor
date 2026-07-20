@@ -7,6 +7,8 @@
 #include <nanovdb_editor/putil/Compute.h>
 #include <nanovdb_editor/putil/Editor.h>
 
+#include "editor/Editor.h"
+
 #include <nanovdb/tools/CreatePrimitives.h>
 
 #include <chrono>
@@ -93,4 +95,44 @@ TEST(NanoVDBEditor, EditorStartStopHeadlessStreaming)
     pnanovdb_compiler_free(&compiler);
 
     SUCCEED();
+}
+
+TEST(NanoVDBEditor, ShutdownFromRenderThreadDefersTeardown)
+{
+    pnanovdb_compiler_t compiler = {};
+    pnanovdb_compiler_load(&compiler);
+    ASSERT_NE(compiler.module, nullptr);
+
+    pnanovdb_compute_t compute = {};
+    pnanovdb_compute_load(&compute, &compiler);
+    ASSERT_NE(compute.module, nullptr);
+
+    pnanovdb_editor_t editor = {};
+    pnanovdb_editor_load(&editor, &compute, &compiler);
+    ASSERT_NE(editor.module, nullptr);
+    ASSERT_NE(editor.impl, nullptr);
+
+    // Model shutdown/free being requested by a callback running inside the
+    // active render loop.  Such a thread cannot join itself.
+    auto worker = std::make_shared<pnanovdb_editor::EditorWorker>();
+    worker->render_thread_id.store(std::this_thread::get_id());
+    editor.impl->editor_worker = worker;
+
+    pnanovdb_editor_free(&editor);
+
+    EXPECT_NE(editor.impl, nullptr) << "self-thread shutdown must leave live render-loop state intact";
+    EXPECT_TRUE(worker->should_stop.load()) << "self-thread shutdown must still request loop termination";
+
+    // Simulate run_show_loop() releasing its worker, then finish teardown from
+    // an external thread as required by the API contract.
+    {
+        std::lock_guard<std::mutex> lock(editor.impl->editor_worker_lifecycle_mutex);
+        editor.impl->editor_worker = nullptr;
+    }
+    worker.reset();
+    pnanovdb_editor_free(&editor);
+    EXPECT_EQ(editor.impl, nullptr);
+
+    pnanovdb_compute_free(&compute);
+    pnanovdb_compiler_free(&compiler);
 }

@@ -118,6 +118,20 @@ TEST(StreamingUiToViewSync, PoolMutationPropagatesToObjectBufferEachFrame)
         kObjectReadyTimeout))
         << "Per-object shader_params buffer was never allocated for the added object";
 
+    pnanovdb_compute_array_t* initial_render_array = editor.impl->nanovdb_array;
+    ASSERT_NE(initial_render_array, nullptr);
+
+    pnanovdb_editor_token_t* second_name_token = editor.get_token("ui_sync_streaming_object_2");
+    auto second_sphere_grid = nanovdb::tools::createLevelSetSphere<float>(5.0f);
+    pnanovdb_compute_array_t* second_nanovdb_array =
+        compute.create_array(4u, second_sphere_grid.bufferSize() / 4u, second_sphere_grid.data());
+    ASSERT_NE(second_nanovdb_array, nullptr);
+    editor.add_nanovdb_2(&editor, scene_token, second_name_token, second_nanovdb_array);
+    compute.destroy_array(second_nanovdb_array);
+
+    EXPECT_EQ(editor.impl->nanovdb_array, initial_render_array)
+        << "adding a later object must not steal the active render view";
+
     std::array<uint8_t, 64> baseline{};
     ASSERT_EQ(pnanovdb_editor_test::snapshot_object_shader_params(
                   &editor, scene_token, name_token, baseline.data(), baseline.size()),

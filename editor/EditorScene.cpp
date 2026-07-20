@@ -810,6 +810,15 @@ void EditorScene::select_view_for_added_object(pnanovdb_editor_token_t* scene,
                                                pnanovdb_editor_token_t* name,
                                                bool added_camera)
 {
+    if (added_camera)
+        return;
+
+    focus_added_object_in_properties(scene, name);
+    if (m_render_view_selection.is_valid())
+    {
+        return;
+    }
+
     pnanovdb_editor_token_t* old_scene = m_scene_view.get_current_scene_token();
     m_scene_view.set_current_scene(scene);
     if (is_switching_scenes(old_scene, scene))
@@ -819,7 +828,7 @@ void EditorScene::select_view_for_added_object(pnanovdb_editor_token_t* scene,
     }
 
     pnanovdb_editor_token_t* content = nullptr;
-    if (!added_camera && determine_view_type(name, scene) != ViewType::None)
+    if (determine_view_type(name, scene) != ViewType::None)
     {
         content = name;
     }

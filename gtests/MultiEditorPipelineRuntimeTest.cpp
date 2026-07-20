@@ -9,6 +9,7 @@
 
 #include "editor/PipelineTypes.h" // canonical pnanovdb_pipeline_type_* enum
 #include "editor/Editor.h" // pnanovdb_editor_impl_t / EditorWorker (per-worker config snapshot)
+#include "GpuTestSupport.h"
 
 #include <nanovdb/tools/CreatePrimitives.h>
 
@@ -44,6 +45,16 @@ TEST(NanoVDBEditor, MultiEditorPipelineRuntimeIsolation)
         pnanovdb_compute_free(&compute);
         pnanovdb_compiler_free(&compiler);
         GTEST_SKIP() << "No Vulkan-compatible device available on this machine";
+    }
+
+    if (pnanovdb_editor_test::should_skip_on_software_renderer(phys_desc.device_name))
+    {
+        const std::string skip_reason = pnanovdb_editor_test::software_renderer_skip_reason(
+            phys_desc.device_name, "multi-editor runtime isolation test (two concurrent headless render loops)");
+        compute.device_interface.destroy_device_manager(device_manager);
+        pnanovdb_compute_free(&compute);
+        pnanovdb_compiler_free(&compiler);
+        GTEST_SKIP() << skip_reason;
     }
 
     pnanovdb_compute_device_t* device_a = compute.device_interface.create_device(device_manager, &device_desc);

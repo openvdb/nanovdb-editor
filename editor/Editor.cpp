@@ -204,6 +204,19 @@ void shutdown(pnanovdb_editor_t* editor)
     if (get_worker(editor))
     {
         editor->stop(editor);
+
+        // The active render thread cannot join its own render loop.
+        // stop() only sends a stop request when you call it from that thread.
+        // Do not destroy the implementation or unload the module in this call.
+        // Call shutdown again from a different thread after the render loop exits.
+        // pnanovdb_editor_free() uses the same rule when the implementation is still active.
+        if (get_worker(editor))
+        {
+            Console::getInstance().addLog(
+                Console::LogLevel::Warning,
+                "shutdown: called from the active render thread; teardown deferred until the render loop exits");
+            return;
+        }
     }
 
     const size_t leaked_maps = editor->impl->param_map_registry ? param_map_active_count(editor) : 0u;
@@ -1442,7 +1455,8 @@ void add_nanovdb_3(pnanovdb_editor_t* editor,
             const char* render_shader_name = pnanovdb_pipeline_get_shader_name(render_pipeline);
             const char* render_shader_group = pnanovdb_pipeline_get_shader_group(render_pipeline);
             pnanovdb_compute_array_t* params_array = editor->impl->scene_manager->create_initialized_shader_params(
-                editor->impl->compute, render_shader_name, render_shader_group, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
+                editor->impl->compute, render_shader_name, render_shader_group,
+                PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
 
             pnanovdb_editor_token_t* shader_name_token = render_shader_name ? get_token(render_shader_name) : nullptr;
             editor->impl->scene_manager->add_nanovdb(scene, name, array, params_array, editor->impl->compute,
