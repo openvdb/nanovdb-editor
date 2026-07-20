@@ -7,10 +7,15 @@ on:
         description: "True if current VERSION.txt satisfies fvdb requirement"
         value: ${{ jobs.evaluate.outputs.compatible }}
 
+# Deny all permissions by default; the job below opts into the minimal scopes it needs.
+permissions: {}
+
 jobs:
   evaluate:
     name: Check fVDB dependency constraint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # required for actions/checkout to read the repository
     outputs:
       compatible: ${{ steps.requirement.outputs.compatible }}
     steps:

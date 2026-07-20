@@ -2,6 +2,8 @@
 # Discovered automatically when scanning paths under .github/.
 # See https://docs.zizmor.sh/configuration/
 rules:
-  # PyPI/TestPyPI still use API tokens. Migrate to OIDC trusted publishing separately.
+  # Why: publishing to PyPI/TestPyPI here still relies on API tokens, so zizmor's
+  #      trusted-publishing recommendation is not actionable yet.
+  # Remove when: the publish workflows have been migrated to OIDC trusted publishing.
   use-trusted-publishing:
     disable: true

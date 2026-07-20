@@ -4,6 +4,9 @@ on:
   issue_comment:
     types: [created]
 
+# Deny all permissions by default; each job below opts into the minimal scopes it needs.
+permissions: {}
+
 jobs:
   rerun-failed-workflows:
     name: Rerun Failed Workflows

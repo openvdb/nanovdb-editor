@@ -24,6 +24,9 @@ on:
         description: "Fully qualified image reference pushed to GHCR"
         value: ${{ jobs.build-and-push-image.outputs.image_ref }}
 
+# Deny all permissions by default; the job below opts into the minimal scopes it needs.
+permissions: {}
+
 jobs:
   build-and-push-image:
     name: Publish Slang Runtime Image
