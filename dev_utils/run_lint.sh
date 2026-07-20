@@ -128,6 +128,10 @@ run_actionlint() {
   step "actionlint ${ACTIONLINT_VERSION}"
   local actionlint_bin=""
   actionlint_bin="$(ensure_actionlint)"
+  if ! command -v shellcheck >/dev/null 2>&1; then
+    echo "    WARNING: shellcheck not found; actionlint will skip shell script checks (CI will not)."
+    echo "             Install it (e.g. apt install shellcheck / brew install shellcheck) for full parity."
+  fi
   "${actionlint_bin}" -color
   pass "workflows and composite actions"
 }

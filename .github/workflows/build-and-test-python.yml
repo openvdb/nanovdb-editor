@@ -281,10 +281,12 @@ jobs:
           fi
 
           echo "Found MoltenVK ICD: ${MOLTENVK_ICD}"
-          echo "VK_ICD_FILENAMES=${MOLTENVK_ICD}" >> "${GITHUB_ENV}"
-          echo "VK_DRIVER_FILES=${MOLTENVK_ICD}" >> "${GITHUB_ENV}"
-          echo "DYLD_LIBRARY_PATH=${BREW_PREFIX}/lib:${DYLD_LIBRARY_PATH:-}" >> "${GITHUB_ENV}"
-          echo "DYLD_FALLBACK_LIBRARY_PATH=${BREW_PREFIX}/lib:${DYLD_FALLBACK_LIBRARY_PATH:-}" >> "${GITHUB_ENV}"
+          {
+            echo "VK_ICD_FILENAMES=${MOLTENVK_ICD}"
+            echo "VK_DRIVER_FILES=${MOLTENVK_ICD}"
+            echo "DYLD_LIBRARY_PATH=${BREW_PREFIX}/lib:${DYLD_LIBRARY_PATH:-}"
+            echo "DYLD_FALLBACK_LIBRARY_PATH=${BREW_PREFIX}/lib:${DYLD_FALLBACK_LIBRARY_PATH:-}"
+          } >> "${GITHUB_ENV}"
 
       - name: Download package with nanovdb_editor
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4

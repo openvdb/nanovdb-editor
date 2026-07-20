@@ -108,9 +108,11 @@ jobs:
         PY
         )"
         image_tag="${slang_version}-ml27"
-        echo "slang_version=${slang_version}" >> "$GITHUB_OUTPUT"
-        echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
-        echo "image_name=nanovdb-editor_slang" >> "$GITHUB_OUTPUT"
+        {
+          echo "slang_version=${slang_version}"
+          echo "image_tag=${image_tag}"
+          echo "image_name=nanovdb-editor_slang"
+        } >> "$GITHUB_OUTPUT"
         echo "Resolved Slang version: ${slang_version}"
         echo "Resolved Slang image tag: ${image_tag}"
 
@@ -896,8 +898,8 @@ jobs:
         rm -f "${LOCAL_LIB_DIR}"/*.dwarf
 
         if ls "${LOCAL_LIB_DIR}"/libslang*.so* >/dev/null 2>&1 && find "${LOCAL_INCLUDE_DIR}" -type f | read -r _; then
-          CONTAINER_ROOT_DIR="/project${LOCAL_ROOT_DIR#${GITHUB_WORKSPACE}}"
-          CONTAINER_LIB_DIR="/project${LOCAL_LIB_DIR#${GITHUB_WORKSPACE}}"
+          CONTAINER_ROOT_DIR="/project${LOCAL_ROOT_DIR#"${GITHUB_WORKSPACE}"}"
+          CONTAINER_LIB_DIR="/project${LOCAL_LIB_DIR#"${GITHUB_WORKSPACE}"}"
           echo "NANOVDB_SLANG_IMAGE_ROOT_DIR=${CONTAINER_ROOT_DIR}" >> "$GITHUB_ENV"
           echo "NANOVDB_SLANG_IMAGE_LIB_DIR=${CONTAINER_LIB_DIR}" >> "$GITHUB_ENV"
           echo "Reusing Slang package from cached image via ${LOCAL_ROOT_DIR}"
