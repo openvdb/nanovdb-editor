@@ -278,7 +278,7 @@ TEST(RenderThreadTaskQueue, ConcurrentBlockingCallersMatchRunResultContractAcros
     for (int p = 0; p < producer_count; ++p)
     {
         producers.emplace_back(
-            [&queue, &run_counts, &results, p]()
+            [&queue, &run_counts, &results, p, per_producer]()
             {
                 for (int i = 0; i < per_producer; ++i)
                 {
