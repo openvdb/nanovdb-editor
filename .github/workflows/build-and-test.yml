@@ -26,8 +26,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
-  deployments: write
+  contents: read
   pull-requests: read
   issues: read
 
@@ -40,7 +39,9 @@ jobs:
         shell: bash -el {0}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Install Vulkan dependencies
         run: |
@@ -72,7 +73,7 @@ jobs:
           bash ./scripts/ci/check_incremental_build.sh "./build.sh -r"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nanovdb-editor-build-linux
           path: |
@@ -93,7 +94,9 @@ jobs:
         shell: bash -el {0}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Install Vulkan dependencies
         run: |
@@ -149,7 +152,7 @@ jobs:
           ./build.sh -rcv
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nanovdb-editor-build-macos
           path: |
@@ -181,7 +184,9 @@ jobs:
         shell: pwsh
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up vcpkg
         run: |
@@ -217,7 +222,7 @@ jobs:
           ./scripts/ci/check_incremental_build.ps1 -Command "build.bat -r"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nanovdb-editor-build-windows
           path: |
@@ -307,7 +312,9 @@ jobs:
         shell: pwsh
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up vcpkg
         run: |
@@ -350,7 +357,7 @@ jobs:
           ./scripts/ci/check_incremental_build.ps1 -Command "build.bat -r"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nanovdb-editor-build-windows-arm64
           path: |
@@ -440,7 +447,9 @@ jobs:
         shell: bash -el {0}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Install Vulkan dependencies
         run: |
@@ -478,7 +487,7 @@ jobs:
           bash ./scripts/ci/check_incremental_build.sh "./build.sh -r"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nanovdb-editor-build-linux-arm64
           path: |

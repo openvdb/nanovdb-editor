@@ -26,6 +26,9 @@ runs:
     - name: Check version match
       id: check_version
       shell: bash
+      env:
+        VERSION_FILE_PATH: ${{ inputs.version-file-path }}
+        ALLOW_DEV_SUFFIX: ${{ inputs.allow-dev-suffix }}
       run: |
         # Extract version from tag (remove 'v' prefix)
         TAG_VERSION=${GITHUB_REF#refs/tags/v}
@@ -33,13 +36,13 @@ runs:
         echo "tag_version=$TAG_VERSION" >> $GITHUB_OUTPUT
 
         # Read version from VERSION.txt
-        FILE_VERSION=$(cat ${{ inputs.version-file-path }} | tr -d '\n\r ')
+        FILE_VERSION=$(cat "${VERSION_FILE_PATH}" | tr -d '\n\r ')
         echo "File version: $FILE_VERSION"
         echo "file_version=$FILE_VERSION" >> $GITHUB_OUTPUT
 
         # Handle dev suffix if allowed
         COMPARE_TAG_VERSION="$TAG_VERSION"
-        if [ "${{ inputs.allow-dev-suffix }}" = "true" ]; then
+        if [ "${ALLOW_DEV_SUFFIX}" = "true" ]; then
           # Check if tag has -dev suffix
           if [[ "$TAG_VERSION" == *-dev ]]; then
             # Remove -dev suffix for comparison

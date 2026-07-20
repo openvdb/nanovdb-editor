@@ -22,7 +22,7 @@ jobs:
       checks: write
     steps:
       - name: Add reaction to comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             await github.rest.reactions.createForIssueComment({
@@ -32,7 +32,7 @@ jobs:
               content: 'rocket'
             });
 
-      - uses: estroz/rerun-actions@v0.3.0
+      - uses: estroz/rerun-actions@6da343594fa5cc0869523be9b43ed9256c68d39b # v0.3.0
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           comment_id: ${{ github.event.comment.id }}
@@ -53,7 +53,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Add reaction to comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             await github.rest.reactions.createForIssueComment({
@@ -65,7 +65,7 @@ jobs:
 
       - name: Get PR info
         id: pr-info
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const pr = await github.rest.pulls.get({
@@ -77,10 +77,12 @@ jobs:
             console.log(`PR branch: ${pr.data.head.ref}`);
 
       - name: Trigger all workflows
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          PR_REF: ${{ steps.pr-info.outputs.ref }}
         with:
           script: |
-            const ref = '${{ steps.pr-info.outputs.ref }}';
+            const ref = process.env.PR_REF;
             const workflows = [
               'build-and-test.yml',
               'build-and-test-python.yml',
@@ -174,7 +176,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Add reaction to comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             await github.rest.reactions.createForIssueComment({
@@ -186,7 +188,7 @@ jobs:
 
       - name: Get PR info
         id: pr-info
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const pr = await github.rest.pulls.get({
@@ -198,10 +200,12 @@ jobs:
             console.log(`PR branch: ${pr.data.head.ref}`);
 
       - name: Trigger requested workflow
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          PR_REF: ${{ steps.pr-info.outputs.ref }}
         with:
           script: |
-            const ref = '${{ steps.pr-info.outputs.ref }}';
+            const ref = process.env.PR_REF;
             const comment = context.payload.comment.body;
 
             const workflowMap = {

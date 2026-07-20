@@ -2,6 +2,11 @@ name: Build Wheels
 
 on:
   workflow_call:
+    secrets:
+      GHCR_PUSH_USERNAME:
+        required: false
+      GHCR_PUSH_TOKEN:
+        required: false
     inputs:
       is_dev:
         description: 'Whether to build as dev package (nanovdb-editor-dev) with -dev version suffix'
@@ -49,6 +54,11 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+  packages: read
+  actions: read
+
 jobs:
   validate_version:
     name: Validate tag version matches VERSION.txt
@@ -56,9 +66,10 @@ jobs:
     outputs:
       version_valid: ${{ steps.validate.outputs.version-valid || 'true' }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       with:
         submodules: recursive
+        persist-credentials: false
 
     - name: Validate version
       id: validate
@@ -75,7 +86,9 @@ jobs:
       image_tag: ${{ steps.resolve.outputs.image_tag }}
       image_name: ${{ steps.resolve.outputs.image_name }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        persist-credentials: false
 
     - name: Parse Slang version from CMake config
       id: resolve
@@ -182,20 +195,21 @@ jobs:
               CPM_SOURCE_CACHE=C:/cpm-cache
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       with:
         submodules: recursive
+        persist-credentials: false
 
     - name: Set up Python (ARM64)
       if: matrix.os == 'windows-11-arm'
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
       with:
         python-version: '3.11'
         architecture: arm64
 
     - name: Set up Python
       if: matrix.os != 'windows-11-arm'
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
       with:
         python-version: '3.11'
 
@@ -302,13 +316,13 @@ jobs:
 
     - name: Set up MSVC developer environment (Windows x64)
       if: matrix.os == 'windows-latest'
-      uses: ilammy/msvc-dev-cmd@v1
+      uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
       with:
         arch: x64
 
     - name: Build Linux wheels
       if: runner.os == 'Linux'
-      uses: pypa/cibuildwheel@v2.23.3
+      uses: pypa/cibuildwheel@faf86a6ed7efa889faf6996aa23820831055001a # v2.23.3
       env:
         CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_34_x86_64:latest
         CIBW_MANYLINUX_AARCH64_IMAGE: quay.io/pypa/manylinux_2_34_aarch64:latest
@@ -514,7 +528,7 @@ jobs:
 
     - name: Build macOS wheels
       if: runner.os == 'macOS'
-      uses: pypa/cibuildwheel@v2.23.3
+      uses: pypa/cibuildwheel@faf86a6ed7efa889faf6996aa23820831055001a # v2.23.3
       env:
         CIBW_ARCHS_MACOS: auto
       with:
@@ -522,13 +536,13 @@ jobs:
 
     - name: Install CMake and Ninja (Windows)
       if: runner.os == 'Windows'
-      uses: lukka/get-cmake@latest
+      uses: lukka/get-cmake@e6906078ebd1ccb8ce51ab4626ac46a1b5a517e3 # latest
       with:
         cmakeVersion: "3.31.6"
 
     - name: Build Windows wheels
       if: runner.os == 'Windows'
-      uses: pypa/cibuildwheel@v2.23.3
+      uses: pypa/cibuildwheel@faf86a6ed7efa889faf6996aa23820831055001a # v2.23.3
       env:
         CIBW_ARCHS_WINDOWS: ${{ matrix.os == 'windows-11-arm' && 'ARM64' || 'auto' }}
         # Windows dependencies
@@ -552,7 +566,7 @@ jobs:
         set -euo pipefail
         python scripts/ci/verify_windows_runtime.py wheel --dir wheelhouse
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: wheels-${{ matrix.os }}${{ matrix.arch && format('-{0}', matrix.arch) || '' }}
         path: ./wheelhouse/*.whl
@@ -568,9 +582,10 @@ jobs:
     # symbol usage.
     if: ${{ !cancelled() && !failure() && inputs.manage_slang_image && inputs.linux_x86_build_slang_from_source && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || needs.validate_version.outputs.version_valid == 'true') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.lookup_slang_image.outputs.exists != 'true' }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       with:
         submodules: recursive
+        persist-credentials: false
 
     - name: Build Slang libs in manylinux environment
       shell: bash
@@ -579,7 +594,7 @@ jobs:
         rm -rf slang-package
         mkdir -p slang-package/lib slang-package/include
 
-        SLANG_VERSION="${{ needs.resolve_slang_version.outputs.slang_version }}"
+        SLANG_VERSION="${NEEDS_RESOLVE_SLANG_VERSION_OUTPUTS_SLANG_VERSION}"
         LLVM_VERSION="$(python3 - <<'PY'
         import pathlib
         import re
@@ -742,8 +757,10 @@ jobs:
             print(f" - {name}")
         PY
         BASH
+      env:
+        NEEDS_RESOLVE_SLANG_VERSION_OUTPUTS_SLANG_VERSION: ${{ needs.resolve_slang_version.outputs.slang_version }}
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: slang-libs-ubuntu-latest-x86_64
         path: slang-package
@@ -762,7 +779,9 @@ jobs:
       image_name: ${{ needs.resolve_slang_version.outputs.image_name }}
       libs_artifact: slang-libs-ubuntu-latest-x86_64
       image_tag: ${{ needs.resolve_slang_version.outputs.image_tag }}
-    secrets: inherit
+    secrets:
+      GHCR_PUSH_USERNAME: ${{ secrets.GHCR_PUSH_USERNAME }}
+      GHCR_PUSH_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN }}
 
   build_linux_x86_wheel:
     name: Build (ubuntu-latest x86_64 ${{ matrix.wheel_tag }})
@@ -785,12 +804,13 @@ jobs:
             slang_build_from_source: false
             slang_manage_image: false
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       with:
         submodules: recursive
+        persist-credentials: false
 
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
       with:
         python-version: '3.11'
 
@@ -807,11 +827,16 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
-        echo "Slang version: ${{ needs.resolve_slang_version.outputs.slang_version }}"
-        echo "Slang image tag: ${{ needs.resolve_slang_version.outputs.image_tag }}"
-        echo "Slang image ref: ${{ needs.lookup_slang_image.outputs.image_ref }}"
-        echo "Lookup result: ${{ needs.lookup_slang_image.outputs.exists }}"
+        echo "Slang version: ${NEEDS_RESOLVE_SLANG_VERSION_OUTPUTS_SLANG_VERSION}"
+        echo "Slang image tag: ${NEEDS_RESOLVE_SLANG_VERSION_OUTPUTS_IMAGE_TAG}"
+        echo "Slang image ref: ${NEEDS_LOOKUP_SLANG_IMAGE_OUTPUTS_IMAGE_REF}"
+        echo "Lookup result: ${NEEDS_LOOKUP_SLANG_IMAGE_OUTPUTS_EXISTS}"
         echo "Publish result: ${{ needs.publish_slang_image.result }}"
+      env:
+        NEEDS_RESOLVE_SLANG_VERSION_OUTPUTS_SLANG_VERSION: ${{ needs.resolve_slang_version.outputs.slang_version }}
+        NEEDS_RESOLVE_SLANG_VERSION_OUTPUTS_IMAGE_TAG: ${{ needs.resolve_slang_version.outputs.image_tag }}
+        NEEDS_LOOKUP_SLANG_IMAGE_OUTPUTS_IMAGE_REF: ${{ needs.lookup_slang_image.outputs.image_ref }}
+        NEEDS_LOOKUP_SLANG_IMAGE_OUTPUTS_EXISTS: ${{ needs.lookup_slang_image.outputs.exists }}
 
     - name: Decide whether to build Linux x86_64 wheel
       id: linux_x86_gate
@@ -839,9 +864,10 @@ jobs:
       env:
         GHCR_USER: ${{ secrets.GHCR_PUSH_USERNAME }}
         GHCR_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN }}
+        NEEDS_LOOKUP_SLANG_IMAGE_OUTPUTS_IMAGE_REF: ${{ needs.lookup_slang_image.outputs.image_ref }}
       run: |
         set -euo pipefail
-        IMAGE_REF="${{ needs.lookup_slang_image.outputs.image_ref }}"
+        IMAGE_REF="${NEEDS_LOOKUP_SLANG_IMAGE_OUTPUTS_IMAGE_REF}"
         LOCAL_ROOT_DIR="${GITHUB_WORKSPACE}/.ci/slang-image"
         LOCAL_LIB_DIR="${LOCAL_ROOT_DIR}/lib"
         LOCAL_INCLUDE_DIR="${LOCAL_ROOT_DIR}/include"
@@ -882,7 +908,7 @@ jobs:
 
     - name: Build Linux x86_64 wheel
       if: ${{ steps.linux_x86_gate.outputs.should_build == 'true' }}
-      uses: pypa/cibuildwheel@v2.23.3
+      uses: pypa/cibuildwheel@faf86a6ed7efa889faf6996aa23820831055001a # v2.23.3
       env:
         CIBW_BUILD: cp311-manylinux_x86_64
         CIBW_MANYLINUX_X86_64_IMAGE: ${{ matrix.build_image }}
@@ -1122,7 +1148,7 @@ jobs:
         "${TEST_VENV}/bin/python" -m pip install numpy ./wheelhouse/nanovdb_editor*.whl
         "${TEST_VENV}/bin/python" -c "import nanovdb_editor; print('Import successful')"
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       if: ${{ steps.linux_x86_gate.outputs.should_build == 'true' }}
       with:
         name: wheels-ubuntu-latest-x86_64-${{ matrix.wheel_tag }}
@@ -1138,7 +1164,6 @@ jobs:
       fvdb_nightly: false
       upstream_test_ref: release
       wheel_artifact: wheels-ubuntu-latest-x86_64-manylinux_2_27_x86_64
-    secrets: inherit
 
   fvdb-viz-integration-nightly:
     name: fVDB Integration (nightly)
@@ -1150,7 +1175,6 @@ jobs:
       fvdb_nightly: true
       upstream_test_ref: main
       wheel_artifact: wheels-ubuntu-latest-x86_64-manylinux_2_27_x86_64
-    secrets: inherit
 
 
   build_sdist:
@@ -1159,12 +1183,13 @@ jobs:
     needs: [validate_version]
     if: ${{ !failure() && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || needs.validate_version.outputs.version_valid == 'true') }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       with:
         submodules: recursive
+        persist-credentials: false
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@7f4fc3e22c37d6ff65e88745f38bd3157c663f7c # v4
       with:
         python-version: '3.11'
 
@@ -1179,7 +1204,7 @@ jobs:
       run: pipx run build --sdist
       working-directory: pymodule
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: sdist
         path: pymodule/dist/*.tar.gz

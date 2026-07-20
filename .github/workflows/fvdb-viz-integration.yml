@@ -75,7 +75,7 @@ jobs:
         id: config
         run: |
           set -euo pipefail
-          stream="${{ inputs.package }}"
+          stream="${INPUTS_PACKAGE}"
           stream="${stream,,}"
           if [[ -z "$stream" ]]; then
             stream="release"
@@ -85,16 +85,21 @@ jobs:
             exit 1
           fi
           use_local="false"
-          if [[ "${{ inputs.wheel_artifact }}" != "" ]]; then
+          if [[ "${INPUTS_WHEEL_ARTIFACT}" != "" ]]; then
             use_local="true"
           fi
           {
             echo "package_stream=$stream"
             echo "use_local=$use_local"
           } >> "$GITHUB_OUTPUT"
+        env:
+          INPUTS_PACKAGE: ${{ inputs.package }}
+          INPUTS_WHEEL_ARTIFACT: ${{ inputs.wheel_artifact }}
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Export fvdb defaults
         run: |
@@ -114,7 +119,7 @@ jobs:
 
       - name: Download wheel artifact
         if: ${{ inputs.wheel_artifact != '' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ inputs.wheel_artifact }}
           path: pymodule/dist
@@ -142,18 +147,23 @@ jobs:
         run: |
           set -euo pipefail
 
-          SCRIPT_ARGS=("--stream" "${{ steps.config.outputs.package_stream }}")
+          SCRIPT_ARGS=("--stream" "${STEPS_CONFIG_OUTPUTS_PACKAGE_STREAM}")
 
-          if [[ "${{ steps.config.outputs.use_local }}" == "true" ]]; then
-            SCRIPT_ARGS+=("--local-wheel" "${{ steps.local_wheel.outputs.host_path }}")
+          if [[ "${STEPS_CONFIG_OUTPUTS_USE_LOCAL}" == "true" ]]; then
+            SCRIPT_ARGS+=("--local-wheel" "${STEPS_LOCAL_WHEEL_OUTPUTS_HOST_PATH}")
           fi
 
           if [[ "${{ inputs.fvdb_nightly }}" == "true" ]]; then
             SCRIPT_ARGS+=("--fvdb-nightly")
           fi
 
-          if [[ -n "${{ inputs.upstream_test_ref }}" ]]; then
-            SCRIPT_ARGS+=("--upstream-test-ref" "${{ inputs.upstream_test_ref }}")
+          if [[ -n "${INPUTS_UPSTREAM_TEST_REF}" ]]; then
+            SCRIPT_ARGS+=("--upstream-test-ref" "${INPUTS_UPSTREAM_TEST_REF}")
           fi
 
           ./scripts/run_fvdb_viz_integration.sh "${SCRIPT_ARGS[@]}"
+        env:
+          STEPS_CONFIG_OUTPUTS_PACKAGE_STREAM: ${{ steps.config.outputs.package_stream }}
+          STEPS_CONFIG_OUTPUTS_USE_LOCAL: ${{ steps.config.outputs.use_local }}
+          STEPS_LOCAL_WHEEL_OUTPUTS_HOST_PATH: ${{ steps.local_wheel.outputs.host_path }}
+          INPUTS_UPSTREAM_TEST_REF: ${{ inputs.upstream_test_ref }}

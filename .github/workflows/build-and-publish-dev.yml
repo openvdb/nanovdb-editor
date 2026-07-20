@@ -18,7 +18,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
   actions: read
 
 jobs:
@@ -28,11 +27,17 @@ jobs:
   build:
     name: Build wheels and sdist
     if: ${{ !inputs.skip_build }}
+    permissions:
+      contents: read
+      packages: write
+      actions: read
     uses: ./.github/workflows/build-wheels.yml
     with:
       is_dev: true
       linux_x86_build_slang_from_source: false
-    secrets: inherit
+    secrets:
+      GHCR_PUSH_USERNAME: ${{ secrets.GHCR_PUSH_USERNAME }}
+      GHCR_PUSH_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN }}
 
   # Dev package upload - publishes to production PyPI with -dev package name
   upload_pypi_dev:
@@ -42,13 +47,13 @@ jobs:
     if: ${{ !cancelled() && ((github.event_name == 'push' && endsWith(github.ref, '-dev')) || github.event_name == 'workflow_dispatch') && (inputs.skip_build || needs.build.outputs.version_valid == 'true') }}
 
     steps:
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
       with:
         pattern: "*"
         merge-multiple: true
         path: dist/
 
-    - uses: pypa/gh-action-pypi-publish@release/v1
+    - uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # release/v1
       with:
         password: ${{ secrets.PYPI_API_TOKEN }}
         verbose: true
@@ -67,4 +72,3 @@ jobs:
     uses: ./.github/workflows/fvdb-viz-integration.yml
     with:
       package: dev
-    secrets: inherit

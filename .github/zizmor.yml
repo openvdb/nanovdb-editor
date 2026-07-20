@@ -1,0 +1,7 @@
+# Central zizmor policy for GitHub Actions workflows and composite actions.
+# Discovered automatically when scanning paths under .github/.
+# See https://docs.zizmor.sh/configuration/
+rules:
+  # PyPI/TestPyPI still use API tokens. Migrate to OIDC trusted publishing separately.
+  use-trusted-publishing:
+    disable: true
