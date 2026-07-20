@@ -1,9 +1,17 @@
+#!/usr/bin/env bash
 # Copyright Contributors to the OpenVDB Project
 # SPDX-License-Identifier: Apache-2.0
 
-#!/bin/bash
+set -euo pipefail
 
-# Find all relevant source files, excluding build directories and gitignored paths, and format them with clang-format
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+cd "${REPO_ROOT}"
+echo "Running formatters from ${REPO_ROOT}"
+
+echo ""
+echo "==> clang-format (C/C++)"
 find . -type f \
     \( -name "*.c" \
     -o -name "*.cpp" \
@@ -19,21 +27,13 @@ find . -type f \
     -not -path "*/*.egg-info/*" \
     -print0 | xargs -0 clang-format -i --verbose
 
-echo "Running black on Python files..."
+echo ""
+echo "==> black (Python)"
 python -m black ./pymodule ./pytests --verbose --target-version=py311 --line-length=120 --extend-exclude='_skbuild|dist|\.egg-info'
 
-echo "Formatting YAML files (removing trailing whitespace)..."
-# Determine a portable in-place editing flag for sed (GNU vs BSD/macOS)
-if sed --version >/dev/null 2>&1; then
-    SED_INPLACE=(-i)
-else
-    SED_INPLACE=(-i '')
-fi
-find .github -type f -name "*.yml" -print0 | xargs -0 -I {} sed "${SED_INPLACE[@]}" 's/[[:space:]]*$//' "{}"
+echo ""
+echo "==> fix_whitespace (trailing spaces and tabs)"
+python dev_utils/fix_whitespace.py .
 
-if command -v yamllint &> /dev/null; then
-    echo "Running yamllint on YAML files..."
-    yamllint -d relaxed .github/workflows/*.yml || true
-else
-    echo "yamllint not found, skipping YAML lint (install with: pip install yamllint)"
-fi
+echo ""
+echo "All formatting complete."

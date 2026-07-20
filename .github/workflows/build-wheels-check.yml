@@ -43,4 +43,6 @@ jobs:
       is_dev: false
       linux_x86_build_slang_from_source: false
       run_fvdb_viz_integration: true
-    secrets: inherit
+    secrets:
+      GHCR_PUSH_USERNAME: ${{ secrets.GHCR_PUSH_USERNAME }}
+      GHCR_PUSH_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN }}

@@ -26,8 +26,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
-  deployments: write
+  contents: read
   pull-requests: read
   issues: read
   packages: read
@@ -42,10 +41,12 @@ jobs:
         shell: bash -el {0}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.11'
 
@@ -62,7 +63,7 @@ jobs:
           ./build.sh -pv
 
       - name: Upload python artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nanovdb-editor-wheel
           path: |
@@ -110,10 +111,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Download wheel artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: nanovdb-editor-wheel
           path: ./pymodule/dist
@@ -164,10 +167,12 @@ jobs:
         shell: bash -el {0}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Conda env
-        uses: conda-incubator/setup-miniconda@v3
+        uses: conda-incubator/setup-miniconda@fc2d68f6413eb2d87b895e92f8584b5b94a10167 # v3
         with:
           miniforge-version: latest
           conda-remove-defaults: "true"
@@ -181,7 +186,7 @@ jobs:
           sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
 
       - name: Download package with nanovdb_editor
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: nanovdb-editor-wheel
           path: ./dist
@@ -204,10 +209,12 @@ jobs:
         shell: bash -el {0}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.11'
 
@@ -221,7 +228,7 @@ jobs:
           ./build.sh -pv
 
       - name: Upload python artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nanovdb-editor-wheel-macos
           path: |
@@ -237,10 +244,12 @@ jobs:
         shell: bash -el {0}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Conda env
-        uses: conda-incubator/setup-miniconda@v3
+        uses: conda-incubator/setup-miniconda@fc2d68f6413eb2d87b895e92f8584b5b94a10167 # v3
         with:
           miniforge-version: latest
           conda-remove-defaults: "true"
@@ -278,7 +287,7 @@ jobs:
           echo "DYLD_FALLBACK_LIBRARY_PATH=${BREW_PREFIX}/lib:${DYLD_FALLBACK_LIBRARY_PATH:-}" >> "${GITHUB_ENV}"
 
       - name: Download package with nanovdb_editor
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: nanovdb-editor-wheel-macos
           path: ./dist
@@ -306,10 +315,12 @@ jobs:
         shell: pwsh
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.11'
 
@@ -325,7 +336,7 @@ jobs:
           ./build.bat -pfv
 
       - name: Upload python artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nanovdb-editor-wheel-windows
           path: |
@@ -343,10 +354,12 @@ jobs:
         shell: bash -el {0}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Conda env
-        uses: conda-incubator/setup-miniconda@v3
+        uses: conda-incubator/setup-miniconda@fc2d68f6413eb2d87b895e92f8584b5b94a10167 # v3
         with:
           miniforge-version: latest
           conda-remove-defaults: "true"
@@ -428,7 +441,7 @@ jobs:
         shell: pwsh
 
       - name: Download package with nanovdb_editor
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: nanovdb-editor-wheel-windows
           path: ./dist
@@ -468,10 +481,12 @@ jobs:
         shell: pwsh
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.11'
           architecture: 'arm64'
@@ -488,7 +503,7 @@ jobs:
           ./build.bat -pfv
 
       - name: Upload python artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nanovdb-editor-wheel-windows-arm64
           path: |
@@ -506,10 +521,12 @@ jobs:
         shell: pwsh
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.11'
           architecture: 'arm64'
@@ -648,7 +665,7 @@ jobs:
           $MesaBinPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Download package with nanovdb_editor
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: nanovdb-editor-wheel-windows-arm64
           path: ./dist
@@ -690,10 +707,12 @@ jobs:
         shell: bash -el {0}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.11'
 
@@ -710,7 +729,7 @@ jobs:
           ./build.sh -pv
 
       - name: Upload python artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nanovdb-editor-wheel-linux-arm64
           path: |
@@ -727,10 +746,12 @@ jobs:
         shell: bash -el {0}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.11'
 
@@ -740,7 +761,7 @@ jobs:
           sudo apt-get -o Acquire::Retries=5 -o Acquire::ForceIPv4=true install -y mesa-vulkan-drivers vulkan-tools
 
       - name: Download wheel artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: nanovdb-editor-wheel-linux-arm64
           path: ./dist
