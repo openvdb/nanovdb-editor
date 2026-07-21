@@ -896,7 +896,7 @@ bool EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,
                              return add_gaussian_data_impl(scene, name, gaussian_data, params_array,
                                                            shader_params_data_type, compute, raster, queue, shader_name,
                                                            pnanovdb_pipeline_type_noop,
-                                                           pnanovdb_pipeline_type_gaussian_splat, old_owner_out);
+                                                           pnanovdb_pipeline_type_gaussian_splat, false, old_owner_out);
                          });
 }
 
@@ -919,7 +919,7 @@ bool EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,
                          {
                              return add_gaussian_data_impl(scene, name, gaussian_data, params_array,
                                                            shader_params_data_type, compute, raster, queue, shader_name,
-                                                           process_pipeline, render_pipeline, old_owner_out);
+                                                           process_pipeline, render_pipeline, true, old_owner_out);
                          });
 }
 
@@ -942,7 +942,7 @@ bool EditorSceneManager::commit_reserved_gaussian_data(pnanovdb_editor_token_t* 
                          {
                              return add_gaussian_data_impl(scene, name, gaussian_data, params_array,
                                                            shader_params_data_type, compute, raster, queue, shader_name,
-                                                           process_pipeline, render_pipeline, old_owner_out);
+                                                           process_pipeline, render_pipeline, false, old_owner_out);
                          });
 }
 
@@ -957,6 +957,7 @@ bool EditorSceneManager::add_gaussian_data_impl(pnanovdb_editor_token_t* scene,
                                                 const char* shader_name,
                                                 pnanovdb_pipeline_type_t process_pipeline,
                                                 pnanovdb_pipeline_type_t render_pipeline,
+                                                bool force_pipelines,
                                                 std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_owner_out)
 {
     // NOTE: Caller must hold m_mutex
@@ -986,8 +987,16 @@ bool EditorSceneManager::add_gaussian_data_impl(pnanovdb_editor_token_t* scene,
     obj.shader_params_data_type() = shader_params_data_type;
     obj.shader_name() = EditorToken::getInstance().getToken(shader_name);
 
-    apply_default_stage(obj.pipeline.process(), process_pipeline);
-    apply_default_stage(obj.pipeline.render(), render_pipeline);
+    if (force_pipelines)
+    {
+        force_configured_stage(obj.pipeline.process(), process_pipeline, process_pipeline != pnanovdb_pipeline_type_noop);
+        force_configured_stage(obj.pipeline.render(), render_pipeline, false);
+    }
+    else
+    {
+        apply_default_stage(obj.pipeline.process(), process_pipeline);
+        apply_default_stage(obj.pipeline.render(), render_pipeline);
+    }
     obj.mark_process_dirty();
     restore_replacement_state(obj, replacement);
 

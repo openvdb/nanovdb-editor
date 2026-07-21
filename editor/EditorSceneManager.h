@@ -675,6 +675,7 @@ private:
                                 const char* shader_name,
                                 pnanovdb_pipeline_type_t process_pipeline,
                                 pnanovdb_pipeline_type_t render_pipeline,
+                                bool force_pipelines,
                                 std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_owner_out);
 
     bool load_reservation_matches(uint64_t key, uint64_t lifetime_id) const;
