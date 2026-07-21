@@ -11,7 +11,9 @@
 
 #include <nanovdb/tools/CreatePrimitives.h>
 
+#include <atomic>
 #include <chrono>
+#include <memory>
 #include <thread>
 
 TEST(NanoVDBEditor, EditorStartStopHeadlessStreaming)
@@ -135,4 +137,34 @@ TEST(NanoVDBEditor, ShutdownFromRenderThreadDefersTeardown)
 
     pnanovdb_compute_free(&compute);
     pnanovdb_compiler_free(&compiler);
+}
+
+TEST(NanoVDBEditor, WorkerRestartUsesFreshTaskQueueState)
+{
+    using pnanovdb_editor::EditorWorker;
+
+    // First lifecycle: queue accepts and runs work when the (modelled) render loop drains.
+    auto worker_a = std::make_shared<EditorWorker>();
+    std::atomic<int> a_runs{ 0 };
+    worker_a->render_thread_tasks.run_async([&a_runs]() { a_runs.fetch_add(1, std::memory_order_relaxed); });
+    worker_a->render_thread_tasks.drain();
+    EXPECT_EQ(a_runs.load(std::memory_order_relaxed), 1);
+
+    // Teardown mirrors stop(): signal stop, then close the queue.
+    worker_a->should_stop.store(true);
+    worker_a->render_thread_tasks.close();
+    worker_a->render_thread_tasks.run_async([&a_runs]() { a_runs.fetch_add(1, std::memory_order_relaxed); });
+    worker_a->render_thread_tasks.drain();
+    EXPECT_EQ(a_runs.load(std::memory_order_relaxed), 1) << "a closed worker queue must not run new work";
+    worker_a.reset();
+
+    // Restart: a brand-new worker starts clean, with no residue from the previous lifecycle.
+    auto worker_b = std::make_shared<EditorWorker>();
+    EXPECT_FALSE(worker_b->should_stop.load()) << "restarted worker must not inherit stop state";
+    EXPECT_TRUE(worker_b->is_starting.load()) << "restarted worker must begin in the starting state";
+    std::atomic<int> b_runs{ 0 };
+    worker_b->render_thread_tasks.run_async([&b_runs]() { b_runs.fetch_add(1, std::memory_order_relaxed); });
+    worker_b->render_thread_tasks.drain();
+    EXPECT_EQ(b_runs.load(std::memory_order_relaxed), 1)
+        << "restarted worker's queue must accept and run work independent of the closed one";
 }

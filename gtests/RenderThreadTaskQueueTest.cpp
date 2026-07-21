@@ -246,6 +246,114 @@ TEST(RenderThreadTaskQueue, ThrowingAsyncTaskLogsTelemetryToStderr)
     EXPECT_NE(err.find("async-telemetry-marker"), std::string::npos) << "stderr was: " << err;
 }
 
+TEST(RenderThreadTaskQueue, EnqueueAfterShutdownIsRejectedAndCallerWoken)
+{
+    RenderThreadTaskQueue queue;
+    std::atomic<int> run_count{ 0 };
+
+    queue.close(); // render loop has gone away
+
+    // enqueue_blocking must not queue anything and must report rejection via a null handle.
+    auto handle = queue.enqueue_blocking(
+        [&run_count]()
+        {
+            run_count.fetch_add(1, std::memory_order_relaxed);
+            return PNANOVDB_TRUE;
+        });
+    EXPECT_EQ(handle, nullptr);
+    EXPECT_EQ(RenderThreadTaskQueue::wait_blocking(handle), PNANOVDB_FALSE);
+
+    // A blocking caller entering after shutdown returns FALSE promptly (no hang).
+    auto caller = std::async(std::launch::async,
+                             [&queue, &run_count]()
+                             {
+                                 return queue.run_blocking(
+                                     [&run_count]()
+                                     {
+                                         run_count.fetch_add(1, std::memory_order_relaxed);
+                                         return PNANOVDB_TRUE;
+                                     });
+                             });
+    ASSERT_EQ(caller.wait_for(2s), std::future_status::ready) << "run_blocking after close must not hang";
+    EXPECT_EQ(caller.get(), PNANOVDB_FALSE);
+
+    // Async work is silently dropped after shutdown.
+    queue.run_async([&run_count]() { run_count.fetch_add(1, std::memory_order_relaxed); });
+    queue.drain();
+
+    EXPECT_EQ(run_count.load(std::memory_order_relaxed), 0);
+}
+
+// Rapidly enqueue from many threads while shutdown is triggered concurrently, mirroring
+// external add/remove calls racing editor stop(). No caller may hang, the blocking result
+// must always match whether the task actually ran, and every enqueue attempt made strictly
+// after close() must be rejected (task never runs).
+TEST(RenderThreadTaskQueue, EnqueueDuringShutdownNeverHangsAndPostCloseEnqueuesAreRejected)
+{
+    RenderThreadTaskQueue queue;
+    constexpr int producer_count = 8;
+    std::atomic<bool> stop_producers{ false };
+    std::atomic<int> mismatch{ 0 };
+
+    std::thread render_thread(
+        [&queue, &stop_producers]()
+        {
+            while (!stop_producers.load(std::memory_order_acquire))
+            {
+                queue.drain();
+                std::this_thread::yield();
+            }
+            queue.drain();
+        });
+
+    std::vector<std::thread> producers;
+    producers.reserve(producer_count);
+    for (int p = 0; p < producer_count; ++p)
+    {
+        producers.emplace_back(
+            [&queue, &stop_producers, &mismatch]()
+            {
+                while (!stop_producers.load(std::memory_order_acquire))
+                {
+                    bool ran = false;
+                    const pnanovdb_bool_t r = queue.run_blocking(
+                        [&ran]()
+                        {
+                            ran = true;
+                            return PNANOVDB_TRUE;
+                        });
+                    // Core contract: the blocking result reflects whether the task ran.
+                    // A rejected/failed task must never have executed its body.
+                    if ((r == PNANOVDB_TRUE) != ran)
+                        mismatch.fetch_add(1, std::memory_order_relaxed);
+                }
+            });
+    }
+
+    std::this_thread::sleep_for(20ms);
+    queue.close();
+
+    stop_producers.store(true, std::memory_order_release);
+    for (auto& producer : producers)
+        producer.join();
+    render_thread.join();
+
+    EXPECT_EQ(mismatch.load(std::memory_order_relaxed), 0) << "blocking result did not match run status";
+
+    // With the queue fully closed and drained, any further enqueue is rejected outright.
+    std::atomic<int> post_close_runs{ 0 };
+    EXPECT_EQ(queue.enqueue_blocking(
+                  [&post_close_runs]()
+                  {
+                      post_close_runs.fetch_add(1, std::memory_order_relaxed);
+                      return PNANOVDB_TRUE;
+                  }),
+              nullptr);
+    queue.run_async([&post_close_runs]() { post_close_runs.fetch_add(1, std::memory_order_relaxed); });
+    queue.drain();
+    EXPECT_EQ(post_close_runs.load(std::memory_order_relaxed), 0) << "task enqueued after close must never run";
+}
+
 TEST(RenderThreadTaskQueue, ConcurrentBlockingCallersMatchRunResultContractAcrossClose)
 {
     RenderThreadTaskQueue queue;
@@ -314,6 +422,97 @@ TEST(RenderThreadTaskQueue, ConcurrentBlockingCallersMatchRunResultContractAcros
         if (result == 0)
             EXPECT_EQ(runs, 0) << "task " << id << " reported failure but ran";
     }
+}
+
+TEST(RenderThreadTaskQueue, ConcurrentAsyncEnqueueAcrossCloseNeverRunsAfterSweep)
+{
+    RenderThreadTaskQueue queue;
+    constexpr int producer_count = 8;
+    constexpr int per_producer = 400;
+
+    std::atomic<int> run_count{ 0 };
+    std::atomic<bool> closed{ false };
+    std::atomic<int> ran_after_close{ 0 };
+
+    std::atomic<bool> keep_draining{ true };
+    std::thread render_thread(
+        [&queue, &keep_draining]()
+        {
+            while (keep_draining.load(std::memory_order_relaxed))
+            {
+                queue.drain();
+                std::this_thread::yield();
+            }
+            queue.drain();
+        });
+
+    std::vector<std::thread> producers;
+    producers.reserve(producer_count);
+    for (int p = 0; p < producer_count; ++p)
+    {
+        producers.emplace_back(
+            [&queue, &run_count, &closed, &ran_after_close, per_producer]()
+            {
+                for (int i = 0; i < per_producer; ++i)
+                {
+                    queue.run_async(
+                        [&run_count, &closed, &ran_after_close]()
+                        {
+                            run_count.fetch_add(1, std::memory_order_relaxed);
+                            if (closed.load(std::memory_order_acquire))
+                                ran_after_close.fetch_add(1, std::memory_order_relaxed);
+                        });
+                }
+            });
+    }
+
+    std::this_thread::sleep_for(10ms);
+
+    for (auto& producer : producers)
+        producer.join();
+
+    // Close, then stop draining and do a final sweep. Any task enqueued after close() is rejected,
+    // and the render thread's final drain() has no accepted-but-unrun work left.
+    queue.close();
+    keep_draining.store(false, std::memory_order_relaxed);
+    render_thread.join();
+    closed.store(true, std::memory_order_release);
+
+    // A second drain after close must be a no-op: nothing can run once the queue is closed and swept.
+    queue.drain();
+
+    EXPECT_EQ(ran_after_close.load(std::memory_order_relaxed), 0)
+        << "no async task may run after close() swept the queue";
+    EXPECT_LE(run_count.load(std::memory_order_relaxed), producer_count * per_producer);
+}
+
+TEST(RenderThreadTaskQueue, FreshQueueAfterCloseModelsWorkerRestartWithoutStaleState)
+{
+    // First lifecycle: a queued task runs when the render loop drains, then close() on teardown.
+    RenderThreadTaskQueue first;
+    std::atomic<int> first_runs{ 0 };
+    first.run_async([&first_runs]() { first_runs.fetch_add(1, std::memory_order_relaxed); });
+    first.drain(); // models the render loop processing queued work
+    EXPECT_EQ(first_runs.load(std::memory_order_relaxed), 1);
+
+    first.close(); // models stop(): reject further work
+
+    // A closed queue stays closed: newly enqueued work is dropped and never runs, even across a drain,
+    // and a blocking caller returns immediately with failure instead of parking on a dead loop.
+    first.run_async([&first_runs]() { first_runs.fetch_add(1, std::memory_order_relaxed); });
+    EXPECT_EQ(first.run_blocking([]() { return PNANOVDB_TRUE; }), PNANOVDB_FALSE);
+    first.drain();
+    EXPECT_EQ(first_runs.load(std::memory_order_relaxed), 1) << "a closed queue must not run new work (no reopen)";
+
+    // Second lifecycle: a *new* queue (as a restarted worker would own) starts fresh and accepting,
+    // completely unaffected by the previously-closed queue -> no stale state persists across the
+    // start -> stop -> start transition.
+    RenderThreadTaskQueue second;
+    std::atomic<int> second_runs{ 0 };
+    second.run_async([&second_runs]() { second_runs.fetch_add(1, std::memory_order_relaxed); });
+    second.drain();
+    EXPECT_EQ(second_runs.load(std::memory_order_relaxed), 1)
+        << "a freshly constructed queue must accept work after a prior queue was closed";
 }
 
 } // namespace

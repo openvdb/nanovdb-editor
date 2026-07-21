@@ -54,6 +54,7 @@ ConfigureTest(ShaderCompileCpuTest ShaderCompileCpuTest.cpp)
 ConfigureTest(FileFormatTest FileFormatTest.cpp)
 ConfigureTest(EditorStartStopTest EditorStartStopTest.cpp)
 ConfigureTest(RenderThreadTaskQueueTest RenderThreadTaskQueueTest.cpp)
+ConfigureTest(EditorRapidAddRemoveTest EditorRapidAddRemoveTest.cpp GpuTestSupport.cpp)
 ConfigureTest(EditorHeadlessNonStreamingTest EditorHeadlessNonStreamingTest.cpp)
 ConfigureTest(EditorViewportCameraSyncTest
   EditorViewportCameraSyncTest.cpp

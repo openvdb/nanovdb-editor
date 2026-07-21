@@ -1114,6 +1114,15 @@ void stop(pnanovdb_editor_t* editor)
     if (!editor || !editor->impl)
         return;
 
+    // Deterministic teardown ordering (prevents use-after-free on scene/task resources):
+    //   1. stop_lock serializes concurrent stop()/shutdown() callers so the sequence below
+    //      runs exactly once at a time.
+    //   2. Signal stop (should_stop) so the render loop exits after its current frame.
+    //   3. close() the task queue: reject any newly enqueued tasks and fail/wake every
+    //      blocking caller (so no external thread stays parked waiting on the dying loop).
+    //   4. join() the spawned render thread, guaranteeing it has fully drained/exited and is
+    //      no longer touching scene/task state, BEFORE we drop the worker pointer.
+    // Steps 2-3 happen under the lifecycle lock so enqueue()/close() cannot interleave.
     std::lock_guard<std::mutex> stop_lock(editor->impl->editor_worker_stop_mutex);
     std::shared_ptr<EditorWorker> editor_worker;
     {
@@ -1121,17 +1130,19 @@ void stop(pnanovdb_editor_t* editor)
         editor_worker = editor->impl->editor_worker;
         if (!editor_worker)
             return;
-        editor_worker->should_stop.store(true);
-        editor_worker->render_thread_tasks.close();
+        editor_worker->should_stop.store(true); // (2) signal stop
+        editor_worker->render_thread_tasks.close(); // (3) reject new tasks + drain/fail waiters
     }
 
     if (editor_worker->spawned)
     {
         if (editor_worker->thread->get_id() == std::this_thread::get_id())
         {
+            // A task running on the render thread asked to stop itself; it cannot join
+            // its own thread. The loop will observe should_stop and tear itself down.
             return;
         }
-        editor_worker->thread->join();
+        editor_worker->thread->join(); // (4) render thread fully exited before pointer drop
         delete editor_worker->thread;
         editor_worker->thread = nullptr;
 
