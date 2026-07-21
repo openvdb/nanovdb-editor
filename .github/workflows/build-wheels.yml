@@ -66,7 +66,7 @@ jobs:
     outputs:
       version_valid: ${{ steps.validate.outputs.version-valid || 'true' }}
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       with:
         submodules: recursive
         persist-credentials: false
@@ -86,7 +86,7 @@ jobs:
       image_tag: ${{ steps.resolve.outputs.image_tag }}
       image_name: ${{ steps.resolve.outputs.image_name }}
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       with:
         persist-credentials: false
 
@@ -197,7 +197,7 @@ jobs:
               CPM_SOURCE_CACHE=C:/cpm-cache
 
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       with:
         submodules: recursive
         persist-credentials: false
@@ -584,7 +584,7 @@ jobs:
     # symbol usage.
     if: ${{ !cancelled() && !failure() && inputs.manage_slang_image && inputs.linux_x86_build_slang_from_source && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || needs.validate_version.outputs.version_valid == 'true') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.lookup_slang_image.outputs.exists != 'true' }}
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       with:
         submodules: recursive
         persist-credentials: false
@@ -806,7 +806,7 @@ jobs:
             slang_build_from_source: false
             slang_manage_image: false
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       with:
         submodules: recursive
         persist-credentials: false
@@ -1185,7 +1185,7 @@ jobs:
     needs: [validate_version]
     if: ${{ !failure() && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || needs.validate_version.outputs.version_valid == 'true') }}
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       with:
         submodules: recursive
         persist-credentials: false
