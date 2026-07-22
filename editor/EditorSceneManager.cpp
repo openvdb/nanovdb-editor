@@ -212,19 +212,21 @@ pnanovdb_compute_array_t* EditorSceneManager::create_params_array(const pnanovdb
     return compute->create_array(element_size, 1u, default_value);
 }
 
-pnanovdb_compute_array_t* EditorSceneManager::create_initialized_shader_params(
-    const pnanovdb_compute_t* compute,
-    const char* shader_name,
-    const char* shader_group,
-    size_t fallback_size,
-    const pnanovdb_reflect_data_type_t* fallback_data_type)
+namespace
+{
+pnanovdb_compute_array_t* build_initialized_shader_params(ShaderParams& shader_params,
+                                                          const pnanovdb_compute_t* compute,
+                                                          const char* shader_name,
+                                                          const char* shader_group,
+                                                          size_t fallback_size,
+                                                          const pnanovdb_reflect_data_type_t* fallback_data_type)
 {
     if (!compute)
     {
         return nullptr;
     }
 
-    // Ensure JSON with default is loaded from our own shader_params
+    // Ensure JSON with default is loaded
     if (shader_group)
     {
         shader_params.loadGroup(shader_group, false);
@@ -245,10 +247,37 @@ pnanovdb_compute_array_t* EditorSceneManager::create_initialized_shader_params(
     // Fallback to empty/default params if JSON not loaded
     if (!params_array)
     {
-        params_array = create_params_array(compute, fallback_data_type, fallback_size);
+        params_array = EditorSceneManager::create_params_array(compute, fallback_data_type, fallback_size);
     }
 
     return params_array;
+}
+} // namespace
+
+pnanovdb_compute_array_t* EditorSceneManager::create_initialized_shader_params(
+    const pnanovdb_compute_t* compute,
+    const char* shader_name,
+    const char* shader_group,
+    size_t fallback_size,
+    const pnanovdb_reflect_data_type_t* fallback_data_type)
+{
+    // Uses the shared, mutex-protected shader_params instance (render-thread callers).
+    return build_initialized_shader_params(
+        shader_params, compute, shader_name, shader_group, fallback_size, fallback_data_type);
+}
+
+pnanovdb_compute_array_t* EditorSceneManager::create_isolated_shader_params(
+    const pnanovdb_compute_t* compute,
+    const char* shader_name,
+    const char* shader_group,
+    size_t fallback_size,
+    const pnanovdb_reflect_data_type_t* fallback_data_type)
+{
+    // A throwaway instance keeps caller-thread adds off the shared shader_params state entirely, so
+    // they cannot race the render thread. The initial values are the shader's JSON defaults.
+    ShaderParams local_params;
+    return build_initialized_shader_params(
+        local_params, compute, shader_name, shader_group, fallback_size, fallback_data_type);
 }
 
 void EditorSceneManager::refresh_params_for_shader(const pnanovdb_compute_t* compute, const char* shader_name)

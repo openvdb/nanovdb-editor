@@ -9,6 +9,7 @@ BUILD_DIR="$PROJECT_DIR/build"
 SLANG_DEBUG_OUTPUT=OFF
 CLEAN_SHADERS=OFF
 ENABLE_SANITIZERS=OFF
+ENABLE_TSAN=OFF
 GLFW_OFF=OFF
 H264_OFF=OFF    # Set to ON to disable H264 build
 
@@ -29,7 +30,8 @@ usage() {
     echo "  -d    Build in debug"
     echo "  -v    Enable CMake verbose output"
     echo "  -s    Compile slang into ASM"
-    echo "  -a    Build in debug with sanitizers"
+    echo "  -a    Build in debug with sanitizers (ASan/UBSan)"
+    echo "  -T    Build in debug with ThreadSanitizer (data-race detection)"
     echo "  -p    Build and install python module (requires Python 3.8+, auto-installs scikit-build & wheel)"
     echo "  -e    Build and install python module in editable mode"
     echo "  -t    Run tests using ctest and pytest"
@@ -37,7 +39,7 @@ usage() {
     echo "  -c    Force CMake reconfigure"
 }
 
-while getopts ":xrdvsapetfch" opt; do
+while getopts ":xrdvsaTpetfch" opt; do
     case ${opt} in
         x) clean_build=true ;;
         r) release=true ;;
@@ -45,6 +47,7 @@ while getopts ":xrdvsapetfch" opt; do
         v) verbose=true ;;
         s) SLANG_DEBUG_OUTPUT=ON; CLEAN_SHADERS=ON;;
         a) ENABLE_SANITIZERS=ON; debug=true ;;
+        T) ENABLE_TSAN=ON; debug=true ;;
         p) python_only=true ;;
         e) editable_mode=true ;;
         t) test_only=true ;;
@@ -95,6 +98,7 @@ function run_build() {
         -DNANOVDB_EDITOR_CLEAN_SHADERS=$CLEAN_SHADERS \
         -DNANOVDB_EDITOR_SLANG_DEBUG_OUTPUT=$SLANG_DEBUG_OUTPUT \
         -DNANOVDB_EDITOR_ENABLE_SANITIZERS=$ENABLE_SANITIZERS \
+        -DNANOVDB_EDITOR_ENABLE_TSAN=$ENABLE_TSAN \
         -DNANOVDB_EDITOR_BUILD_TESTS=ON \
         -DNANOVDB_EDITOR_USE_H264=$([ "$H264_OFF" = "ON" ] && echo OFF || echo ON) \
         -DNANOVDB_EDITOR_USE_GLFW=$([ "$GLFW_OFF" = "ON" ] && echo OFF || echo ON)

@@ -1363,8 +1363,7 @@ void add_nanovdb_2(pnanovdb_editor_t* editor,
                                           token_to_string_log(scene), (unsigned long long)scene->id,
                                           token_to_string_log(name), (unsigned long long)name->id);
 
-            // Pre-create params array initialized from JSON
-            pnanovdb_compute_array_t* params_array = editor->impl->scene_manager->create_initialized_shader_params(
+            pnanovdb_compute_array_t* params_array = pnanovdb_editor::EditorSceneManager::create_isolated_shader_params(
                 editor->impl->compute, editor->impl->shader_name.c_str(), nullptr,
                 PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
 
@@ -1484,7 +1483,7 @@ void add_nanovdb_3(pnanovdb_editor_t* editor,
 
             const char* render_shader_name = pnanovdb_pipeline_get_shader_name(render_pipeline);
             const char* render_shader_group = pnanovdb_pipeline_get_shader_group(render_pipeline);
-            pnanovdb_compute_array_t* params_array = editor->impl->scene_manager->create_initialized_shader_params(
+            pnanovdb_compute_array_t* params_array = pnanovdb_editor::EditorSceneManager::create_isolated_shader_params(
                 editor->impl->compute, render_shader_name, render_shader_group,
                 PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
 

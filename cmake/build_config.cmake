@@ -8,6 +8,7 @@ cmake_minimum_required(VERSION 3.25 FATAL_ERROR)
 # Build options
 option(NANOVDB_EDITOR_USE_VCPKG "Use Vcpkg for dependencies" OFF)
 option(NANOVDB_EDITOR_ENABLE_SANITIZERS "Enable sanitizers in debug builds" OFF)
+option(NANOVDB_EDITOR_ENABLE_TSAN "Enable ThreadSanitizer (mutually exclusive with address sanitizer)" OFF)
 option(NANOVDB_EDITOR_CLEAN_SHADERS "Clean shader cache (_generated dir)" OFF)
 option(NANOVDB_EDITOR_SLANG_DEBUG_OUTPUT "Enable Slang debug output (compiles shader into Spirv Assembly)" OFF)
 option(NANOVDB_EDITOR_E57_FORMAT "Use E57Format" OFF)
@@ -65,7 +66,9 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -ffast-math")
     elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
         set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g -DDEBUG")
-        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address -fno-omit-frame-pointer")
+        if(NOT NANOVDB_EDITOR_ENABLE_TSAN)
+            set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address -fno-omit-frame-pointer")
+        endif()
     endif()
 
     # Add system library support for Linux compatibility
@@ -110,12 +113,20 @@ elseif(WIN32)
 endif()
 
 # Conditional settings
+if(NANOVDB_EDITOR_ENABLE_TSAN AND NANOVDB_EDITOR_ENABLE_SANITIZERS)
+    message(FATAL_ERROR "NANOVDB_EDITOR_ENABLE_TSAN and NANOVDB_EDITOR_ENABLE_SANITIZERS (ASan) cannot both be ON")
+endif()
+
 if(NANOVDB_EDITOR_ENABLE_SANITIZERS AND CMAKE_BUILD_TYPE STREQUAL "Debug")
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address,undefined")
         set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -fsanitize=address,undefined")
         set(CMAKE_SHARED_LINKER_FLAGS_DEBUG "${CMAKE_SHARED_LINKER_FLAGS_DEBUG} -fsanitize=address,undefined")
     endif()
+endif()
+
+if(NANOVDB_EDITOR_ENABLE_TSAN)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION FALSE)
 endif()
 
 if(NOT NANOVDB_EDITOR_ENABLE_LTO)

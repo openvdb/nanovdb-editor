@@ -118,8 +118,9 @@ TEST(StreamingUiToViewSync, PoolMutationPropagatesToObjectBufferEachFrame)
         kObjectReadyTimeout))
         << "Per-object shader_params buffer was never allocated for the added object";
 
+    ASSERT_TRUE(wait_until([&]() { return editor.impl->nanovdb_array != nullptr; }, kObjectReadyTimeout))
+        << "The added object was not synchronized to the render view";
     pnanovdb_compute_array_t* initial_render_array = editor.impl->nanovdb_array;
-    ASSERT_NE(initial_render_array, nullptr);
 
     pnanovdb_editor_token_t* second_name_token = editor.get_token("ui_sync_streaming_object_2");
     auto second_sphere_grid = nanovdb::tools::createLevelSetSphere<float>(5.0f);

@@ -80,6 +80,15 @@ public:
         size_t fallback_size,
         const pnanovdb_reflect_data_type_t* fallback_data_type = nullptr);
 
+    // Same as create_initialized_shader_params, but uses a throwaway ShaderParams instance so it
+    // touches no shared state. Safe to call from a non-render (caller) thread.
+    static pnanovdb_compute_array_t* create_isolated_shader_params(
+        const pnanovdb_compute_t* compute,
+        const char* shader_name,
+        const char* shader_group,
+        size_t fallback_size,
+        const pnanovdb_reflect_data_type_t* fallback_data_type = nullptr);
+
     // Reinitialize params arrays for all NanoVDB objects using the given shader
     void refresh_params_for_shader(const pnanovdb_compute_t* compute, const char* shader_name);
 

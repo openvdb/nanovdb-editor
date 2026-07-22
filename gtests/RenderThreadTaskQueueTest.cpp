@@ -7,7 +7,6 @@
 
 #include <atomic>
 #include <chrono>
-#include <condition_variable>
 #include <future>
 #include <mutex>
 #include <stdexcept>
@@ -108,42 +107,46 @@ TEST(RenderThreadTaskQueue, CloseDropsQueuedAsyncTasks)
 TEST(RenderThreadTaskQueue, CloseDuringDrainLetsInFlightTaskCompleteExactlyOnce)
 {
     RenderThreadTaskQueue queue;
-    std::mutex gate_mutex;
-    std::condition_variable gate_cv;
-    bool task_started = false;
-    bool release_task = false;
+    std::atomic<bool> task_started{ false };
+    std::atomic<bool> release_task{ false };
     std::atomic<int> run_count{ 0 };
 
     auto caller = std::async(std::launch::async,
-                             [&queue, &gate_mutex, &gate_cv, &task_started, &release_task, &run_count]()
+                             [&queue, &task_started, &release_task, &run_count]()
                              {
                                  return queue.run_blocking(
-                                     [&gate_mutex, &gate_cv, &task_started, &release_task, &run_count]()
+                                     [&task_started, &release_task, &run_count]()
                                      {
                                          run_count.fetch_add(1, std::memory_order_relaxed);
-                                         std::unique_lock<std::mutex> lock(gate_mutex);
-                                         task_started = true;
-                                         gate_cv.notify_one();
-                                         gate_cv.wait(lock, [&release_task]() { return release_task; });
+                                         task_started.store(true, std::memory_order_release);
+                                         while (!release_task.load(std::memory_order_acquire))
+                                             std::this_thread::sleep_for(1ms);
                                          return PNANOVDB_TRUE;
                                      });
                              });
 
     const bool queued = wait_until_queued(queue, 1);
     std::thread render_thread([&queue]() { queue.drain(); });
-    bool started;
+
+    // Wait until the task is actually executing inside drain().
+    bool started = false;
+    const auto start_deadline = std::chrono::steady_clock::now() + 2s;
+    while (std::chrono::steady_clock::now() < start_deadline)
     {
-        std::unique_lock<std::mutex> lock(gate_mutex);
-        started = gate_cv.wait_for(lock, 2s, [&task_started]() { return task_started; });
+        if (task_started.load(std::memory_order_acquire))
+        {
+            started = true;
+            break;
+        }
+        std::this_thread::sleep_for(1ms);
     }
 
+    // Closing while a task is in flight must not abandon the blocking caller.
     queue.close();
     const std::future_status before_release = caller.wait_for(20ms);
-    {
-        std::lock_guard<std::mutex> lock(gate_mutex);
-        release_task = true;
-    }
-    gate_cv.notify_one();
+
+    // Release the in-flight task; the caller then observes its real result.
+    release_task.store(true, std::memory_order_release);
     render_thread.join();
 
     const std::future_status after_release = caller.wait_for(2s);
