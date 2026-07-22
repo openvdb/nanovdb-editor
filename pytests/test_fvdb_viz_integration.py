@@ -75,6 +75,11 @@ FVDB_CORE_INDEX_URL = _default_version(
     "https://d36m13axqqhiit.cloudfront.net/simple",
 )
 
+# Limit child process time. This reports a viewer shutdown deadlock as a pytest
+# failure before the GitHub Actions job timeout cancels the job.
+VIZ_PREFLIGHT_TIMEOUT_SECONDS = int(os.environ.get("FVDB_VIZ_PREFLIGHT_TIMEOUT_SECONDS", "120"))
+VIZ_SUITE_TIMEOUT_SECONDS = int(os.environ.get("FVDB_VIZ_SUITE_TIMEOUT_SECONDS", "300"))
+
 
 def _fvdb_core_release_tag() -> str:
     return f"v{FVDB_CORE_VERSION.split('+', 1)[0]}"
@@ -228,36 +233,39 @@ def _log_nanovdb_version(env_ctx: dict):
 def _assert_viz_server_initializes(env_ctx: dict):
     python_exe = env_ctx["python"]
     env = env_ctx["env"]
+    cmd = [
+        str(python_exe),
+        "-c",
+        (
+            "import os; "
+            "import fvdb; "
+            "print("
+            "'VK_ICD_FILENAMES:', "
+            "os.environ.get('VK_ICD_FILENAMES', '<unset>')"
+            "); "
+            "print("
+            "'VK_DRIVER_FILES:', "
+            "os.environ.get('VK_DRIVER_FILES', '<unset>')"
+            "); "
+            "fvdb.viz.init("
+            "ip_address='127.0.0.1', port=8080, verbose=False"
+            "); "
+            "print('fvdb.viz init preflight: ok')"
+        ),
+    ]
     try:
-        subprocess.run(
-            [
-                str(python_exe),
-                "-c",
-                (
-                    "import os; "
-                    "import fvdb; "
-                    "print("
-                    "'VK_ICD_FILENAMES:', "
-                    "os.environ.get('VK_ICD_FILENAMES', '<unset>')"
-                    "); "
-                    "print("
-                    "'VK_DRIVER_FILES:', "
-                    "os.environ.get('VK_DRIVER_FILES', '<unset>')"
-                    "); "
-                    "fvdb.viz.init("
-                    "ip_address='127.0.0.1', port=8080, verbose=False"
-                    "); "
-                    "print('fvdb.viz init preflight: ok')"
-                ),
-            ],
-            env=env,
-            check=True,
-        )
+        subprocess.run(cmd, env=env, check=True, timeout=VIZ_PREFLIGHT_TIMEOUT_SECONDS)
     except subprocess.CalledProcessError as exc:
         raise AssertionError(
             "fvdb.viz viewer initialization failed during preflight. "
             "Treating this as a hard failure instead of allowing the upstream "
             "suite to skip."
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise AssertionError(
+            "fvdb.viz viewer initialization did not exit within "
+            f"{VIZ_PREFLIGHT_TIMEOUT_SECONDS} seconds. This usually indicates "
+            "a native viewer shutdown deadlock."
         ) from exc
 
 
@@ -294,7 +302,27 @@ finally:
         "--full-trace",
         "-rA",
     ]
-    result = subprocess.run(cmd, env=env, capture_output=True, text=True)
+    try:
+        result = subprocess.run(
+            cmd,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=VIZ_SUITE_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout = exc.stdout or ""
+        stderr = exc.stderr or ""
+        if isinstance(stdout, bytes):
+            stdout = stdout.decode(errors="replace")
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode(errors="replace")
+        sys.stdout.write(stdout)
+        sys.stderr.write(stderr)
+        raise AssertionError(
+            "fvdb.viz upstream test suite did not exit within "
+            f"{VIZ_SUITE_TIMEOUT_SECONDS} seconds."
+        ) from exc
     sys.stdout.write(result.stdout)
     sys.stdout.flush()
     if result.stderr:
