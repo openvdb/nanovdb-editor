@@ -1576,18 +1576,18 @@ void add_camera_view_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene
         return;
     }
 
-    on_render_thread(editor,
-                     [=]()
-                     {
-                         Console::getInstance().addLog(Console::LogLevel::Debug,
-                                                       "add_camera_view_2: scene='%s' (id=%llu), camera='%s' (id=%llu)",
-                                                       scene->str, (unsigned long long)scene->id, camera->name->str,
-                                                       (unsigned long long)camera->name->id);
+    run_add_with_render_sync(
+        editor,
+        [=](bool defer_sync)
+        {
+            Console::getInstance().addLog(
+                Console::LogLevel::Debug, "add_camera_view_2: scene='%s' (id=%llu), camera='%s' (id=%llu)", scene->str,
+                (unsigned long long)scene->id, camera->name->str, (unsigned long long)camera->name->id);
 
-                         editor->impl->scene_manager->add_camera(scene, camera->name, camera);
+            editor->impl->scene_manager->add_camera(scene, camera->name, camera);
 
-                         sync_added_object(editor, scene, camera->name);
-                     });
+            sync_added_object(editor, scene, camera->name, defer_sync);
+        });
 }
 
 void update_camera_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_camera_t* camera)
