@@ -68,21 +68,6 @@ void defer_gaussian_data_destruction(pnanovdb_editor_impl_t* impl, std::shared_p
     impl->gaussian_data_old = std::move(owner);
 }
 
-static void sync_added_object(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
-{
-    if (editor->impl->editor_scene)
-    {
-        editor->impl->editor_scene->sync_object_from_scene_manager(scene, name);
-    }
-    else
-    {
-        // No render loop yet: remember the last-added object so show() can sync the
-        // views and select it once editor_scene comes up.
-        editor->impl->startup_view_scene_id = scene->id;
-        editor->impl->startup_view_name_id = name->id;
-    }
-}
-
 struct GaussianDataDeleter
 {
     pnanovdb_editor_t* editor = nullptr;
@@ -543,6 +528,40 @@ static void post_to_render_thread(pnanovdb_editor_t* editor, std::function<void(
     {
         fn();
     }
+}
+
+static void sync_added_object(pnanovdb_editor_t* editor,
+                              pnanovdb_editor_token_t* scene,
+                              pnanovdb_editor_token_t* name,
+                              bool defer_sync = false)
+{
+    if (defer_sync)
+    {
+        post_to_render_thread(editor, [=]() { sync_added_object(editor, scene, name); });
+    }
+    else if (editor->impl->editor_scene)
+    {
+        editor->impl->editor_scene->sync_object_from_scene_manager(scene, name);
+    }
+    else
+    {
+        // No render loop exists. Save the last object so show() can synchronize and select it.
+        editor->impl->startup_view_scene_id = scene->id;
+        editor->impl->startup_view_name_id = name->id;
+    }
+}
+
+// Copy add input on the caller thread. Synchronize the render view on its owner thread.
+static void run_add_with_render_sync(pnanovdb_editor_t* editor, std::function<void(bool)> fn)
+{
+    std::shared_ptr<EditorWorker> worker = get_worker(editor);
+    if (worker && worker->render_thread_id.load() != std::this_thread::get_id())
+    {
+        fn(true);
+        return;
+    }
+
+    fn(false);
 }
 
 static void run_show_loop(pnanovdb_editor_t* editor,
@@ -1325,39 +1344,39 @@ void add_nanovdb_2(pnanovdb_editor_t* editor,
         return;
     }
 
-    on_render_thread(editor,
-                     [=]()
-                     {
-                         // we need to duplicate array for now to take proper ownership
-                         pnanovdb_compute_array_t* array = editor->impl->compute->duplicate_array(array_in);
-                         if (!array)
-                         {
-                             Console::getInstance().addLog(Console::LogLevel::Error,
-                                                           "add_nanovdb_2: failed to duplicate input array for '%s'",
-                                                           token_to_string_log(name));
-                             return;
-                         }
+    run_add_with_render_sync(
+        editor,
+        [=](bool defer_sync)
+        {
+            // we need to duplicate array for now to take proper ownership
+            pnanovdb_compute_array_t* array = editor->impl->compute->duplicate_array(array_in);
+            if (!array)
+            {
+                Console::getInstance().addLog(Console::LogLevel::Error,
+                                              "add_nanovdb_2: failed to duplicate input array for '%s'",
+                                              token_to_string_log(name));
+                return;
+            }
 
-                         Console::getInstance().addLog(Console::LogLevel::Debug,
-                                                       "add_nanovdb_2: scene='%s' (id=%llu), name='%s' (id=%llu)",
-                                                       token_to_string_log(scene), (unsigned long long)scene->id,
-                                                       token_to_string_log(name), (unsigned long long)name->id);
+            Console::getInstance().addLog(Console::LogLevel::Debug,
+                                          "add_nanovdb_2: scene='%s' (id=%llu), name='%s' (id=%llu)",
+                                          token_to_string_log(scene), (unsigned long long)scene->id,
+                                          token_to_string_log(name), (unsigned long long)name->id);
 
-                         // Pre-create params array initialized from JSON
-                         pnanovdb_compute_array_t* params_array =
-                             editor->impl->scene_manager->create_initialized_shader_params(
-                                 editor->impl->compute, editor->impl->shader_name.c_str(), nullptr,
-                                 PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
+            // Pre-create params array initialized from JSON
+            pnanovdb_compute_array_t* params_array = editor->impl->scene_manager->create_initialized_shader_params(
+                editor->impl->compute, editor->impl->shader_name.c_str(), nullptr,
+                PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
 
-                         pnanovdb_editor_token_t* shader_name_token = get_token(editor->impl->shader_name.c_str());
-                         editor->impl->scene_manager->add_nanovdb(
-                             scene, name, array, params_array, editor->impl->compute, shader_name_token);
+            pnanovdb_editor_token_t* shader_name_token = get_token(editor->impl->shader_name.c_str());
+            editor->impl->scene_manager->add_nanovdb(
+                scene, name, array, params_array, editor->impl->compute, shader_name_token);
 
-                         Console::getInstance().addLog(
-                             Console::LogLevel::Debug, "Added NanoVDB '%s' to scene '%s'", name->str, scene->str);
+            Console::getInstance().addLog(
+                Console::LogLevel::Debug, "Added NanoVDB '%s' to scene '%s'", name->str, scene->str);
 
-                         sync_added_object(editor, scene, name);
-                     });
+            sync_added_object(editor, scene, name, defer_sync);
+        });
 }
 
 void add_gaussian_data_2(pnanovdb_editor_t* editor,
@@ -1446,9 +1465,9 @@ void add_nanovdb_3(pnanovdb_editor_t* editor,
         return;
     }
 
-    on_render_thread(
+    run_add_with_render_sync(
         editor,
-        [=]()
+        [=](bool defer_sync)
         {
             pnanovdb_compute_array_t* array = editor->impl->compute->duplicate_array(array_in);
             if (!array)
@@ -1476,7 +1495,7 @@ void add_nanovdb_3(pnanovdb_editor_t* editor,
             Console::getInstance().addLog(
                 Console::LogLevel::Debug, "Added NanoVDB '%s' to scene '%s' with pipelines", name->str, scene->str);
 
-            sync_added_object(editor, scene, name);
+            sync_added_object(editor, scene, name, defer_sync);
         });
 }
 

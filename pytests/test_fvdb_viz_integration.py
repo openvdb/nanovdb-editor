@@ -320,8 +320,7 @@ finally:
         sys.stdout.write(stdout)
         sys.stderr.write(stderr)
         raise AssertionError(
-            "fvdb.viz upstream test suite did not exit within "
-            f"{VIZ_SUITE_TIMEOUT_SECONDS} seconds."
+            "fvdb.viz upstream test suite did not exit within " f"{VIZ_SUITE_TIMEOUT_SECONDS} seconds."
         ) from exc
     sys.stdout.write(result.stdout)
     sys.stdout.flush()

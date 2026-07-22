@@ -240,12 +240,11 @@ TEST(EditorRapidAddRemove, ObjectAddedDuringStartupIsAppliedAndSynced)
     ASSERT_NE(scene, nullptr);
     ASSERT_NE(name, nullptr);
 
-    // Kick off the render loop and immediately enqueue an add, racing the worker's startup. This is
-    // the "formerly deferred" path: before the pending-change buffers were removed, this update was
-    // stashed and replayed once the scene came up. It must now marshal through the task queue and be
-    // applied just the same, then get synced into the active render view.
+    // Start the render loop and immediately add an object while the worker starts. The add operation
+    // must copy the input without waiting for the render thread. The render view must synchronize later.
     fx.start();
-    fx.editor.add_nanovdb_2(&fx.editor, scene, name, arr);
+    fx.editor.add_nanovdb_3(
+        &fx.editor, scene, name, arr, pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_nanovdb_render);
 
     EXPECT_TRUE(wait_until(
         [&]()
