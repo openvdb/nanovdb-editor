@@ -298,7 +298,17 @@ class pnanovdb_Editor(Structure):
         ("add_gaussian_data_3", c_void_p),
         ("set_visible", c_void_p),
         ("get_visible", c_void_p),
-        ("add_named_array", c_void_p),
+        (
+            "add_named_array",
+            CFUNCTYPE(
+                None,
+                c_void_p,  # pnanovdb_editor_t*
+                POINTER(EditorToken),  # scene
+                POINTER(EditorToken),  # object_name
+                POINTER(EditorToken),  # array_name
+                POINTER(pnanovdb_ComputeArray),  # array
+            ),
+        ),
         ("get_named_array", c_void_p),
         ("map_pipeline_params", c_void_p),
         ("unmap_pipeline_params", c_void_p),
@@ -319,6 +329,17 @@ class pnanovdb_Editor(Structure):
                 c_void_p,  # pnanovdb_editor_t*
                 POINTER(EditorToken),  # scene
                 POINTER(Camera),  # out_camera (caller-owned)
+            ),
+        ),
+        (
+            "add_gaussian_data_4",
+            CFUNCTYPE(
+                None,
+                c_void_p,  # pnanovdb_editor_t*
+                POINTER(EditorToken),  # scene
+                POINTER(EditorToken),  # name
+                c_uint32,  # process_pipeline
+                c_uint32,  # render_pipeline
             ),
         ),
     ]
@@ -554,6 +575,20 @@ class Editor:
         """Add Gaussian data to scene with token-based API."""
         add_gaussian_data_2_func = self._editor.contents.add_gaussian_data_2
         add_gaussian_data_2_func(self._editor, scene, name, pointer(desc))
+
+    def add_named_array(self, scene, object_name, array_name, array):
+        """Attach a named array to a scene object (creating the object if needed)."""
+        add_named_array_func = self._editor.contents.add_named_array
+        add_named_array_func(self._editor, scene, object_name, array_name, pointer(array))
+
+    def add_gaussian_data_4(self, scene, name, process_pipeline, render_pipeline):
+        """Create Gaussian data from named arrays previously attached to the object.
+
+        Attach the conventional arrays first via add_named_array using the names
+        "means", "opacities", "quaternions", "scales", "sh_0", and optionally "sh_n".
+        """
+        add_gaussian_data_4_func = self._editor.contents.add_gaussian_data_4
+        add_gaussian_data_4_func(self._editor, scene, name, int(process_pipeline), int(render_pipeline))
 
     def update_camera_2(self, scene, camera):
         """Update camera for a scene with token-based API."""

@@ -281,6 +281,16 @@ typedef struct pnanovdb_editor_t
                                                 pnanovdb_editor_token_t* scene,
                                                 pnanovdb_camera_t* out_camera);
 
+    // Named-array variant - instead of an explicit desc, the Gaussian arrays are
+    // taken from the named arrays previously attached to the (scene, name) object via add_named_array,
+    // using the conventional names "means", "opacities", "quaternions", "scales", "sh_0" and the
+    // optional "sh_n".
+    void(PNANOVDB_ABI* add_gaussian_data_4)(pnanovdb_editor_t* editor,
+                                            pnanovdb_editor_token_t* scene,
+                                            pnanovdb_editor_token_t* name,
+                                            pnanovdb_pipeline_type_t process_pipeline,
+                                            pnanovdb_pipeline_type_t render_pipeline);
+
 } pnanovdb_editor_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_editor_t
@@ -334,6 +344,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(load_scene, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(save_scene, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_pipeline_type, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_camera_2, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(add_gaussian_data_4, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE

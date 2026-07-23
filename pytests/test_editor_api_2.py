@@ -3,9 +3,6 @@
 
 """
 Test suite for editor _2 token-based API functions.
-Tests: get_token, get_camera, add_nanovdb_2, add_gaussian_data_2,
-       update_camera_2, add_camera_view_2, remove, map_params, unmap_params,
-       add_image2d
 """
 
 import nanovdb_editor as nve  # type: ignore
@@ -397,3 +394,94 @@ class TestEditorAPI2:
 
         # Clean up
         self.compute.destroy_array(image_array)
+
+    def test_get_camera_2(self):
+        """Test get_camera_2 API - value getter with read-after-write semantics."""
+        self.start_editor()
+
+        # A scene that has never been seen reports "not set" (None), unlike get_camera which
+        # always returns a usable default.
+        scene_token = self.editor.get_token("test_scene_camera2")
+        assert self.editor.get_camera_2(scene_token) is None
+
+        # Set a camera for the scene, then read it back. get_camera_2 returns a fresh copy, so the
+        # value must reflect what was just set (read-after-write consistency).
+        cam_ptr = self.editor.get_camera(scene_token)
+        assert cam_ptr is not None
+        cam_ptr.contents.state.position.x = 7.0
+        cam_ptr.contents.state.position.y = 8.0
+        cam_ptr.contents.state.position.z = 9.0
+        self.editor.update_camera_2(scene_token, cam_ptr.contents)
+        sleep(0.1)
+
+        result = self.editor.get_camera_2(scene_token)
+        assert result is not None, "Camera should be set after update_camera_2"
+        assert hasattr(result, "config"), "Camera should have config"
+        assert hasattr(result, "state"), "Camera should have state"
+        assert result.state.position.x == pytest.approx(7.0)
+        assert result.state.position.y == pytest.approx(8.0)
+        assert result.state.position.z == pytest.approx(9.0)
+
+        # The returned value is an independent copy: mutating it must not affect the cached camera.
+        result.state.position.x = 123.0
+        again = self.editor.get_camera_2(scene_token)
+        assert again.state.position.x == pytest.approx(7.0), "get_camera_2 must return an independent copy"
+
+    def test_add_named_array_and_gaussian_data_4(self):
+        """Test add_named_array + add_gaussian_data_4 - Gaussian data from named arrays."""
+        self.start_editor()
+
+        scene_token = self.editor.get_token("test_scene")
+        name_token = self.editor.get_token("test_gaussians_named")
+
+        # Build the conventional Gaussian arrays (see add_gaussian_data_2 test).
+        num_points = 10
+        means_data = np.random.randn(num_points, 3).astype(np.float32)
+        opacities_data = np.ones((num_points, 1), dtype=np.float32) * 0.5
+        quaternions_data = np.tile([1.0, 0.0, 0.0, 0.0], (num_points, 1)).astype(np.float32)
+        scales_data = np.ones((num_points, 3), dtype=np.float32) * 0.1
+        sh_0_data = np.random.randn(num_points, 3).astype(np.float32)
+
+        means_array = self.compute.create_array(means_data)
+        opacities_array = self.compute.create_array(opacities_data)
+        quaternions_array = self.compute.create_array(quaternions_data)
+        scales_array = self.compute.create_array(scales_data)
+        sh_0_array = self.compute.create_array(sh_0_data)
+
+        # Attach them to the object as named arrays using the conventional names. add_named_array
+        # creates the object if it does not exist yet.
+        self.editor.add_named_array(scene_token, name_token, self.editor.get_token("means"), means_array)
+        self.editor.add_named_array(scene_token, name_token, self.editor.get_token("opacities"), opacities_array)
+        self.editor.add_named_array(scene_token, name_token, self.editor.get_token("quaternions"), quaternions_array)
+        self.editor.add_named_array(scene_token, name_token, self.editor.get_token("scales"), scales_array)
+        self.editor.add_named_array(scene_token, name_token, self.editor.get_token("sh_0"), sh_0_array)
+
+        # Create the Gaussian data from the named arrays with explicit pipelines
+        # (process = pnanovdb_pipeline_type_noop = 0, render = pnanovdb_pipeline_type_gaussian_splat = 2).
+        self.editor.add_gaussian_data_4(scene_token, name_token, 0, 2)
+        sleep(0.2)  # Give the render thread time to create the GPU data
+
+        # Clean up arrays (the editor duplicated them synchronously on the calling thread).
+        self.compute.destroy_array(means_array)
+        self.compute.destroy_array(opacities_array)
+        self.compute.destroy_array(quaternions_array)
+        self.compute.destroy_array(scales_array)
+        self.compute.destroy_array(sh_0_array)
+
+    def test_add_gaussian_data_4_missing_arrays_is_safe(self):
+        """add_gaussian_data_4 on an object without the required named arrays must not crash."""
+        self.start_editor()
+
+        scene_token = self.editor.get_token("test_scene")
+        name_token = self.editor.get_token("test_gaussians_incomplete")
+
+        # Only attach a subset of the required arrays.
+        num_points = 4
+        means_array = self.compute.create_array(np.random.randn(num_points, 3).astype(np.float32))
+        self.editor.add_named_array(scene_token, name_token, self.editor.get_token("means"), means_array)
+
+        # Missing opacities/quaternions/scales/sh_0: the call should be rejected gracefully.
+        self.editor.add_gaussian_data_4(scene_token, name_token, 0, 2)
+        sleep(0.1)
+
+        self.compute.destroy_array(means_array)

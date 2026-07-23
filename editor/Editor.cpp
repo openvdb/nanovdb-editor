@@ -1445,6 +1445,13 @@ static void destroy_gaussian_desc(const pnanovdb_compute_t* compute, pnanovdb_ed
     desc = pnanovdb_editor_gaussian_data_desc_t{};
 }
 
+static void run_gaussian_add(pnanovdb_editor_t* editor,
+                             pnanovdb_editor_token_t* scene,
+                             pnanovdb_editor_token_t* name,
+                             pnanovdb_pipeline_type_t process_pipeline,
+                             pnanovdb_pipeline_type_t render_pipeline,
+                             pnanovdb_editor_gaussian_data_desc_t desc_copy);
+
 void add_gaussian_data_2(pnanovdb_editor_t* editor,
                          pnanovdb_editor_token_t* scene,
                          pnanovdb_editor_token_t* name,
@@ -1462,59 +1469,7 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
 
     pnanovdb_editor_gaussian_data_desc_t desc_copy = duplicate_gaussian_desc(editor->impl->compute, *desc);
 
-    post_to_render_thread(
-        editor,
-        [editor, scene, name, desc_copy]() mutable
-        {
-            const pnanovdb_compute_t* compute = editor->impl->compute;
-            pnanovdb_compute_queue_t* device_queue = editor->impl->device_queue;
-            if (!device_queue)
-            {
-                Console::getInstance().addLog(Console::LogLevel::Error, "add_gaussian_data_2: device_queue is null");
-                destroy_gaussian_desc(compute, desc_copy);
-                return;
-            }
-
-            pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr;
-
-            pnanovdb_bool_t success = editor->impl->raster->create_gaussian_data_from_desc(
-                editor->impl->raster, compute, device_queue, &desc_copy, name->str, &gaussian_data, nullptr, nullptr);
-
-            destroy_gaussian_desc(compute, desc_copy);
-
-            if (success == PNANOVDB_FALSE || !gaussian_data)
-            {
-                Console::getInstance().addLog(
-                    Console::LogLevel::Error, "Error: Failed to create gaussian data from descriptor");
-                return;
-            }
-
-            // Pre-create params array initialized from JSON
-            const pnanovdb_reflect_data_type_t* raster_params_dt =
-                PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t);
-
-            pnanovdb_compute_array_t* raster_params_array = editor->impl->scene_manager->create_initialized_shader_params(
-                compute, pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat),
-                pnanovdb_pipeline_get_shader_group(pnanovdb_pipeline_type_gaussian_splat),
-                sizeof(pnanovdb_raster_shader_params_t), raster_params_dt);
-
-            // Add with deferred destruction handling (use local device_queue in case we waited for worker init)
-            std::shared_ptr<pnanovdb_raster_gaussian_data_t> old_owner;
-            editor->impl->scene_manager->add_gaussian_data(
-                scene, name, gaussian_data, raster_params_array, raster_params_dt, compute, editor->impl->raster,
-                device_queue, pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat), &old_owner);
-
-            // Chain old data through gaussian_data_old for deferred destruction
-            if (old_owner)
-            {
-                defer_gaussian_data_destruction(editor->impl, std::move(old_owner));
-            }
-
-            Console::getInstance().addLog(
-                Console::LogLevel::Debug, "Added Gaussian data '%s' to scene '%s'", name->str, scene->str);
-
-            sync_added_object(editor, scene, name);
-        });
+    run_gaussian_add(editor, scene, name, pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_gaussian_splat, desc_copy);
 }
 
 void set_pipeline(pnanovdb_editor_t* editor,
@@ -1569,6 +1524,107 @@ void add_nanovdb_3(pnanovdb_editor_t* editor,
         });
 }
 
+static void create_and_register_gaussian_data_pipelined(pnanovdb_editor_t* editor,
+                                                        pnanovdb_editor_token_t* scene,
+                                                        pnanovdb_editor_token_t* name,
+                                                        pnanovdb_pipeline_type_t process_pipeline,
+                                                        pnanovdb_pipeline_type_t render_pipeline,
+                                                        pnanovdb_editor_gaussian_data_desc_t desc_copy)
+{
+    const pnanovdb_compute_t* compute = editor->impl->compute;
+    pnanovdb_compute_queue_t* device_queue = editor->impl->device_queue;
+    if (!device_queue)
+    {
+        Console::getInstance().addLog(Console::LogLevel::Error, "add_gaussian_data: device_queue is null");
+        destroy_gaussian_desc(compute, desc_copy);
+        return;
+    }
+
+    pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr;
+    pnanovdb_bool_t success = editor->impl->raster->create_gaussian_data_from_desc(
+        editor->impl->raster, compute, device_queue, &desc_copy, name->str, &gaussian_data, nullptr, nullptr);
+
+    // GPU data has been built (or failed); the duplicated host arrays are no longer needed.
+    destroy_gaussian_desc(compute, desc_copy);
+
+    if (success == PNANOVDB_FALSE || !gaussian_data)
+    {
+        Console::getInstance().addLog(Console::LogLevel::Error, "Error: Failed to create gaussian data from descriptor");
+        return;
+    }
+
+    const pnanovdb_reflect_data_type_t* raster_params_dt = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t);
+    pnanovdb_compute_array_t* raster_params_array = editor->impl->scene_manager->create_initialized_shader_params(
+        compute, pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat),
+        pnanovdb_pipeline_get_shader_group(pnanovdb_pipeline_type_gaussian_splat),
+        sizeof(pnanovdb_raster_shader_params_t), raster_params_dt);
+
+    std::shared_ptr<pnanovdb_raster_gaussian_data_t> old_owner;
+    editor->impl->scene_manager->add_gaussian_data(
+        scene, name, gaussian_data, raster_params_array, raster_params_dt, compute, editor->impl->raster, device_queue,
+        pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat), process_pipeline, render_pipeline,
+        &old_owner);
+
+    if (old_owner)
+    {
+        defer_gaussian_data_destruction(editor->impl, std::move(old_owner));
+    }
+
+    Console::getInstance().addLog(
+        Console::LogLevel::Debug, "Added Gaussian data '%s' to scene '%s' with pipelines", name->str, scene->str);
+
+    // Already on the render thread, so synchronize the view immediately.
+    sync_added_object(editor, scene, name);
+}
+
+static void register_gaussian_placeholder(pnanovdb_editor_t* editor,
+                                          pnanovdb_editor_token_t* scene,
+                                          pnanovdb_editor_token_t* name,
+                                          pnanovdb_pipeline_type_t process_pipeline,
+                                          pnanovdb_pipeline_type_t render_pipeline)
+{
+    const pnanovdb_compute_t* compute = editor->impl->compute;
+    const char* shader_name = pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat);
+    const char* shader_group = pnanovdb_pipeline_get_shader_group(pnanovdb_pipeline_type_gaussian_splat);
+    const pnanovdb_reflect_data_type_t* raster_params_dt = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t);
+
+    pnanovdb_compute_array_t* raster_params_array = pnanovdb_editor::EditorSceneManager::create_isolated_shader_params(
+        compute, shader_name, shader_group, sizeof(pnanovdb_raster_shader_params_t), raster_params_dt);
+
+    std::shared_ptr<pnanovdb_raster_gaussian_data_t> old_owner;
+    editor->impl->scene_manager->add_gaussian_data(
+        scene, name, /*gaussian_data=*/nullptr, raster_params_array, raster_params_dt, compute, editor->impl->raster,
+        editor->impl->device_queue, shader_name, process_pipeline, render_pipeline, &old_owner);
+    if (old_owner)
+    {
+        defer_gaussian_data_destruction(editor->impl, std::move(old_owner));
+    }
+}
+
+static void run_gaussian_add(pnanovdb_editor_t* editor,
+                             pnanovdb_editor_token_t* scene,
+                             pnanovdb_editor_token_t* name,
+                             pnanovdb_pipeline_type_t process_pipeline,
+                             pnanovdb_pipeline_type_t render_pipeline,
+                             pnanovdb_editor_gaussian_data_desc_t desc_copy)
+{
+    std::shared_ptr<EditorWorker> worker = get_worker(editor);
+    const bool will_defer = worker && worker->render_thread_id.load() != std::this_thread::get_id();
+    if (will_defer)
+    {
+        register_gaussian_placeholder(editor, scene, name, process_pipeline, render_pipeline);
+        post_to_render_thread(editor,
+                              [editor, scene, name, process_pipeline, render_pipeline, desc_copy]() mutable {
+                                  create_and_register_gaussian_data_pipelined(
+                                      editor, scene, name, process_pipeline, render_pipeline, desc_copy);
+                              });
+    }
+    else
+    {
+        create_and_register_gaussian_data_pipelined(editor, scene, name, process_pipeline, render_pipeline, desc_copy);
+    }
+}
+
 void add_gaussian_data_3(pnanovdb_editor_t* editor,
                          pnanovdb_editor_token_t* scene,
                          pnanovdb_editor_token_t* name,
@@ -1587,55 +1643,66 @@ void add_gaussian_data_3(pnanovdb_editor_t* editor,
 
     pnanovdb_editor_gaussian_data_desc_t desc_copy = duplicate_gaussian_desc(editor->impl->compute, *desc);
 
-    post_to_render_thread(
-        editor,
-        [editor, scene, name, process_pipeline, render_pipeline, desc_copy]() mutable
-        {
-            const pnanovdb_compute_t* compute = editor->impl->compute;
-            pnanovdb_compute_queue_t* device_queue = editor->impl->device_queue;
-            if (!device_queue)
-            {
-                Console::getInstance().addLog(Console::LogLevel::Error, "add_gaussian_data_3: device_queue is null");
-                destroy_gaussian_desc(compute, desc_copy);
-                return;
-            }
+    run_gaussian_add(editor, scene, name, process_pipeline, render_pipeline, desc_copy);
+}
 
-            pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr;
-            pnanovdb_bool_t success = editor->impl->raster->create_gaussian_data_from_desc(
-                editor->impl->raster, compute, device_queue, &desc_copy, name->str, &gaussian_data, nullptr, nullptr);
+void add_gaussian_data_4(pnanovdb_editor_t* editor,
+                         pnanovdb_editor_token_t* scene,
+                         pnanovdb_editor_token_t* name,
+                         pnanovdb_pipeline_type_t process_pipeline,
+                         pnanovdb_pipeline_type_t render_pipeline)
+{
+    if (!editor || !editor->impl || !scene || !name)
+    {
+        return;
+    }
 
-            destroy_gaussian_desc(compute, desc_copy);
+    Console::getInstance().addLog(
+        Console::LogLevel::Debug, "add_gaussian_data_4: scene='%s', name='%s', process=%d, render=%d",
+        token_to_string_log(scene), token_to_string_log(name), (int)process_pipeline, (int)render_pipeline);
 
-            if (success == PNANOVDB_FALSE || !gaussian_data)
-            {
-                Console::getInstance().addLog(
-                    Console::LogLevel::Error, "Error: Failed to create gaussian data from descriptor");
-                return;
-            }
+    static const char* kGaussianArrayNames[6] = { "means", "opacities", "quaternions", "scales", "sh_0", "sh_n" };
+    pnanovdb_editor_gaussian_data_desc_t src_desc = {};
+    pnanovdb_compute_array_t** src_slots[6] = { &src_desc.means,  &src_desc.opacities, &src_desc.quaternions,
+                                                &src_desc.scales, &src_desc.sh_0,      &src_desc.sh_n };
+    bool object_exists = false;
+    editor->impl->scene_manager->with_object(scene, name,
+                                             [&](SceneObject* obj)
+                                             {
+                                                 if (!obj)
+                                                 {
+                                                     return;
+                                                 }
+                                                 object_exists = true;
+                                                 auto& arrays = obj->named_arrays();
+                                                 for (int i = 0; i < 6; ++i)
+                                                 {
+                                                     auto it = arrays.find(kGaussianArrayNames[i]);
+                                                     *src_slots[i] = (it != arrays.end()) ? it->second : nullptr;
+                                                 }
+                                             });
 
-            const pnanovdb_reflect_data_type_t* raster_params_dt =
-                PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t);
-            pnanovdb_compute_array_t* raster_params_array = editor->impl->scene_manager->create_initialized_shader_params(
-                compute, pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat),
-                pnanovdb_pipeline_get_shader_group(pnanovdb_pipeline_type_gaussian_splat),
-                sizeof(pnanovdb_raster_shader_params_t), raster_params_dt);
+    if (!object_exists)
+    {
+        Console::getInstance().addLog(Console::LogLevel::Error,
+                                      "add_gaussian_data_4: object '%s' not found; attach the Gaussian arrays with "
+                                      "add_named_array first",
+                                      token_to_string_log(name));
+        return;
+    }
 
-            std::shared_ptr<pnanovdb_raster_gaussian_data_t> old_owner;
-            editor->impl->scene_manager->add_gaussian_data(
-                scene, name, gaussian_data, raster_params_array, raster_params_dt, compute, editor->impl->raster,
-                device_queue, pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat),
-                process_pipeline, render_pipeline, &old_owner);
+    if (!src_desc.means || !src_desc.opacities || !src_desc.quaternions || !src_desc.scales || !src_desc.sh_0)
+    {
+        Console::getInstance().addLog(Console::LogLevel::Error,
+                                      "add_gaussian_data_4: object '%s' is missing required named arrays "
+                                      "(means, opacities, quaternions, scales, sh_0)",
+                                      token_to_string_log(name));
+        return;
+    }
 
-            if (old_owner)
-            {
-                defer_gaussian_data_destruction(editor->impl, std::move(old_owner));
-            }
+    pnanovdb_editor_gaussian_data_desc_t desc_copy = duplicate_gaussian_desc(editor->impl->compute, src_desc);
 
-            Console::getInstance().addLog(
-                Console::LogLevel::Debug, "Added Gaussian data '%s' to scene '%s' with pipelines", name->str, scene->str);
-
-            sync_added_object(editor, scene, name);
-        });
+    run_gaussian_add(editor, scene, name, process_pipeline, render_pipeline, desc_copy);
 }
 
 void add_camera_view_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_camera_view_t* camera)
@@ -2826,12 +2893,12 @@ void add_named_array(pnanovdb_editor_t* editor,
     }
 
     const char* array_name_str = array_name->str;
-    editor->impl->scene_manager->with_object(scene, object_name,
-                                             [array_name_str, array](SceneObject* obj)
-                                             {
-                                                 if (obj)
-                                                     obj->named_arrays()[array_name_str] = array;
-                                             });
+    editor->impl->scene_manager->with_object_or_create(scene, object_name,
+                                                       [array_name_str, array](SceneObject* obj)
+                                                       {
+                                                           if (obj)
+                                                               obj->named_arrays()[array_name_str] = array;
+                                                       });
 }
 
 pnanovdb_compute_array_t* get_named_array(pnanovdb_editor_t* editor,
@@ -2897,6 +2964,7 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
     editor.mark_pipeline_dirty = mark_pipeline_dirty;
     editor.add_nanovdb_3 = add_nanovdb_3;
     editor.add_gaussian_data_3 = add_gaussian_data_3;
+    editor.add_gaussian_data_4 = add_gaussian_data_4;
     editor.set_visible = set_visible;
     editor.get_visible = get_visible;
     editor.add_named_array = add_named_array;
