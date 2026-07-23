@@ -468,20 +468,14 @@ class TestEditorAPI2:
         self.compute.destroy_array(scales_array)
         self.compute.destroy_array(sh_0_array)
 
-    def test_add_gaussian_data_4_missing_arrays_is_safe(self):
-        """add_gaussian_data_4 on an object without the required named arrays must not crash."""
-        self.start_editor()
+        incomplete_name_token = self.editor.get_token("test_gaussians_incomplete")
+        incomplete_means_array = self.compute.create_array(np.random.randn(4, 3).astype(np.float32))
+        self.editor.add_named_array(
+            scene_token, incomplete_name_token, self.editor.get_token("means"), incomplete_means_array
+        )
 
-        scene_token = self.editor.get_token("test_scene")
-        name_token = self.editor.get_token("test_gaussians_incomplete")
-
-        # Only attach a subset of the required arrays.
-        num_points = 4
-        means_array = self.compute.create_array(np.random.randn(num_points, 3).astype(np.float32))
-        self.editor.add_named_array(scene_token, name_token, self.editor.get_token("means"), means_array)
-
-        # Missing opacities/quaternions/scales/sh_0: the call should be rejected gracefully.
-        self.editor.add_gaussian_data_4(scene_token, name_token, 0, 2)
+        # The call must reject an object that does not have all required arrays.
+        self.editor.add_gaussian_data_4(scene_token, incomplete_name_token, 0, 2)
         sleep(0.1)
 
-        self.compute.destroy_array(means_array)
+        self.compute.destroy_array(incomplete_means_array)
