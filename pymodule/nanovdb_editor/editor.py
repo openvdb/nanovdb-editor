@@ -312,6 +312,15 @@ class pnanovdb_Editor(Structure):
         ("load_scene", CFUNCTYPE(c_int32, c_void_p, c_char_p, c_int32)),
         ("save_scene", CFUNCTYPE(c_int32, c_void_p, c_char_p)),
         ("get_pipeline_type", CFUNCTYPE(c_int32, c_void_p, POINTER(EditorToken), POINTER(c_uint32))),
+        (
+            "get_camera_2",
+            CFUNCTYPE(
+                pnanovdb_bool_t,
+                c_void_p,  # pnanovdb_editor_t*
+                POINTER(EditorToken),  # scene
+                POINTER(Camera),  # out_camera (caller-owned)
+            ),
+        ),
     ]
 
 
@@ -524,6 +533,17 @@ class Editor:
         """Get camera for a given scene."""
         get_camera_func = self._editor.contents.get_camera
         return get_camera_func(self._editor, scene)
+
+    def get_camera_2(self, scene):
+        """Get a copy of the camera for a given scene.
+
+        Returns a fresh Camera value (safe to keep and to call concurrently), or
+        None if the scene has not been seen yet.
+        """
+        camera = Camera()
+        get_camera_2_func = self._editor.contents.get_camera_2
+        found = get_camera_2_func(self._editor, scene, byref(camera))
+        return camera if found else None
 
     def add_nanovdb_2(self, scene, name, array):
         """Add NanoVDB data to scene with token-based API."""

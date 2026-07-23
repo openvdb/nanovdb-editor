@@ -25,7 +25,7 @@ TEST(ShaderParamsConcurrency, ConcurrentPoolAndMapAccessIsRaceFree)
 
     // Half the threads churn the pool (push_back + clear); the rest also scan the param map, so the
     // recursive_mutex is exercised across shader_params_pool_ and params_map_ simultaneously.
-    auto pool_churn = [&params](bool also_scan_map)
+    auto pool_churn = [&params, kIterationsPerThread](bool also_scan_map)
     {
         std::vector<char> seed(64, 0x5A);
         ShaderParam probe;

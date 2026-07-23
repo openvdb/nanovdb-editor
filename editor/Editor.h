@@ -23,6 +23,7 @@
 #include <functional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <mutex>
 #include <memory>
@@ -103,6 +104,8 @@ struct pnanovdb_editor_impl_t
     // Temporary buffer for get_camera() to return scene-specific camera
     pnanovdb_camera_t* scene_camera;
     std::mutex scene_camera_mutex;
+    std::unordered_map<uint64_t, pnanovdb_camera_t> scene_cameras;
+    std::unordered_set<uint64_t> scene_cameras_pending_apply;
 };
 
 namespace pnanovdb_editor

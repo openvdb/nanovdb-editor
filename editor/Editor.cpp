@@ -129,6 +129,8 @@ static pnanovdb_bool_t init_impl(pnanovdb_editor_t* editor,
     editor->impl->data_array = NULL;
     editor->impl->camera = NULL;
     editor->impl->scene_camera = NULL;
+    editor->impl->scene_cameras.clear();
+    editor->impl->scene_cameras_pending_apply.clear();
     editor->impl->camera_view = NULL;
     editor->impl->raster_ctx = NULL;
     editor->impl->shader_params = NULL;
@@ -564,6 +566,39 @@ static void run_add_with_render_sync(pnanovdb_editor_t* editor, std::function<vo
     fn(false);
 }
 
+static void refresh_current_scene_camera_cache(pnanovdb_editor_t* editor)
+{
+    if (!editor || !editor->impl)
+    {
+        return;
+    }
+    SceneView* views = editor->impl->scene_view;
+    if (!views)
+    {
+        return;
+    }
+    pnanovdb_editor_token_t* current_scene = views->get_current_scene_token();
+    if (!current_scene)
+    {
+        return;
+    }
+    pnanovdb_editor_token_t* viewport_token = views->get_viewport_camera_token(current_scene);
+    pnanovdb_camera_view_t* viewport_view = views->get_camera(current_scene, viewport_token);
+    if (!viewport_view || !viewport_view->configs || !viewport_view->states || viewport_view->num_cameras == 0)
+    {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(editor->impl->scene_camera_mutex);
+    if (editor->impl->scene_cameras_pending_apply.count(current_scene->id) != 0)
+    {
+        return;
+    }
+    pnanovdb_camera_t& cached = editor->impl->scene_cameras[current_scene->id];
+    cached.config = viewport_view->configs[0];
+    cached.state = viewport_view->states[0];
+}
+
 static void run_show_loop(pnanovdb_editor_t* editor,
                           pnanovdb_compute_device_t* device,
                           pnanovdb_editor_config_t* config,
@@ -848,6 +883,8 @@ static void run_show_loop(pnanovdb_editor_t* editor,
         // update scene
         editor->impl->editor_scene->sync_selected_view_with_current();
         editor->impl->editor_scene->sync_shader_params_from_editor();
+
+        refresh_current_scene_camera_cache(editor);
 
         // execute pending convert pipelines
         {
@@ -1221,6 +1258,26 @@ void wait_for_interrupt(pnanovdb_editor_t* editor)
 }
 
 // TODO: use map/unmap for cameras
+pnanovdb_bool_t get_camera_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_camera_t* out_camera)
+{
+    if (!editor || !editor->impl || !scene || !out_camera)
+    {
+        return PNANOVDB_FALSE;
+    }
+
+    std::lock_guard<std::mutex> lock(editor->impl->scene_camera_mutex);
+    auto cached = editor->impl->scene_cameras.find(scene->id);
+    if (cached == editor->impl->scene_cameras.end())
+    {
+        pnanovdb_camera_init(out_camera);
+        pnanovdb_camera_state_default(&out_camera->state, PNANOVDB_TRUE);
+        pnanovdb_camera_config_default(&out_camera->config);
+        return PNANOVDB_FALSE;
+    }
+    *out_camera = cached->second;
+    return PNANOVDB_TRUE;
+}
+
 pnanovdb_camera_t* get_camera(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene)
 {
     if (!editor || !editor->impl || !scene)
@@ -1228,26 +1285,8 @@ pnanovdb_camera_t* get_camera(pnanovdb_editor_t* editor, pnanovdb_editor_token_t
         return nullptr;
     }
 
-    pnanovdb_camera_t* result = nullptr;
-    run_on_render_thread(
-        editor,
-        [editor, scene, &result]()
-        {
-            SceneView* views = editor->impl->scene_view;
-            if (!views)
-                return PNANOVDB_FALSE;
-            views->get_or_create_scene(scene);
-            pnanovdb_editor_token_t* viewport_token = views->get_viewport_camera_token(scene);
-            pnanovdb_camera_view_t* viewport_view = views->get_camera(scene, viewport_token);
-            if (!viewport_view || !viewport_view->configs || !viewport_view->states || viewport_view->num_cameras == 0)
-                return PNANOVDB_FALSE;
-            std::lock_guard<std::mutex> lock(editor->impl->scene_camera_mutex);
-            editor->impl->scene_camera->config = viewport_view->configs[0];
-            editor->impl->scene_camera->state = viewport_view->states[0];
-            result = editor->impl->scene_camera;
-            return PNANOVDB_TRUE;
-        });
-    return result;
+    get_camera_2(editor, scene, editor->impl->scene_camera);
+    return editor->impl->scene_camera;
 }
 
 pnanovdb_bool_t load_scene(pnanovdb_editor_t* editor, const char* filepath, pnanovdb_bool_t overwrite)
@@ -1378,6 +1417,34 @@ void add_nanovdb_2(pnanovdb_editor_t* editor,
         });
 }
 
+static pnanovdb_editor_gaussian_data_desc_t duplicate_gaussian_desc(const pnanovdb_compute_t* compute,
+                                                                    const pnanovdb_editor_gaussian_data_desc_t& desc)
+{
+    auto dup = [compute](pnanovdb_compute_array_t* a) { return a ? compute->duplicate_array(a) : nullptr; };
+    pnanovdb_editor_gaussian_data_desc_t out{};
+    out.means = dup(desc.means);
+    out.opacities = dup(desc.opacities);
+    out.quaternions = dup(desc.quaternions);
+    out.scales = dup(desc.scales);
+    out.sh_0 = dup(desc.sh_0);
+    out.sh_n = dup(desc.sh_n);
+    return out;
+}
+
+static void destroy_gaussian_desc(const pnanovdb_compute_t* compute, pnanovdb_editor_gaussian_data_desc_t& desc)
+{
+    pnanovdb_compute_array_t* arrays[] = { desc.means,  desc.opacities, desc.quaternions,
+                                           desc.scales, desc.sh_0,      desc.sh_n };
+    for (pnanovdb_compute_array_t* a : arrays)
+    {
+        if (a)
+        {
+            compute->destroy_array(a);
+        }
+    }
+    desc = pnanovdb_editor_gaussian_data_desc_t{};
+}
+
 void add_gaussian_data_2(pnanovdb_editor_t* editor,
                          pnanovdb_editor_token_t* scene,
                          pnanovdb_editor_token_t* name,
@@ -1393,22 +1460,27 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
                                   token_to_string_log(scene), (unsigned long long)scene->id, token_to_string_log(name),
                                   (unsigned long long)name->id);
 
-    on_render_thread(
+    pnanovdb_editor_gaussian_data_desc_t desc_copy = duplicate_gaussian_desc(editor->impl->compute, *desc);
+
+    post_to_render_thread(
         editor,
-        [=]()
+        [editor, scene, name, desc_copy]() mutable
         {
+            const pnanovdb_compute_t* compute = editor->impl->compute;
             pnanovdb_compute_queue_t* device_queue = editor->impl->device_queue;
             if (!device_queue)
             {
                 Console::getInstance().addLog(Console::LogLevel::Error, "add_gaussian_data_2: device_queue is null");
+                destroy_gaussian_desc(compute, desc_copy);
                 return;
             }
 
             pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr;
 
             pnanovdb_bool_t success = editor->impl->raster->create_gaussian_data_from_desc(
-                editor->impl->raster, editor->impl->compute, device_queue, desc, name->str, &gaussian_data, nullptr,
-                nullptr);
+                editor->impl->raster, compute, device_queue, &desc_copy, name->str, &gaussian_data, nullptr, nullptr);
+
+            destroy_gaussian_desc(compute, desc_copy);
 
             if (success == PNANOVDB_FALSE || !gaussian_data)
             {
@@ -1422,16 +1494,15 @@ void add_gaussian_data_2(pnanovdb_editor_t* editor,
                 PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t);
 
             pnanovdb_compute_array_t* raster_params_array = editor->impl->scene_manager->create_initialized_shader_params(
-                editor->impl->compute, pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat),
+                compute, pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat),
                 pnanovdb_pipeline_get_shader_group(pnanovdb_pipeline_type_gaussian_splat),
                 sizeof(pnanovdb_raster_shader_params_t), raster_params_dt);
 
             // Add with deferred destruction handling (use local device_queue in case we waited for worker init)
             std::shared_ptr<pnanovdb_raster_gaussian_data_t> old_owner;
             editor->impl->scene_manager->add_gaussian_data(
-                scene, name, gaussian_data, raster_params_array, raster_params_dt, editor->impl->compute,
-                editor->impl->raster, device_queue,
-                pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat), &old_owner);
+                scene, name, gaussian_data, raster_params_array, raster_params_dt, compute, editor->impl->raster,
+                device_queue, pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat), &old_owner);
 
             // Chain old data through gaussian_data_old for deferred destruction
             if (old_owner)
@@ -1514,21 +1585,26 @@ void add_gaussian_data_3(pnanovdb_editor_t* editor,
         Console::LogLevel::Debug, "add_gaussian_data_3: scene='%s', name='%s', process=%d, render=%d",
         token_to_string_log(scene), token_to_string_log(name), (int)process_pipeline, (int)render_pipeline);
 
-    on_render_thread(
+    pnanovdb_editor_gaussian_data_desc_t desc_copy = duplicate_gaussian_desc(editor->impl->compute, *desc);
+
+    post_to_render_thread(
         editor,
-        [=]()
+        [editor, scene, name, process_pipeline, render_pipeline, desc_copy]() mutable
         {
+            const pnanovdb_compute_t* compute = editor->impl->compute;
             pnanovdb_compute_queue_t* device_queue = editor->impl->device_queue;
             if (!device_queue)
             {
                 Console::getInstance().addLog(Console::LogLevel::Error, "add_gaussian_data_3: device_queue is null");
+                destroy_gaussian_desc(compute, desc_copy);
                 return;
             }
 
             pnanovdb_raster_gaussian_data_t* gaussian_data = nullptr;
             pnanovdb_bool_t success = editor->impl->raster->create_gaussian_data_from_desc(
-                editor->impl->raster, editor->impl->compute, device_queue, desc, name->str, &gaussian_data, nullptr,
-                nullptr);
+                editor->impl->raster, compute, device_queue, &desc_copy, name->str, &gaussian_data, nullptr, nullptr);
+
+            destroy_gaussian_desc(compute, desc_copy);
 
             if (success == PNANOVDB_FALSE || !gaussian_data)
             {
@@ -1540,16 +1616,15 @@ void add_gaussian_data_3(pnanovdb_editor_t* editor,
             const pnanovdb_reflect_data_type_t* raster_params_dt =
                 PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t);
             pnanovdb_compute_array_t* raster_params_array = editor->impl->scene_manager->create_initialized_shader_params(
-                editor->impl->compute, pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat),
+                compute, pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat),
                 pnanovdb_pipeline_get_shader_group(pnanovdb_pipeline_type_gaussian_splat),
                 sizeof(pnanovdb_raster_shader_params_t), raster_params_dt);
 
             std::shared_ptr<pnanovdb_raster_gaussian_data_t> old_owner;
             editor->impl->scene_manager->add_gaussian_data(
-                scene, name, gaussian_data, raster_params_array, raster_params_dt, editor->impl->compute,
-                editor->impl->raster, device_queue,
-                pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat), process_pipeline,
-                render_pipeline, &old_owner);
+                scene, name, gaussian_data, raster_params_array, raster_params_dt, compute, editor->impl->raster,
+                device_queue, pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat),
+                process_pipeline, render_pipeline, &old_owner);
 
             if (old_owner)
             {
@@ -1596,45 +1671,56 @@ void update_camera_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, 
         return;
     }
 
-    on_render_thread(editor,
-                     [=]()
-                     {
-                         // 1) Update the scene's viewport camera view
-                         SceneView* views = editor->impl->scene_view;
-                         if (views)
-                         {
-                             // Create the scene if it doesn't exist
-                             views->get_or_create_scene(scene);
+    const pnanovdb_camera_t camera_copy = *camera;
+    {
+        std::lock_guard<std::mutex> lock(editor->impl->scene_camera_mutex);
+        editor->impl->scene_cameras[scene->id] = camera_copy;
+        editor->impl->scene_cameras_pending_apply.insert(scene->id);
+    }
+    post_to_render_thread(editor,
+                          [editor, scene, camera_copy]()
+                          {
+                              // 1) Update the scene's viewport camera view
+                              SceneView* views = editor->impl->scene_view;
+                              if (views)
+                              {
+                                  // Create the scene if it doesn't exist
+                                  views->get_or_create_scene(scene);
 
-                             pnanovdb_editor_token_t* viewport_token = views->get_viewport_camera_token(scene);
-                             pnanovdb_camera_view_t* viewport_view = views->get_camera(scene, viewport_token);
-                             if (viewport_view && viewport_view->configs && viewport_view->states)
-                             {
-                                 *viewport_view->configs = camera->config;
-                                 *viewport_view->states = camera->state;
-                             }
-                         }
+                                  pnanovdb_editor_token_t* viewport_token = views->get_viewport_camera_token(scene);
+                                  pnanovdb_camera_view_t* viewport_view = views->get_camera(scene, viewport_token);
+                                  if (viewport_view && viewport_view->configs && viewport_view->states)
+                                  {
+                                      *viewport_view->configs = camera_copy.config;
+                                      *viewport_view->states = camera_copy.state;
+                                  }
+                              }
 
-                         // 2) If this scene is currently displayed, update the editor's active camera
-                         bool is_current_scene_displayed = false;
-                         if (views)
-                         {
-                             pnanovdb_editor_token_t* current_scene = views->get_current_scene_token();
-                             is_current_scene_displayed = (current_scene && current_scene->id == scene->id);
-                         }
+                              // 2) If this scene is currently displayed, update the editor's active camera
+                              bool is_current_scene_displayed = false;
+                              if (views)
+                              {
+                                  pnanovdb_editor_token_t* current_scene = views->get_current_scene_token();
+                                  is_current_scene_displayed = (current_scene && current_scene->id == scene->id);
+                              }
 
-                         if (is_current_scene_displayed && editor->impl->camera)
-                         {
-                             // We run on the render thread, so update the active camera directly and push it
-                             // into the viewport/UI (what the pending_camera handoff used to do next frame).
-                             editor->impl->camera->config = camera->config;
-                             editor->impl->camera->state = camera->state;
-                             if (editor->impl->editor_scene)
-                             {
-                                 editor->impl->editor_scene->apply_editor_camera_to_viewport();
-                             }
-                         }
-                     });
+                              if (is_current_scene_displayed && editor->impl->camera)
+                              {
+                                  // We run on the render thread, so update the active camera directly and push it
+                                  // into the viewport/UI (what the pending_camera handoff used to do next frame).
+                                  editor->impl->camera->config = camera_copy.config;
+                                  editor->impl->camera->state = camera_copy.state;
+                                  if (editor->impl->editor_scene)
+                                  {
+                                      editor->impl->editor_scene->apply_editor_camera_to_viewport();
+                                  }
+                              }
+
+                              // The client camera is now live in the viewport; allow the per-frame refresh to
+                              // track interactive changes from here on.
+                              std::lock_guard<std::mutex> lock(editor->impl->scene_camera_mutex);
+                              editor->impl->scene_cameras_pending_apply.erase(scene->id);
+                          });
 }
 
 // Helper function that executes the actual removal logic
@@ -1844,6 +1930,12 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
                         Console::getInstance().addLog(
                             Console::LogLevel::Debug, "Scene '%s' was not found in SceneView", scene->str);
                     }
+                }
+
+                {
+                    std::lock_guard<std::mutex> lock(editor->impl->scene_camera_mutex);
+                    editor->impl->scene_cameras.erase(scene->id);
+                    editor->impl->scene_cameras_pending_apply.erase(scene->id);
                 }
 
                 Console::getInstance().addLog(
@@ -2790,6 +2882,7 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
 
     // New token-based API
     editor.get_camera = get_camera;
+    editor.get_camera_2 = get_camera_2;
     editor.get_token = get_token;
     editor.add_nanovdb_2 = add_nanovdb_2;
     editor.add_gaussian_data_2 = add_gaussian_data_2;

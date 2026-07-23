@@ -274,13 +274,18 @@ def _run_upstream_viz_suite(env_ctx: dict):
     env = env_ctx["env"]
     upstream_test_path = env_ctx["upstream_test_path"]
     _assert_viz_server_initializes(env_ctx)
-    runner = """
+    # Emit periodic Python thread stacks well before the suite timeout fires so a hang produces
+    # several progressively-updated tracebacks rather than a single dump at the very end.
+    dump_interval = max(15, VIZ_SUITE_TIMEOUT_SECONDS // 4)
+    runner = f"""
+import faulthandler
 import os
 import sys
 import traceback
 
 import pytest
 
+faulthandler.dump_traceback_later({dump_interval}, repeat=True)
 exit_code = 1
 try:
     exit_code = int(pytest.main(sys.argv[1:]))
