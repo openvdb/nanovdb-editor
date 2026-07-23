@@ -91,6 +91,17 @@ public:
         return (it == m_entries.end()) ? 0u : it->second.ref_count;
     }
 
+    size_t active_map_count() const
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        size_t total = 0u;
+        for (const auto& entry : m_entries)
+        {
+            total += entry.second.ref_count;
+        }
+        return total;
+    }
+
     void stack_push(ParamMapFrame frame)
     {
         thread_stack().push_back(frame);
@@ -325,6 +336,12 @@ PNANOVDB_API size_t param_map_stack_depth(pnanovdb_editor_t* editor)
 {
     ParamMapRegistry* registry = registry_for(editor);
     return registry ? registry->stack_depth() : 0u;
+}
+
+size_t param_map_active_count(pnanovdb_editor_t* editor)
+{
+    ParamMapRegistry* registry = registry_for(editor);
+    return registry ? registry->active_map_count() : 0u;
 }
 
 } // namespace pnanovdb_editor

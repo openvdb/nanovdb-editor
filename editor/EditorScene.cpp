@@ -570,72 +570,6 @@ bool EditorScene::handle_pending_view_changes()
     return false;
 }
 
-void EditorScene::process_pending_editor_changes()
-{
-    auto* worker = m_editor->impl->editor_worker;
-    if (!worker)
-    {
-        return;
-    }
-
-    bool updated = false;
-
-    // Process pending NanoVDB array
-    pnanovdb_compute_array_t* old_nanovdb_array = nullptr;
-    updated = worker->pending_nanovdb.process_pending(m_editor->impl->nanovdb_array, old_nanovdb_array);
-
-    // Process pending data array
-    pnanovdb_compute_array_t* old_array = nullptr;
-    worker->pending_data_array.process_pending(m_editor->impl->data_array, old_array);
-
-    // Process pending Gaussian data
-    pnanovdb_raster_gaussian_data_t* old_gaussian_data = nullptr;
-    worker->pending_gaussian_data.process_pending(m_editor->impl->gaussian_data, old_gaussian_data);
-
-    pnanovdb_camera_t* old_camera = nullptr;
-    updated = worker->pending_camera.process_pending(m_editor->impl->camera, old_camera);
-    if (updated)
-    {
-        if (old_camera)
-        {
-            delete old_camera;
-        }
-
-        m_imgui_settings->camera_state = m_editor->impl->camera->state;
-        m_imgui_settings->camera_config = m_editor->impl->camera->config;
-        m_imgui_settings->sync_camera = PNANOVDB_TRUE;
-    }
-
-    // Process pending camera views
-    // Note: Camera views are added to scene manager in add_camera_view_2(), we just update pointers here
-    for (uint32_t idx = 0u; idx < 32u; idx++)
-    {
-        pnanovdb_camera_view_t* old_camera_view = nullptr;
-        worker->pending_camera_view[idx].process_pending(m_editor->impl->camera_view, old_camera_view);
-    }
-
-    // Process pending shader params
-    // Note: Shader params are set in scene objects, we just update the global pointer for legacy renderer access
-    {
-        std::lock_guard<std::recursive_mutex> lock(m_editor->impl->editor_worker->shader_params_mutex);
-        void* old_shader_params = nullptr;
-        worker->pending_shader_params.process_pending(m_editor->impl->shader_params, old_shader_params);
-
-        const pnanovdb_reflect_data_type_t* old_shader_params_data_type = nullptr;
-        worker->pending_shader_params_data_type.process_pending(
-            m_editor->impl->shader_params_data_type, old_shader_params_data_type);
-    }
-
-
-    // Sync views from scene_manager if signaled (worker thread modified scene_manager)
-    if (worker->views_need_sync.exchange(false, std::memory_order_acq_rel))
-    {
-        const uint64_t selected_scene_id = worker->last_added_scene_token_id.exchange(0, std::memory_order_relaxed);
-        const uint64_t selected_name_id = worker->last_added_name_token_id.exchange(0, std::memory_order_relaxed);
-        sync_views_from_scene_manager(selected_scene_id, selected_name_id);
-    }
-}
-
 void EditorScene::process_pending_ui_changes()
 {
     // TODO: remove those
@@ -725,11 +659,16 @@ void EditorScene::sync_selected_view_with_current()
 
 void EditorScene::sync_shader_params_from_editor()
 {
-    if (m_editor->impl->editor_worker)
+    std::shared_ptr<EditorWorker> worker;
     {
-        std::lock_guard<std::recursive_mutex> lock(m_editor->impl->editor_worker->shader_params_mutex);
+        std::lock_guard<std::mutex> lifecycle_lock(m_editor->impl->editor_worker_lifecycle_mutex);
+        worker = m_editor->impl->editor_worker;
+    }
+    if (worker)
+    {
+        std::lock_guard<std::recursive_mutex> lock(worker->shader_params_mutex);
 
-        if (m_editor->impl->editor_worker->params_dirty.exchange(false))
+        if (worker->params_dirty.exchange(false))
         {
             // Sync editor params to UI
             sync_current_view_state(SyncDirection::EditorToUI);
@@ -766,39 +705,7 @@ void EditorScene::sync_views_from_scene_manager(uint64_t selected_scene_id, uint
     m_scene_manager.for_each_object(
         [this](SceneObject* obj)
         {
-            if (!obj || !obj->scene_token || !obj->name_token || !obj->name_token->str)
-            {
-                return true;
-            }
-
-            if (obj->type == SceneObjectType::Camera)
-            {
-                if (obj->camera_view() && obj->resources.camera_view_owner)
-                {
-                    m_scene_view.sync_camera_owner(obj->scene_token, obj->name_token, obj->resources.camera_view_owner);
-                }
-            }
-            else
-            {
-                auto render_method = pipeline_get_render_method(obj->render_pipeline());
-                bool has_nanovdb = (obj->nanovdb_array() && obj->resources.nanovdb_array_owner) ||
-                                   (obj->converted_nanovdb() && obj->resources.converted_nanovdb_owner);
-                if (render_method == pnanovdb_pipeline_render_method_nanovdb && has_nanovdb)
-                {
-                    const auto& owner = obj->resources.nanovdb_array_owner ? obj->resources.nanovdb_array_owner :
-                                                                             obj->resources.converted_nanovdb_owner;
-                    NanoVDBContext ctx{ owner, obj->shader_params(), obj->params.shader_params_array_owner };
-                    m_scene_view.add_nanovdb(obj->scene_token, obj->name_token, ctx);
-                }
-                else if (render_method == pnanovdb_pipeline_render_method_gaussian && obj->gaussian_data() &&
-                         obj->resources.gaussian_data_owner)
-                {
-                    GaussianDataContext ctx{ obj->resources.gaussian_data_owner,
-                                             (pnanovdb_raster_shader_params_t*)obj->shader_params() };
-                    m_scene_view.add_gaussian(obj->scene_token, obj->name_token, ctx);
-                }
-            }
-
+            sync_object_into_view(obj);
             return true;
         });
 
@@ -865,6 +772,89 @@ void EditorScene::sync_views_from_scene_manager(uint64_t selected_scene_id, uint
             set_render_view(view_type, view_to_select, last_added_scene_token);
         }
     }
+}
+
+bool EditorScene::sync_object_into_view(SceneObject* obj)
+{
+    if (!obj || !obj->scene_token || !obj->name_token || !obj->name_token->str)
+        return false;
+
+    if (obj->type == SceneObjectType::Camera)
+    {
+        if (obj->camera_view() && obj->resources.camera_view_owner)
+            m_scene_view.sync_camera_owner(obj->scene_token, obj->name_token, obj->resources.camera_view_owner);
+        return true;
+    }
+
+    const auto render_method = pipeline_get_render_method(obj->render_pipeline());
+    const bool has_nanovdb = (obj->nanovdb_array() && obj->resources.nanovdb_array_owner) ||
+                             (obj->converted_nanovdb() && obj->resources.converted_nanovdb_owner);
+    if (render_method == pnanovdb_pipeline_render_method_nanovdb && has_nanovdb)
+    {
+        const auto& owner = obj->resources.nanovdb_array_owner ? obj->resources.nanovdb_array_owner :
+                                                                 obj->resources.converted_nanovdb_owner;
+        NanoVDBContext ctx{ owner, obj->shader_params(), obj->params.shader_params_array_owner };
+        m_scene_view.add_nanovdb(obj->scene_token, obj->name_token, ctx);
+    }
+    else if (render_method == pnanovdb_pipeline_render_method_gaussian && obj->gaussian_data() &&
+             obj->resources.gaussian_data_owner)
+    {
+        GaussianDataContext ctx{ obj->resources.gaussian_data_owner,
+                                 (pnanovdb_raster_shader_params_t*)obj->shader_params() };
+        m_scene_view.add_gaussian(obj->scene_token, obj->name_token, ctx);
+    }
+    return false;
+}
+
+void EditorScene::select_view_for_added_object(pnanovdb_editor_token_t* scene,
+                                               pnanovdb_editor_token_t* name,
+                                               bool added_camera)
+{
+    if (added_camera)
+        return;
+
+    focus_added_object_in_properties(scene, name);
+    if (m_render_view_selection.is_valid())
+    {
+        return;
+    }
+
+    pnanovdb_editor_token_t* old_scene = m_scene_view.get_current_scene_token();
+    m_scene_view.set_current_scene(scene);
+    if (is_switching_scenes(old_scene, scene))
+    {
+        sync_editor_camera_from_scene();
+        apply_editor_camera_to_viewport();
+    }
+
+    pnanovdb_editor_token_t* content = nullptr;
+    if (determine_view_type(name, scene) != ViewType::None)
+    {
+        content = name;
+    }
+    else
+    {
+        SceneViewData* scene_data = m_scene_view.get_or_create_scene(scene);
+        if (scene_data && scene_data->last_added_view_token_id != 0)
+            content = EditorToken::getInstance().getTokenById(scene_data->last_added_view_token_id);
+        if (!content || determine_view_type(content, scene) == ViewType::None)
+            content = find_any_view_in_scene(scene);
+    }
+
+    if (content)
+        select_render_view(scene, content);
+}
+
+void EditorScene::sync_object_from_scene_manager(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
+{
+    if (!scene || !name)
+        return;
+
+    bool added_camera = false;
+    m_scene_manager.with_object(
+        scene, name, [this, &added_camera](SceneObject* obj) { added_camera = sync_object_into_view(obj); });
+
+    select_view_for_added_object(scene, name, added_camera);
 }
 
 void EditorScene::reload_shader_params_for_current_view()
@@ -2485,7 +2475,7 @@ void EditorScene::select_render_view(pnanovdb_editor_token_t* scene, pnanovdb_ed
         return;
     }
 
-    // Set the current view in the specified scene
+
     m_scene_view.set_current_view(scene, name);
 
     // Sync the selection

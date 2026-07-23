@@ -8,6 +8,8 @@
 #include <nanovdb_editor/putil/Editor.h>
 
 #include "editor/PipelineTypes.h" // canonical pnanovdb_pipeline_type_* enum
+#include "editor/Editor.h" // pnanovdb_editor_impl_t / EditorWorker (per-worker config snapshot)
+#include "GpuTestSupport.h"
 
 #include <nanovdb/tools/CreatePrimitives.h>
 
@@ -43,6 +45,16 @@ TEST(NanoVDBEditor, MultiEditorPipelineRuntimeIsolation)
         pnanovdb_compute_free(&compute);
         pnanovdb_compiler_free(&compiler);
         GTEST_SKIP() << "No Vulkan-compatible device available on this machine";
+    }
+
+    if (pnanovdb_editor_test::should_skip_on_software_renderer(phys_desc.device_name))
+    {
+        const std::string skip_reason = pnanovdb_editor_test::software_renderer_skip_reason(
+            phys_desc.device_name, "multi-editor runtime isolation test (two concurrent headless render loops)");
+        compute.device_interface.destroy_device_manager(device_manager);
+        pnanovdb_compute_free(&compute);
+        pnanovdb_compiler_free(&compiler);
+        GTEST_SKIP() << skip_reason;
     }
 
     pnanovdb_compute_device_t* device_a = compute.device_interface.create_device(device_manager, &device_desc);
@@ -86,6 +98,23 @@ TEST(NanoVDBEditor, MultiEditorPipelineRuntimeIsolation)
     ASSERT_NE(b.editor.impl, nullptr);
     EXPECT_NE(a.editor.impl, b.editor.impl)
         << "Each editor must own its own impl (and therefore its own PipelineRuntime)";
+
+    ASSERT_NE(a.editor.impl->editor_worker, nullptr) << "Editor A must have a live worker after start()";
+    ASSERT_NE(b.editor.impl->editor_worker, nullptr) << "Editor B must have a live worker after start()";
+    EXPECT_NE(a.editor.impl->editor_worker, b.editor.impl->editor_worker) << "Each editor must own a distinct worker";
+
+    EXPECT_EQ(a.editor.impl->config.port, 8090) << "Editor A must keep the port it was started with";
+    EXPECT_EQ(b.editor.impl->config.port, 8091) << "Editor B must keep the port it was started with";
+
+    ASSERT_NE(a.editor.impl->config.ip_address, nullptr);
+    ASSERT_NE(b.editor.impl->config.ip_address, nullptr);
+    EXPECT_STREQ(a.editor.impl->config.ip_address, "127.0.0.1");
+    EXPECT_STREQ(b.editor.impl->config.ip_address, "127.0.0.1");
+
+    EXPECT_EQ(a.editor.impl->config.ip_address, a.editor.impl->config_ip_address.c_str());
+    EXPECT_EQ(b.editor.impl->config.ip_address, b.editor.impl->config_ip_address.c_str());
+    EXPECT_NE(a.editor.impl->config.ip_address, b.editor.impl->config.ip_address)
+        << "Each editor must own independent config storage";
 
     pnanovdb_editor_token_t* scene = a.editor.get_token("shared_scene_name");
     pnanovdb_editor_token_t* only_in_a = a.editor.get_token("only_in_a");

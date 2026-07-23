@@ -96,9 +96,10 @@ TEST(StreamingUiToViewSync, PoolMutationPropagatesToObjectBufferEachFrame)
 
     editor.start(&editor, device, &cfg);
 
-    ASSERT_NE(editor.impl->editor_worker, nullptr) << "Streaming mode must create an EditorWorker";
+    std::shared_ptr<pnanovdb_editor::EditorWorker> worker = editor.impl->editor_worker;
+    ASSERT_NE(worker, nullptr) << "Streaming mode must create an EditorWorker";
 
-    ASSERT_TRUE(wait_until([&]() { return !editor.impl->editor_worker->is_starting.load(); }, kWorkerStartupTimeout))
+    ASSERT_TRUE(wait_until([&]() { return !worker->is_starting.load(); }, kWorkerStartupTimeout))
         << "Editor worker did not finish starting";
 
     pnanovdb_editor_token_t* scene_token = editor.get_token("ui_sync_streaming_scene");
@@ -116,6 +117,21 @@ TEST(StreamingUiToViewSync, PoolMutationPropagatesToObjectBufferEachFrame)
         [&]() { return pnanovdb_editor_test::get_object_shader_params_ptr(&editor, scene_token, name_token) != nullptr; },
         kObjectReadyTimeout))
         << "Per-object shader_params buffer was never allocated for the added object";
+
+    ASSERT_TRUE(wait_until([&]() { return editor.impl->nanovdb_array != nullptr; }, kObjectReadyTimeout))
+        << "The added object was not synchronized to the render view";
+    pnanovdb_compute_array_t* initial_render_array = editor.impl->nanovdb_array;
+
+    pnanovdb_editor_token_t* second_name_token = editor.get_token("ui_sync_streaming_object_2");
+    auto second_sphere_grid = nanovdb::tools::createLevelSetSphere<float>(5.0f);
+    pnanovdb_compute_array_t* second_nanovdb_array =
+        compute.create_array(4u, second_sphere_grid.bufferSize() / 4u, second_sphere_grid.data());
+    ASSERT_NE(second_nanovdb_array, nullptr);
+    editor.add_nanovdb_2(&editor, scene_token, second_name_token, second_nanovdb_array);
+    compute.destroy_array(second_nanovdb_array);
+
+    EXPECT_EQ(editor.impl->nanovdb_array, initial_render_array)
+        << "adding a later object must not steal the active render view";
 
     std::array<uint8_t, 64> baseline{};
     ASSERT_EQ(pnanovdb_editor_test::snapshot_object_shader_params(

@@ -212,19 +212,21 @@ pnanovdb_compute_array_t* EditorSceneManager::create_params_array(const pnanovdb
     return compute->create_array(element_size, 1u, default_value);
 }
 
-pnanovdb_compute_array_t* EditorSceneManager::create_initialized_shader_params(
-    const pnanovdb_compute_t* compute,
-    const char* shader_name,
-    const char* shader_group,
-    size_t fallback_size,
-    const pnanovdb_reflect_data_type_t* fallback_data_type)
+namespace
+{
+pnanovdb_compute_array_t* build_initialized_shader_params(ShaderParams& shader_params,
+                                                          const pnanovdb_compute_t* compute,
+                                                          const char* shader_name,
+                                                          const char* shader_group,
+                                                          size_t fallback_size,
+                                                          const pnanovdb_reflect_data_type_t* fallback_data_type)
 {
     if (!compute)
     {
         return nullptr;
     }
 
-    // Ensure JSON with default is loaded from our own shader_params
+    // Ensure JSON with default is loaded
     if (shader_group)
     {
         shader_params.loadGroup(shader_group, false);
@@ -245,10 +247,37 @@ pnanovdb_compute_array_t* EditorSceneManager::create_initialized_shader_params(
     // Fallback to empty/default params if JSON not loaded
     if (!params_array)
     {
-        params_array = create_params_array(compute, fallback_data_type, fallback_size);
+        params_array = EditorSceneManager::create_params_array(compute, fallback_data_type, fallback_size);
     }
 
     return params_array;
+}
+} // namespace
+
+pnanovdb_compute_array_t* EditorSceneManager::create_initialized_shader_params(
+    const pnanovdb_compute_t* compute,
+    const char* shader_name,
+    const char* shader_group,
+    size_t fallback_size,
+    const pnanovdb_reflect_data_type_t* fallback_data_type)
+{
+    // Uses the shared, mutex-protected shader_params instance (render-thread callers).
+    return build_initialized_shader_params(
+        shader_params, compute, shader_name, shader_group, fallback_size, fallback_data_type);
+}
+
+pnanovdb_compute_array_t* EditorSceneManager::create_isolated_shader_params(
+    const pnanovdb_compute_t* compute,
+    const char* shader_name,
+    const char* shader_group,
+    size_t fallback_size,
+    const pnanovdb_reflect_data_type_t* fallback_data_type)
+{
+    // A throwaway instance keeps caller-thread adds off the shared shader_params state entirely, so
+    // they cannot race the render thread. The initial values are the shader's JSON defaults.
+    ShaderParams local_params;
+    return build_initialized_shader_params(
+        local_params, compute, shader_name, shader_group, fallback_size, fallback_data_type);
 }
 
 void EditorSceneManager::refresh_params_for_shader(const pnanovdb_compute_t* compute, const char* shader_name)
@@ -424,7 +453,7 @@ bool EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
                          {
                              return add_nanovdb_impl(scene, name, array, params_array, compute, shader_name,
                                                      pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_nanovdb_render,
-                                                     old_gaussian_owner_out);
+                                                     false, old_gaussian_owner_out);
                          });
 }
 
@@ -443,7 +472,7 @@ bool EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
                          [&]
                          {
                              return add_nanovdb_impl(scene, name, array, params_array, compute, shader_name,
-                                                     process_pipeline, render_pipeline, old_gaussian_owner_out);
+                                                     process_pipeline, render_pipeline, true, old_gaussian_owner_out);
                          });
 }
 
@@ -524,7 +553,7 @@ bool EditorSceneManager::commit_reserved_nanovdb(pnanovdb_editor_token_t* scene,
                          [&]
                          {
                              return add_nanovdb_impl(scene, name, array, params_array, compute, shader_name,
-                                                     process_pipeline, render_pipeline, old_gaussian_owner_out);
+                                                     process_pipeline, render_pipeline, false, old_gaussian_owner_out);
                          });
 }
 
@@ -538,6 +567,16 @@ void apply_default_stage(PipelineStage& slot, pnanovdb_pipeline_type_t type)
     }
     slot.type = type;
     pnanovdb_pipeline_get_default_params(type, &slot.params);
+    slot.bump_revision();
+}
+
+void force_configured_stage(PipelineStage& slot, pnanovdb_pipeline_type_t type, bool dirty)
+{
+    slot.type = type;
+    pnanovdb_pipeline_get_default_params(type, &slot.params);
+    slot.shader_overrides.clear();
+    slot.configured = true;
+    slot.dirty = dirty;
     slot.bump_revision();
 }
 
@@ -817,6 +856,7 @@ bool EditorSceneManager::add_nanovdb_impl(pnanovdb_editor_token_t* scene,
                                           pnanovdb_editor_token_t* shader_name,
                                           pnanovdb_pipeline_type_t process_pipeline,
                                           pnanovdb_pipeline_type_t render_pipeline,
+                                          bool force_pipelines,
                                           std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_gaussian_owner_out)
 {
     // NOTE: Caller must hold m_mutex
@@ -845,8 +885,16 @@ bool EditorSceneManager::add_nanovdb_impl(pnanovdb_editor_token_t* scene,
     obj.shader_name() = shader_name;
 
     apply_default_stage(obj.pipeline.load(), pnanovdb_pipeline_type_nanovdb_load);
-    apply_default_stage(obj.pipeline.process(), process_pipeline);
-    apply_default_stage(obj.pipeline.render(), render_pipeline);
+    if (force_pipelines)
+    {
+        force_configured_stage(obj.pipeline.process(), process_pipeline, process_pipeline != pnanovdb_pipeline_type_noop);
+        force_configured_stage(obj.pipeline.render(), render_pipeline, false);
+    }
+    else
+    {
+        apply_default_stage(obj.pipeline.process(), process_pipeline);
+        apply_default_stage(obj.pipeline.render(), render_pipeline);
+    }
     obj.mark_process_dirty();
     restore_replacement_state(obj, replacement);
 
@@ -877,7 +925,7 @@ bool EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,
                              return add_gaussian_data_impl(scene, name, gaussian_data, params_array,
                                                            shader_params_data_type, compute, raster, queue, shader_name,
                                                            pnanovdb_pipeline_type_noop,
-                                                           pnanovdb_pipeline_type_gaussian_splat, old_owner_out);
+                                                           pnanovdb_pipeline_type_gaussian_splat, false, old_owner_out);
                          });
 }
 
@@ -900,7 +948,7 @@ bool EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,
                          {
                              return add_gaussian_data_impl(scene, name, gaussian_data, params_array,
                                                            shader_params_data_type, compute, raster, queue, shader_name,
-                                                           process_pipeline, render_pipeline, old_owner_out);
+                                                           process_pipeline, render_pipeline, true, old_owner_out);
                          });
 }
 
@@ -923,7 +971,7 @@ bool EditorSceneManager::commit_reserved_gaussian_data(pnanovdb_editor_token_t* 
                          {
                              return add_gaussian_data_impl(scene, name, gaussian_data, params_array,
                                                            shader_params_data_type, compute, raster, queue, shader_name,
-                                                           process_pipeline, render_pipeline, old_owner_out);
+                                                           process_pipeline, render_pipeline, false, old_owner_out);
                          });
 }
 
@@ -938,6 +986,7 @@ bool EditorSceneManager::add_gaussian_data_impl(pnanovdb_editor_token_t* scene,
                                                 const char* shader_name,
                                                 pnanovdb_pipeline_type_t process_pipeline,
                                                 pnanovdb_pipeline_type_t render_pipeline,
+                                                bool force_pipelines,
                                                 std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_owner_out)
 {
     // NOTE: Caller must hold m_mutex
@@ -967,8 +1016,16 @@ bool EditorSceneManager::add_gaussian_data_impl(pnanovdb_editor_token_t* scene,
     obj.shader_params_data_type() = shader_params_data_type;
     obj.shader_name() = EditorToken::getInstance().getToken(shader_name);
 
-    apply_default_stage(obj.pipeline.process(), process_pipeline);
-    apply_default_stage(obj.pipeline.render(), render_pipeline);
+    if (force_pipelines)
+    {
+        force_configured_stage(obj.pipeline.process(), process_pipeline, process_pipeline != pnanovdb_pipeline_type_noop);
+        force_configured_stage(obj.pipeline.render(), render_pipeline, false);
+    }
+    else
+    {
+        apply_default_stage(obj.pipeline.process(), process_pipeline);
+        apply_default_stage(obj.pipeline.render(), render_pipeline);
+    }
     obj.mark_process_dirty();
     restore_replacement_state(obj, replacement);
 

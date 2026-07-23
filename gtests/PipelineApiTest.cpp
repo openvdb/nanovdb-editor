@@ -20,6 +20,8 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <cstring>
+#include <memory>
 #include <string>
 #include <thread>
 
@@ -32,7 +34,7 @@ protected:
     pnanovdb_compiler_t compiler{};
     pnanovdb_compute_t compute{};
     pnanovdb_editor_t editor{};
-    pnanovdb_editor::EditorWorker worker{};
+    std::shared_ptr<pnanovdb_editor::EditorWorker> worker = std::make_shared<pnanovdb_editor::EditorWorker>();
 
     pnanovdb_editor_token_t* scene_token = nullptr;
     pnanovdb_editor_token_t* name_token = nullptr;
@@ -49,8 +51,9 @@ protected:
         pnanovdb_editor_load(&editor, &compute, &compiler);
         ASSERT_NE(editor.module, nullptr);
         ASSERT_NE(editor.impl, nullptr);
-        worker.is_starting.store(false, std::memory_order_release);
-        editor.impl->editor_worker = &worker;
+        worker->is_starting.store(false, std::memory_order_release);
+        worker->render_thread_id = std::this_thread::get_id();
+        editor.impl->editor_worker = worker;
 
         scene_token = editor.get_token("pipeline_api_scene");
         name_token = editor.get_token("pipeline_api_object");
@@ -295,6 +298,43 @@ TEST_F(PipelineApiTest, SetProcessChainExpandsIntoSteps)
     EXPECT_EQ(pnanovdb_editor_test::get_object_process_step_count(&editor, scene_token, name_token), 2u);
     EXPECT_EQ(pnanovdb_editor_test::get_object_process_step_type(&editor, scene_token, name_token, 1),
               pnanovdb_pipeline_type_voxelbvh_rgba8);
+}
+
+TEST_F(PipelineApiTest, VoxelBvhRgba8ParamsExposeRayDirectionInsteadOfUnusedResolution)
+{
+    editor.set_pipeline(
+        &editor, scene_token, name_token, pnanovdb_pipeline_stage_process, pnanovdb_pipeline_type_voxelbvh_rgba8);
+
+    pnanovdb_pipeline_params_t* params = editor.map_process_step_params(&editor, scene_token, name_token, 0);
+    ASSERT_NE(params, nullptr);
+    ASSERT_NE(params->data, nullptr);
+    ASSERT_EQ(params->size, sizeof(pnanovdb_bool_t) + 3u * sizeof(float) + sizeof(pnanovdb_uint32_t));
+
+    const auto* bytes = static_cast<const unsigned char*>(params->data);
+    pnanovdb_bool_t bake_all_directions = PNANOVDB_TRUE;
+    float ray_direction[3] = {};
+    pnanovdb_uint32_t upsample = 0u;
+    std::memcpy(&bake_all_directions, bytes, sizeof(bake_all_directions));
+    std::memcpy(ray_direction, bytes + sizeof(bake_all_directions), sizeof(ray_direction));
+    std::memcpy(&upsample, bytes + sizeof(bake_all_directions) + sizeof(ray_direction), sizeof(upsample));
+
+    EXPECT_EQ(bake_all_directions, PNANOVDB_FALSE);
+    EXPECT_FLOAT_EQ(ray_direction[0], 0.f);
+    EXPECT_FLOAT_EQ(ray_direction[1], 0.f);
+    EXPECT_FLOAT_EQ(ray_direction[2], -1.f);
+    EXPECT_EQ(upsample, pnanovdb_editor::k_default_voxelbvh_rgba8_upsample);
+    editor.unmap_process_step_params(&editor, scene_token, name_token, 0);
+
+    const pnanovdb_pipeline_descriptor_t* descriptor =
+        pnanovdb_pipeline_get_descriptor(pnanovdb_pipeline_type_voxelbvh_rgba8);
+    ASSERT_NE(descriptor, nullptr);
+    ASSERT_NE(descriptor->params_data_type, nullptr);
+    ASSERT_EQ(descriptor->params_data_type->child_reflect_data_count, 5u);
+    EXPECT_STREQ(descriptor->params_data_type->child_reflect_datas[0].name, "bake_all_directions");
+    EXPECT_STREQ(descriptor->params_data_type->child_reflect_datas[1].name, "ray_dir_x");
+    EXPECT_STREQ(descriptor->params_data_type->child_reflect_datas[2].name, "ray_dir_y");
+    EXPECT_STREQ(descriptor->params_data_type->child_reflect_datas[3].name, "ray_dir_z");
+    EXPECT_STREQ(descriptor->params_data_type->child_reflect_datas[4].name, "upsample");
 }
 
 TEST_F(PipelineApiTest, ReapplyingUnchangedProcessConfigurationPreservesParamsAndOutputs)

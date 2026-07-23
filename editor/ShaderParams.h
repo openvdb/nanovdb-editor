@@ -28,6 +28,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <mutex>
 #include <cstring>
 #include <optional>
 
@@ -158,6 +159,7 @@ public:
     template <typename Func>
     void forEachGroupShader(Func callback) const
     {
+        std::lock_guard<std::recursive_mutex> lock(m_mutex);
         for (const auto& [pool_index, shader_param_pair] : group_params_)
         {
             callback(shader_param_pair.first);
@@ -166,6 +168,7 @@ public:
 
     std::vector<ShaderParam>* get(const std::string& shader_name)
     {
+        std::lock_guard<std::recursive_mutex> lock(m_mutex);
         if (params_map_.find(shader_name) == params_map_.end())
         {
             return nullptr;
@@ -173,11 +176,23 @@ public:
         return &params_map_.at(shader_name);
     }
 
+    // Thread-safe: returns a copy of the parameter descriptors under the lock
+    std::vector<ShaderParam> snapshot(const std::string& shader_name)
+    {
+        std::lock_guard<std::recursive_mutex> lock(m_mutex);
+        auto it = params_map_.find(shader_name);
+        if (it == params_map_.end())
+        {
+            return {};
+        }
+        return it->second;
+    }
+
     // returns index of the allocated array
-    size_t allocatePoolArray(size_t total_size, const void* initial_data = nullptr);
-    void deallocatePoolArray(size_t pool_index);
+    PNANOVDB_SHADER_PARAMS_EXPORT_CXX size_t allocatePoolArray(size_t total_size, const void* initial_data = nullptr);
+    PNANOVDB_SHADER_PARAMS_EXPORT_CXX void deallocatePoolArray(size_t pool_index);
     bool getAllocatedPoolArray(ShaderParam& shader_param);
-    size_t findEquivalentParamPoolIndex(const ShaderParam& new_param);
+    PNANOVDB_SHADER_PARAMS_EXPORT_CXX size_t findEquivalentParamPoolIndex(const ShaderParam& new_param);
 
     const void* getValue(const ShaderParam& shader_param);
 
@@ -191,9 +206,10 @@ public:
     PNANOVDB_SHADER_PARAMS_EXPORT_CXX size_t copy_default_params_to_buffer(const std::string& shader_name,
                                                                            void* dst,
                                                                            size_t dst_size);
-    void clear_pending_array_for_shader(const std::string& shader_name);
+    PNANOVDB_SHADER_PARAMS_EXPORT_CXX void clear_pending_array_for_shader(const std::string& shader_name);
 
 private:
+    mutable std::recursive_mutex m_mutex;
     std::vector<std::vector<char>> shader_params_pool_; // each array corresponds to a shader parameter pool index
     std::map<std::string, std::vector<ShaderParam>> params_map_; // <shader_name, shader_params>
     std::map<size_t, std::pair<std::string, ShaderParam>> group_params_; // <pool_index, <shader_file, ShaderParam>>
@@ -211,7 +227,29 @@ private:
     void createBoolParam(const std::string& name, const nlohmann::json& value, std::vector<ShaderParam>& params);
     void addToBoolParam(const std::string& name, const nlohmann::json& value, std::vector<ShaderParam>& params);
 
-    void renderParams(const std::string& shader_name, ShaderParam& shader_param);
     void processPendingArrays(const std::string& shader_name);
+
+    struct RenderableParamSnapshot
+    {
+        std::string shader_name;
+        std::string name;
+        ImGuiDataType type = ImGuiDataType_Float;
+        size_t size = 0;
+        size_t num_elements = 0;
+        size_t pool_index = SIZE_MAX;
+        std::vector<char> value; // working copy of the pool bytes, edited by ImGui
+        std::vector<char> min;
+        std::vector<char> max;
+        float step = 0.01f;
+        bool is_slider = false;
+        bool is_bool = false;
+        bool is_hidden = false;
+        bool is_native_bool = false;
+    };
+
+    void buildRenderSnapshots(const std::string& shader_name,
+                              std::vector<ShaderParam>& params,
+                              std::vector<RenderableParamSnapshot>& out);
+    void renderSnapshotsAndWriteBack(std::vector<RenderableParamSnapshot>& snapshots);
 };
 }

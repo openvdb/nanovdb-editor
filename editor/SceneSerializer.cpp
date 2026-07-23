@@ -852,14 +852,14 @@ nlohmann::ordered_json shader_params_to_json(ShaderParams& shader_params,
     {
         return j;
     }
-    const std::vector<ShaderParam>* params = shader_params.get(shader_name);
-    if (!params)
+    const std::vector<ShaderParam> params = shader_params.snapshot(shader_name);
+    if (params.empty())
     {
         return j;
     }
     const unsigned char* base = static_cast<const unsigned char*>(data);
     size_t offset = 0;
-    for (const ShaderParam& p : *params)
+    for (const ShaderParam& p : params)
     {
         if (p.size == 0 || p.num_elements == 0)
         {
@@ -906,14 +906,14 @@ bool json_to_shader_params(ShaderParams& shader_params,
     {
         return false;
     }
-    const std::vector<ShaderParam>* params = shader_params.get(shader_name);
-    if (!params)
+    const std::vector<ShaderParam> params = shader_params.snapshot(shader_name);
+    if (params.empty())
     {
         return false;
     }
 
     size_t total = 0;
-    for (const ShaderParam& p : *params)
+    for (const ShaderParam& p : params)
     {
         total += p.size * p.num_elements;
     }
@@ -928,7 +928,7 @@ bool json_to_shader_params(ShaderParams& shader_params,
     out_bytes.assign(buffer_size, 0u);
     shader_params.copy_default_params_to_buffer(shader_name, out_bytes.data(), out_bytes.size());
 
-    return apply_shader_params_json(*params, j, out_bytes);
+    return apply_shader_params_json(params, j, out_bytes);
 }
 
 bool apply_shader_params_json(const std::vector<ShaderParam>& params,

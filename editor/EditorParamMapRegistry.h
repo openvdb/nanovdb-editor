@@ -14,11 +14,13 @@
 
 #include <cstdint>
 #include <stddef.h>
+#include <memory>
 
 namespace pnanovdb_editor
 {
 
 class ParamMapRegistry;
+struct EditorWorker;
 
 enum class ParamMapKind : uint8_t
 {
@@ -43,11 +45,12 @@ struct ParamMapKey
 };
 
 // Per-thread record of a successful map_params(), consumed by unmap_params().
-// locked_worker_mutex tells unmap whether it must also release the worker mutex.
+// The shared_ptr holds a lease on the worker whose mutex was locked, so unmap_params()
+// can always release that exact worker even if stop()/teardown unpublished it in between.
 struct ParamMapFrame
 {
     ParamMapKey key;
-    bool locked_worker_mutex;
+    std::shared_ptr<EditorWorker> worker;
 };
 
 // Owned by pnanovdb_editor_impl_t::param_map_registry; created/destroyed by editor init()/shutdown().
@@ -80,6 +83,8 @@ PNANOVDB_API size_t shader_name_map_ref_count(pnanovdb_editor_t* editor,
                                               pnanovdb_editor_token_t* name);
 
 PNANOVDB_API size_t param_map_stack_depth(pnanovdb_editor_t* editor);
+
+size_t param_map_active_count(pnanovdb_editor_t* editor);
 
 } // namespace pnanovdb_editor
 

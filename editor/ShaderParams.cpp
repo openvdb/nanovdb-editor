@@ -136,6 +136,7 @@ ShaderParams::~ShaderParams()
 
 void ShaderParams::create(const std::string& shader_name)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     std::string json_filePath = pnanovdb_shader::getShaderParamsFilePath(shader_name.c_str());
     std::filesystem::path fsPath(json_filePath);
     if (std::filesystem::exists(fsPath))
@@ -188,6 +189,7 @@ void ShaderParams::create(const std::string& shader_name)
 
 void ShaderParams::createGroup(const std::string& group_name)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     std::string json_filePath = pnanovdb_shader::getShaderParamsFilePath(group_name.c_str());
     std::filesystem::path fsPath(json_filePath);
     if (std::filesystem::exists(fsPath))
@@ -207,11 +209,13 @@ void ShaderParams::createGroup(const std::string& group_name)
 
 bool ShaderParams::isJsonLoaded(const std::string& shader_name, bool is_group_file)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     return loadAndParseJsonFile(shader_name, is_group_file) != std::nullopt;
 }
 
 bool ShaderParams::load(const std::string& shader_name, bool reload, bool load_group)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     // lazy load
     if (params_map_.find(shader_name) != params_map_.end() && !reload)
     {
@@ -311,6 +315,7 @@ bool ShaderParams::load(const std::string& shader_name, bool reload, bool load_g
 
 bool ShaderParams::loadGroup(const std::string& group_file, bool reload)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     if (!reload && !group_params_.empty())
     {
         return true;
@@ -374,6 +379,7 @@ void* ShaderParams::getValue(ShaderParam& shader_param)
 
 const void* ShaderParams::getValue(const ShaderParam& shader_param)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     if (shader_param.pool_index >= shader_params_pool_.size() || shader_params_pool_[shader_param.pool_index].empty())
     {
         return nullptr;
@@ -383,6 +389,7 @@ const void* ShaderParams::getValue(const ShaderParam& shader_param)
 
 void ShaderParams::set_compute_array_for_shader(const std::string& shader_name, pnanovdb_compute_array_t* array)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     if (!array)
     {
         return;
@@ -439,11 +446,13 @@ void ShaderParams::set_compute_array_for_shader(const std::string& shader_name, 
 
 void ShaderParams::clear_pending_array_for_shader(const std::string& shader_name)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     pending_arrays_data_.erase(shader_name);
 }
 
 size_t ShaderParams::copy_params_to_buffer(const std::string& shader_name, void* dst, size_t dst_size)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     if (!dst || dst_size == 0)
     {
         return 0;
@@ -487,6 +496,7 @@ size_t ShaderParams::copy_params_to_buffer(const std::string& shader_name, void*
 pnanovdb_compute_array_t* ShaderParams::get_compute_array_for_shader(const std::string& shader_name,
                                                                      const pnanovdb_compute_t* compute)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     if (!compute)
     {
         return nullptr;
@@ -508,6 +518,7 @@ pnanovdb_compute_array_t* ShaderParams::get_compute_array_for_shader(const std::
 
 size_t ShaderParams::allocatePoolArray(size_t total_size, const void* initial_data)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     std::vector<char> pool_array(total_size);
 
     if (initial_data)
@@ -525,6 +536,7 @@ size_t ShaderParams::allocatePoolArray(size_t total_size, const void* initial_da
 
 void ShaderParams::deallocatePoolArray(size_t pool_index)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     if (pool_index >= shader_params_pool_.size())
     {
         return;
@@ -536,6 +548,7 @@ void ShaderParams::deallocatePoolArray(size_t pool_index)
 
 size_t ShaderParams::findEquivalentParamPoolIndex(const ShaderParam& new_param)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     for (const auto& [shader_name, shader_params] : params_map_)
     {
         for (const auto& existing_param : shader_params)
@@ -654,6 +667,7 @@ void assignTypedValue(ImGuiDataType type,
 
 size_t ShaderParams::copy_default_params_to_buffer(const std::string& shader_name, void* dst, size_t dst_size)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     if (!dst || dst_size == 0 || !load(shader_name, false))
     {
         return 0;
@@ -706,6 +720,7 @@ size_t ShaderParams::copy_default_params_to_buffer(const std::string& shader_nam
 
 bool ShaderParams::getAllocatedPoolArray(ShaderParam& shader_param)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     // lazy allocate
     if (shader_param.pool_index != SIZE_MAX)
     {
@@ -753,6 +768,7 @@ bool ShaderParams::getAllocatedPoolArray(ShaderParam& shader_param)
 
 bool ShaderParams::resetToDefaults(const std::string& shader_name)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     if (!load(shader_name, false))
     {
         return false;
@@ -813,6 +829,7 @@ bool ShaderParams::resetToDefaults(const std::string& shader_name)
 
 bool ShaderParams::resetGroupToDefaults(const std::string& group_file_path)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     if (!loadGroup(group_file_path, false))
     {
         return false;
@@ -997,78 +1014,135 @@ void ShaderParams::addToBoolParam(const std::string& name, const nlohmann::json&
 
 void ShaderParams::render(const std::string& shader_name)
 {
-    bool hasParams = load(shader_name, false);
-    if (!hasParams)
+    std::vector<RenderableParamSnapshot> snapshots;
     {
-        pnanovdb_editor::Console::getInstance().addLog(Console::LogLevel::Debug,
-                                                       "ShaderParams::render() - Failed to load params for shader '%s'",
-                                                       shader_name.c_str());
-        ImGui::TextDisabled("Shader parameters not available");
-        return;
+        std::lock_guard<std::recursive_mutex> lock(m_mutex);
+        bool hasParams = load(shader_name, false);
+        if (!hasParams)
+        {
+            pnanovdb_editor::Console::getInstance().addLog(
+                Console::LogLevel::Debug, "ShaderParams::render() - Failed to load params for shader '%s'",
+                shader_name.c_str());
+            ImGui::TextDisabled("Shader parameters not available");
+            return;
+        }
+
+        std::vector<ShaderParam>& shader_params = *get(shader_name);
+        pnanovdb_editor::Console::getInstance().addLog(Console::LogLevel::Trace,
+                                                       "ShaderParams::render() - Rendering %zu params for shader '%s'",
+                                                       shader_params.size(), shader_name.c_str());
+        buildRenderSnapshots(shader_name, shader_params, snapshots);
     }
 
-    std::vector<ShaderParam>& shader_params = *get(shader_name);
-    pnanovdb_editor::Console::getInstance().addLog(Console::LogLevel::Trace,
-                                                   "ShaderParams::render() - Rendering %zu params for shader '%s'",
-                                                   shader_params.size(), shader_name.c_str());
-
-    for (auto& shader_param : shader_params)
-    {
-        renderParams(shader_name, shader_param);
-    }
-    return;
+    renderSnapshotsAndWriteBack(snapshots);
 }
 
 void ShaderParams::renderGroup(const std::string& group_file_path)
 {
-    bool hasGroup = loadGroup(group_file_path, false);
-    if (!hasGroup)
+    std::vector<RenderableParamSnapshot> snapshots;
     {
-        ImGui::TextDisabled("Shader params not loaded");
-        return;
+        std::lock_guard<std::recursive_mutex> lock(m_mutex);
+        bool hasGroup = loadGroup(group_file_path, false);
+        if (!hasGroup)
+        {
+            ImGui::TextDisabled("Shader params not loaded");
+            return;
+        }
+
+        // render unique parameters by pool index (avoids duplicates)
+        for (auto& [pool_index, shader_param_pair] : group_params_)
+        {
+            std::vector<ShaderParam> single{ shader_param_pair.second };
+            buildRenderSnapshots(shader_param_pair.first, single, snapshots);
+            // Propagate any lazy pool allocation back to the stored group param.
+            shader_param_pair.second = single.front();
+        }
     }
 
-    // render unique parameters by pool index (avoids duplicates)
-    for (auto& [pool_index, shader_param_pair] : group_params_)
-    {
-        renderParams(shader_param_pair.first, shader_param_pair.second);
-    }
-
-    return;
+    renderSnapshotsAndWriteBack(snapshots);
 }
 
-void ShaderParams::renderParams(const std::string& shader_name, ShaderParam& shader_param)
+void ShaderParams::buildRenderSnapshots(const std::string& shader_name,
+                                        std::vector<ShaderParam>& params,
+                                        std::vector<RenderableParamSnapshot>& out)
 {
-    if (shader_param.name.find("_pad") != std::string::npos || shader_param.is_hidden)
+    // NOTE: caller holds m_mutex.
+    for (auto& shader_param : params)
+    {
+        if (shader_param.name.find("_pad") != std::string::npos || shader_param.is_hidden)
+        {
+            continue;
+        }
+        if (!getAllocatedPoolArray(shader_param))
+        {
+            printf("Error: Failed to allocate UI array for parameter '%s'\n", shader_param.name.c_str());
+            continue;
+        }
+        if (shader_param.pool_index >= shader_params_pool_.size())
+        {
+            continue;
+        }
+        const std::vector<char>& pool_array = shader_params_pool_[shader_param.pool_index];
+
+        RenderableParamSnapshot snap;
+        snap.shader_name = shader_name;
+        snap.name = shader_param.name;
+        snap.type = (ImGuiDataType)shader_param.type;
+        snap.size = shader_param.size;
+        snap.num_elements = shader_param.num_elements;
+        snap.pool_index = shader_param.pool_index;
+        snap.value = pool_array;
+        snap.min = shader_param.min;
+        snap.max = shader_param.max;
+        snap.step = shader_param.step;
+        snap.is_slider = shader_param.is_slider;
+        snap.is_bool = shader_param.is_bool;
+        snap.is_hidden = shader_param.is_hidden;
+        snap.is_native_bool = shader_param.is_native_bool;
+        out.push_back(std::move(snap));
+    }
+}
+
+void ShaderParams::renderSnapshotsAndWriteBack(std::vector<RenderableParamSnapshot>& snapshots)
+{
+    if (snapshots.empty())
     {
         return;
     }
 
-    if (!getAllocatedPoolArray(shader_param))
+    for (RenderableParamSnapshot& snap : snapshots)
     {
-        printf("Error: Failed to allocate UI array for parameter '%s'\n", shader_param.name.c_str());
-        return;
+        ParamWidgetSpec ui_spec;
+        ui_spec.display_name = snap.name;
+        ui_spec.label = snap.name + "##" + snap.shader_name;
+        ui_spec.type = snap.type;
+        ui_spec.value = snap.value.empty() ? nullptr : snap.value.data();
+        ui_spec.element_size = snap.size;
+        ui_spec.element_count = snap.num_elements;
+        ui_spec.min_value = snap.min.empty() ? nullptr : snap.min.data();
+        ui_spec.max_value = snap.max.empty() ? nullptr : snap.max.data();
+        ui_spec.step = snap.step;
+        ui_spec.is_slider = snap.is_slider;
+        ui_spec.is_bool = snap.is_bool;
+        ui_spec.is_hidden = snap.is_hidden;
+        ui_spec.is_native_bool = snap.is_native_bool;
+        renderParamWidget(ui_spec);
     }
 
-    ParamWidgetSpec ui_spec;
-    ui_spec.display_name = shader_param.name;
-    ui_spec.label = shader_param.name + "##" + shader_name;
-    ui_spec.type = (ImGuiDataType)shader_param.type;
-    ui_spec.value = getValue(shader_param);
-    ui_spec.element_size = shader_param.size;
-    ui_spec.element_count = shader_param.num_elements;
-    ui_spec.min_value = shader_param.getMin();
-    ui_spec.max_value = shader_param.getMax();
-    ui_spec.step = shader_param.step;
-    ui_spec.is_slider = shader_param.is_slider;
-    ui_spec.is_bool = shader_param.is_bool;
-    ui_spec.is_hidden = shader_param.is_hidden;
-    ui_spec.is_native_bool = shader_param.is_native_bool;
-    renderParamWidget(ui_spec);
-    // if (ImGui::IsItemHovered())
-    // {
-    //     ImGui::SetTooltip("%s", shader_name.c_str());
-    // }
+    // Write any edited bytes back into the pool under the lock.
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    for (const RenderableParamSnapshot& snap : snapshots)
+    {
+        if (snap.pool_index >= shader_params_pool_.size())
+        {
+            continue;
+        }
+        std::vector<char>& pool_array = shader_params_pool_[snap.pool_index];
+        if (pool_array.size() == snap.value.size() && !snap.value.empty())
+        {
+            std::memcpy(pool_array.data(), snap.value.data(), snap.value.size());
+        }
+    }
 }
 
 void ShaderParams::processPendingArrays(const std::string& shader_name)

@@ -39,7 +39,7 @@ jobs:
         shell: bash -el {0}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
 
@@ -86,6 +86,41 @@ jobs:
           export LD_LIBRARY_PATH=$PWD/build/Release/lib:$PWD/build/Release/bin:$LD_LIBRARY_PATH
           ctest --test-dir build/Release/gtests -C Release --output-on-failure --verbose
 
+  nanovdb-editor-tsan-linux:
+    name: ThreadSanitizer (Linux)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Install build dependencies
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y libxcb1-dev libxcb-keysyms1-dev libxcb-randr0-dev libxcb-xinerama0-dev libx11-xcb-dev libxrandr-dev libwayland-dev wayland-protocols libdirectfb-dev
+
+      - name: Build with ThreadSanitizer (GLFW disabled)
+        run: |
+          set -e
+          chmod +x ./build.sh
+          ./build.sh -Tfv
+
+      - name: Run ThreadSanitizer concurrency tests
+        run: |
+          set -e
+          # Recent kernels raise ASLR entropy above what ThreadSanitizer can map, which otherwise
+          # aborts the instrumented binaries with "unexpected memory mapping". Running ctest under
+          # `setarch -R` disables randomization for it and every test process it spawns (the
+          # ADDR_NO_RANDOMIZE personality is inherited), avoiding the need for a privileged sysctl.
+          export TSAN_OPTIONS="halt_on_error=1 second_deadlock_stack=1"
+          export LD_LIBRARY_PATH=$PWD/build/Debug/lib:$PWD/build/Debug/bin:$LD_LIBRARY_PATH
+          setarch "$(uname -m)" -R ctest --test-dir build/Debug/gtests -C Debug --output-on-failure --verbose -L threadsafety
+
   nanovdb-editor-build-and-test-macos:
     name: Build and Test (macOS)
     runs-on: macos-latest
@@ -94,7 +129,7 @@ jobs:
         shell: bash -el {0}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
 
@@ -186,7 +221,7 @@ jobs:
         shell: pwsh
     steps:
       - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
 
@@ -314,7 +349,7 @@ jobs:
         shell: pwsh
     steps:
       - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
 
@@ -449,7 +484,7 @@ jobs:
         shell: bash -el {0}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
 
