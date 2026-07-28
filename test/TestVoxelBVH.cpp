@@ -22,7 +22,6 @@
 #include <math.h>
 
 #include "editor/shaders/voxelbvh_common.h"
-#include "nanovdb/PNanoVDB.h"
 
 static void save_ply(pnanovdb_compute_t& compute,
                      pnanovdb_compute_array_t* positions,
