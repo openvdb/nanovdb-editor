@@ -949,7 +949,7 @@ bool VoxelBVHRgba8Worker::start(SceneObject* scene_obj,
                 m_progress_current_grid = (pnanovdb_uint32_t)i;
                 pnanovdb_compute_array_t* dst = nullptr;
                 m_iface->nanovdb_duplicate_topology_array(m_pending_compute, m_worker_queue, m_worker_ctx, &dst,
-                                                          m_pending_src, PNANOVDB_GRID_TYPE_RGBA8, upsample_factor);
+                                                          m_pending_src, PNANOVDB_GRID_TYPE_ONINDEX, upsample_factor);
                 if (!dst)
                 {
                     ok = false;

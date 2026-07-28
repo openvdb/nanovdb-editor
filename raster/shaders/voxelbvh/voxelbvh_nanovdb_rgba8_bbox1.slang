@@ -1,4 +1,4 @@
-// voxelbvh_nanovdb_level_list_alloc1.slang
+// voxelbvh_nanovdb_rgba8_bbox1.slang
 
 struct user_state_t
 {
@@ -18,22 +18,43 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
 {
     if (!pnanovdb_address_is_null(val_addr))
     {
-        pnanovdb_uint32_t val_raw = pnanovdb_read_uint32(buf, val_addr);
+        // assuming single grid for now
+        pnanovdb_grid_handle_t grid = {};
+        pnanovdb_uint32_t grid_type = pnanovdb_grid_get_grid_type(buf, grid);
+        pnanovdb_uint32_t val_raw = 0u;
+        if (grid_type == PNANOVDB_GRID_TYPE_ONINDEX)
+        {
+            pnanovdb_gridblindmetadata_handle_t metadata = pnanovdb_grid_get_gridblindmetadata(buf, grid, 0u);
+            pnanovdb_uint64_t val_index64;
+            if (level == 0)
+            {
+                val_index64 = pnanovdb_leaf_onindex_get_value_index(buf, val_addr, ijk);
+            }
+            else
+            {
+                val_index64 = pnanovdb_read_uint64(buf, val_addr);
+            }
+            // write to metadata
+            if (val_index64 != 0u)
+            {
+                pnanovdb_int64_t byte_offset = pnanovdb_gridblindmetadata_get_data_offset(buf, metadata);
+                pnanovdb_address_t meta_val_addr =
+                    pnanovdb_address_offset64(metadata.address, pnanovdb_int64_as_uint64(byte_offset));
+                meta_val_addr = pnanovdb_address_offset64(meta_val_addr, val_index64 * 4u);
+                val_raw = pnanovdb_read_uint32(buf, meta_val_addr);
+            }
+        }
+        else
+        {
+            val_raw = pnanovdb_read_uint32(buf, val_addr);
+        }
         if (val_raw != 0u)
         {
             uint dim = 1;
-            if (level == 3)
-            {
-                dim = 4096;
-            }
-            if (level == 2)
-            {
-                dim = 128;
-            }
-            if (level == 1)
-            {
-                dim = 8;
-            }
+            if (level == 4) { dim = 4096; }
+            if (level == 3) { dim = 4096; }
+            if (level == 2) { dim = 128; }
+            if (level == 1) { dim = 8; }
             user_state.bbox_min = min(user_state.bbox_min, ijk);
             user_state.bbox_max = max(user_state.bbox_max, ijk + int(dim - 1u));
         }

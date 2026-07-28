@@ -838,7 +838,7 @@ static const pnanovdb_vec3_t verts[8u] = { { -1.f, -1.f, 0.f }, { 1.f, -1.f, 0.f
                                            { 1.f, 0.f, 0.f },   { 0.f, 1.f, 0.f } };
 #endif
 
-static void get_transform(pnanovdb_uint32_t vert_idx, pnanovdb_camera_mat_t* transform)
+static void get_transform(pnanovdb_uint32_t vert_idx, pnanovdb_camera_mat_t* transform, float aniso)
 {
     pnanovdb_vec3_t ray_dir = verts[vert_idx];
     ray_dir = pnanovdb_camera_vec3_normalize(ray_dir);
@@ -855,19 +855,19 @@ static void get_transform(pnanovdb_uint32_t vert_idx, pnanovdb_camera_mat_t* tra
     pnanovdb_vec3_t x_vec = pnanovdb_camera_vec3_normalize(pnanovdb_camera_vec3_cross(up_vec, ray_dir));
     pnanovdb_vec3_t y_vec = pnanovdb_camera_vec3_cross(ray_dir, x_vec);
 
-    const float aniso = 1.f / 2.f;
+    const float aniso_inv = 1.f / aniso;
 
     pnanovdb_camera_mat_t view = { x_vec.x,
                                    y_vec.x,
-                                   aniso * ray_dir.x,
+                                   aniso_inv * ray_dir.x,
                                    0.f,
                                    x_vec.y,
                                    y_vec.y,
-                                   aniso * ray_dir.y,
+                                   aniso_inv * ray_dir.y,
                                    0.f,
                                    x_vec.z,
                                    y_vec.z,
-                                   aniso * ray_dir.z,
+                                   aniso_inv * ray_dir.z,
                                    0.f,
                                    0.f,
                                    0.f,
@@ -916,7 +916,7 @@ void voxelbvh_generate_rgba8()
         printf("ijkl from Gaussians vert_idx(%d)\n", vert_idx);
 
         pnanovdb_camera_mat_t transform_mat = {};
-        get_transform(vert_idx, &transform_mat);
+        get_transform(vert_idx, &transform_mat, 2.f);
         float transform[16u] = {};
         memcpy(transform, &transform_mat, sizeof(pnanovdb_camera_mat_t));
 
@@ -990,7 +990,7 @@ void voxelbvh_generate_rgba8()
 #if 1
         pnanovdb_compute_array_t* nanovdb_rgba8_4x = nullptr;
         voxel_bvh.nanovdb_duplicate_topology_array(
-            &compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_meta, PNANOVDB_GRID_TYPE_RGBA8, 4u);
+            &compute, queue, voxelbvh_ctx, &nanovdb_rgba8_4x, nanovdb_meta, PNANOVDB_GRID_TYPE_ONINDEX, 4u);
 
         pnanovdb_vec3_t index_space_ray_direction = { 0.f, 0.f, 1.f };
         voxel_bvh.nanovdb_rgba8_from_voxelbvh_array(

@@ -252,6 +252,22 @@ typedef struct pnanovdb_voxelbvh_t
                                              pnanovdb_voxelbvh_progress_t callback,
                                              void* userdata);
 
+    void(PNANOVDB_ABI* nanovdb_index_allocate)(const pnanovdb_compute_t* compute,
+                                               pnanovdb_compute_queue_t* queue,
+                                               pnanovdb_voxelbvh_context_t* context,
+                                               pnanovdb_compute_buffer_t* nanovdb_inout,
+                                               pnanovdb_uint64_t nanovdb_word_count,
+                                               pnanovdb_compute_buffer_t* total_count_out);
+
+    void(PNANOVDB_ABI* nanovdb_allocate_metadata)(const pnanovdb_compute_t* compute,
+                                                  pnanovdb_compute_queue_t* queue,
+                                                  pnanovdb_voxelbvh_context_t* context,
+                                                  pnanovdb_compute_buffer_t* nanovdb_inout,
+                                                  pnanovdb_uint64_t nanovdb_word_count,
+                                                  pnanovdb_compute_buffer_t* total_count_in,
+                                                  const pnanovdb_uint64_t* metadata_element_sizes,
+                                                  pnanovdb_uint64_t metadata_count);
+
 } pnanovdb_voxelbvh_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_voxelbvh_t
@@ -282,6 +298,8 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_rgba8_from_voxelbvh, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_rgba8_from_voxelbvh_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(context_set_cancel, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(context_set_progress, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_index_allocate, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_allocate_metadata, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE
