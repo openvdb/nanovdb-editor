@@ -252,26 +252,6 @@ typedef struct pnanovdb_voxelbvh_t
                                              pnanovdb_voxelbvh_progress_t callback,
                                              void* userdata);
 
-    void(PNANOVDB_ABI* nanovdb_integral_from_voxelbvh)(const pnanovdb_compute_t* compute,
-                                                       pnanovdb_compute_queue_t* queue,
-                                                       pnanovdb_voxelbvh_context_t* context,
-                                                       pnanovdb_compute_buffer_t* dst_nanovdb_inout,
-                                                       pnanovdb_uint64_t dst_nanovdb_word_count,
-                                                       pnanovdb_compute_buffer_t* src_nanovdb_in,
-                                                       pnanovdb_uint64_t src_nanovdb_word_count,
-                                                       pnanovdb_uint32_t resolution,
-                                                       const float* view_floats,
-                                                       pnanovdb_uint32_t view_float_count);
-
-    void(PNANOVDB_ABI* nanovdb_integral_from_voxelbvh_array)(const pnanovdb_compute_t* compute,
-                                                             pnanovdb_compute_queue_t* queue,
-                                                             pnanovdb_voxelbvh_context_t* context,
-                                                             pnanovdb_compute_array_t** dst_nanovdb_out,
-                                                             pnanovdb_compute_array_t* src_nanovdb_in,
-                                                             pnanovdb_uint32_t resolution,
-                                                             const float* view_floats,
-                                                             pnanovdb_uint32_t view_float_count);
-
     void(PNANOVDB_ABI* nanovdb_index_allocate)(const pnanovdb_compute_t* compute,
                                                pnanovdb_compute_queue_t* queue,
                                                pnanovdb_voxelbvh_context_t* context,
@@ -318,8 +298,6 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_rgba8_from_voxelbvh, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_rgba8_from_voxelbvh_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(context_set_cancel, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(context_set_progress, 0, 0)
-PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_integral_from_voxelbvh, 0, 0)
-PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_integral_from_voxelbvh_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_index_allocate, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_allocate_metadata, 0, 0)
 PNANOVDB_REFLECT_END(0)

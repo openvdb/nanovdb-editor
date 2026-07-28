@@ -41,14 +41,14 @@ static const float sphere_radius = sqrt(g*g + 1.f);
 #else
 static const uint vert_count = 8u;
 static const pnanovdb_vec3_t verts[8u] = {
-    {-1.f, -1.f, 0.f},
-    {1.f, -1.f, 0.f},
-    {-1.f, 1.f, 0.f},
-    {1.f, 1.f, 0.f},
     {-1.f, 0.f, 0.f},
     {0.f, -1.f, 0.f},
     {1.f, 0.f, 0.f},
-    {0.f, 1.f, 0.f}
+    {0.f, 1.f, 0.f},
+    {-1.f, -1.f, 0.f},
+    {1.f, -1.f, 0.f},
+    {-1.f, 1.f, 0.f},
+    {1.f, 1.f, 0.f}
 };
 #endif
 

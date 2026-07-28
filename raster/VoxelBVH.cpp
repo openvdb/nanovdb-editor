@@ -59,8 +59,6 @@ enum shader
     voxelbvh_nanovdb_index_allocate2_slang,
     voxelbvh_nanovdb_index_allocate3_slang,
     voxelbvh_nanovdb_init_slang,
-    voxelbvh_nanovdb_integral_init_slang,
-    voxelbvh_nanovdb_integral_slang,
     voxelbvh_nanovdb_iterate_copy_scratch_slang,
     voxelbvh_nanovdb_level_list_alloc1_slang,
     voxelbvh_nanovdb_level_list_alloc2_slang,
@@ -110,8 +108,6 @@ static const char* s_shader_names[shader_count] = {
     "raster/voxelbvh/voxelbvh_nanovdb_index_allocate2.slang",
     "raster/voxelbvh/voxelbvh_nanovdb_index_allocate3.slang",
     "raster/voxelbvh/voxelbvh_nanovdb_init.slang",
-    "raster/voxelbvh/voxelbvh_nanovdb_integral_init.slang",
-    "raster/voxelbvh/voxelbvh_nanovdb_integral.slang",
     "raster/voxelbvh/voxelbvh_nanovdb_iterate_copy_scratch.slang",
     "raster/voxelbvh/voxelbvh_nanovdb_level_list_alloc1.slang",
     "raster/voxelbvh/voxelbvh_nanovdb_level_list_alloc2.slang",
@@ -2647,201 +2643,6 @@ void nanovdb_rgba8_from_voxelbvh_array(const pnanovdb_compute_t* compute,
     gpu_array_destroy(compute, queue, dst_nanovdb_gpu_array);
 }
 
-void nanovdb_integral_from_voxelbvh(const pnanovdb_compute_t* compute,
-                                    pnanovdb_compute_queue_t* queue,
-                                    pnanovdb_voxelbvh_context_t* voxelbvh_context,
-                                    pnanovdb_compute_buffer_t* dst_nanovdb_inout,
-                                    pnanovdb_uint64_t dst_nanovdb_word_count,
-                                    pnanovdb_compute_buffer_t* src_nanovdb_in,
-                                    pnanovdb_uint64_t src_nanovdb_word_count,
-                                    pnanovdb_uint32_t resolution,
-                                    const float* view_floats,
-                                    pnanovdb_uint32_t view_float_count)
-{
-    auto ctx = cast(voxelbvh_context);
-
-    pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
-    pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
-
-    // clear buffer before initialization, to ensure everything starts 0
-    nanovdb_clear(compute, queue, voxelbvh_context, dst_nanovdb_inout, dst_nanovdb_word_count);
-
-    // nanovdb transients
-    pnanovdb_compute_buffer_transient_t* dst_nanovdb_transient =
-        compute_interface->register_buffer_as_transient(context, dst_nanovdb_inout);
-    pnanovdb_compute_buffer_transient_t* src_nanovdb_transient =
-        compute_interface->register_buffer_as_transient(context, src_nanovdb_in);
-
-    struct constants_t
-    {
-        pnanovdb_camera_mat_t view;
-        pnanovdb_camera_mat_t view_inv;
-        pnanovdb_uint32_t resolution;
-        pnanovdb_uint32_t dst_grid_type;
-        pnanovdb_uint32_t pass_id;
-    };
-    constants_t constants = {};
-    constants.resolution = resolution;
-    constants.dst_grid_type = PNANOVDB_GRID_TYPE_ONINDEX;
-    constants.pass_id = 0u;
-
-    constants.view.x.x = 1.f;
-    constants.view.y.y = 1.f;
-    constants.view.z.z = 1.f;
-    constants.view.w.w = 1.f;
-    constants.view_inv.x.x = 1.f;
-    constants.view_inv.y.y = 1.f;
-    constants.view_inv.z.z = 1.f;
-    constants.view_inv.w.w = 1.f;
-    if (view_floats && view_float_count >= 16)
-    {
-        pnanovdb_camera_mat_t mat = {};
-        memcpy(&mat, &view_floats[0], sizeof(pnanovdb_camera_mat_t));
-        pnanovdb_camera_mat_t mat_inv = pnanovdb_camera_mat_inverse(mat);
-        constants.view = pnanovdb_camera_mat_transpose(mat);
-        constants.view_inv = pnanovdb_camera_mat_transpose(mat_inv);
-    }
-
-    pnanovdb_compute_buffer_desc_t buf_desc = {};
-    {
-        // constants
-        buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT;
-        buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
-        buf_desc.structure_stride = 0u;
-        buf_desc.size_in_bytes = sizeof(constants_t);
-        pnanovdb_compute_buffer_t* constant_buffer =
-            compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &buf_desc);
-
-        // copy constants
-        void* mapped_constants = compute_interface->map_buffer(context, constant_buffer);
-        memcpy(mapped_constants, &constants, sizeof(constants_t));
-        compute_interface->unmap_buffer(context, constant_buffer);
-
-        pnanovdb_compute_buffer_transient_t* constant_transient =
-            compute_interface->register_buffer_as_transient(context, constant_buffer);
-
-        pnanovdb_compute_resource_t resources[3u] = {};
-        resources[0u].buffer_transient = constant_transient;
-        resources[1u].buffer_transient = src_nanovdb_transient;
-        resources[2u].buffer_transient = dst_nanovdb_transient;
-
-        compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_integral_init_slang],
-                                 resources, 1u, 1u, 1u, "voxelbvh_nanovdb_integral_init");
-
-        compute_interface->destroy_buffer(context, constant_buffer);
-    }
-
-    for (pnanovdb_uint32_t pass_id = 0u; pass_id < 5u; pass_id++)
-    {
-        constants.pass_id = pass_id;
-
-        if (pass_id == 4u)
-        {
-            buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED;
-            buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
-            buf_desc.structure_stride = 8u;
-            buf_desc.size_in_bytes = 256u * 8u;
-            pnanovdb_compute_buffer_t* total_count_buffer =
-                compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
-
-            pnanovdb_get_voxelbvh()->nanovdb_index_allocate(
-                compute, queue, voxelbvh_context, dst_nanovdb_inout, dst_nanovdb_word_count, total_count_buffer);
-
-            pnanovdb_uint64_t metadata_element_sizes[1u] = { 4u };
-            pnanovdb_uint64_t metadata_count = 1u;
-
-            pnanovdb_get_voxelbvh()->nanovdb_allocate_metadata(compute, queue, voxelbvh_context, dst_nanovdb_inout,
-                                                               dst_nanovdb_word_count, total_count_buffer,
-                                                               metadata_element_sizes, metadata_count);
-
-            compute_interface->destroy_buffer(context, total_count_buffer);
-        }
-
-        // constants
-        buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT;
-        buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
-        buf_desc.structure_stride = 0u;
-        buf_desc.size_in_bytes = sizeof(constants_t);
-        pnanovdb_compute_buffer_t* constant_buffer =
-            compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &buf_desc);
-
-        // copy constants
-        void* mapped_constants = compute_interface->map_buffer(context, constant_buffer);
-        memcpy(mapped_constants, &constants, sizeof(constants_t));
-        compute_interface->unmap_buffer(context, constant_buffer);
-
-        pnanovdb_compute_buffer_transient_t* constant_transient =
-            compute_interface->register_buffer_as_transient(context, constant_buffer);
-
-        {
-            pnanovdb_compute_resource_t resources[3u] = {};
-            resources[0u].buffer_transient = constant_transient;
-            resources[1u].buffer_transient = src_nanovdb_transient;
-            resources[2u].buffer_transient = dst_nanovdb_transient;
-
-            pnanovdb_uint32_t grid_x = (constants.resolution + 15u) / 16u;
-            pnanovdb_uint32_t grid_y = (constants.resolution + 7u) / 8u;
-
-            compute->dispatch_shader(compute_interface, context, ctx->shader_ctx[voxelbvh_nanovdb_integral_slang],
-                                     resources, grid_x, grid_y, 1u, "voxelbvh_nanovdb_integral");
-        }
-
-        if (pass_id < 3u)
-        {
-            nanovdb_add_nodes(compute, queue, voxelbvh_context, dst_nanovdb_inout, dst_nanovdb_word_count);
-        }
-
-        compute_interface->destroy_buffer(context, constant_buffer);
-    }
-}
-
-void nanovdb_integral_from_voxelbvh_array(const pnanovdb_compute_t* compute,
-                                          pnanovdb_compute_queue_t* queue,
-                                          pnanovdb_voxelbvh_context_t* voxelbvh_context,
-                                          pnanovdb_compute_array_t** dst_nanovdb_out,
-                                          pnanovdb_compute_array_t* src_nanovdb_in,
-                                          pnanovdb_uint32_t resolution,
-                                          const float* view_floats,
-                                          pnanovdb_uint32_t view_float_count)
-{
-    auto ctx = cast(voxelbvh_context);
-
-    pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
-    pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
-
-    // default to 8GB return for now
-    uint64_t buf_size = 8u * 1024llu * 1024llu * 1024llu;
-    uint64_t nanovdb_uint64_count = (buf_size + 7u) / 8u;
-
-    pnanovdb_compute_array_t* dst_nanovdb_array = compute->create_array(8u, nanovdb_uint64_count, nullptr);
-
-    compute_gpu_array_t* src_nanovdb_gpu_array = gpu_array_create();
-    compute_gpu_array_t* dst_nanovdb_gpu_array = gpu_array_create();
-
-    gpu_array_upload(compute, queue, src_nanovdb_gpu_array, src_nanovdb_in);
-    gpu_array_alloc_device(compute, queue, dst_nanovdb_gpu_array, dst_nanovdb_array);
-
-    pnanovdb_uint64_t src_word_count = (src_nanovdb_in->element_count * src_nanovdb_in->element_size) / 4u;
-
-    nanovdb_integral_from_voxelbvh(compute, queue, voxelbvh_context, dst_nanovdb_gpu_array->device_buffer,
-                                   2u * nanovdb_uint64_count, src_nanovdb_gpu_array->device_buffer, src_word_count,
-                                   resolution, view_floats, view_float_count);
-
-    gpu_array_readback(compute, queue, dst_nanovdb_gpu_array, dst_nanovdb_array);
-
-    pnanovdb_uint64_t flushed_frame = 0llu;
-    compute->device_interface.flush(queue, &flushed_frame, nullptr, nullptr);
-
-    compute->device_interface.wait_idle(queue);
-
-    gpu_array_map(compute, queue, dst_nanovdb_gpu_array, dst_nanovdb_array);
-
-    gpu_array_destroy(compute, queue, src_nanovdb_gpu_array);
-    gpu_array_destroy(compute, queue, dst_nanovdb_gpu_array);
-
-    *dst_nanovdb_out = dst_nanovdb_array;
-}
-
 void nanovdb_index_allocate(const pnanovdb_compute_t* compute,
                             pnanovdb_compute_queue_t* queue,
                             pnanovdb_voxelbvh_context_t* voxelbvh_context,
@@ -3034,8 +2835,6 @@ pnanovdb_voxelbvh_t* pnanovdb_get_voxelbvh()
     iface.nanovdb_rgba8_from_voxelbvh_array = nanovdb_rgba8_from_voxelbvh_array;
     iface.context_set_cancel = context_set_cancel;
     iface.context_set_progress = context_set_progress;
-    iface.nanovdb_integral_from_voxelbvh = nanovdb_integral_from_voxelbvh;
-    iface.nanovdb_integral_from_voxelbvh_array = nanovdb_integral_from_voxelbvh_array;
     iface.nanovdb_index_allocate = nanovdb_index_allocate;
     iface.nanovdb_allocate_metadata = nanovdb_allocate_metadata;
 
