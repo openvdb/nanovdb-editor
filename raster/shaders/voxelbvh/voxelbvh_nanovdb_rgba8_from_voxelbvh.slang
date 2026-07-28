@@ -720,6 +720,15 @@ void ray_hdda_nanovdb(uint thread_idx,
     }
 }
 
+void nanovdb_set_bit(pnanovdb_buf_t write_buf, pnanovdb_address_t addr, uint bit_idx)
+{
+    uint64_t word_idx = (addr.byte_offset >> 3u) + (bit_idx >> 6u);
+    uint64_t val = uint64_t(1u) << (bit_idx & 63u);
+    uint2 val2 = uint2(uint(val), uint(val >> 32u));
+    if (val2.x != 0u) { InterlockedOr(write_buf[word_idx].x, val2.x); };
+    if (val2.y != 0u) { InterlockedOr(write_buf[word_idx].y, val2.y); };
+}
+
 void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint level, uint n,
                   pnanovdb_coord_t ijk, inout user_state_t user_state)
 {
@@ -830,7 +839,49 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
         uint rgba_raw = uint(255.f * max(0.f, min(1.f, color.x))) | (uint(255.f * max(0.f, min(1.f, color.y))) << 8u) |
                         (uint(255.f * max(0.f, min(1.f, color.z))) << 16u) |
                         (uint(255.f * max(0.f, min(1.f, color.w))) << 24u);
-        pnanovdb_write_uint32(buf, val_addr, rgba_raw);
+        if (rgba_raw != 0u)
+        {
+            if (constants2.pass_id == 0u)
+            {
+                if (level == 0u)
+                {
+                    pnanovdb_leaf_handle_t leaf = {node_arr};
+                    pnanovdb_address_t mask_addr = pnanovdb_address_offset(leaf.address, PNANOVDB_LEAF_OFF_VALUE_MASK);
+                    pnanovdb_uint32_t n = pnanovdb_leaf_coord_to_offset(ijk);
+                    nanovdb_set_bit(buf, mask_addr, n);
+                }
+            }
+            if (constants2.pass_id == 1u)
+            {
+                pnanovdb_uint32_t grid_type = pnanovdb_grid_get_grid_type(buf, grid);
+                if (grid_type == PNANOVDB_GRID_TYPE_ONINDEX)
+                {
+                    pnanovdb_gridblindmetadata_handle_t metadata = pnanovdb_grid_get_gridblindmetadata(buf, grid, 0u);
+                    pnanovdb_uint64_t val_index64;
+                    if (level == 0)
+                    {
+                        val_index64 = pnanovdb_leaf_onindex_get_value_index(buf, val_addr, ijk);
+                    }
+                    else
+                    {
+                        val_index64 = pnanovdb_read_uint64(buf, val_addr);
+                    }
+                    // write to metadata
+                    if (val_index64 != 0u)
+                    {
+                        pnanovdb_int64_t byte_offset = pnanovdb_gridblindmetadata_get_data_offset(buf, metadata);
+                        pnanovdb_address_t meta_val_addr =
+                            pnanovdb_address_offset64(metadata.address, pnanovdb_int64_as_uint64(byte_offset));
+                        meta_val_addr = pnanovdb_address_offset64(meta_val_addr, val_index64 * 4u);
+                        pnanovdb_write_uint32(buf, meta_val_addr, rgba_raw);
+                    }
+                }
+                else
+                {
+                    pnanovdb_write_uint32(buf, val_addr, rgba_raw);
+                }
+            }
+        }
     }
 }
 
