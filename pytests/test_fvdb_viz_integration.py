@@ -75,6 +75,11 @@ FVDB_CORE_INDEX_URL = _default_version(
     "https://d36m13axqqhiit.cloudfront.net/simple",
 )
 
+# Limit child process time. This reports a viewer shutdown deadlock as a pytest
+# failure before the GitHub Actions job timeout cancels the job.
+VIZ_PREFLIGHT_TIMEOUT_SECONDS = int(os.environ.get("FVDB_VIZ_PREFLIGHT_TIMEOUT_SECONDS", "120"))
+VIZ_SUITE_TIMEOUT_SECONDS = int(os.environ.get("FVDB_VIZ_SUITE_TIMEOUT_SECONDS", "300"))
+
 
 def _fvdb_core_release_tag() -> str:
     return f"v{FVDB_CORE_VERSION.split('+', 1)[0]}"
@@ -228,187 +233,40 @@ def _log_nanovdb_version(env_ctx: dict):
 def _assert_viz_server_initializes(env_ctx: dict):
     python_exe = env_ctx["python"]
     env = env_ctx["env"]
+    cmd = [
+        str(python_exe),
+        "-c",
+        (
+            "import os; "
+            "import fvdb; "
+            "print("
+            "'VK_ICD_FILENAMES:', "
+            "os.environ.get('VK_ICD_FILENAMES', '<unset>')"
+            "); "
+            "print("
+            "'VK_DRIVER_FILES:', "
+            "os.environ.get('VK_DRIVER_FILES', '<unset>')"
+            "); "
+            "fvdb.viz.init("
+            "ip_address='127.0.0.1', port=8080, verbose=False"
+            "); "
+            "print('fvdb.viz init preflight: ok')"
+        ),
+    ]
     try:
-        subprocess.run(
-            [
-                str(python_exe),
-                "-c",
-                (
-                    "import os; "
-                    "import fvdb; "
-                    "print("
-                    "'VK_ICD_FILENAMES:', "
-                    "os.environ.get('VK_ICD_FILENAMES', '<unset>')"
-                    "); "
-                    "print("
-                    "'VK_DRIVER_FILES:', "
-                    "os.environ.get('VK_DRIVER_FILES', '<unset>')"
-                    "); "
-                    "fvdb.viz.init("
-                    "ip_address='127.0.0.1', port=8080, verbose=False"
-                    "); "
-                    "print('fvdb.viz init preflight: ok')"
-                ),
-            ],
-            env=env,
-            check=True,
-        )
+        subprocess.run(cmd, env=env, check=True, timeout=VIZ_PREFLIGHT_TIMEOUT_SECONDS)
     except subprocess.CalledProcessError as exc:
         raise AssertionError(
             "fvdb.viz viewer initialization failed during preflight. "
             "Treating this as a hard failure instead of allowing the upstream "
             "suite to skip."
         ) from exc
-
-
-def _apply_fvdb_camera_fov_compat():
-    import math
-
-    import fvdb.viz._scene as scene_module
-
-    scene_cls = scene_module.Scene
-    if getattr(scene_cls, "_nve_camera_fov_compat", False):
-        return
-
-    from fvdb.viz._viewer_server import _get_viewer_server_cpp
-
-    def _fov_get(self):
-        server = _get_viewer_server_cpp()
-        try:
-            return server.camera_fov(self._name)
-        except (AttributeError, TypeError):
-            return getattr(self, "_nve_camera_fov", math.pi / 4.0)
-
-    def _fov_set(self, fov_radians):
-        if not math.isfinite(fov_radians):
-            raise ValueError(f"FOV must be a finite value, got {fov_radians}")
-        if fov_radians <= 0.0 or fov_radians >= math.pi:
-            raise ValueError(f"FOV must be between 0 and pi radians, got {fov_radians}")
-        server = _get_viewer_server_cpp()
-        try:
-            server.set_camera_fov(self._name, fov_radians)
-        except (AttributeError, TypeError):
-            self._nve_camera_fov = fov_radians
-
-    scene_cls.camera_fov = property(_fov_get, _fov_set)
-    scene_cls._nve_camera_fov_compat = True
-
-
-def _apply_fvdb_point_cloud_compat():
-    import fvdb.viz._point_cloud_view as point_cloud_view_module
-    import torch
-
-    point_cloud_view_cls = point_cloud_view_module.PointCloudView
-    if getattr(point_cloud_view_cls, "__nanovdb_editor_point_cloud_compat__", False):
-        return
-
-    gaussian_splat_cls = getattr(point_cloud_view_module, "GaussianSplat3d", None)
-    if gaussian_splat_cls is None:
-        # Newer fvdb-core: PointCloudView.__init__ already calls
-        # add_gaussian_splat_3d_view() with keyword tensor arguments
-        # directly; no compatibility patching needed.
-        return
-
-    get_viewer_server_cpp = point_cloud_view_module._get_viewer_server_cpp
-
-    def _add_gaussian_splat_view_compat(
-        *,
-        server,
-        scene_name: str,
-        name: str,
-        means,
-        quats,
-        log_scales,
-        logit_opacities,
-        sh0,
-        shN,
-    ):
-        # `fvdb-core@main` switched `add_gaussian_splat_3d_view()` to take raw
-        # tensors directly, while older releases expected a wrapped
-        # `GaussianSplat3d` implementation object.
-        try:
-            return server.add_gaussian_splat_3d_view(
-                scene_name=scene_name,
-                name=name,
-                means=means,
-                quats=quats,
-                log_scales=log_scales,
-                logit_opacities=logit_opacities,
-                sh0=sh0,
-                shN=shN,
-            )
-        except TypeError:
-            gaussian_splat = gaussian_splat_cls.from_tensors(
-                means=means,
-                quats=quats,
-                log_scales=log_scales,
-                logit_opacities=logit_opacities,
-                sh0=sh0,
-                shN=shN,
-            )
-
-        gaussian_splat_impl = getattr(gaussian_splat, "_impl", gaussian_splat)
-        try:
-            return server.add_gaussian_splat_3d_view(
-                scene_name=scene_name,
-                name=name,
-                gaussian_splat_3d=gaussian_splat_impl,
-            )
-        except TypeError:
-            return server.add_gaussian_splat_3d_view(
-                scene_name,
-                name,
-                gaussian_splat_impl,
-            )
-
-    def _compat_point_cloud_init(
-        self,
-        scene_name: str,
-        name: str,
-        positions,
-        colors,
-        point_size: float,
-        _private=None,
-    ):
-        if _private is not self.__PRIVATE__:
-            raise ValueError("PointCloudView constructor is private. Use Viewer.register_point_cloud_view() instead.")
-
-        self._name = name
-        self._scene_name = scene_name
-
-        server = get_viewer_server_cpp()
-
-        def _rgb_to_sh(rgb: torch.Tensor) -> torch.Tensor:
-            c0 = 0.28209479177387814
-            return (rgb - 0.5) / c0
-
-        means = positions
-        quats = torch.zeros((positions.shape[0], 4), dtype=torch.float32)
-        quats[:, 0] = 1.0
-        logit_opacities = torch.full((positions.shape[0],), 10.0, dtype=torch.float32)
-        log_scales = torch.full((positions.shape[0], 3), -20.0, dtype=torch.float32)
-        sh0 = _rgb_to_sh(colors)
-        shN = torch.zeros((positions.shape[0], 0, 3), dtype=torch.float32)
-
-        view = _add_gaussian_splat_view_compat(
-            server=server,
-            scene_name=scene_name,
-            name=name,
-            means=means,
-            quats=quats,
-            log_scales=log_scales,
-            logit_opacities=logit_opacities,
-            sh0=sh0,
-            shN=shN,
-        )
-        view.tile_size = 16
-        view.min_radius_2d = 0.0
-        view.eps_2d = point_size / 2.0
-        view.antialias = False
-        view.sh_degree_to_use = 0
-
-    point_cloud_view_cls.__init__ = _compat_point_cloud_init
-    point_cloud_view_cls.__nanovdb_editor_point_cloud_compat__ = True
+    except subprocess.TimeoutExpired as exc:
+        raise AssertionError(
+            "fvdb.viz viewer initialization did not exit within "
+            f"{VIZ_PREFLIGHT_TIMEOUT_SECONDS} seconds. This usually indicates "
+            "a native viewer shutdown deadlock."
+        ) from exc
 
 
 def _run_upstream_viz_suite(env_ctx: dict):
@@ -416,25 +274,20 @@ def _run_upstream_viz_suite(env_ctx: dict):
     env = env_ctx["env"]
     upstream_test_path = env_ctx["upstream_test_path"]
     _assert_viz_server_initializes(env_ctx)
-    runner = """
+    # Emit periodic Python thread stacks well before the suite timeout fires so a hang produces
+    # several progressively-updated tracebacks rather than a single dump at the very end.
+    dump_interval = max(15, VIZ_SUITE_TIMEOUT_SECONDS // 4)
+    runner = f"""
+import faulthandler
 import os
 import sys
 import traceback
 
 import pytest
 
+faulthandler.dump_traceback_later({dump_interval}, repeat=True)
 exit_code = 1
 try:
-    from packaging.version import Version
-    import fvdb
-    _fvdb_ver = Version(fvdb.__version__.split("+")[0])
-    if not _fvdb_ver.is_devrelease:
-        from pytests.test_fvdb_viz_integration import (
-            _apply_fvdb_camera_fov_compat,
-            _apply_fvdb_point_cloud_compat,
-        )
-        _apply_fvdb_camera_fov_compat()
-        _apply_fvdb_point_cloud_compat()
     exit_code = int(pytest.main(sys.argv[1:]))
 except BaseException:
     traceback.print_exc()
@@ -454,7 +307,26 @@ finally:
         "--full-trace",
         "-rA",
     ]
-    result = subprocess.run(cmd, env=env, capture_output=True, text=True)
+    try:
+        result = subprocess.run(
+            cmd,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=VIZ_SUITE_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout = exc.stdout or ""
+        stderr = exc.stderr or ""
+        if isinstance(stdout, bytes):
+            stdout = stdout.decode(errors="replace")
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode(errors="replace")
+        sys.stdout.write(stdout)
+        sys.stderr.write(stderr)
+        raise AssertionError(
+            "fvdb.viz upstream test suite did not exit within " f"{VIZ_SUITE_TIMEOUT_SECONDS} seconds."
+        ) from exc
     sys.stdout.write(result.stdout)
     sys.stdout.flush()
     if result.stderr:

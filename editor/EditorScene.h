@@ -118,12 +118,15 @@ public:
     }
 
     // Editor per update sync
-    void process_pending_editor_changes();
     void process_pending_ui_changes();
 
     void sync_selected_view_with_current();
     void sync_shader_params_from_editor();
     void sync_views_from_scene_manager(uint64_t selected_scene_id = 0, uint64_t selected_name_id = 0);
+    void sync_object_from_scene_manager(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
+
+    // Push the active editor camera into the current scene's viewport view + UI
+    void apply_editor_camera_to_viewport();
 
     // To refresh shader params after shader compile
     void reload_shader_params_for_current_view();
@@ -200,6 +203,8 @@ public:
                                   pnanovdb_editor_token_t* name_token,
                                   pnanovdb_editor_token_t* scene_token = nullptr);
     SceneSelection get_properties_selection() const;
+
+    void focus_added_object_in_properties(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token);
 
     void set_render_view(ViewType type,
                          pnanovdb_editor_token_t* name_token,
@@ -439,8 +444,14 @@ private:
                                     const char* name,
                                     pnanovdb_editor_token_t* scene_token,
                                     const char* log_message);
+
+    // Push a single scene-manager object's resources into the SceneView; returns true if it was a camera.
+    bool sync_object_into_view(SceneObject* obj);
+
+    // Switch to the added object's scene and select an appropriate content view.
+    void select_view_for_added_object(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name, bool added_camera);
+
     bool is_switching_scenes(pnanovdb_editor_token_t* from_scene, pnanovdb_editor_token_t* to_scene) const;
-    void apply_editor_camera_to_viewport();
     pnanovdb_editor_token_t* find_next_available_view(pnanovdb_editor_token_t* scene_token) const;
     pnanovdb_editor_token_t* find_any_view_in_scene(pnanovdb_editor_token_t* scene_token) const;
     void* get_view_params_with_fallback(SceneShaderParams& params, void* obj_params) const;

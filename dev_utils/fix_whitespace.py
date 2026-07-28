@@ -1,10 +1,30 @@
 # Copyright Contributors to the OpenVDB Project
 # SPDX-License-Identifier: Apache-2.0
 
-import os
 import argparse
-from pathlib import Path
+import os
 import subprocess
+import sys
+from pathlib import Path
+
+# Keep in sync with .github/workflows/codestyle.yml (trailingspaces / spacesnottabs jobs).
+TRAILING_SPACE_SKIP_SUFFIXES = (".wlt",)
+
+BINARY_SKIP_PATTERNS = {
+    ".svg",
+    ".cmd",
+    ".png",
+    ".jpg",
+    ".gif",
+    ".mp4",
+    ".pt",
+    ".pth",
+    ".nvdb",
+    ".npz",
+    ".wlt",
+}
+
+TAB_FIX_SKIP_PATTERNS = BINARY_SKIP_PATTERNS | {".gitmodules"}
 
 
 def get_git_root():
@@ -19,12 +39,11 @@ def get_git_root():
         return None
 
 
-def get_git_files(directory):
+def get_git_files(git_root: Path) -> set[Path]:
     try:
-        # Get list of tracked files from git
         git_files = subprocess.check_output(
             ["git", "ls-files"],
-            cwd=directory,
+            cwd=git_root,
             stderr=subprocess.DEVNULL,
             universal_newlines=True,
         )
@@ -33,56 +52,96 @@ def get_git_files(directory):
         return set()
 
 
-def should_skip_file(file_path, git_files):
-    # Skip if file is not tracked by git
-    if file_path not in git_files:
+def is_ignored_by_git(git_root: Path, relative_path: Path) -> bool:
+    try:
+        subprocess.run(
+            ["git", "check-ignore", "-q", "--", str(relative_path)],
+            cwd=git_root,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+
+def normalize_path(file_path: Path) -> str:
+    return str(file_path).replace("\\", "/")
+
+
+def matches_pattern(path: str, patterns: set[str]) -> bool:
+    return any(pattern in path for pattern in patterns)
+
+
+def should_skip_file(relative_path: Path, git_root: Path, git_files: set[Path]) -> bool:
+    path = normalize_path(relative_path)
+    if path.endswith(TRAILING_SPACE_SKIP_SUFFIXES):
+        return True
+    if matches_pattern(path, BINARY_SKIP_PATTERNS):
         return True
 
-    # Skip patterns matching the workflow's paths-ignore and file exclusions
-    skip_patterns = {
-        ".svg",
-        ".cmd",
-        ".png",
-        ".jpg",
-        ".gif",
-        ".mp4",
-        ".pt",
-        ".pth",
-        ".nvdb",
-        ".npz",
-        ".wlt",
-        ".yml",
-    }
+    if path.endswith("codestyle.yml"):
+        return True
 
-    str_path = str(file_path)
-    return any(pattern in str_path for pattern in skip_patterns)
+    if relative_path in git_files:
+        return False
+
+    # Include untracked (but not gitignored) files under .github/, e.g. new workflow YAML.
+    if path.startswith(".github/") and not is_ignored_by_git(git_root, relative_path):
+        return False
+
+    return True
 
 
-def fix_whitespace(file_path):
+def should_fix_tabs(file_path: Path) -> bool:
+    path = normalize_path(file_path)
+    if path.endswith("codestyle.yml"):
+        return False
+    return not matches_pattern(path, TAB_FIX_SKIP_PATTERNS)
+
+
+def transform_line(line: str, fix_tabs: bool) -> str:
+    new_line = line.rstrip()
+    if fix_tabs:
+        new_line = new_line.replace("\t", "    ")
+    return new_line
+
+
+def file_needs_fix(file_path: Path, fix_tabs: bool) -> bool:
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+    except OSError:
+        return False
+
+    if "\0" in content:
+        return False
+
+    for line in content.splitlines():
+        if transform_line(line, fix_tabs) != line:
+            return True
+    return False
+
+
+def fix_whitespace(file_path: Path, fix_tabs: bool) -> bool:
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
 
-        # Skip binary-looking files
         if "\0" in content:
             return False
 
-        # Remove trailing whitespace and convert tabs to spaces
         fixed_lines = []
         modified = False
 
         for line in content.splitlines():
-            # Remove trailing whitespace
-            new_line = line.rstrip()
-            # Convert tabs to spaces (4 spaces per tab)
-            new_line = new_line.replace("\t", "    ")
-
+            new_line = transform_line(line, fix_tabs)
             if new_line != line:
                 modified = True
             fixed_lines.append(new_line)
 
         if modified:
-            # Write back only if changes were made
             with open(file_path, "w", encoding="utf-8", newline="\n") as f:
                 f.write("\n".join(fixed_lines) + "\n")
             print(f"Fixed: {file_path}")
@@ -110,7 +169,7 @@ def check_line_length(file_path, max_length=100):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Fix whitespace issues in git-tracked files"
+        description="Fix whitespace issues in git-tracked files (matches codestyle CI checks)"
     )
     parser.add_argument(
         "directory",
@@ -124,27 +183,29 @@ def main():
         help="Show files that would be modified without making changes",
     )
     parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Exit with status 1 if any file would need fixes",
+    )
+    parser.add_argument(
         "--check-length",
         action="store_true",
         help="Check for lines exceeding 100 characters",
     )
 
     args = parser.parse_args()
+    preview_only = args.dry_run or args.check
 
-    # Find git root directory
     git_root = get_git_root()
     if not git_root:
-        print("Error: Not a git repository")
-        return
+        print("Error: Not a git repository", file=sys.stderr)
+        return 1
 
-    # Convert directory to absolute path
     work_dir = Path(args.directory).resolve()
-
-    # Get list of git-tracked files
     git_files = get_git_files(git_root)
     if not git_files:
-        print("Error: No git-tracked files found")
-        return
+        print("Error: No git-tracked files found", file=sys.stderr)
+        return 1
 
     fixed_count = 0
     processed_count = 0
@@ -153,41 +214,38 @@ def main():
         for file in files:
             file_path = Path(root) / file
             try:
-                # Convert both paths to absolute before calculating relative path
                 relative_path = file_path.resolve().relative_to(git_root)
-
-                if should_skip_file(relative_path, git_files):
-                    continue
-
-                processed_count += 1
-
-                if args.check_length:
-                    check_line_length(file_path)
-
-                if args.dry_run:
-                    try:
-                        with open(file_path, "r", encoding="utf-8") as f:
-                            content = f.read()
-                        if "\t" in content or any(
-                            line.rstrip() != line for line in content.splitlines()
-                        ):
-                            print(f"Would fix: {relative_path}")
-                            fixed_count += 1
-                    except:
-                        continue
-                else:
-                    if fix_whitespace(file_path):
-                        fixed_count += 1
             except ValueError:
-                # Skip files that are not under the git root
                 continue
 
+            if should_skip_file(relative_path, git_root, git_files):
+                continue
+
+            processed_count += 1
+            fix_tabs = should_fix_tabs(relative_path)
+
+            if args.check_length:
+                check_line_length(file_path)
+
+            if preview_only:
+                if file_needs_fix(file_path, fix_tabs):
+                    print(f"Would fix: {relative_path}")
+                    fixed_count += 1
+            elif fix_whitespace(file_path, fix_tabs):
+                fixed_count += 1
+
     print(f"\nProcessed {processed_count} files")
-    if args.dry_run:
+    if preview_only:
         print(f"Would fix {fixed_count} files")
+    elif fixed_count == 0:
+        print("No whitespace fixes needed.")
     else:
         print(f"Fixed {fixed_count} files")
 
+    if args.check and fixed_count > 0:
+        return 1
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

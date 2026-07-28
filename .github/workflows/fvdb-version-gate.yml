@@ -7,21 +7,27 @@ on:
         description: "True if current VERSION.txt satisfies fvdb requirement"
         value: ${{ jobs.evaluate.outputs.compatible }}
 
+# Deny all permissions by default; the job below opts into the minimal scopes it needs.
+permissions: {}
+
 jobs:
   evaluate:
     name: Check fVDB dependency constraint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # required for actions/checkout to read the repository
     outputs:
       compatible: ${{ steps.requirement.outputs.compatible }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.11'
 
       - name: Evaluate fvdb-reality-capture requirement
         id: requirement
         run: python scripts/check_fvdb_version_compatibility.py
-

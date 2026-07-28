@@ -80,6 +80,15 @@ public:
         size_t fallback_size,
         const pnanovdb_reflect_data_type_t* fallback_data_type = nullptr);
 
+    // Same as create_initialized_shader_params, but uses a throwaway ShaderParams instance so it
+    // touches no shared state. Safe to call from a non-render (caller) thread.
+    static pnanovdb_compute_array_t* create_isolated_shader_params(
+        const pnanovdb_compute_t* compute,
+        const char* shader_name,
+        const char* shader_group,
+        size_t fallback_size,
+        const pnanovdb_reflect_data_type_t* fallback_data_type = nullptr);
+
     // Reinitialize params arrays for all NanoVDB objects using the given shader
     void refresh_params_for_shader(const pnanovdb_compute_t* compute, const char* shader_name);
 
@@ -661,6 +670,7 @@ private:
                           pnanovdb_editor_token_t* shader_name,
                           pnanovdb_pipeline_type_t process_pipeline,
                           pnanovdb_pipeline_type_t render_pipeline,
+                          bool force_pipelines,
                           std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_gaussian_owner_out);
 
     bool add_gaussian_data_impl(pnanovdb_editor_token_t* scene,
@@ -674,6 +684,7 @@ private:
                                 const char* shader_name,
                                 pnanovdb_pipeline_type_t process_pipeline,
                                 pnanovdb_pipeline_type_t render_pipeline,
+                                bool force_pipelines,
                                 std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_owner_out);
 
     bool load_reservation_matches(uint64_t key, uint64_t lifetime_id) const;

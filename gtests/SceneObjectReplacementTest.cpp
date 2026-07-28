@@ -665,5 +665,37 @@ TEST(SceneObjectReplacementTest, CrossTypeReplacementHandsOffGaussianOwner)
     expect_deferred(old_owner);
 }
 
+TEST(SceneObjectReplacementTest, AddGaussianDataExplicitPipelineOverridesConfiguredRender)
+{
+    EditorSceneManager manager;
+    pnanovdb_editor_token_t scene{ 551u, "scene" };
+    pnanovdb_editor_token_t name{ 552u, "gaussian" };
+    pnanovdb_raster::gaussian_data_t gaussian_storage{};
+    pnanovdb_raster_gaussian_data_t* gaussian = pnanovdb_raster::cast(&gaussian_storage);
+    pnanovdb_compute_t compute{};
+    pnanovdb_raster_t raster{};
+    auto* queue = reinterpret_cast<pnanovdb_compute_queue_t*>(uintptr_t{ 1 });
+
+    ASSERT_TRUE(manager.add_gaussian_data(&scene, &name, gaussian, nullptr, nullptr, &compute, &raster, queue));
+    manager.with_object(&scene, &name,
+                        [&](SceneObject* obj)
+                        {
+                            ASSERT_NE(obj, nullptr);
+                            obj->pipeline.render().type = pnanovdb_pipeline_type_voxelbvh_gaussians_render;
+                            obj->pipeline.render().configured = true;
+                        });
+
+    ASSERT_TRUE(manager.add_gaussian_data(&scene, &name, gaussian, nullptr, nullptr, &compute, &raster, queue, nullptr,
+                                          pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_gaussian_splat, nullptr));
+
+    manager.with_object(&scene, &name,
+                        [&](SceneObject* obj)
+                        {
+                            ASSERT_NE(obj, nullptr);
+                            EXPECT_EQ(obj->pipeline.render().type, pnanovdb_pipeline_type_gaussian_splat);
+                            EXPECT_TRUE(obj->pipeline.render().configured);
+                        });
+}
+
 } // namespace
 } // namespace pnanovdb_editor

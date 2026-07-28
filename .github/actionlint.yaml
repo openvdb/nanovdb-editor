@@ -1,0 +1,7 @@
+self-hosted-runner:
+  # Why: actionlint v1.7.7 (pinned in workflow-security.yml) predates this
+  #      GitHub-hosted runner label and would otherwise flag it as unknown.
+  # Remove when: ACTIONLINT_VERSION is bumped to a release that recognizes
+  #              windows-11-arm natively.
+  labels:
+    - windows-11-arm
