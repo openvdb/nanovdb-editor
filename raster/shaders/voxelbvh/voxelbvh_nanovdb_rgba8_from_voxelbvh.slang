@@ -850,6 +850,32 @@ void iterate_main(pnanovdb_address_t node_arr, pnanovdb_address_t val_addr, uint
                     pnanovdb_uint32_t n = pnanovdb_leaf_coord_to_offset(ijk);
                     nanovdb_set_bit(buf, mask_addr, n);
                 }
+                else if (level == 1u)
+                {
+                    pnanovdb_lower_handle_t lower = {node_arr};
+                    pnanovdb_address_t mask_addr = pnanovdb_address_offset(lower.address, PNANOVDB_LOWER_OFF_VALUE_MASK);
+                    pnanovdb_uint32_t n = pnanovdb_lower_coord_to_offset(ijk);
+                    nanovdb_set_bit(buf, mask_addr, n);
+                }
+                else if (level == 2u)
+                {
+                    pnanovdb_upper_handle_t upper = {node_arr};
+                    pnanovdb_address_t mask_addr = pnanovdb_address_offset(upper.address, PNANOVDB_UPPER_OFF_VALUE_MASK);
+                    pnanovdb_uint32_t n = pnanovdb_upper_coord_to_offset(ijk);
+                    nanovdb_set_bit(buf, mask_addr, n);
+                }
+                else if (level == 3u)
+                {
+                    pnanovdb_root_handle_t root = {node_arr};
+                    pnanovdb_uint32_t count = pnanovdb_root_get_tile_count(buf, root);
+                    if (n < count)
+                    {
+                        pnanovdb_uint32_t grid_type = pnanovdb_grid_get_grid_type(buf, grid);
+                        pnanovdb_root_tile_handle_t tile = pnanovdb_root_get_tile(grid_type, root, n);
+                        pnanovdb_address_t mask_addr = pnanovdb_address_offset(tile.address, PNANOVDB_ROOT_TILE_OFF_STATE);
+                        nanovdb_set_bit(buf, mask_addr, 0u);
+                    }
+                }
             }
             if (constants2.pass_id == 1u)
             {

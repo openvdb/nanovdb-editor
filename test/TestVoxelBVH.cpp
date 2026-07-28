@@ -834,9 +834,9 @@ static const pnanovdb_vec3_t verts[12u] = {
 static const float sphere_radius = sqrt(g*g + 1.f);
 #else
 static const pnanovdb_uint32_t vert_count = 8u;
-static const pnanovdb_vec3_t verts[8u] = { { -1.f, 0.f, 0.f }, { 0.f, -1.f, 0.f },  { 1.f, 0.f, 0.f },
-                                           { 0.f, 1.f, 0.f },  { -1.f, -1.f, 0.f }, { 1.f, -1.f, 0.f },
-                                           { -1.f, 1.f, 0.f }, { 1.f, 1.f, 0.f } };
+static const pnanovdb_vec3_t verts[8u] = { { -1.f, -1.f, 0.f }, { 1.f, -1.f, 0.f }, { -1.f, 1.f, 0.f },
+                                           { 1.f, 1.f, 0.f },   { -1.f, 0.f, 0.f }, { 0.f, -1.f, 0.f },
+                                           { 1.f, 0.f, 0.f },   { 0.f, 1.f, 0.f } };
 #endif
 
 static void get_transform(pnanovdb_uint32_t vert_idx, pnanovdb_camera_mat_t* transform, float aniso)
