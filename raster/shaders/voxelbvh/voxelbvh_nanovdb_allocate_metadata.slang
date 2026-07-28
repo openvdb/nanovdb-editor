@@ -1,4 +1,4 @@
-// voxelbvh_duplicate_init.slang
+// voxelbvh_nanovdb_allocate_metadata.slang
 
 #define PNANOVDB_HLSL
 #define PNANOVDB_ADDRESS_64
