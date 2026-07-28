@@ -20,8 +20,10 @@
 #include <cstdint>
 #include <cstdio>
 #include <math.h>
+#include <unordered_map>
 
 #include "editor/shaders/voxelbvh_common.h"
+#include "nanovdb/PNanoVDB.h"
 
 static void save_ply(pnanovdb_compute_t& compute,
                      pnanovdb_compute_array_t* positions,
@@ -141,10 +143,12 @@ static void print_memory_stats(pnanovdb_compute_t* compute, pnanovdb_compute_dev
 }
 
 void voxelbvh_generate_rgba8();
+void voxelbvh_generate_rgba8_integral();
 
 void voxelbvh_test()
 {
-    voxelbvh_generate_rgba8();
+    voxelbvh_generate_rgba8_integral();
+    // voxelbvh_generate_rgba8();
     return;
 
     // load compiler and compute
@@ -833,12 +837,12 @@ static const pnanovdb_vec3_t verts[12u] = {
 static const float sphere_radius = sqrt(g*g + 1.f);
 #else
 static const pnanovdb_uint32_t vert_count = 8u;
-static const pnanovdb_vec3_t verts[8u] = { { -1.f, -1.f, 0.f }, { 1.f, -1.f, 0.f }, { -1.f, 1.f, 0.f },
-                                           { 1.f, 1.f, 0.f },   { -1.f, 0.f, 0.f }, { 0.f, -1.f, 0.f },
-                                           { 1.f, 0.f, 0.f },   { 0.f, 1.f, 0.f } };
+static const pnanovdb_vec3_t verts[8u] = { { -1.f, 0.f, 0.f }, { 0.f, -1.f, 0.f },  { 1.f, 0.f, 0.f },
+                                           { 0.f, 1.f, 0.f },  { -1.f, -1.f, 0.f }, { 1.f, -1.f, 0.f },
+                                           { -1.f, 1.f, 0.f }, { 1.f, 1.f, 0.f } };
 #endif
 
-static void get_transform(pnanovdb_uint32_t vert_idx, pnanovdb_camera_mat_t* transform)
+static void get_transform(pnanovdb_uint32_t vert_idx, pnanovdb_camera_mat_t* transform, float aniso)
 {
     pnanovdb_vec3_t ray_dir = verts[vert_idx];
     ray_dir = pnanovdb_camera_vec3_normalize(ray_dir);
@@ -855,19 +859,19 @@ static void get_transform(pnanovdb_uint32_t vert_idx, pnanovdb_camera_mat_t* tra
     pnanovdb_vec3_t x_vec = pnanovdb_camera_vec3_normalize(pnanovdb_camera_vec3_cross(up_vec, ray_dir));
     pnanovdb_vec3_t y_vec = pnanovdb_camera_vec3_cross(ray_dir, x_vec);
 
-    const float aniso = 1.f / 2.f;
+    const float aniso_inv = 1.f / aniso;
 
     pnanovdb_camera_mat_t view = { x_vec.x,
                                    y_vec.x,
-                                   aniso * ray_dir.x,
+                                   aniso_inv * ray_dir.x,
                                    0.f,
                                    x_vec.y,
                                    y_vec.y,
-                                   aniso * ray_dir.y,
+                                   aniso_inv * ray_dir.y,
                                    0.f,
                                    x_vec.z,
                                    y_vec.z,
-                                   aniso * ray_dir.z,
+                                   aniso_inv * ray_dir.z,
                                    0.f,
                                    0.f,
                                    0.f,
@@ -916,7 +920,7 @@ void voxelbvh_generate_rgba8()
         printf("ijkl from Gaussians vert_idx(%d)\n", vert_idx);
 
         pnanovdb_camera_mat_t transform_mat = {};
-        get_transform(vert_idx, &transform_mat);
+        get_transform(vert_idx, &transform_mat, 2.f);
         float transform[16u] = {};
         memcpy(transform, &transform_mat, sizeof(pnanovdb_camera_mat_t));
 
@@ -1066,6 +1070,301 @@ void voxelbvh_generate_rgba8()
 
         global_offset += grid_size;
     }
+
+    printf("Save merged grid\n");
+
+    compute.save_nanovdb(merged_nanovdb, "./data/merged_rgba8.nvdb");
+    // FILE* file = fopen("./data/merged_rgba8.nvdb", "wb");
+    // fwrite(merged_nanovdb->data, 1u,
+    //     merged_nanovdb->element_size * merged_nanovdb->element_count,
+    //     file);
+    // fclose(file);
+
+    compute.destroy_array(merged_nanovdb);
+
+    pnanovdb_compute_free(&compute);
+    pnanovdb_compiler_free(&compiler);
+}
+
+PNANOVDB_FORCE_INLINE pnanovdb_uint64_t pnanovdb_leaf_onindex_get_value_index(pnanovdb_buf_t buf,
+                                                                              pnanovdb_address_t value_address,
+                                                                              pnanovdb_uint32_t n)
+{
+    pnanovdb_leaf_handle_t leaf = { pnanovdb_address_offset_neg(
+        value_address, PNANOVDB_GRID_TYPE_GET(PNANOVDB_GRID_TYPE_ONINDEX, leaf_off_table)) };
+
+    pnanovdb_uint32_t word_idx = n >> 6u;
+    pnanovdb_uint32_t bit_idx = n & 63u;
+    pnanovdb_uint64_t val_mask =
+        pnanovdb_read_uint64(buf, pnanovdb_address_offset(leaf.address, PNANOVDB_LEAF_OFF_VALUE_MASK + 8u * word_idx));
+    pnanovdb_uint64_t mask = pnanovdb_uint64_bit_mask(bit_idx);
+    pnanovdb_uint64_t value_index = pnanovdb_uint32_as_uint64_low(0u);
+    if (pnanovdb_uint64_any_bit(pnanovdb_uint64_and(val_mask, mask)))
+    {
+        pnanovdb_uint32_t sum = 0u;
+        sum += pnanovdb_uint64_countbits(pnanovdb_uint64_and(val_mask, pnanovdb_uint64_dec(mask)));
+        if (word_idx > 0u)
+        {
+            pnanovdb_uint64_t prefix_sum = pnanovdb_read_uint64(buf, pnanovdb_address_offset(value_address, 8u));
+            sum += pnanovdb_uint64_to_uint32_lsr(prefix_sum, 9u * (word_idx - 1u)) & 511u;
+        }
+        pnanovdb_uint64_t offset = pnanovdb_read_uint64(buf, value_address);
+        value_index = pnanovdb_uint64_offset(offset, sum);
+    }
+    return value_index;
+}
+
+void voxelbvh_generate_rgba8_integral()
+{
+    // load compiler and compute
+    pnanovdb_compiler_t compiler = {};
+    pnanovdb_compiler_load(&compiler);
+    pnanovdb_compute_t compute = {};
+    pnanovdb_compute_load(&compute, &compiler);
+
+    // create device
+    pnanovdb_compute_device_desc_t device_desc = {};
+    device_desc.log_print = log_print;
+    pnanovdb_compute_device_manager_t* device_manager = compute.device_interface.create_device_manager(PNANOVDB_FALSE);
+    pnanovdb_compute_device_t* device = compute.device_interface.create_device(device_manager, &device_desc);
+    pnanovdb_compute_queue_t* queue = compute.device_interface.get_compute_queue(device);
+
+    // pnanovdb_compute_context_t* compute_context = compute.device_interface.get_compute_context(queue);
+    // compute.device_interface.set_resource_min_lifetime(compute_context, 0u);
+
+    pnanovdb_voxelbvh_t voxel_bvh = {};
+    pnanovdb_voxelbvh_load(&voxel_bvh, &compute);
+
+    auto voxelbvh_ctx = voxel_bvh.create_context(&compute, queue);
+
+    static const pnanovdb_uint32_t prim_meta_count = 6u;
+    pnanovdb_compute_array_t* prim_meta_arrays[prim_meta_count] = {};
+
+    const pnanovdb_uint32_t resolution = 2048u;
+    // const pnanovdb_uint32_t resolution = 512u;
+    const char* in_file = "./data/garden_eps2d03.ply";
+    // const char* in_file = "./data/dozer__segment.ply";
+
+    printf("Vulkan initialized\n");
+    print_memory_stats(&compute, device);
+
+    // only need to generate single VoxelBVH here
+    pnanovdb_compute_array_t* nanovdb_meta = nullptr;
+    {
+        printf("ijkl from Gaussians\n");
+
+        pnanovdb_compute_array_t* ijkl_array = nullptr;
+        pnanovdb_compute_array_t* prim_id_array = nullptr;
+        pnanovdb_compute_array_t* range_array = nullptr;
+        pnanovdb_compute_array_t* world_bbox_array = nullptr;
+        voxel_bvh.ijkl_from_gaussians_file(&compute, queue, voxelbvh_ctx, in_file, &ijkl_array, &prim_id_array,
+                                           &range_array, &world_bbox_array, resolution, prim_meta_arrays, 6u, nullptr,
+                                           0u);
+
+        uint64_t range_count = range_array->element_count;
+        uint64_t ijkl_count = ijkl_array->element_count;
+        uint64_t* mapped_ijkl = (uint64_t*)compute.map_array(ijkl_array);
+        uint64_t* mapped_range = (uint64_t*)compute.map_array(range_array);
+
+        printf("NanoVDB from ijkl\n");
+
+        pnanovdb_compute_array_t* built_nanovdb_array = nullptr;
+        pnanovdb_compute_array_t* built_flat_range_array = nullptr;
+        voxel_bvh.nanovdb_add_nodes_from_ijkl_array(&compute, queue, voxelbvh_ctx, &built_nanovdb_array,
+                                                    &built_flat_range_array, ijkl_array, range_array, world_bbox_array,
+                                                    resolution, nullptr, 0u);
+
+        pnanovdb_buf_t buf =
+            pnanovdb_make_buf((uint32_t*)built_nanovdb_array->data,
+                              built_nanovdb_array->element_size * built_nanovdb_array->element_count / 4u);
+        pnanovdb_uint64_t* range_flat_ptr = (pnanovdb_uint64_t*)built_flat_range_array->data;
+
+        // find first invalid key
+        uint64_t last_valid_key = ijkl_count;
+        for (uint64_t idx = 0u; idx < ijkl_count; idx++)
+        {
+            if ((mapped_ijkl[idx] & 0xFFFF) != 0xFFFF)
+            {
+                last_valid_key = idx;
+            }
+        }
+        // shrink prim_id array
+        prim_id_array->element_count = last_valid_key + 1u;
+
+        // find first invalid range
+        uint64_t flat_range_count = built_flat_range_array->element_count;
+        uint64_t last_valid_range = flat_range_count;
+        for (uint64_t idx = 0u; idx < built_flat_range_array->element_count; idx++)
+        {
+            if (range_flat_ptr[idx] != 0u)
+            {
+                last_valid_range = idx;
+            }
+        }
+        // shrink ranges array
+        built_flat_range_array->element_count = last_valid_range + 1u;
+
+        printf("Shrinking arrays prim_id(%zu vs %zu) range(%zu vs %zu)\n", prim_id_array->element_count, ijkl_count,
+               built_flat_range_array->element_count, flat_range_count);
+
+        pnanovdb_compute_array_t* metadata_arrays[2u + prim_meta_count] = { built_flat_range_array, prim_id_array };
+        for (pnanovdb_uint32_t idx = 0u; idx < prim_meta_count; idx++)
+        {
+            metadata_arrays[2u + idx] = prim_meta_arrays[idx];
+        }
+
+        printf("Append metadata\n");
+        voxel_bvh.nanovdb_append_metadata(
+            &compute, built_nanovdb_array, &nanovdb_meta, metadata_arrays, 2u + prim_meta_count);
+
+        for (uint32_t idx = 0u; idx < prim_meta_count; idx++)
+        {
+            compute.destroy_array(prim_meta_arrays[idx]);
+        }
+
+        compute.destroy_array(ijkl_array);
+        compute.destroy_array(prim_id_array);
+        compute.destroy_array(range_array);
+        compute.destroy_array(world_bbox_array);
+
+        compute.destroy_array(built_nanovdb_array);
+        compute.destroy_array(built_flat_range_array);
+    }
+
+    static const pnanovdb_uint32_t l_vert_count = 1u;
+
+    pnanovdb_compute_array_t* vert_nanovdbs[l_vert_count] = {};
+    for (pnanovdb_uint32_t vert_idx = 0u; vert_idx < l_vert_count; vert_idx++)
+    {
+        pnanovdb_camera_mat_t transform_mat = {};
+        get_transform(vert_idx, &transform_mat, 1.f);
+        float transform[16u] = {};
+        memcpy(transform, &transform_mat, sizeof(pnanovdb_camera_mat_t));
+
+        printf("Voxelize vert_idx(%d)\n", vert_idx);
+
+        pnanovdb_uint32_t resolution = 2u * 4096u;
+        pnanovdb_compute_array_t* nanovdb_rgba8_integral = nullptr;
+        voxel_bvh.nanovdb_integral_from_voxelbvh_array(
+            &compute, queue, voxelbvh_ctx, &nanovdb_rgba8_integral, nanovdb_meta, resolution, transform, 16u);
+
+        vert_nanovdbs[vert_idx] = nanovdb_rgba8_integral;
+        // compute.destroy_array(nanovdb_rgba8_integral);
+
+        printf("End of vert_idx(%d)\n", vert_idx);
+        print_memory_stats(&compute, device);
+    }
+
+    compute.destroy_array(nanovdb_meta);
+
+    printf("Freeing GPU device before merge\n");
+    print_memory_stats(&compute, device);
+
+    voxel_bvh.destroy_context(&compute, queue, voxelbvh_ctx);
+
+    pnanovdb_voxelbvh_free(&voxel_bvh);
+
+    print_memory_stats(&compute, device);
+
+    compute.device_interface.destroy_device(device_manager, device);
+    compute.device_interface.destroy_device_manager(device_manager);
+
+    printf("Merge grids\n");
+    // for each NanoVDB, set grid idx and count
+    pnanovdb_uint64_t total_size = 0llu;
+    for (pnanovdb_uint32_t vert_idx = 0u; vert_idx < l_vert_count; vert_idx++)
+    {
+        pnanovdb_buf_t buf =
+            pnanovdb_make_buf((uint32_t*)vert_nanovdbs[vert_idx]->data,
+                              vert_nanovdbs[vert_idx]->element_size * vert_nanovdbs[vert_idx]->element_count / 4u);
+
+        pnanovdb_grid_handle_t grid = {};
+        pnanovdb_grid_set_grid_index(buf, grid, vert_idx);
+        pnanovdb_grid_set_grid_count(buf, grid, l_vert_count);
+        total_size += pnanovdb_grid_get_grid_size(buf, grid);
+    }
+
+    uint64_t merged_uint64_count = (total_size + 7u) / 8u;
+    pnanovdb_compute_array_t* merged_nanovdb = compute.create_array(8u, merged_uint64_count, nullptr);
+
+    pnanovdb_uint64_t global_offset = 0llu;
+    for (pnanovdb_uint32_t vert_idx = 0u; vert_idx < l_vert_count; vert_idx++)
+    {
+        pnanovdb_buf_t buf =
+            pnanovdb_make_buf((uint32_t*)vert_nanovdbs[vert_idx]->data,
+                              vert_nanovdbs[vert_idx]->element_size * vert_nanovdbs[vert_idx]->element_count / 4u);
+
+        pnanovdb_grid_handle_t grid = {};
+        pnanovdb_uint64_t grid_size = pnanovdb_grid_get_grid_size(buf, grid);
+        uint8_t* data_dst = (uint8_t*)merged_nanovdb->data;
+        memcpy(data_dst + global_offset, buf.data, grid_size);
+
+        compute.destroy_array(vert_nanovdbs[vert_idx]);
+        vert_nanovdbs[vert_idx] = nullptr;
+
+        global_offset += grid_size;
+    }
+
+// check prefix sum
+#if 0
+    {
+        pnanovdb_buf_t buf = pnanovdb_make_buf(
+            (uint32_t*)merged_nanovdb->data, merged_nanovdb->element_size * merged_nanovdb->element_count / 4u);
+
+        pnanovdb_grid_handle_t grid = {};
+        pnanovdb_tree_handle_t tree = pnanovdb_grid_get_tree(buf, grid);
+        pnanovdb_root_handle_t root = pnanovdb_tree_get_root(buf, tree);
+        pnanovdb_uint32_t grid_type = pnanovdb_grid_get_grid_type(buf, grid);
+
+        std::unordered_map<uint64_t, uint64_t> meta_map;
+
+        int print_count = 64;
+        pnanovdb_uint32_t root_tile_count = pnanovdb_root_get_tile_count(buf, root);
+        for (pnanovdb_uint32_t root_n = 0u; root_n < root_tile_count; root_n++)
+        {
+            pnanovdb_root_tile_handle_t tile = pnanovdb_root_get_tile(grid_type, root, root_n);
+            pnanovdb_int64_t child = pnanovdb_root_tile_get_child(buf, tile);
+            if (child)
+            {
+                pnanovdb_upper_handle_t upper = pnanovdb_root_get_child(grid_type, buf, root, tile);
+                for (pnanovdb_uint32_t upper_n = 0u; upper_n < PNANOVDB_UPPER_TABLE_COUNT; upper_n++)
+                {
+                    if (pnanovdb_upper_get_child_mask(buf, upper, upper_n))
+                    {
+                        pnanovdb_lower_handle_t lower = pnanovdb_upper_get_child(grid_type, buf, upper, upper_n);
+                        for (pnanovdb_uint32_t lower_n = 0u; lower_n < PNANOVDB_LOWER_TABLE_COUNT; lower_n++)
+                        {
+                            if (pnanovdb_lower_get_child_mask(buf, lower, lower_n))
+                            {
+                                pnanovdb_leaf_handle_t leaf = pnanovdb_lower_get_child(grid_type, buf, lower, lower_n);
+
+                                for (pnanovdb_uint32_t leaf_n = 0u; leaf_n < PNANOVDB_LEAF_TABLE_COUNT; leaf_n++)
+                                {
+                                    pnanovdb_address_t val_addr =
+                                        pnanovdb_leaf_get_table_address(grid_type, buf, leaf, leaf_n);
+
+                                    pnanovdb_gridblindmetadata_handle_t metadata =
+                                        pnanovdb_grid_get_gridblindmetadata(buf, grid, 0u);
+                                    pnanovdb_uint64_t val_index64 =
+                                        pnanovdb_leaf_onindex_get_value_index(buf, val_addr, leaf_n);
+
+                                    meta_map[val_index64]++;
+                                    if (print_count > 0 && val_index64 != 0u && meta_map[val_index64] > 1u)
+                                    {
+                                        print_count--;
+
+                                        printf("Collision at value_index(%zu) tree(%u,%u,%u,%u) times(%zu)\n",
+                                               val_index64, root_n, upper_n, lower_n, leaf_n, meta_map[val_index64]);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+#endif
 
     printf("Save merged grid\n");
 
