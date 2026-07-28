@@ -1082,31 +1082,3 @@ void voxelbvh_generate_rgba8()
     pnanovdb_compute_free(&compute);
     pnanovdb_compiler_free(&compiler);
 }
-
-PNANOVDB_FORCE_INLINE pnanovdb_uint64_t pnanovdb_leaf_onindex_get_value_index(pnanovdb_buf_t buf,
-                                                                              pnanovdb_address_t value_address,
-                                                                              pnanovdb_uint32_t n)
-{
-    pnanovdb_leaf_handle_t leaf = { pnanovdb_address_offset_neg(
-        value_address, PNANOVDB_GRID_TYPE_GET(PNANOVDB_GRID_TYPE_ONINDEX, leaf_off_table)) };
-
-    pnanovdb_uint32_t word_idx = n >> 6u;
-    pnanovdb_uint32_t bit_idx = n & 63u;
-    pnanovdb_uint64_t val_mask =
-        pnanovdb_read_uint64(buf, pnanovdb_address_offset(leaf.address, PNANOVDB_LEAF_OFF_VALUE_MASK + 8u * word_idx));
-    pnanovdb_uint64_t mask = pnanovdb_uint64_bit_mask(bit_idx);
-    pnanovdb_uint64_t value_index = pnanovdb_uint32_as_uint64_low(0u);
-    if (pnanovdb_uint64_any_bit(pnanovdb_uint64_and(val_mask, mask)))
-    {
-        pnanovdb_uint32_t sum = 0u;
-        sum += pnanovdb_uint64_countbits(pnanovdb_uint64_and(val_mask, pnanovdb_uint64_dec(mask)));
-        if (word_idx > 0u)
-        {
-            pnanovdb_uint64_t prefix_sum = pnanovdb_read_uint64(buf, pnanovdb_address_offset(value_address, 8u));
-            sum += pnanovdb_uint64_to_uint32_lsr(prefix_sum, 9u * (word_idx - 1u)) & 511u;
-        }
-        pnanovdb_uint64_t offset = pnanovdb_read_uint64(buf, value_address);
-        value_index = pnanovdb_uint64_offset(offset, sum);
-    }
-    return value_index;
-}
