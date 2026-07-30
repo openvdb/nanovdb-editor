@@ -12,20 +12,13 @@
 #include "Common.h"
 
 #include "nanovdb_editor/putil/Raster.h"
-#include "nanovdb_editor/putil/GridBuild.h"
 #include "nanovdb_editor/putil/ParallelPrimitives.h"
 #include "nanovdb_editor/putil/Editor.h"
 
 namespace pnanovdb_raster
 {
 
-static const char* s_shader_names[shader_count] = { "raster/gaussian_frag_alloc.slang",
-                                                    "raster/gaussian_frag_color.slang",
-                                                    "raster/gaussian_prim.slang",
-                                                    "raster/point_frag_alloc.slang",
-                                                    "raster/point_frag_color.slang",
-
-                                                    "raster/gaussian_count_tiles.slang",
+static const char* s_shader_names[shader_count] = { "raster/gaussian_count_tiles.slang",
                                                     "raster/gaussian_projection.slang",
                                                     "raster/gaussian_rasterize_2d.slang",
                                                     "raster/gaussian_rasterize_2d_null.slang",
@@ -39,8 +32,6 @@ struct raster_context_t
 
     pnanovdb_parallel_primitives_t parallel_primitives;
     pnanovdb_parallel_primitives_context_t* parallel_primitives_ctx;
-    pnanovdb_grid_build_t grid_build;
-    pnanovdb_grid_build_context_t* grid_build_ctx;
 
     pnanovdb_uint64_t max_isects_count = { 0llu };
 };

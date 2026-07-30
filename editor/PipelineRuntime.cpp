@@ -81,16 +81,6 @@ void RasterFileShaderParams::prepare(const pnanovdb_compute_t* compute, EditorSc
         m_initialized = true;
     }
 
-    if (scene_manager)
-    {
-        if (m_arrays[pnanovdb_raster::gaussian_frag_color_slang])
-        {
-            m_compute->destroy_array(m_arrays[pnanovdb_raster::gaussian_frag_color_slang]);
-        }
-        m_arrays[pnanovdb_raster::gaussian_frag_color_slang] =
-            scene_manager->shader_params.get_compute_array_for_shader("raster/gaussian_frag_color.slang", m_compute);
-    }
-
     m_params.name = nullptr;
     m_params.data_type = m_data_type;
 }

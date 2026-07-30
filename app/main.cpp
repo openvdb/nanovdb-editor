@@ -10,7 +10,6 @@
 */
 
 #include "Log.h"
-#include "Node2Convert.h"
 
 #include <nanovdb_editor/putil/Editor.h>
 
@@ -26,8 +25,6 @@
 #include <chrono>
 #include <thread>
 #include <filesystem>
-
-#define CONVERT_NODE2 1
 
 namespace
 {
@@ -85,8 +82,6 @@ struct NanoVDBEditorArgs : public argparse::Args
     std::string& scene_file =
         kwarg("scene", "Scene JSON file path to load on startup; if omitted, ./scene.json is loaded when present")
             .set_default("");
-    bool& convert_node2 = flag("c,convert", "Convert to Node2 format").set_default(false);
-    std::string& convert_node2_output_file = kwarg("o,output", "Convert to Node2 output file path").set_default("");
     bool& headless = flag("headless", "Run in headless mode").set_default(false);
     bool& streaming = flag("s,stream", "Run in streaming mode").set_default(false);
     bool& stream_to_file = flag("stream-to-file", "Stream to file").set_default(false);
@@ -105,27 +100,6 @@ int main(int argc, char* argv[])
     printf("NanoVDB Editor starting...\n");
     printf("Input file: '%s'\n", args.input_file.c_str());
     printf("Scene file: '%s'\n", args.scene_file.empty() ? k_startup_scene_path : args.scene_file.c_str());
-    if (!args.convert_node2_output_file.empty())
-    {
-        printf("Output file: '%s'\n", args.convert_node2_output_file.c_str());
-    }
-
-#if CONVERT_NODE2
-#    ifndef _DEBUG
-    printf("Convert to Node2: %s\n", args.convert_node2 ? "true" : "false");
-    if (args.convert_node2)
-    {
-        std::string input_path = args.input_file;
-        std::string output_path = args.convert_node2_output_file.empty() ?
-                                      input_path.substr(0, input_path.find_last_of('.')) + "_node2.nvdb" :
-                                      args.convert_node2_output_file;
-
-        pnanovdb_editor::node2_convert(input_path.c_str(), output_path.c_str());
-        // pnanovdb_editor::node2_sphere(input_path.c_str());
-        printf("Converted '%s' to '%s'\n", input_path.c_str(), output_path.c_str());
-    }
-#    endif
-#endif
 
     printf("Headless mode: %s\n", args.headless ? "true" : "false");
     printf("Streaming mode: %s\n", args.streaming ? "true" : "false");

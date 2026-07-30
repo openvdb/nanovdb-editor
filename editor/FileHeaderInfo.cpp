@@ -72,8 +72,6 @@ static const char* getGridTypeName(uint32_t gridType)
         return "VEC3U16";
     case 26:
         return "UINT8";
-    case 27:
-        return "NODE2";
     default:
         return "INVALID";
     }

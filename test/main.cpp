@@ -254,11 +254,7 @@ int main(int argc, char* argv[])
 
     auto args = argparse::parse<NanoVDBEditorArgs>(argc, argv);
 
-#if TEST_NODE2
-    const char* nvdb_filepath = "./data/dragon_node2.nvdb";
-#else
     const char* nvdb_filepath = "./data/dragon.nvdb";
-#endif
 
     // uses dlopen to load compiler and get symbols
     pnanovdb_compiler_t compiler = {};

@@ -34,13 +34,6 @@ pnanovdb_raster_context_t* create_context(const pnanovdb_compute_t* compute, pna
         return nullptr;
     }
 
-    pnanovdb_grid_build_load(&ctx->grid_build, compute);
-    ctx->grid_build_ctx = ctx->grid_build.create_context(compute, queue);
-    if (!ctx->grid_build_ctx)
-    {
-        return nullptr;
-    }
-
     pnanovdb_compiler_settings_t compile_settings = {};
     pnanovdb_compiler_settings_init(&compile_settings);
 
@@ -83,8 +76,6 @@ void destroy_context(const pnanovdb_compute_t* compute,
 
     ctx->parallel_primitives.destroy_context(compute, queue, ctx->parallel_primitives_ctx);
     pnanovdb_parallel_primitives_free(&ctx->parallel_primitives);
-    ctx->grid_build.destroy_context(compute, queue, ctx->grid_build_ctx);
-    pnanovdb_grid_build_free(&ctx->grid_build);
 
     delete ctx;
 }

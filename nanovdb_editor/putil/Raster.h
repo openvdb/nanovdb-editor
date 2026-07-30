@@ -218,13 +218,6 @@ namespace pnanovdb_raster
 {
 enum shader
 {
-    // raster points shaders
-    gaussian_frag_alloc_slang,
-    gaussian_frag_color_slang,
-    gaussian_prim_slang,
-    point_frag_alloc_slang,
-    point_frag_color_slang,
-
     // raster 2d shaders
     gaussian_count_tiles_slang,
     gaussian_projection_slang,
