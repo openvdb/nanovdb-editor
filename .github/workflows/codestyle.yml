@@ -24,7 +24,7 @@ jobs:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       with:
         persist-credentials: false
-    - uses: enarx/spdx@d4020ee98e3101dd487c5184f27c6a6fb4f88709 # master
+    - uses: enarx/spdx@d4020ee98e3101dd487c5184f27c6a6fb4f88709 # zizmor: ignore[ref-version-mismatch] no release tags; pin is current master HEAD
       with:
         licenses: |-
           Apache-2.0
