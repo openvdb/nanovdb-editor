@@ -14,11 +14,6 @@
 #include <nanovdb_editor/putil/FileFormat.h>
 #include <nanovdb_editor/putil/Editor.h>
 
-#define PNANOVDB_RASTER_CONVERT_TO_ONINDEX 1
-#if PNANOVDB_RASTER_CONVERT_TO_ONINDEX
-#    include <nanovdb_editor/putil/Convert.h>
-#endif
-
 namespace pnanovdb_raster
 {
 // Common preprocessing for Gaussian arrays shared by rasterization entry points.
@@ -138,7 +133,6 @@ static pnanovdb_compute_array_t* process_gaussian_arrays_common(const pnanovdb_c
 // Converts preprocessed Gaussian attribute arrays into a NanoVDB buffer.
 // - Calls process_gaussian_arrays_common to normalize quats, exponentiate scales, derive colors, sigmoid opacities
 // - Invokes raster->raster_to_nanovdb to build the grid (writes to nanovdb_arr)
-// - Optional Node2 conversion path is enabled when PNANOVDB_RASTER_TEST_CONVERT is set
 // - Returns true on success; logs an error and returns false on failure
 static pnanovdb_bool_t process_arrays_to_raster_to_nanovdb(pnanovdb_raster_t* raster,
                                                            const pnanovdb_compute_t* compute,
@@ -184,25 +178,6 @@ static pnanovdb_bool_t process_arrays_to_raster_to_nanovdb(pnanovdb_raster_t* ra
         }
         return PNANOVDB_FALSE;
     }
-#if PNANOVDB_RASTER_CONVERT_TO_ONINDEX
-    pnanovdb_compute_array_t* node2_arr = *nanovdb_arr;
-    *nanovdb_arr = compute->create_array(4u, 3u * 256u * 1024u * 1024u, nullptr);
-
-    pnanovdb_uint32_t* mapped_src = (pnanovdb_uint32_t*)compute->map_array(node2_arr);
-    pnanovdb_uint32_t* mapped_dst = (pnanovdb_uint32_t*)compute->map_array(*nanovdb_arr);
-
-    pnanovdb_buf_t src_buf = pnanovdb_make_buf(mapped_src, node2_arr->element_count);
-    pnanovdb_buf_t dst_buf = pnanovdb_make_buf(mapped_dst, (*nanovdb_arr)->element_count);
-
-    pnanovdb_address_t dst_addr_max = { 4u * 3u * 256u * 1024u * 1024u };
-    pnanovdb_node2_convert_to_grid_type(dst_buf, dst_addr_max, PNANOVDB_GRID_TYPE_ONINDEX, src_buf);
-
-    compute->unmap_array(*nanovdb_arr);
-    compute->unmap_array(node2_arr);
-
-    compute->destroy_array(node2_arr);
-#endif
-
     return PNANOVDB_TRUE;
 }
 

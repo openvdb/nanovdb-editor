@@ -765,8 +765,6 @@ if (NOT SKBUILD)
             pnanovdbcompute
             pnanovdbfileformat
             pnanovdbeditor
-        DEFINITIONS
-            TEST_NODE2
     )
 
     add_dependencies(pnanovdbeditorapp pnanovdbeditor_prebuild)
