@@ -6,6 +6,7 @@ from ctypes import *
 from .utils import load_library
 from .compute import pnanovdb_Compute, pnanovdb_ComputeArray
 from .device import pnanovdb_Device, pnanovdb_ComputeQueue
+from .exceptions import InvalidArgumentError
 
 COMPUTE_LIB = "pnanovdbcompute"
 
@@ -226,6 +227,52 @@ class Raster:
             raise RuntimeError("Failed to raster points")
 
         return nanovdb_array.contents
+
+    def raster_to_nanovdb_from_arrays(
+        self,
+        voxel_size: float,
+        arrays,
+    ) -> pnanovdb_ComputeArray:
+        """Rasterize raw Gaussian arrays into a NanoVDB grid.
+
+        Unlike ``raster_to_nanovdb``, this entry point performs the Gaussian
+        preprocessing internally (quaternion normalization, scale
+        exponentiation, spherical-harmonic to color conversion and opacity
+        sigmoid), so the arrays can be passed in their raw, on-disk form.
+
+        Args:
+            voxel_size: World-space size of a voxel (e.g. ``1.0 / 128.0``).
+            arrays: Sequence of ``pnanovdb_ComputeArray`` in the canonical
+                Gaussian order ``[means, opacities, quaternions, scales, sh_0,
+                sh_n]``.
+
+        Returns:
+            The resulting NanoVDB ``pnanovdb_ComputeArray``.
+        """
+        if len(arrays) != 6:
+            raise InvalidArgumentError(
+                "Gaussian rasterization requires 6 arrays: " "[means, opacities, quaternions, scales, sh_0, sh_n]"
+            )
+        func = self._raster.contents.raster_to_nanovdb_from_arrays
+
+        ArrayPtr = POINTER(pnanovdb_ComputeArray)
+        arrays_c = (ArrayPtr * 6)(*[pointer(a) for a in arrays])
+        out_array = ArrayPtr()
+
+        ok = func(
+            self._raster,
+            self._compute.get_compute(),
+            self._compute_queue,
+            c_float(voxel_size),
+            arrays_c,
+            c_uint32(6),
+            byref(out_array),
+        )
+
+        if not ok or not out_array:
+            raise RuntimeError("Failed to rasterize Gaussian arrays to NanoVDB")
+
+        return out_array.contents
 
     def __del__(self):
         self._raster = None

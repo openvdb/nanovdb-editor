@@ -21,6 +21,7 @@ def cleanup_modules(exit_code=0):
             "nanovdb_editor.device",
             "nanovdb_editor.editor",
             "nanovdb_editor.raster",
+            "nanovdb_editor.session",
             "nanovdb_editor.utils",
         ]
 

@@ -182,12 +182,21 @@ void init(pnanovdb_editor_t* editor)
 
 static std::shared_ptr<EditorWorker> get_worker(pnanovdb_editor_t* editor)
 {
+    if (!editor || !editor->impl)
+    {
+        return nullptr;
+    }
     std::lock_guard<std::mutex> lock(editor->impl->editor_worker_lifecycle_mutex);
     return editor->impl->editor_worker;
 }
 
 void shutdown(pnanovdb_editor_t* editor)
 {
+    if (!editor || !editor->impl)
+    {
+        return;
+    }
+
     if (get_worker(editor))
     {
         editor->stop(editor);
@@ -204,6 +213,11 @@ void shutdown(pnanovdb_editor_t* editor)
                 "shutdown: called from the active render thread; teardown deferred until the render loop exits");
             return;
         }
+    }
+
+    if (!editor->impl)
+    {
+        return;
     }
 
     const size_t leaked_maps = editor->impl->param_map_registry ? param_map_active_count(editor) : 0u;

@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # pylint: disable=import-error,no-member,protected-access
 
-import gc
 import os
 import platform
 from pathlib import Path
@@ -41,56 +40,44 @@ def test_editor_stream_to_file_produces_h264_output(tmp_path, monkeypatch):
         print(f"Using Vulkan ICD: {os.environ.get('VK_ICD_FILENAMES', 'N/A')}")
         print(f"Using Vulkan driver: {os.environ.get('VK_DRIVER_FILES', 'N/A')}")
 
-    compiler = nve.Compiler()
-    compiler.create_instance()
-
-    compute = nve.Compute(compiler)
-    compute.device_interface().create_device_manager()
-    compute.device_interface().create_device()
-
-    editor = nve.Editor(compute, compiler)
-
-    config = nve.EditorConfig()
-    config.ip_address = b"127.0.0.1"
-    config.port = 8080
-    config.headless = 1
-    config.streaming = 1
-    config.stream_to_file = 1
-    config.ui_profile_name = None
-
     output_path = Path(tmp_path) / "capture_stream.h264"
 
-    try:
-        print(
-            f"Starting editor on platform={platform.system()} "
-            f"streaming={config.streaming} "
-            f"stream_to_file={config.stream_to_file} "
-            f"headless={config.headless} preferred_port={config.port}"
-        )
-        compiler.clear_diagnostics()
-        editor.start(config)
-        resolved_port = editor.get_resolved_port(True)
-        assert resolved_port > 0, "Expected the editor to resolve a streaming port"
-        print(f"Editor resolved streaming port={resolved_port}")
+    with nve.create_default() as session:
+        editor, compute, compiler = session
 
-        # Allow the render loop to produce and flush a few encoded frames.
-        sleep(1.5)
+        config = nve.EditorConfig()
+        config.ip_address = b"127.0.0.1"
+        config.port = 8080
+        config.headless = 1
+        config.streaming = 1
+        config.stream_to_file = 1
+        config.ui_profile_name = None
 
-        diagnostics = compiler.get_diagnostics()
-        if diagnostics:
-            print(f"Compiler diagnostics during startup:\n{diagnostics}")
-    except Exception as exc:
-        raise AssertionError(
-            "Editor CPU streaming to file failed.\n" f"Compiler diagnostics:\n{compiler.get_diagnostics() or '<none>'}"
-        ) from exc
-    finally:
-        editor.stop()
-        editor = None
-        compute = None
-        compiler._instance = None  # noqa: SLF001
-        compiler._compiler = None  # noqa: SLF001
-        compiler = None
-        gc.collect()
+        try:
+            print(
+                f"Starting editor on platform={platform.system()} "
+                f"streaming={config.streaming} "
+                f"stream_to_file={config.stream_to_file} "
+                f"headless={config.headless} preferred_port={config.port}"
+            )
+            compiler.clear_diagnostics()
+            editor.start(config)
+            resolved_port = editor.get_resolved_port(wait=True)
+            assert resolved_port > 0, "Expected the editor to resolve a streaming port"
+            print(f"Editor resolved streaming port={resolved_port}")
+
+            # Allow the render loop to produce and flush a few encoded frames.
+            sleep(1.5)
+
+            diagnostics = compiler.get_diagnostics()
+            if diagnostics:
+                print(f"Compiler diagnostics during startup:\n{diagnostics}")
+        except Exception as exc:
+            raise AssertionError(
+                "Editor CPU streaming to file failed.\n"
+                f"Compiler diagnostics:\n{compiler.get_diagnostics() or '<none>'}"
+            ) from exc
+        # Session.__exit__ stops + shuts down the editor and destroys the compiler.
 
     assert output_path.exists(), f"Expected H264 output file to exist: {output_path}"
 

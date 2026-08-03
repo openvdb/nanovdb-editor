@@ -1,7 +1,7 @@
 # Copyright Contributors to the OpenVDB Project
 # SPDX-License-Identifier: Apache-2.0
 
-from nanovdb_editor import Compiler, Compute, Editor, EditorConfig
+import nanovdb_editor as nve
 
 import os
 
@@ -11,26 +11,13 @@ TEST_NANOVDB = os.path.join(SCRIPT_DIR, "../data/dragon.nvdb")
 
 if __name__ == "__main__":
 
-    compiler = Compiler()
-    compiler.create_instance()
+    with nve.create_default() as app:
+        with app.scene("main").nanovdb_from_file(TEST_NANOVDB, name="dragon") as dragon:
+            print(f"Loaded dragon grid: {dragon.element_count} elements")
 
-    compute = Compute(compiler)
-    nvdb_array = compute.load_nanovdb(TEST_NANOVDB)
-
-    compute.device_interface().create_device_manager()
-    compute.device_interface().create_device()
-
-    editor = Editor(compute, compiler)
-
-    scene_token = editor.get_token("main")
-    dragon_token = editor.get_token("dragon")
-    editor.add_nanovdb_2(scene_token, dragon_token, nvdb_array)
-
-    compute.destroy_array(nvdb_array)
-
-    config = EditorConfig()
-    config.ip_address = b"127.0.0.1"
-    config.port = 8080
-    config.headless = 0
-    config.streaming = 0
-    editor.show(config)
+        config = nve.EditorConfig()
+        config.ip_address = b"127.0.0.1"
+        config.port = 8080
+        config.headless = 0
+        config.streaming = 0
+        app.show(config)

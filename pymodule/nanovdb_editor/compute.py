@@ -1,6 +1,7 @@
 # Copyright Contributors to the OpenVDB Project
 # SPDX-License-Identifier: Apache-2.0
 
+from contextlib import contextmanager
 from ctypes import *
 from typing import Tuple
 import numpy as np
@@ -8,6 +9,7 @@ import numpy as np
 from .utils import load_library
 from .device import DeviceInterface, pnanovdb_DeviceInterface, pnanovdb_Device
 from .compiler import Compiler, pnanovdb_Compiler
+from .exceptions import InvalidArgumentError, PipelineError
 
 COMPUTE_LIB = "pnanovdbcompute"
 
@@ -48,6 +50,60 @@ class pnanovdb_ComputeArray(Structure):
         self.element_size = element_size
         self.element_count = element_count
         self.filepath = filepath.encode("utf-8") if isinstance(filepath, str) else filepath
+
+
+class Array:
+    """Owned wrapper around a ``pnanovdb_ComputeArray``.
+
+    Prefer this over raw :meth:`Compute.create_array` / :meth:`Compute.destroy_array`
+    when you manage array lifetime from Python::
+
+        with compute.array(np.arange(16, dtype=np.uint32)) as arr:
+            ...
+    """
+
+    def __init__(self, compute: "Compute", array: pnanovdb_ComputeArray):
+        self._compute = compute
+        self._array: pnanovdb_ComputeArray | None = array
+
+    @staticmethod
+    def unwrap(value: "Array | pnanovdb_ComputeArray") -> pnanovdb_ComputeArray:
+        return value.raw if isinstance(value, Array) else value
+
+    @property
+    def raw(self) -> pnanovdb_ComputeArray:
+        if self._array is None:
+            raise InvalidArgumentError("Array has been closed")
+        return self._array
+
+    # Alias used by Grid.unwrap-style helpers.
+    @property
+    def array(self) -> pnanovdb_ComputeArray:
+        return self.raw
+
+    @property
+    def element_count(self) -> int:
+        return int(self.raw.element_count)
+
+    @property
+    def element_size(self) -> int:
+        return int(self.raw.element_size)
+
+    def close(self) -> None:
+        if self._array is not None:
+            self._compute.destroy_array(self._array)
+            self._array = None
+
+    def __enter__(self) -> "Array":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
+    def __repr__(self) -> str:
+        if self._array is None:
+            return "Array(closed)"
+        return f"Array(element_count={self.element_count}, element_size={self.element_size})"
 
 
 class pnanovdb_Compute(Structure):
@@ -178,11 +234,11 @@ class Compute:
 
         self._compute = get_compute()
         if not self._compute:
-            raise RuntimeError("Failed to get compute interface")
+            raise PipelineError("Failed to get compute interface")
 
         compiler_ptr = compiler.get_compiler()
         if not compiler_ptr:
-            raise RuntimeError("Failed to get compiler interface")
+            raise PipelineError("Failed to get compiler interface")
 
         self._compute.contents.compiler = compiler_ptr
         self._compute.contents.device_interface = self._device_interface.get_device_interface().contents
@@ -207,7 +263,7 @@ class Compute:
         load_func = self._compute.contents.load_nanovdb
         array = load_func(filepath.encode("utf-8"))
         if not array:
-            raise RuntimeError(f"Failed to load NanoVDB file: {filepath}")
+            raise PipelineError(f"Failed to load NanoVDB file: {filepath}")
         return array.contents
 
     def save_nanovdb(self, array: pnanovdb_ComputeArray, filepath: str) -> None:
@@ -218,14 +274,18 @@ class Compute:
         create_func = self._compute.contents.create_array
         array = create_func(data.itemsize, data.size, data.ctypes.data_as(c_void_p))
         if not array:
-            raise RuntimeError("Failed to create compute array")
+            raise PipelineError("Failed to create compute array")
         return array.contents
+
+    def array(self, data: np.ndarray) -> Array:
+        """Create an owned :class:`Array` from a NumPy buffer (context-manager friendly)."""
+        return Array(self, self.create_array(data))
 
     def duplicate_array(self, array: pnanovdb_ComputeArray) -> pnanovdb_ComputeArray:
         dup_func = self._compute.contents.duplicate_array
         dup_array = dup_func(pointer(array))
         if not dup_array:
-            raise RuntimeError("Failed to duplicate compute array")
+            raise PipelineError("Failed to duplicate compute array")
         return dup_array.contents
 
     def destroy_array(self, array: pnanovdb_ComputeArray) -> None:
@@ -244,7 +304,7 @@ class Compute:
         scratch_clear_size: int = 0,
     ) -> bool:
         if not data_in or not constants or not data_out:
-            raise ValueError("ComputeArray parameters cannot be None")
+            raise InvalidArgumentError("ComputeArray parameters cannot be None")
 
         dispatch_func = self._compute.contents.dispatch_shader_on_array
         result = dispatch_func(
@@ -266,12 +326,12 @@ class Compute:
 
     def map_array(self, array: pnanovdb_ComputeArray, np_dtype: np.dtype) -> np.ndarray:
         if array.element_size != np_dtype.itemsize:
-            raise ValueError("Array element size mismatches the provided dtype")
+            raise InvalidArgumentError("Array element size mismatches the provided dtype")
 
         map_func = self._compute.contents.map_array
         data_ptr = map_func(pointer(array))
         if not data_ptr:
-            raise RuntimeError("Failed to map array")
+            raise PipelineError("Failed to map array")
 
         buffer = (c_byte * (array.element_size * array.element_count)).from_address(data_ptr)
         return np.frombuffer(buffer, dtype=np_dtype)
@@ -280,6 +340,26 @@ class Compute:
         unmap_func = self._compute.contents.unmap_array
         unmap_func(pointer(array))
 
+    @contextmanager
+    def mapped_array(self, array: pnanovdb_ComputeArray, np_dtype: np.dtype):
+        """Context manager yielding a live NumPy view of a compute array.
+
+        The view is zero-copy and backed by mapped device memory, so it is only
+        valid inside the ``with`` block; writes to it update the array in place.
+        The array is always unmapped on exit. Copy the data out (e.g.
+        ``np.array(view)``) if you need it to outlive the block.
+
+        Example::
+
+            with compute.mapped_array(array, np.dtype(np.uint32)) as view:
+                first = int(view[0])
+        """
+        view = self.map_array(array, np_dtype)
+        try:
+            yield view
+        finally:
+            self.unmap_array(array)
+
     def nanovdb_from_image_rgba8(
         self, image_data: pnanovdb_ComputeArray, width: int, height: int
     ) -> pnanovdb_ComputeArray:
@@ -287,7 +367,7 @@ class Compute:
         convert_func = self._compute.contents.nanovdb_from_image_rgba8
         array = convert_func(pointer(image_data), c_uint32(width), c_uint32(height))
         if not array:
-            raise RuntimeError("Failed to convert image to NanoVDB format")
+            raise PipelineError("Failed to convert image to NanoVDB format")
         return array.contents
 
     def array_exists(self, array: pnanovdb_ComputeArray) -> bool:

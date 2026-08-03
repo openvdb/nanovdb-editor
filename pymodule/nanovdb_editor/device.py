@@ -5,6 +5,7 @@ from ctypes import *
 import sys
 
 from .utils import load_library
+from .exceptions import DeviceError
 
 COMPUTE_LIB = "pnanovdbcompute"
 
@@ -126,7 +127,7 @@ class DeviceInterface:
 
     def get_device(self, index=0) -> POINTER(pnanovdb_Device):
         if len(self._devices) == 0:
-            raise RuntimeError("Device not created")
+            raise DeviceError("Device not created")
 
         return self._devices[index]
 
@@ -134,11 +135,11 @@ class DeviceInterface:
         create_func = self._device_interface.contents.create_device_manager
         self._device_manager = create_func(enable_validation)
         if not self._device_manager:
-            raise RuntimeError("Failed to create device manager")
+            raise DeviceError("Failed to create device manager")
 
     def create_device(self, device_index=0, enable_external_usage=False) -> POINTER(pnanovdb_Device):
         if not self._device_manager:
-            raise RuntimeError("Device manager not created")
+            raise DeviceError("Device manager not created")
 
         desc = pnanovdb_DeviceDesc(
             device_index=device_index, enable_external_usage=enable_external_usage, log_print=self._callback_func
@@ -147,7 +148,7 @@ class DeviceInterface:
         create_func = self._device_interface.contents.create_device
         device = create_func(self._device_manager, byref(desc))
         if not device:
-            raise RuntimeError("Failed to create device")
+            raise DeviceError("Failed to create device")
         self._devices.append(device)
 
         return device
