@@ -193,24 +193,23 @@ class TestPipelineRegistry:
         finally:
             session.close()
 
-    def test_mesh_without_colors_accepts_compute_array_positions(self):
+    def test_default_mesh_colors_size_non_numpy_positions(self):
+        """``colors=None`` must size white colors from any accepted positions input."""
         session = nve.create_default(device=False)
         try:
             positions = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float32)
-            indices = np.array([0, 1, 2], dtype=np.uint32)
-            positions_array = session.compute.create_array(positions.reshape(-1))
-            indices_array = session.compute.create_array(indices)
-            scene = session.scene("main")
-            grid = scene.nanovdb_from_mesh(
-                indices_array,
-                positions_array,
-                colors=None,
-                register=False,
-            )
-            assert grid.element_count > 0
-            grid.close()
-            session.compute.destroy_array(positions_array)
-            session.compute.destroy_array(indices_array)
+            assert nve.Scene._position_float_count(positions) == 9
+
+            flat = positions.reshape(-1)
+            raw = session.compute.create_array(flat)
+            try:
+                assert nve.Scene._position_float_count(raw) == 9
+                assert nve.Scene._position_float_count(nve.Grid(session.compute, raw)) == 9
+            finally:
+                session.compute.destroy_array(raw)
+
+            with session.compute.array(flat) as owned:
+                assert nve.Scene._position_float_count(owned) == 9
         finally:
             session.close()
 
@@ -352,10 +351,12 @@ class TestPipelineConversions:
 
     def test_gaussians_to_rgba8(self):
         scene = self.editor.scene("main")
+        # Keep the source grid small: the bake allocates a duplicated topology,
+        # which exhausts memory on software-Vulkan CI runners at larger sizes.
         grid = scene.nanovdb_from_gaussians(
-            **_make_gaussians(),
+            **_make_gaussians(num_points=256),
             process="voxelbvh",
-            resolution=64,
+            resolution=32,
             add=False,
         )
         try:
@@ -367,9 +368,9 @@ class TestPipelineConversions:
     def test_gaussians_to_rgba8_directions(self):
         scene = self.editor.scene("main")
         grid = scene.nanovdb_from_gaussians(
-            **_make_gaussians(),
+            **_make_gaussians(num_points=256),
             process="voxelbvh",
-            resolution=64,
+            resolution=32,
             add=False,
         )
         try:

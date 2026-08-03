@@ -2791,7 +2791,21 @@ pnanovdb_bool_t set_custom_scene_params(pnanovdb_editor_t* editor,
     }
 
     std::string error_message;
-    if (!editor->impl->scene_manager->set_custom_scene_params(scene, json, &error_message))
+    bool loaded = false;
+    try
+    {
+        loaded = editor->impl->scene_manager->set_custom_scene_params(scene, json, &error_message);
+    }
+    catch (const std::exception& e)
+    {
+        // Never let an exception cross this C ABI boundary; report it instead.
+        error_message = e.what();
+    }
+    catch (...)
+    {
+        error_message = "unknown error while loading custom scene params";
+    }
+    if (!loaded)
     {
         Console::getInstance().addLog(Console::LogLevel::Error, "set_custom_scene_params failed for scene '%s': %s",
                                       token_to_string_log(scene),

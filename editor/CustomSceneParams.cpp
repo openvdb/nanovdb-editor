@@ -219,16 +219,15 @@ bool CustomSceneParams::loadFromJsonString(const std::string& json_string,
     m_element_type_names.clear();
     m_element_offsets.clear();
 
-    nlohmann::ordered_json json;
-    try
-    {
-        json = nlohmann::ordered_json::parse(json_string);
-    }
-    catch (const nlohmann::json::parse_error& e)
+    // Parse without exceptions: a throwing parse_error terminates the process on
+    // builds where exceptions cannot unwind out of this C ABI boundary (MSVC CI).
+    nlohmann::ordered_json json =
+        nlohmann::ordered_json::parse(json_string, nullptr, /*allow_exceptions=*/false);
+    if (json.is_discarded())
     {
         if (error_message)
         {
-            *error_message = e.what();
+            *error_message = "Failed to parse JSON from '" + source_name + "'";
         }
         return false;
     }
