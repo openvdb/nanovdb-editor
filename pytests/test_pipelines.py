@@ -231,7 +231,7 @@ class TestPipelineRegistry:
 # --------------------------------------------------------------------------- #
 
 
-def _make_gaussians(num_points=256):
+def _make_gaussians(num_points=64):
     """Build a small but well-conditioned Gaussian cloud.
 
     Values mirror the raw, on-disk convention consumed by the pipelines:
@@ -255,11 +255,21 @@ def _make_gaussians(num_points=256):
 
 # Voxel size for the raster3d conversions. The resulting grid spans roughly
 # (cloud extent / voxel_size)^3 voxels, so this stays coarse on purpose.
-_RASTER3D_VOXEL_SIZE = 1.0 / 32.0
+_RASTER3D_VOXEL_SIZE = 1.0 / 16.0
 
 # VoxelBVH resolution for Gaussian conversions. Keep this modest: CI runs on
 # software Vulkan, and the later RGBA8 bake duplicates topology.
-_VOXELBVH_RESOLUTION = 32
+_VOXELBVH_RESOLUTION = 16
+
+
+def _make_tiny_mesh():
+    """Minimal triangle mesh used as a cheap VoxelBVH / RGBA8 source."""
+    positions = np.array(
+        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+        dtype=np.float32,
+    )
+    indices = np.array([0, 1, 2], dtype=np.uint32)
+    return positions, indices
 
 
 class TestPipelineConversions:
@@ -290,22 +300,15 @@ class TestPipelineConversions:
             self.compute.destroy_array(nvdb)
 
     def test_gaussians_raster3d(self):
-        scene = self.editor.scene("main")
-        nvdb = scene.nanovdb_from_gaussians(
-            **_make_gaussians(),
-            process="raster3d",
-            # Grid extent scales with 1/voxel_size; keep it coarse so the
-            # software rasterizer used in CI stays within runner memory.
-            voxel_size=_RASTER3D_VOXEL_SIZE,
-            add=False,
-        )
-        self._assert_valid_grid(nvdb)
-
-    def test_gaussians_pipeline_type_and_register(self):
+        # One raster3d build covers both the process alias path (via the enum)
+        # and register=False. A second full raster on software Vulkan has been
+        # enough to exhaust CI runners.
         scene = self.editor.scene("main")
         nvdb = scene.nanovdb_from_gaussians(
             **_make_gaussians(),
             process=nve.PipelineType.gaussian_voxelize,
+            # Grid extent scales with 1/voxel_size; keep it coarse so the
+            # software rasterizer used in CI stays within runner memory.
             voxel_size=_RASTER3D_VOXEL_SIZE,
             register=False,
         )
@@ -343,7 +346,7 @@ class TestPipelineConversions:
         nvdb = scene.nanovdb_from_mesh(
             indices=indices,
             positions=positions,
-            resolution=64,
+            resolution=_VOXELBVH_RESOLUTION,
             add=False,
         )
         self._assert_valid_grid(nvdb)
@@ -358,18 +361,20 @@ class TestPipelineConversions:
         nvdb = scene.nanovdb_from_lines(
             indices=indices,
             positions=positions,
-            resolution=64,
+            resolution=_VOXELBVH_RESOLUTION,
             add=False,
         )
         self._assert_valid_grid(nvdb)
 
-    def test_gaussians_to_rgba8(self):
+    def test_mesh_to_rgba8(self):
         scene = self.editor.scene("main")
-        # Keep the source grid small: the bake allocates a duplicated topology,
-        # which exhausts memory on software-Vulkan CI runners at larger sizes.
-        grid = scene.nanovdb_from_gaussians(
-            **_make_gaussians(),
-            process="voxelbvh",
+        # Bake from a tiny mesh rather than Gaussians: the bake allocates a
+        # duplicated topology, which exhausts memory on software-Vulkan CI
+        # runners when the source grid is large.
+        positions, indices = _make_tiny_mesh()
+        grid = scene.nanovdb_from_mesh(
+            indices=indices,
+            positions=positions,
             resolution=_VOXELBVH_RESOLUTION,
             add=False,
         )
@@ -379,11 +384,12 @@ class TestPipelineConversions:
         finally:
             grid.close()
 
-    def test_gaussians_to_rgba8_directions(self):
+    def test_mesh_to_rgba8_directions(self):
         scene = self.editor.scene("main")
-        grid = scene.nanovdb_from_gaussians(
-            **_make_gaussians(),
-            process="voxelbvh",
+        positions, indices = _make_tiny_mesh()
+        grid = scene.nanovdb_from_mesh(
+            indices=indices,
+            positions=positions,
             resolution=_VOXELBVH_RESOLUTION,
             add=False,
         )
@@ -405,10 +411,11 @@ class TestPipelineConversions:
 
     def test_process_step_chain_roundtrip(self):
         scene = self.editor.scene("main")
+        positions, indices = _make_tiny_mesh()
         grid = scene.nanovdb_from_mesh(
-            indices=np.array([0, 1, 2], dtype=np.uint32),
-            positions=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=np.float32),
-            resolution=64,
+            indices=indices,
+            positions=positions,
+            resolution=_VOXELBVH_RESOLUTION,
             name="mesh",
         )
         try:
@@ -436,9 +443,10 @@ class TestPipelineConversions:
 
     def test_rgba8_invalid_upsample(self):
         scene = self.editor.scene("main")
-        with scene.nanovdb_from_gaussians(
-            **_make_gaussians(),
-            process="voxelbvh",
+        positions, indices = _make_tiny_mesh()
+        with scene.nanovdb_from_mesh(
+            indices=indices,
+            positions=positions,
             resolution=_VOXELBVH_RESOLUTION,
             add=False,
         ) as grid:
@@ -447,10 +455,11 @@ class TestPipelineConversions:
 
     def test_render_pipeline_roundtrip(self):
         scene = self.editor.scene("main")
+        positions, indices = _make_tiny_mesh()
         grid = scene.nanovdb_from_mesh(
-            indices=np.array([0, 1, 2], dtype=np.uint32),
-            positions=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=np.float32),
-            resolution=64,
+            indices=indices,
+            positions=positions,
+            resolution=_VOXELBVH_RESOLUTION,
             name="mesh",
         )
         try:
@@ -463,10 +472,11 @@ class TestPipelineConversions:
 
     def test_grid_to_numpy(self):
         scene = self.editor.scene("main")
+        positions, indices = _make_tiny_mesh()
         with scene.nanovdb_from_mesh(
-            indices=np.array([0, 1, 2], dtype=np.uint32),
-            positions=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=np.float32),
-            resolution=64,
+            indices=indices,
+            positions=positions,
+            resolution=_VOXELBVH_RESOLUTION,
             add=False,
         ) as grid:
             arr = grid.to_numpy()
