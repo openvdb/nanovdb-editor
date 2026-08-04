@@ -231,7 +231,7 @@ class TestPipelineRegistry:
 # --------------------------------------------------------------------------- #
 
 
-def _make_gaussians(num_points=1024):
+def _make_gaussians(num_points=256):
     """Build a small but well-conditioned Gaussian cloud.
 
     Values mirror the raw, on-disk convention consumed by the pipelines:
@@ -239,6 +239,9 @@ def _make_gaussians(num_points=1024):
     native code), unit quaternions, and higher-order SH stored as 15 RGB
     coefficients per point. A degenerate/too-sparse cloud can trip the native
     rasterizer, so keep points clustered and scales modest.
+
+    Keep the cloud small: CI runs these conversions on a software Vulkan
+    device, where the rasterized grid has to stay well within runner memory.
     """
     rng = np.random.default_rng(0)
     means = (rng.standard_normal((num_points, 3)) * 0.3).astype(np.float32)
@@ -248,6 +251,15 @@ def _make_gaussians(num_points=1024):
     sh_0 = np.full((num_points, 3), 0.5, dtype=np.float32)
     sh_n = np.zeros((num_points, 45), dtype=np.float32)  # 15 higher-order RGB coeffs
     return dict(means=means, quats=quats, scales=scales, sh_0=sh_0, sh_n=sh_n, opacities=opacities)
+
+
+# Voxel size for the raster3d conversions. The resulting grid spans roughly
+# (cloud extent / voxel_size)^3 voxels, so this stays coarse on purpose.
+_RASTER3D_VOXEL_SIZE = 1.0 / 32.0
+
+# VoxelBVH resolution for Gaussian conversions. Keep this modest: CI runs on
+# software Vulkan, and the later RGBA8 bake duplicates topology.
+_VOXELBVH_RESOLUTION = 32
 
 
 class TestPipelineConversions:
@@ -282,7 +294,9 @@ class TestPipelineConversions:
         nvdb = scene.nanovdb_from_gaussians(
             **_make_gaussians(),
             process="raster3d",
-            voxel_size=1.0 / 128.0,
+            # Grid extent scales with 1/voxel_size; keep it coarse so the
+            # software rasterizer used in CI stays within runner memory.
+            voxel_size=_RASTER3D_VOXEL_SIZE,
             add=False,
         )
         self._assert_valid_grid(nvdb)
@@ -292,7 +306,7 @@ class TestPipelineConversions:
         nvdb = scene.nanovdb_from_gaussians(
             **_make_gaussians(),
             process=nve.PipelineType.gaussian_voxelize,
-            voxel_size=1.0 / 128.0,
+            voxel_size=_RASTER3D_VOXEL_SIZE,
             register=False,
         )
         self._assert_valid_grid(nvdb)
@@ -302,7 +316,7 @@ class TestPipelineConversions:
         nvdb = scene.nanovdb_from_gaussians(
             **_make_gaussians(),
             process="voxelbvh",
-            resolution=64,
+            resolution=_VOXELBVH_RESOLUTION,
             add=False,
         )
         self._assert_valid_grid(nvdb)
@@ -314,7 +328,7 @@ class TestPipelineConversions:
         nvdb = scene.nanovdb_from_gaussians(
             **gaussians,
             process="voxelbvh",
-            resolution=64,
+            resolution=_VOXELBVH_RESOLUTION,
             add=False,
         )
         self._assert_valid_grid(nvdb)
@@ -354,9 +368,9 @@ class TestPipelineConversions:
         # Keep the source grid small: the bake allocates a duplicated topology,
         # which exhausts memory on software-Vulkan CI runners at larger sizes.
         grid = scene.nanovdb_from_gaussians(
-            **_make_gaussians(num_points=256),
+            **_make_gaussians(),
             process="voxelbvh",
-            resolution=32,
+            resolution=_VOXELBVH_RESOLUTION,
             add=False,
         )
         try:
@@ -368,9 +382,9 @@ class TestPipelineConversions:
     def test_gaussians_to_rgba8_directions(self):
         scene = self.editor.scene("main")
         grid = scene.nanovdb_from_gaussians(
-            **_make_gaussians(num_points=256),
+            **_make_gaussians(),
             process="voxelbvh",
-            resolution=32,
+            resolution=_VOXELBVH_RESOLUTION,
             add=False,
         )
         try:
@@ -425,7 +439,7 @@ class TestPipelineConversions:
         with scene.nanovdb_from_gaussians(
             **_make_gaussians(),
             process="voxelbvh",
-            resolution=64,
+            resolution=_VOXELBVH_RESOLUTION,
             add=False,
         ) as grid:
             with pytest.raises(ValueError, match="upsample_factor"):
@@ -473,7 +487,9 @@ class TestPipelineConversions:
             self.compute.create_array(gaussians["sh_n"]),
         ]
         try:
-            nvdb = voxelbvh.nanovdb_from_gaussians_array(arrays, resolution=64)
+            nvdb = voxelbvh.nanovdb_from_gaussians_array(
+                arrays, resolution=_VOXELBVH_RESOLUTION
+            )
             self._assert_valid_grid(nvdb)
         finally:
             for array in arrays:
