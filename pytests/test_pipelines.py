@@ -14,11 +14,30 @@ Two layers are covered:
 """
 
 import gc
+import os
 
 import numpy as np
 import pytest
 
 import nanovdb_editor as nve  # type: ignore
+
+
+def _skip_heavy_pipeline_conversions() -> bool:
+    """Software-Vulkan CI runners OOM/hang on Gaussian raster and multi-bake.
+
+    Set ``NANOVDB_EDITOR_RUN_HEAVY_PIPELINE_TESTS=1`` to force them on in CI
+    (e.g. a GPU runner). Local runs keep the full suite by default.
+    """
+    if os.environ.get("NANOVDB_EDITOR_RUN_HEAVY_PIPELINE_TESTS", "0") == "1":
+        return False
+    return os.environ.get("GITHUB_ACTIONS") == "true"
+
+
+_HEAVY_CONVERSION_REASON = (
+    "Heavy Gaussian/raster/RGBA8-direction conversions are skipped on "
+    "GitHub Actions software-Vulkan runners; set "
+    "NANOVDB_EDITOR_RUN_HEAVY_PIPELINE_TESTS=1 to force-run"
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -299,6 +318,7 @@ class TestPipelineConversions:
         else:
             self.compute.destroy_array(nvdb)
 
+    @pytest.mark.skipif(_skip_heavy_pipeline_conversions(), reason=_HEAVY_CONVERSION_REASON)
     def test_gaussians_raster3d(self):
         # One raster3d build covers both the process alias path (via the enum)
         # and register=False. A second full raster on software Vulkan has been
@@ -314,6 +334,7 @@ class TestPipelineConversions:
         )
         self._assert_valid_grid(nvdb)
 
+    @pytest.mark.skipif(_skip_heavy_pipeline_conversions(), reason=_HEAVY_CONVERSION_REASON)
     def test_gaussians_voxelbvh(self):
         scene = self.editor.scene("main")
         nvdb = scene.nanovdb_from_gaussians(
@@ -324,6 +345,7 @@ class TestPipelineConversions:
         )
         self._assert_valid_grid(nvdb)
 
+    @pytest.mark.skipif(_skip_heavy_pipeline_conversions(), reason=_HEAVY_CONVERSION_REASON)
     def test_gaussians_sh_n_none(self):
         gaussians = _make_gaussians()
         gaussians["sh_n"] = None
@@ -384,6 +406,7 @@ class TestPipelineConversions:
         finally:
             grid.close()
 
+    @pytest.mark.skipif(_skip_heavy_pipeline_conversions(), reason=_HEAVY_CONVERSION_REASON)
     def test_mesh_to_rgba8_directions(self):
         scene = self.editor.scene("main")
         positions, indices = _make_tiny_mesh()
@@ -483,6 +506,7 @@ class TestPipelineConversions:
             assert isinstance(arr, np.ndarray)
             assert arr.size == grid.element_count
 
+    @pytest.mark.skipif(_skip_heavy_pipeline_conversions(), reason=_HEAVY_CONVERSION_REASON)
     def test_voxelbvh_wrapper_direct(self):
         voxelbvh = self.editor._get_voxelbvh()
         assert isinstance(voxelbvh, nve.VoxelBVH)
