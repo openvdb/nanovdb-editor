@@ -12,8 +12,10 @@ Two layers are covered:
   ``nanovdb_from_lines``) plus the ``VoxelBVH`` wrapper, which require a Vulkan
   device. Conversion coverage uses one shared editor session (same pattern as
   ``test_editor_api_2``) so CI does not pay for repeated Python/device init.
-  The heaviest builds (``raster3d``, multi-direction RGBA8) stay behind
-  ``NANOVDB_EDITOR_RUN_HEAVY_PIPELINE_TESTS=1`` on GitHub Actions.
+  GitHub Actions uses a one-mesh light smoke; ``raster3d`` / multi-direction
+  RGBA8 stay behind ``NANOVDB_EDITOR_RUN_HEAVY_PIPELINE_TESTS=1``. Linux ARM64
+  CI opts out entirely via ``NANOVDB_EDITOR_SKIP_PIPELINE_CONVERSION_TESTS``
+  (tiny VoxelBVH builds exceed the 300s pytest timeout on lavapipe there).
 """
 
 import gc
@@ -34,10 +36,34 @@ def _skip_heavy_pipeline_conversions() -> bool:
     return os.environ.get("GITHUB_ACTIONS") == "true"
 
 
+def _skip_pipeline_conversions() -> bool:
+    """Skip all conversion builds when CI explicitly opts out (e.g. Linux ARM64)."""
+    if os.environ.get("NANOVDB_EDITOR_RUN_PIPELINE_CONVERSION_TESTS", "0") == "1":
+        return False
+    if os.environ.get("NANOVDB_EDITOR_RUN_HEAVY_PIPELINE_TESTS", "0") == "1":
+        return False
+    return os.environ.get("NANOVDB_EDITOR_SKIP_PIPELINE_CONVERSION_TESTS", "0") == "1"
+
+
+def _ci_light_conversions() -> bool:
+    """One-mesh smoke on GitHub Actions; full local suite otherwise."""
+    if os.environ.get("NANOVDB_EDITOR_RUN_PIPELINE_CONVERSION_TESTS", "0") == "1":
+        return False
+    if os.environ.get("NANOVDB_EDITOR_RUN_HEAVY_PIPELINE_TESTS", "0") == "1":
+        return False
+    return os.environ.get("GITHUB_ACTIONS") == "true"
+
+
 _HEAVY_CONVERSION_REASON = (
     "Heavy Gaussian raster / multi-direction RGBA8 builds are skipped on "
     "GitHub Actions software-Vulkan runners; set "
     "NANOVDB_EDITOR_RUN_HEAVY_PIPELINE_TESTS=1 to force-run"
+)
+
+_CONVERSION_SKIP_REASON = (
+    "Pipeline conversion builds are skipped on this runner "
+    "(NANOVDB_EDITOR_SKIP_PIPELINE_CONVERSION_TESTS=1); set "
+    "NANOVDB_EDITOR_RUN_PIPELINE_CONVERSION_TESTS=1 to force-run"
 )
 
 
@@ -288,6 +314,7 @@ def _make_tiny_mesh():
     return positions, indices
 
 
+@pytest.mark.skipif(_skip_pipeline_conversions(), reason=_CONVERSION_SKIP_REASON)
 class TestPipelineConversions:
     @pytest.fixture(scope="class", autouse=True)
     def pipeline_conversion_resources(self, request):
@@ -336,13 +363,15 @@ class TestPipelineConversions:
             self.compute.destroy_array(nvdb)
 
     def test_pipeline_conversions_smoke(self):
-        """Single-run smoke: mesh/lines/gaussians/RGBA8/process/render/numpy.
+        """Single-run smoke over the Scene conversion helpers.
 
-        Kept as one method so CI pays for one device lifetime and a small
-        number of builds, matching the Editor API 2 fixture pattern.
+        Kept as one method so CI pays for one device lifetime. On GitHub Actions
+        only the mesh path runs (one VoxelBVH build); lines/gaussians stay in
+        the full local profile.
         """
         scene = self.editor.scene("main")
         positions, indices = _make_tiny_mesh()
+        light = _ci_light_conversions()
 
         # Mesh → VoxelBVH, numpy round-trip, render pipeline, process chain.
         mesh = scene.nanovdb_from_mesh(
@@ -382,6 +411,9 @@ class TestPipelineConversions:
                 scene.nanovdb_to_rgba8(mesh, upsample_factor=99, add=False)
         finally:
             mesh.close()
+
+        if light:
+            return
 
         # Lines → VoxelBVH.
         line_positions = np.array(

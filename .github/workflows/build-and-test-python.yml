@@ -780,4 +780,7 @@ jobs:
           # the ARM64 Python suite active here; the streaming smoke tests still
           # run on Linux x86_64, macOS, Windows, and Windows ARM64.
           export NANOVDB_EDITOR_SKIP_STREAMING_SMOKE_TESTS=1
+          # Tiny VoxelBVH mesh builds exceed the 300s pytest timeout on this
+          # lavapipe runner; conversion coverage still runs on the other platforms.
+          export NANOVDB_EDITOR_SKIP_PIPELINE_CONVERSION_TESTS=1
           python3 -X faulthandler -m pytest pytests -vvv -s -ra --tb=long --timeout=300 --timeout-method=thread
