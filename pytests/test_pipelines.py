@@ -10,8 +10,10 @@ Two layers are covered:
 - The Scene conversion helpers (``nanovdb_from_gaussians`` for both the
   ``raster3d`` and ``voxelbvh`` processes, ``nanovdb_from_mesh`` and
   ``nanovdb_from_lines``) plus the ``VoxelBVH`` wrapper, which require a Vulkan
-  device. Those builds are skipped on GitHub Actions software-Vulkan runners
-  (override with ``NANOVDB_EDITOR_RUN_PIPELINE_CONVERSION_TESTS=1``).
+  device. Conversion coverage uses one shared editor session (same pattern as
+  ``test_editor_api_2``) so CI does not pay for repeated Python/device init.
+  The heaviest builds (``raster3d``, multi-direction RGBA8) stay behind
+  ``NANOVDB_EDITOR_RUN_HEAVY_PIPELINE_TESTS=1`` on GitHub Actions.
 """
 
 import gc
@@ -23,23 +25,19 @@ import pytest
 import nanovdb_editor as nve  # type: ignore
 
 
-def _skip_pipeline_conversions() -> bool:
-    """Native VoxelBVH / raster conversions hang or OOM on software-Vulkan CI.
-
-    Set ``NANOVDB_EDITOR_RUN_PIPELINE_CONVERSION_TESTS=1`` to force them on in
-    CI (e.g. a GPU runner). Local runs keep the full suite by default.
-    """
-    if os.environ.get("NANOVDB_EDITOR_RUN_PIPELINE_CONVERSION_TESTS", "0") == "1":
-        return False
-    # Keep the older override name as an alias.
+def _skip_heavy_pipeline_conversions() -> bool:
+    """Skip raster3d / multi-bake on software-Vulkan CI unless forced."""
     if os.environ.get("NANOVDB_EDITOR_RUN_HEAVY_PIPELINE_TESTS", "0") == "1":
+        return False
+    if os.environ.get("NANOVDB_EDITOR_RUN_PIPELINE_CONVERSION_TESTS", "0") == "1":
         return False
     return os.environ.get("GITHUB_ACTIONS") == "true"
 
 
-_CONVERSION_SKIP_REASON = (
-    "Pipeline conversion builds are skipped on GitHub Actions software-Vulkan "
-    "runners; set NANOVDB_EDITOR_RUN_PIPELINE_CONVERSION_TESTS=1 to force-run"
+_HEAVY_CONVERSION_REASON = (
+    "Heavy Gaussian raster / multi-direction RGBA8 builds are skipped on "
+    "GitHub Actions software-Vulkan runners; set "
+    "NANOVDB_EDITOR_RUN_HEAVY_PIPELINE_TESTS=1 to force-run"
 )
 
 
@@ -253,7 +251,7 @@ class TestPipelineRegistry:
 # --------------------------------------------------------------------------- #
 
 
-def _make_gaussians(num_points=64):
+def _make_gaussians(num_points=32):
     """Build a small but well-conditioned Gaussian cloud.
 
     Values mirror the raw, on-disk convention consumed by the pipelines:
@@ -275,13 +273,9 @@ def _make_gaussians(num_points=64):
     return dict(means=means, quats=quats, scales=scales, sh_0=sh_0, sh_n=sh_n, opacities=opacities)
 
 
-# Voxel size for the raster3d conversions. The resulting grid spans roughly
-# (cloud extent / voxel_size)^3 voxels, so this stays coarse on purpose.
-_RASTER3D_VOXEL_SIZE = 1.0 / 16.0
-
-# VoxelBVH resolution for Gaussian conversions. Keep this modest: CI runs on
-# software Vulkan, and the later RGBA8 bake duplicates topology.
-_VOXELBVH_RESOLUTION = 16
+# Coarse on purpose: grid cost scales with 1/voxel_size and resolution^3.
+_RASTER3D_VOXEL_SIZE = 1.0 / 8.0
+_VOXELBVH_RESOLUTION = 8
 
 
 def _make_tiny_mesh():
@@ -294,222 +288,129 @@ def _make_tiny_mesh():
     return positions, indices
 
 
-@pytest.mark.skipif(_skip_pipeline_conversions(), reason=_CONVERSION_SKIP_REASON)
 class TestPipelineConversions:
-    @pytest.fixture(autouse=True)
-    def setup_and_teardown(self):
+    @pytest.fixture(scope="class", autouse=True)
+    def pipeline_conversion_resources(self, request):
+        """One shared Session for all conversion tests (mirrors test_editor_api_2).
+
+        Device/Python init dominates CI time; recreating it per method was enough
+        to exhaust software-Vulkan runners even with tiny meshes.
+        """
         try:
-            self.session = nve.create_default()
-        except Exception as exc:  # no GPU / Vulkan available (e.g. CI)
-            pytest.skip(f"No compute device available: {exc}")
-        self.editor, self.compute, self.compiler = self.session
+            session = nve.create_default()
+        except Exception as exc:
+            request.cls._pipeline_conversion_skip = f"No compute device available: {exc}"
+            yield
+            return
+
+        request.cls._pipeline_conversion_skip = None
+        request.cls.session = session
+        request.cls.editor, request.cls.compute, request.cls.compiler = session
+        print("Initialized shared pipeline conversion fixture")
 
         yield
 
-        self.session.close()
-        self.editor = None
-        self.compute = None
-        self.compiler = None
+        try:
+            session.close()
+        except Exception:
+            pass
+        request.cls.session = None
+        request.cls.editor = None
+        request.cls.compute = None
+        request.cls.compiler = None
         gc.collect()
 
-    def _assert_valid_grid(self, nvdb):
+    def setup_method(self):
+        skip = getattr(self, "_pipeline_conversion_skip", None)
+        if skip:
+            pytest.skip(skip)
+
+    def _assert_valid_grid(self, nvdb, *, destroy=True):
         assert nvdb is not None
-        # A built NanoVDB grid must contain data.
         assert nvdb.element_count > 0
-        # Scene helpers return Grid; the low-level wrappers return raw arrays.
+        if not destroy:
+            return
         if isinstance(nvdb, nve.Grid):
             nvdb.close()
         else:
             self.compute.destroy_array(nvdb)
 
-    def test_gaussians_raster3d(self):
-        # One raster3d build covers both the process alias path (via the enum)
-        # and register=False. A second full raster on software Vulkan has been
-        # enough to exhaust CI runners.
-        scene = self.editor.scene("main")
-        nvdb = scene.nanovdb_from_gaussians(
-            **_make_gaussians(),
-            process=nve.PipelineType.gaussian_voxelize,
-            # Grid extent scales with 1/voxel_size; keep it coarse so the
-            # software rasterizer used in CI stays within runner memory.
-            voxel_size=_RASTER3D_VOXEL_SIZE,
-            register=False,
-        )
-        self._assert_valid_grid(nvdb)
+    def test_pipeline_conversions_smoke(self):
+        """Single-run smoke: mesh/lines/gaussians/RGBA8/process/render/numpy.
 
-    def test_gaussians_voxelbvh(self):
-        scene = self.editor.scene("main")
-        nvdb = scene.nanovdb_from_gaussians(
-            **_make_gaussians(),
-            process="voxelbvh",
-            resolution=_VOXELBVH_RESOLUTION,
-            add=False,
-        )
-        self._assert_valid_grid(nvdb)
-
-    def test_gaussians_sh_n_none(self):
-        gaussians = _make_gaussians()
-        gaussians["sh_n"] = None
-        scene = self.editor.scene("main")
-        nvdb = scene.nanovdb_from_gaussians(
-            **gaussians,
-            process="voxelbvh",
-            resolution=_VOXELBVH_RESOLUTION,
-            add=False,
-        )
-        self._assert_valid_grid(nvdb)
-
-    def test_mesh_voxelbvh(self):
-        positions = np.array(
-            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 1.0, 0.0]],
-            dtype=np.float32,
-        )
-        indices = np.array([0, 1, 2, 1, 3, 2], dtype=np.uint32)
-        scene = self.editor.scene("main")
-        nvdb = scene.nanovdb_from_mesh(
-            indices=indices,
-            positions=positions,
-            resolution=_VOXELBVH_RESOLUTION,
-            add=False,
-        )
-        self._assert_valid_grid(nvdb)
-
-    def test_lines_voxelbvh(self):
-        positions = np.array(
-            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0]],
-            dtype=np.float32,
-        )
-        indices = np.array([0, 1, 1, 2], dtype=np.uint32)
-        scene = self.editor.scene("main")
-        nvdb = scene.nanovdb_from_lines(
-            indices=indices,
-            positions=positions,
-            resolution=_VOXELBVH_RESOLUTION,
-            add=False,
-        )
-        self._assert_valid_grid(nvdb)
-
-    def test_mesh_to_rgba8(self):
-        scene = self.editor.scene("main")
-        # Bake from a tiny mesh rather than Gaussians: the bake allocates a
-        # duplicated topology, which exhausts memory on software-Vulkan CI
-        # runners when the source grid is large.
-        positions, indices = _make_tiny_mesh()
-        grid = scene.nanovdb_from_mesh(
-            indices=indices,
-            positions=positions,
-            resolution=_VOXELBVH_RESOLUTION,
-            add=False,
-        )
-        try:
-            with scene.nanovdb_to_rgba8(grid, name="rgba8", upsample_factor=1, add=False) as rgba8:
-                assert rgba8.element_count > 0
-        finally:
-            grid.close()
-
-    def test_mesh_to_rgba8_directions(self):
+        Kept as one method so CI pays for one device lifetime and a small
+        number of builds, matching the Editor API 2 fixture pattern.
+        """
         scene = self.editor.scene("main")
         positions, indices = _make_tiny_mesh()
-        grid = scene.nanovdb_from_mesh(
-            indices=indices,
-            positions=positions,
-            resolution=_VOXELBVH_RESOLUTION,
-            add=False,
-        )
-        try:
-            # Bake a small custom set (faster than the full 8-direction default).
-            directions = [(0.0, 0.0, -1.0), (0.0, 0.0, 1.0)]
-            grids = scene.nanovdb_to_rgba8_directions(
-                grid, name="rgba8", directions=directions, upsample_factor=1, add=False
-            )
-            try:
-                assert len(grids) == 2
-                for g in grids:
-                    assert g.element_count > 0
-            finally:
-                for g in grids:
-                    g.close()
-        finally:
-            grid.close()
 
-    def test_process_step_chain_roundtrip(self):
-        scene = self.editor.scene("main")
-        positions, indices = _make_tiny_mesh()
-        grid = scene.nanovdb_from_mesh(
+        # Mesh → VoxelBVH, numpy round-trip, render pipeline, process chain.
+        mesh = scene.nanovdb_from_mesh(
             indices=indices,
             positions=positions,
             resolution=_VOXELBVH_RESOLUTION,
             name="mesh",
         )
         try:
+            arr = mesh.to_numpy()
+            assert isinstance(arr, np.ndarray)
+            assert arr.size == mesh.element_count
+
+            expected = nve.get_pipeline_info("voxelbvh_triangles_render")
+            scene.set_render_pipeline("mesh", "voxelbvh_triangles_render")
+            assert scene.get_render_pipeline("mesh") is expected
+
             steps = scene.process_steps("mesh")
-            # Build a two-step chain: voxelbvh_build → voxelbvh_rgba8.
             steps[0] = "voxelbvh"
             rgba_step = steps.append("voxelbvh_rgba8")
-
             assert len(steps) >= 2
             assert steps[0].pipeline is nve.get_pipeline_info("voxelbvh")
             assert rgba_step.pipeline is nve.get_pipeline_info("voxelbvh_rgba8")
             assert [s.type_id for s in steps][:2] == ["voxelbvh_build", "voxelbvh_rgba8"]
-
-            # Per-step params CM must enter/exit without error (params may be None
-            # until the step has been configured by the editor).
             with rgba_step.params() as params:
                 assert params is None or (params.size >= 0)
-
-            # Negative indexing and out-of-range behave like a sequence.
             assert steps[-1].type_id == "voxelbvh_rgba8"
             with pytest.raises(IndexError):
                 _ = steps[len(steps)]
-        finally:
-            grid.close()
 
-    def test_rgba8_invalid_upsample(self):
-        scene = self.editor.scene("main")
-        positions, indices = _make_tiny_mesh()
-        with scene.nanovdb_from_mesh(
-            indices=indices,
-            positions=positions,
-            resolution=_VOXELBVH_RESOLUTION,
-            add=False,
-        ) as grid:
+            with scene.nanovdb_to_rgba8(
+                mesh, name="rgba8", upsample_factor=1, add=False
+            ) as rgba8:
+                assert rgba8.element_count > 0
+
             with pytest.raises(ValueError, match="upsample_factor"):
-                scene.nanovdb_to_rgba8(grid, upsample_factor=99, add=False)
-
-    def test_render_pipeline_roundtrip(self):
-        scene = self.editor.scene("main")
-        positions, indices = _make_tiny_mesh()
-        grid = scene.nanovdb_from_mesh(
-            indices=indices,
-            positions=positions,
-            resolution=_VOXELBVH_RESOLUTION,
-            name="mesh",
-        )
-        try:
-            expected = nve.get_pipeline_info("voxelbvh_triangles_render")
-            scene.set_render_pipeline("mesh", "voxelbvh_triangles_render")
-            # get_pipeline returns a PipelineInfo (same registry singleton).
-            assert scene.get_render_pipeline("mesh") is expected
+                scene.nanovdb_to_rgba8(mesh, upsample_factor=99, add=False)
         finally:
-            grid.close()
+            mesh.close()
 
-    def test_grid_to_numpy(self):
-        scene = self.editor.scene("main")
-        positions, indices = _make_tiny_mesh()
-        with scene.nanovdb_from_mesh(
-            indices=indices,
-            positions=positions,
+        # Lines → VoxelBVH.
+        line_positions = np.array(
+            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0]],
+            dtype=np.float32,
+        )
+        line_indices = np.array([0, 1, 1, 2], dtype=np.uint32)
+        lines = scene.nanovdb_from_lines(
+            indices=line_indices,
+            positions=line_positions,
             resolution=_VOXELBVH_RESOLUTION,
             add=False,
-        ) as grid:
-            arr = grid.to_numpy()
-            assert isinstance(arr, np.ndarray)
-            assert arr.size == grid.element_count
+        )
+        self._assert_valid_grid(lines)
 
-    def test_voxelbvh_wrapper_direct(self):
+        # Gaussians → VoxelBVH with sh_n=None (empty higher-order SH).
+        gaussians = _make_gaussians()
+        gaussians["sh_n"] = None
+        nvdb = scene.nanovdb_from_gaussians(
+            **gaussians,
+            process="voxelbvh",
+            resolution=_VOXELBVH_RESOLUTION,
+            register=False,
+        )
+        self._assert_valid_grid(nvdb)
+
+        # Low-level VoxelBVH wrapper path.
         voxelbvh = self.editor._get_voxelbvh()
         assert isinstance(voxelbvh, nve.VoxelBVH)
-
         gaussians = _make_gaussians()
         arrays = [
             self.compute.create_array(gaussians["means"]),
@@ -527,6 +428,42 @@ class TestPipelineConversions:
         finally:
             for array in arrays:
                 self.compute.destroy_array(array)
+
+    @pytest.mark.skipif(_skip_heavy_pipeline_conversions(), reason=_HEAVY_CONVERSION_REASON)
+    def test_gaussians_raster3d(self):
+        scene = self.editor.scene("main")
+        nvdb = scene.nanovdb_from_gaussians(
+            **_make_gaussians(),
+            process=nve.PipelineType.gaussian_voxelize,
+            voxel_size=_RASTER3D_VOXEL_SIZE,
+            register=False,
+        )
+        self._assert_valid_grid(nvdb)
+
+    @pytest.mark.skipif(_skip_heavy_pipeline_conversions(), reason=_HEAVY_CONVERSION_REASON)
+    def test_mesh_to_rgba8_directions(self):
+        scene = self.editor.scene("main")
+        positions, indices = _make_tiny_mesh()
+        grid = scene.nanovdb_from_mesh(
+            indices=indices,
+            positions=positions,
+            resolution=_VOXELBVH_RESOLUTION,
+            add=False,
+        )
+        try:
+            directions = [(0.0, 0.0, -1.0), (0.0, 0.0, 1.0)]
+            grids = scene.nanovdb_to_rgba8_directions(
+                grid, name="rgba8", directions=directions, upsample_factor=1, add=False
+            )
+            try:
+                assert len(grids) == 2
+                for g in grids:
+                    assert g.element_count > 0
+            finally:
+                for g in grids:
+                    g.close()
+        finally:
+            grid.close()
 
 
 # --------------------------------------------------------------------------- #
