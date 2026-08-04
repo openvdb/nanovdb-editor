@@ -10,7 +10,8 @@ Two layers are covered:
 - The Scene conversion helpers (``nanovdb_from_gaussians`` for both the
   ``raster3d`` and ``voxelbvh`` processes, ``nanovdb_from_mesh`` and
   ``nanovdb_from_lines``) plus the ``VoxelBVH`` wrapper, which require a Vulkan
-  device and are skipped when none is available.
+  device. Those builds are skipped on GitHub Actions software-Vulkan runners
+  (override with ``NANOVDB_EDITOR_RUN_PIPELINE_CONVERSION_TESTS=1``).
 """
 
 import gc
@@ -22,21 +23,23 @@ import pytest
 import nanovdb_editor as nve  # type: ignore
 
 
-def _skip_heavy_pipeline_conversions() -> bool:
-    """Software-Vulkan CI runners OOM/hang on Gaussian raster and multi-bake.
+def _skip_pipeline_conversions() -> bool:
+    """Native VoxelBVH / raster conversions hang or OOM on software-Vulkan CI.
 
-    Set ``NANOVDB_EDITOR_RUN_HEAVY_PIPELINE_TESTS=1`` to force them on in CI
-    (e.g. a GPU runner). Local runs keep the full suite by default.
+    Set ``NANOVDB_EDITOR_RUN_PIPELINE_CONVERSION_TESTS=1`` to force them on in
+    CI (e.g. a GPU runner). Local runs keep the full suite by default.
     """
+    if os.environ.get("NANOVDB_EDITOR_RUN_PIPELINE_CONVERSION_TESTS", "0") == "1":
+        return False
+    # Keep the older override name as an alias.
     if os.environ.get("NANOVDB_EDITOR_RUN_HEAVY_PIPELINE_TESTS", "0") == "1":
         return False
     return os.environ.get("GITHUB_ACTIONS") == "true"
 
 
-_HEAVY_CONVERSION_REASON = (
-    "Heavy Gaussian/raster/RGBA8-direction conversions are skipped on "
-    "GitHub Actions software-Vulkan runners; set "
-    "NANOVDB_EDITOR_RUN_HEAVY_PIPELINE_TESTS=1 to force-run"
+_CONVERSION_SKIP_REASON = (
+    "Pipeline conversion builds are skipped on GitHub Actions software-Vulkan "
+    "runners; set NANOVDB_EDITOR_RUN_PIPELINE_CONVERSION_TESTS=1 to force-run"
 )
 
 
@@ -291,6 +294,7 @@ def _make_tiny_mesh():
     return positions, indices
 
 
+@pytest.mark.skipif(_skip_pipeline_conversions(), reason=_CONVERSION_SKIP_REASON)
 class TestPipelineConversions:
     @pytest.fixture(autouse=True)
     def setup_and_teardown(self):
@@ -318,7 +322,6 @@ class TestPipelineConversions:
         else:
             self.compute.destroy_array(nvdb)
 
-    @pytest.mark.skipif(_skip_heavy_pipeline_conversions(), reason=_HEAVY_CONVERSION_REASON)
     def test_gaussians_raster3d(self):
         # One raster3d build covers both the process alias path (via the enum)
         # and register=False. A second full raster on software Vulkan has been
@@ -334,7 +337,6 @@ class TestPipelineConversions:
         )
         self._assert_valid_grid(nvdb)
 
-    @pytest.mark.skipif(_skip_heavy_pipeline_conversions(), reason=_HEAVY_CONVERSION_REASON)
     def test_gaussians_voxelbvh(self):
         scene = self.editor.scene("main")
         nvdb = scene.nanovdb_from_gaussians(
@@ -345,7 +347,6 @@ class TestPipelineConversions:
         )
         self._assert_valid_grid(nvdb)
 
-    @pytest.mark.skipif(_skip_heavy_pipeline_conversions(), reason=_HEAVY_CONVERSION_REASON)
     def test_gaussians_sh_n_none(self):
         gaussians = _make_gaussians()
         gaussians["sh_n"] = None
@@ -406,7 +407,6 @@ class TestPipelineConversions:
         finally:
             grid.close()
 
-    @pytest.mark.skipif(_skip_heavy_pipeline_conversions(), reason=_HEAVY_CONVERSION_REASON)
     def test_mesh_to_rgba8_directions(self):
         scene = self.editor.scene("main")
         positions, indices = _make_tiny_mesh()
@@ -506,7 +506,6 @@ class TestPipelineConversions:
             assert isinstance(arr, np.ndarray)
             assert arr.size == grid.element_count
 
-    @pytest.mark.skipif(_skip_heavy_pipeline_conversions(), reason=_HEAVY_CONVERSION_REASON)
     def test_voxelbvh_wrapper_direct(self):
         voxelbvh = self.editor._get_voxelbvh()
         assert isinstance(voxelbvh, nve.VoxelBVH)
