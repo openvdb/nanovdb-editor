@@ -34,6 +34,8 @@ MAX_BVH_RESOLUTION = 4096
 # RGBA8 conversion defaults, mirrored from editor/PipelineTypes.h.
 DEFAULT_RGBA8_UPSAMPLE = 2
 MAX_RGBA8_UPSAMPLE = 4
+# Soft cap on multi-direction RGBA8 bake requests to avoid unbounded memory use.
+MAX_RGBA8_DIRECTIONS = 256
 
 # NanoVDB grid type for a packed-RGBA8 image grid (nanovdb::GridType::RGBA8).
 PNANOVDB_GRID_TYPE_RGBA8 = 12
@@ -55,6 +57,26 @@ DEFAULT_RGBA8_DIRECTIONS = (
     (1.0, 0.0, 0.0),
     (0.0, 1.0, 0.0),
 )
+
+
+def normalize_rgba8_directions(directions=None):
+    """Normalize and validate a multi-direction RGBA8 bake list.
+
+    Returns a concrete ``list`` of directions. Raises
+    :class:`~nanovdb_editor.exceptions.InvalidArgumentError` when empty or
+    larger than :data:`MAX_RGBA8_DIRECTIONS`.
+    """
+    if directions is None:
+        directions = DEFAULT_RGBA8_DIRECTIONS
+    directions = list(directions)
+    if not directions:
+        raise InvalidArgumentError("directions must contain at least one ray direction")
+    if len(directions) > MAX_RGBA8_DIRECTIONS:
+        raise InvalidArgumentError(
+            f"directions must contain at most {MAX_RGBA8_DIRECTIONS} entries, got {len(directions)}"
+        )
+    return directions
+
 
 _ComputeArrayPtr = POINTER(pnanovdb_ComputeArray)
 
@@ -439,18 +461,15 @@ class VoxelBVH:
         Args:
             src: Source VoxelBVH NanoVDB grid.
             directions: Iterable of ``(x, y, z)`` index-space ray directions.
-                Defaults to :data:`DEFAULT_RGBA8_DIRECTIONS`.
+                Defaults to :data:`DEFAULT_RGBA8_DIRECTIONS`. At most
+                :data:`MAX_RGBA8_DIRECTIONS` entries.
             upsample_factor: Topology upsampling factor, 1..``MAX_RGBA8_UPSAMPLE``.
 
         Returns:
             A ``list`` of RGBA8 ``pnanovdb_ComputeArray`` grids, one per
             direction (same order as ``directions``).
         """
-        if directions is None:
-            directions = DEFAULT_RGBA8_DIRECTIONS
-        directions = list(directions)
-        if not directions:
-            raise InvalidArgumentError("directions must contain at least one ray direction")
+        directions = normalize_rgba8_directions(directions)
 
         results = []
         try:

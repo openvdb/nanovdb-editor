@@ -127,9 +127,19 @@ class TestPipelineRegistry:
         assert nve.PNANOVDB_GRID_TYPE_RGBA8 == 12
         assert nve.DEFAULT_RGBA8_UPSAMPLE == 2
         assert nve.MAX_RGBA8_UPSAMPLE == 4
+        assert nve.MAX_RGBA8_DIRECTIONS == 256
         assert nve.DEFAULT_RGBA8_RAY_DIRECTION == (0.0, 0.0, -1.0)
         assert len(nve.DEFAULT_RGBA8_DIRECTIONS) == 8
         assert nve.DEFAULT_RGBA8_DIRECTIONS[0] == (-1.0, -1.0, 0.0)
+
+    def test_normalize_rgba8_directions(self):
+        from nanovdb_editor.voxelbvh import normalize_rgba8_directions
+
+        assert normalize_rgba8_directions(None) == list(nve.DEFAULT_RGBA8_DIRECTIONS)
+        with pytest.raises(nve.InvalidArgumentError, match="at least one"):
+            normalize_rgba8_directions([])
+        with pytest.raises(nve.InvalidArgumentError, match="at most"):
+            normalize_rgba8_directions([(0.0, 0.0, -1.0)] * (nve.MAX_RGBA8_DIRECTIONS + 1))
 
     def test_resolve_pipeline_type(self):
         # int passthrough, process alias, enum name, and PipelineInfo all resolve.

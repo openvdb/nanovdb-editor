@@ -415,10 +415,49 @@ class pnanovdb_Editor(Structure):
                 POINTER(EditorToken),  # name
             ),
         ),
-        ("add_nanovdb_3", c_void_p),
-        ("add_gaussian_data_3", c_void_p),
-        ("set_visible", c_void_p),
-        ("get_visible", c_void_p),
+        (
+            "add_nanovdb_3",
+            CFUNCTYPE(
+                None,
+                c_void_p,  # pnanovdb_editor_t*
+                POINTER(EditorToken),  # scene
+                POINTER(EditorToken),  # name
+                POINTER(pnanovdb_ComputeArray),  # array
+                c_uint32,  # process_pipeline
+                c_uint32,  # render_pipeline
+            ),
+        ),
+        (
+            "add_gaussian_data_3",
+            CFUNCTYPE(
+                None,
+                c_void_p,  # pnanovdb_editor_t*
+                POINTER(EditorToken),  # scene
+                POINTER(EditorToken),  # name
+                POINTER(EditorGaussianDataDesc),  # desc
+                c_uint32,  # process_pipeline
+                c_uint32,  # render_pipeline
+            ),
+        ),
+        (
+            "set_visible",
+            CFUNCTYPE(
+                None,
+                c_void_p,  # pnanovdb_editor_t*
+                POINTER(EditorToken),  # scene
+                POINTER(EditorToken),  # name
+                pnanovdb_bool_t,  # visible
+            ),
+        ),
+        (
+            "get_visible",
+            CFUNCTYPE(
+                pnanovdb_bool_t,
+                c_void_p,  # pnanovdb_editor_t*
+                POINTER(EditorToken),  # scene
+                POINTER(EditorToken),  # name
+            ),
+        ),
         (
             "add_named_array",
             CFUNCTYPE(
@@ -430,7 +469,16 @@ class pnanovdb_Editor(Structure):
                 POINTER(pnanovdb_ComputeArray),  # array
             ),
         ),
-        ("get_named_array", c_void_p),
+        (
+            "get_named_array",
+            CFUNCTYPE(
+                POINTER(pnanovdb_ComputeArray),
+                c_void_p,  # pnanovdb_editor_t*
+                POINTER(EditorToken),  # scene
+                POINTER(EditorToken),  # object_name
+                POINTER(EditorToken),  # array_name
+            ),
+        ),
         (
             "map_pipeline_params",
             CFUNCTYPE(
@@ -875,6 +923,9 @@ class Editor:
     def scene(self, name: str) -> "Scene":
         """Return a high-level handle for the named scene.
 
+        ``Scene`` is imported lazily so ``editor`` and ``scene`` never form a
+        module-load cycle (``scene`` only type-checks ``Editor``).
+
         Example:
             nvdb = editor.scene("main").nanovdb_from_gaussians(
                 means=means, quats=quats, scales=scales,
@@ -1098,14 +1149,26 @@ class Editor:
         """Set (or append) a process-step pipeline on a scene object.
 
         When ``step_index`` equals the current step count, a new step is
-        appended.
+        appended. Index and pipeline stage are validated before the native
+        call; a short post-check still detects silent native rejection.
 
         Raises:
             PipelineError: If the native API rejects the request (chain
                 template, non-process pipeline, out-of-range index, etc.).
         """
+        from .pipelines import PIPELINE_STAGE_PROCESS, get_pipeline_info
+
         step_index = int(step_index)
+        if step_index < 0:
+            raise PipelineError(f"process step index {step_index} out of range")
+
         resolved = self._resolve_pipeline_type(pipeline)
+        info = get_pipeline_info(resolved)
+        if info is not None and info.stage != PIPELINE_STAGE_PROCESS:
+            raise PipelineError(
+                f"pipeline {pipeline!r} is stage {info.stage_name!r}; process steps require a process pipeline"
+            )
+
         count_before = self.get_process_step_count(scene, name)
         if step_index > count_before:
             raise PipelineError(f"process step index {step_index} out of range for chain of length {count_before}")

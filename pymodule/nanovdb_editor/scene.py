@@ -7,6 +7,10 @@ A :class:`Scene` bundles a scene token with convenience helpers that build
 NanoVDB grids from higher-level inputs (Gaussian splats, triangle meshes, line
 sets) using the editor's existing process pipelines and register the result
 with the scene. Obtain one via :meth:`nanovdb_editor.editor.Editor.scene`.
+
+``Editor`` is only imported under ``TYPE_CHECKING`` here; the runtime dependency
+is one-way (``Editor.scene`` lazily imports this module) to avoid an import
+cycle.
 """
 
 import math
@@ -31,10 +35,10 @@ from .pipelines import (
     get_pipeline_info,
 )
 from .voxelbvh import (
-    DEFAULT_RGBA8_DIRECTIONS,
     DEFAULT_RGBA8_RAY_DIRECTION,
     DEFAULT_RGBA8_UPSAMPLE,
     MAX_RGBA8_UPSAMPLE,
+    normalize_rgba8_directions,
 )
 
 if TYPE_CHECKING:
@@ -186,9 +190,12 @@ class Scene:
     higher-level inputs (Gaussian splats, triangle meshes, line sets) using the
     editor's existing process pipelines and register the result with the scene.
 
-    Each ``nanovdb_from_*`` helper accepts either NumPy arrays or pre-built
-    ``pnanovdb_ComputeArray`` instances, and dispatches to the pipeline selected
-    by ``process`` (see :mod:`nanovdb_editor.pipelines`).
+    Each ``nanovdb_from_*`` / ``nanovdb_to_*`` helper accepts either NumPy arrays
+    or pre-built ``pnanovdb_ComputeArray`` instances, and dispatches to the
+    pipeline selected by ``process`` (see :mod:`nanovdb_editor.pipelines`).
+    These conversion helpers require a GPU compute device (they call into
+    Raster / VoxelBVH); CPU-only sessions must mock those paths or create a
+    device first.
     """
 
     # Supported ``process`` values for building NanoVDB grids from Gaussians.
@@ -223,11 +230,22 @@ class Scene:
         return self._token
 
     class _Arrays:
-        """Tracks compute arrays created from NumPy inputs for cleanup."""
+        """Tracks compute arrays created from NumPy inputs for cleanup.
+
+        Prefer ``with Scene._Arrays(compute) as arrays:`` so owned buffers are
+        always released, including when a conversion fails mid-flight.
+        """
 
         def __init__(self, compute):
             self._compute = compute
             self._owned = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.destroy()
+            return False
 
         def to_array(self, value, dtype=np.float32):
             if value is None:
@@ -714,6 +732,7 @@ class Scene:
                 ``"{name}_d{i}"`` when registering.
             directions: Iterable of ``(x, y, z)`` index-space ray directions.
                 Defaults to :data:`~nanovdb_editor.DEFAULT_RGBA8_DIRECTIONS`.
+                At most :data:`~nanovdb_editor.MAX_RGBA8_DIRECTIONS` entries.
             upsample_factor: Topology upsampling factor, ``1``..``4``.
             add / register: When True (default), also register each grid with
                 the scene. Prefer ``register=``.
@@ -722,11 +741,7 @@ class Scene:
             A list of RGBA8 :class:`~nanovdb_editor.grid.Grid` objects, one per
             direction (same order as ``directions``).
         """
-        if directions is None:
-            directions = DEFAULT_RGBA8_DIRECTIONS
-        directions = list(directions)
-        if not directions:
-            raise InvalidArgumentError("directions must contain at least one ray direction")
+        directions = normalize_rgba8_directions(directions)
 
         do_register = self._resolve_register(add, register)
         voxelbvh = self._editor._get_voxelbvh()
@@ -791,32 +806,29 @@ class Scene:
         if opacities is None:
             raise InvalidArgumentError("opacities is required")
 
-        arrays = self._Arrays(self._editor._compute)
-        if sh_n is None:
-            # Native code derives the SH stride from sh_n's element count, so an
-            # empty buffer means "no higher-order SH". A zero-filled array shaped
-            # like sh_0 would instead imply a stride of 1.
-            sh_n = np.zeros(0, dtype=np.float32)
+        with self._Arrays(self._editor._compute) as arrays:
+            if sh_n is None:
+                # Native code derives the SH stride from sh_n's element count, so an
+                # empty buffer means "no higher-order SH". A zero-filled array shaped
+                # like sh_0 would instead imply a stride of 1.
+                sh_n = np.zeros(0, dtype=np.float32)
 
-        # Canonical Gaussian array order shared by both pipelines.
-        gaussian_arrays = [
-            arrays.to_array(means),
-            arrays.to_array(opacities),
-            arrays.to_array(quats),
-            arrays.to_array(scales),
-            arrays.to_array(sh_0),
-            arrays.to_array(sh_n),
-        ]
+            # Canonical Gaussian array order shared by both pipelines.
+            gaussian_arrays = [
+                arrays.to_array(means),
+                arrays.to_array(opacities),
+                arrays.to_array(quats),
+                arrays.to_array(scales),
+                arrays.to_array(sh_0),
+                arrays.to_array(sh_n),
+            ]
 
-        try:
             if process == "raster3d":
                 raster = self._editor._get_raster()
                 nvdb_array = raster.raster_to_nanovdb_from_arrays(voxel_size, gaussian_arrays)
             else:  # "voxelbvh"
                 voxelbvh = self._editor._get_voxelbvh()
                 nvdb_array = voxelbvh.nanovdb_from_gaussians_array(gaussian_arrays, resolution)
-        finally:
-            arrays.destroy()
 
         return self._finalize(nvdb_array, name, self._resolve_register(add, register))
 
@@ -914,15 +926,14 @@ class Scene:
         if process != "voxelbvh":
             raise InvalidArgumentError(f"Unsupported process {process!r} for {kind}; supported: ('voxelbvh',)")
 
-        arrays = self._Arrays(self._editor._compute)
-        if colors is None:
-            colors = np.ones(self._position_float_count(positions), dtype=np.float32)
+        with self._Arrays(self._editor._compute) as arrays:
+            if colors is None:
+                colors = np.ones(self._position_float_count(positions), dtype=np.float32)
 
-        indices_array = arrays.to_array(indices, dtype=np.uint32)
-        positions_array = arrays.to_array(positions)
-        colors_array = arrays.to_array(colors)
+            indices_array = arrays.to_array(indices, dtype=np.uint32)
+            positions_array = arrays.to_array(positions)
+            colors_array = arrays.to_array(colors)
 
-        try:
             voxelbvh = self._editor._get_voxelbvh()
             if kind == "triangles":
                 nvdb_array = voxelbvh.nanovdb_from_triangles_array(
@@ -932,7 +943,5 @@ class Scene:
                 nvdb_array = voxelbvh.nanovdb_from_lines_array(
                     indices_array, positions_array, colors_array, inflation_radius, resolution
                 )
-        finally:
-            arrays.destroy()
 
         return self._finalize(nvdb_array, name, add)

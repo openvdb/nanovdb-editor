@@ -32,9 +32,11 @@ from .voxelbvh import (  # noqa: F401
     MAX_BVH_RESOLUTION,
     DEFAULT_RGBA8_UPSAMPLE,
     MAX_RGBA8_UPSAMPLE,
+    MAX_RGBA8_DIRECTIONS,
     DEFAULT_RGBA8_RAY_DIRECTION,
     DEFAULT_RGBA8_DIRECTIONS,
     PNANOVDB_GRID_TYPE_RGBA8,
+    normalize_rgba8_directions,
 )
 
 # Defaults mirrored from editor/PipelineTypes.h (pnanovdb_editor namespace).
