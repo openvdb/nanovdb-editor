@@ -10,6 +10,7 @@ from ctypes import (
     POINTER,
     CFUNCTYPE,
     c_void_p,
+    c_char,
     c_char_p,
     c_int,
     c_int32,
@@ -17,9 +18,9 @@ from ctypes import (
     c_uint64,
     c_float,
     byref,
-    cast,
     create_string_buffer,
     pointer,
+    sizeof,
 )
 import warnings
 
@@ -111,12 +112,23 @@ def make_editor_config(
             cfg.ui_profile_name = None
 
     if ip is not None:
-        ip_bytes = ip.encode("utf-8") if isinstance(ip, str) else bytes(ip)
+        if isinstance(ip, str):
+            ip_bytes = ip.encode("utf-8")
+        elif isinstance(ip, (bytes, bytearray)):
+            ip_bytes = bytes(ip)
+        else:
+            raise InvalidArgumentError(f"ip must be str or bytes, got {type(ip).__name__}")
+        if not ip_bytes:
+            raise InvalidArgumentError("ip must be a non-empty address")
         cfg._keepalive = getattr(cfg, "_keepalive", [])
         cfg._keepalive.append(ip_bytes)
         cfg.ip_address = ip_bytes
     if port is not None:
-        cfg.port = int(port)
+        if isinstance(port, bool) or not isinstance(port, int):
+            raise InvalidArgumentError(f"port must be an int, got {type(port).__name__}")
+        if port < 0 or port > 65535:
+            raise InvalidArgumentError(f"port must be in [0, 65535], got {port}")
+        cfg.port = port
     if headless is not None:
         cfg.headless = 1 if headless else 0
     if streaming is not None:
@@ -124,7 +136,12 @@ def make_editor_config(
     if stream_to_file is not None:
         cfg.stream_to_file = 1 if stream_to_file else 0
     if ui_profile is not None:
-        profile_bytes = ui_profile.encode("utf-8") if isinstance(ui_profile, str) else bytes(ui_profile)
+        if isinstance(ui_profile, str):
+            profile_bytes = ui_profile.encode("utf-8")
+        elif isinstance(ui_profile, (bytes, bytearray)):
+            profile_bytes = bytes(ui_profile)
+        else:
+            raise InvalidArgumentError(f"ui_profile must be str or bytes, got {type(ui_profile).__name__}")
         cfg._keepalive = getattr(cfg, "_keepalive", [])
         cfg._keepalive.append(profile_bytes)
         cfg.ui_profile_name = profile_bytes
@@ -502,11 +519,13 @@ class pnanovdb_Editor(Structure):
         (
             "set_custom_scene_params",
             CFUNCTYPE(
-                c_int32,  # pnanovdb_bool_t
+                pnanovdb_bool_t,
                 c_void_p,  # pnanovdb_editor_t*
                 POINTER(EditorToken),  # scene
                 POINTER(EditorToken),  # json (str carries the JSON payload)
-                c_char_p,  # error_buf
+                # Mutable out-buffer: must not use c_char_p (ctypes treats that
+                # as an immutable C string and can drop writes / corrupt ABI).
+                POINTER(c_char),  # error_buf
                 c_uint64,  # error_buf_size
             ),
         ),
@@ -1245,6 +1264,8 @@ class Editor:
             json_string = json_string.decode("utf-8")
 
         # The C API carries the JSON payload in the token's string field.
+        # Failures are reported via the bool return + error_buf (native code
+        # catches C++ exceptions at the ABI boundary).
         json_token = self.get_token(json_string)
         error_buf = create_string_buffer(1024)
         ok = self._editor.contents.set_custom_scene_params(
@@ -1252,7 +1273,7 @@ class Editor:
             scene,
             json_token,
             error_buf,
-            len(error_buf),
+            c_uint64(sizeof(error_buf)),
         )
         if not ok:
             message = error_buf.value.decode("utf-8", "replace") or "set_custom_scene_params failed"

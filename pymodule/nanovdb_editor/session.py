@@ -42,17 +42,15 @@ class Session:
         self._pending_teardown = None
 
     def _require_editor(self) -> Editor:
-        if self.editor is None:
+        if self._closed or self.editor is None:
             raise SessionClosedError("Session has been closed")
         return self.editor
 
     def _live_editor(self) -> Optional[Editor]:
         """The editor to act on, including one awaiting a deferred teardown."""
-        if self.editor is not None:
-            return self.editor
         if self._pending_teardown is not None:
             return self._pending_teardown[0]
-        return None
+        return self.editor
 
     def __iter__(self) -> Iterator:
         """Unpack as ``(editor, compute, compiler)``."""
@@ -129,9 +127,11 @@ class Session:
     def close(self) -> bool:
         """Stop the editor worker, shut down the native editor, destroy the compiler.
 
-        Idempotent and exception-safe: never raises from teardown. After
-        ``close``, attribute access still works (fields become ``None``) but
-        ``scene`` / ``show`` / ``start`` raise :class:`SessionClosedError`.
+        Idempotent and exception-safe: never raises from teardown. Marks the
+        session closed immediately (``scene`` / ``show`` / ``start`` raise
+        :class:`SessionClosedError`), but keeps ``editor`` / ``compute`` /
+        ``compiler`` intact until native teardown actually completes so a
+        deferred or failed close stays retryable without dropping live handles.
 
         Returns:
             True when teardown completed. False when the native side deferred it
@@ -146,13 +146,9 @@ class Session:
         else:
             editor, compiler = self.editor, self.compiler
 
+        # Mark closed first so API entry points reject new work, but leave the
+        # public handles in place until teardown succeeds.
         self._closed = True
-        # Drop public refs first so concurrent users see a closed session, then
-        # tear down native state in a safe order: editor (stops worker + frees
-        # impl) before the compiler instance it was wired to.
-        self.editor = None
-        self.compute = None
-        self.compiler = None
 
         completed = True
         try:
@@ -168,15 +164,21 @@ class Session:
             self._pending_teardown = (editor, compiler)
             return False
 
+        # Editor is gone; drop it before compiler teardown so a failed compiler
+        # destroy does not leave a half-closed editor reachable via attributes.
+        self.editor = None
+        self.compute = None
+
         try:
             if compiler is not None:
                 compiler.destroy_instance()
         except Exception:
-            # The editor is gone, so only the compiler is left to free; keep it
-            # pending rather than reporting a teardown that did not happen.
+            # Only the compiler is left to free; keep it pending and visible.
+            self.compiler = compiler
             self._pending_teardown = (None, compiler)
             return False
 
+        self.compiler = None
         self._pending_teardown = None
         return True
 
@@ -187,6 +189,8 @@ class Session:
         self.close()
 
     def __repr__(self) -> str:
+        if self._pending_teardown is not None:
+            return "Session(closing)"
         if self._closed:
             return "Session(closed)"
         return f"Session(editor={self.editor!r})"

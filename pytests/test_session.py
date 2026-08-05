@@ -43,6 +43,12 @@ class TestSessionLifecycle:
             assert hasattr(session, "run")
             cfg = nve.make_editor_config(ip="127.0.0.1", port=18080, headless=True)
             assert cfg.headless == 1
+            with pytest.raises(nve.InvalidArgumentError, match="port"):
+                nve.make_editor_config(port=70000)
+            with pytest.raises(nve.InvalidArgumentError, match="ip"):
+                nve.make_editor_config(ip=1234)
+            with pytest.raises(nve.InvalidArgumentError, match="ui_profile"):
+                nve.make_editor_config(ui_profile=object())
         finally:
             session.close()
 
@@ -50,6 +56,7 @@ class TestSessionLifecycle:
         """A failing native shutdown must not be reported as a completed teardown."""
         session = nve.create_default(device=False)
         editor = session.editor
+        compiler = session.compiler
         real_handle = editor._editor
 
         class _FailingHandle:
@@ -61,15 +68,21 @@ class TestSessionLifecycle:
         assert editor.shutdown() is False
         assert editor.close() is False
 
-        # The compiler is still wired to a native editor of unknown state.
+        # Handles stay visible while teardown is pending / retryable.
         assert session.close() is False
-        assert session.compiler is None
+        assert session.compiler is compiler
+        assert session.editor is editor
         assert session._pending_teardown is not None
+        assert repr(session) == "Session(closing)"
+        with pytest.raises(nve.SessionClosedError):
+            session.scene("main")
 
         # Once the native side responds again, close() finishes the teardown.
         editor._editor = real_handle
         assert session.close() is True
         assert session._pending_teardown is None
+        assert session.editor is None
+        assert session.compiler is None
 
     def test_compiler_destroy_keeps_handle_on_failure(self):
         """A failed native destroy must stay retryable instead of dropping the handle."""
@@ -108,10 +121,14 @@ class TestSessionLifecycle:
         assert session.close() is False
         assert attempts == [True]
         assert session._pending_teardown == (None, compiler)
+        assert session.editor is None
+        assert session.compiler is compiler
+        assert repr(session) == "Session(closing)"
 
         del compiler.destroy_instance
         assert session.close() is True
         assert session._pending_teardown is None
+        assert session.compiler is None
 
     def test_wait_for_interrupt_is_noop_after_editor_close(self):
         session = nve.create_default(device=False)
@@ -133,7 +150,8 @@ class TestSessionLifecycle:
 
         editor._editor = _FailingHandle()
         assert session.close() is False
-        assert session.editor is None
+        assert session.editor is editor
+        assert repr(session) == "Session(closing)"
 
         stopped = []
         editor.stop = lambda: stopped.append(True)
@@ -201,8 +219,12 @@ class TestSessionLifecycle:
 
         assert session.close() is False
         assert editor._editor is not None, "handle must survive a deferred teardown"
-        assert session.compiler is None
+        assert session.compiler is not None
+        assert session.editor is editor
+        assert repr(session) == "Session(closing)"
 
         deferred["value"] = False
         assert session.close() is True
         assert editor._editor is None
+        assert session.editor is None
+        assert session.compiler is None

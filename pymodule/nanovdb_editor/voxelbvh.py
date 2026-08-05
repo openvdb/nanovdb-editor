@@ -415,6 +415,7 @@ class VoxelBVH:
 
         Args:
             src: Source VoxelBVH NanoVDB grid (from ``nanovdb_from_*``).
+                Borrowed; ownership stays with the caller.
             ray_direction: Index-space ray direction ``(x, y, z)`` used to bake
                 colors; a zero/invalid direction falls back to ``(0, 0, -1)``.
             upsample_factor: Topology upsampling factor, 1..``MAX_RGBA8_UPSAMPLE``.
@@ -431,17 +432,25 @@ class VoxelBVH:
         ctx = self._ensure_context()
 
         dst = self.duplicate_topology_array(src, PNANOVDB_GRID_TYPE_RGBA8, upsample_factor)
-
-        rx, ry, rz = direction
-        func = self._voxelbvh.contents.nanovdb_rgba8_from_voxelbvh_array
-        func(
-            self._compute.get_compute(),
-            self._compute_queue,
-            ctx,
-            pointer(dst),
-            pointer(src),
-            pnanovdb_Vec3(float(rx), float(ry), float(rz)),
-        )
+        try:
+            rx, ry, rz = direction
+            func = self._voxelbvh.contents.nanovdb_rgba8_from_voxelbvh_array
+            func(
+                self._compute.get_compute(),
+                self._compute_queue,
+                ctx,
+                pointer(dst),
+                pointer(src),
+                pnanovdb_Vec3(float(rx), float(ry), float(rz)),
+            )
+        except Exception:
+            # Topology was allocated before the fill; release it on failure so a
+            # multi-direction bake does not leak intermediate destinations.
+            try:
+                self._compute.destroy_array(dst)
+            except Exception:
+                pass
+            raise
         return dst
 
     def nanovdb_rgba8_from_array_directions(
@@ -457,6 +466,10 @@ class VoxelBVH:
         and filled per direction. Defaults to :data:`DEFAULT_RGBA8_DIRECTIONS`
         (the same 8 directions the editor uses when
         ``bake_all_directions`` is enabled).
+
+        ``src`` is borrowed for the whole bake; only the newly created destination
+        arrays are owned by the returned list. On a mid-loop failure, any
+        destinations already produced are destroyed before re-raising.
 
         Args:
             src: Source VoxelBVH NanoVDB grid.
@@ -477,7 +490,7 @@ class VoxelBVH:
                 results.append(self.nanovdb_rgba8_from_array(src, direction, upsample_factor))
         except Exception:
             # Destroy any grids already produced so a partial failure does not
-            # leak native arrays.
+            # leak native arrays. ``src`` remains owned by the caller.
             for array in results:
                 try:
                     self._compute.destroy_array(array)

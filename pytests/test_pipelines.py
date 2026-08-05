@@ -272,11 +272,23 @@ class TestPipelineRegistry:
             try:
                 assert nve.Scene._position_float_count(raw) == 9
                 assert nve.Scene._position_float_count(nve.Grid(session.compute, raw)) == 9
+
+                # Packed float32 vec3 elements must still resolve to 3*V floats.
+                packed = session.compute.create_array(flat)
+                try:
+                    packed.element_size = 12
+                    packed.element_count = 3
+                    assert nve.Scene._position_float_count(packed) == 9
+                finally:
+                    session.compute.destroy_array(packed)
             finally:
                 session.compute.destroy_array(raw)
 
             with session.compute.array(flat) as owned:
                 assert nve.Scene._position_float_count(owned) == 9
+
+            with pytest.raises(nve.InvalidArgumentError, match="multiple of 3"):
+                nve.Scene._position_float_count(np.arange(4, dtype=np.float32))
         finally:
             session.close()
 

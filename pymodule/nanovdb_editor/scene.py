@@ -269,17 +269,32 @@ class Scene:
 
     @staticmethod
     def _position_float_count(positions) -> int:
-        """Number of float32 values in a positions buffer (``3 * vertex_count``)."""
+        """Number of float32 values in a positions buffer (``3 * vertex_count``).
+
+        For a raw :class:`~nanovdb_editor.compute.pnanovdb_ComputeArray`, this
+        uses total byte size (``element_count * element_size``) so packed
+        ``float32`` scalars and ``float32`` vec3 elements both resolve to the
+        same float count used when defaulting ``colors=None``.
+        """
         if isinstance(positions, Grid):
             positions = positions.array
         if isinstance(positions, Array):
             positions = positions.raw
         if isinstance(positions, pnanovdb_ComputeArray):
-            if int(positions.element_size) != 4:
-                raise InvalidArgumentError("positions must be float32")
-            return int(positions.element_count)
-        positions_np = np.ascontiguousarray(positions, dtype=np.float32)
-        return int(positions_np.size)
+            element_size = int(positions.element_size)
+            element_count = int(positions.element_count)
+            if element_size <= 0 or element_count < 0:
+                raise InvalidArgumentError("positions array has invalid size")
+            total_bytes = element_count * element_size
+            if total_bytes % 4 != 0:
+                raise InvalidArgumentError("positions must be float32-based")
+            float_count = total_bytes // 4
+        else:
+            positions_np = np.ascontiguousarray(positions, dtype=np.float32)
+            float_count = int(positions_np.size)
+        if float_count % 3 != 0:
+            raise InvalidArgumentError(f"positions must contain a multiple of 3 floats, got {float_count}")
+        return float_count
 
     @staticmethod
     def _resolve_register(add: bool, register: Optional[bool]) -> bool:

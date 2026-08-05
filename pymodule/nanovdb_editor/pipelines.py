@@ -20,7 +20,9 @@ The :class:`~nanovdb_editor.editor.Scene` helpers (``nanovdb_from_gaussians``,
 ``process`` argument.
 """
 
+from dataclasses import dataclass
 from enum import IntEnum
+from typing import Optional
 
 # VoxelBVH lives in its own module; re-exported here for convenience so that
 # ``from nanovdb_editor.pipelines import VoxelBVH`` keeps working.
@@ -68,6 +70,7 @@ _STAGE_NAMES = {
 }
 
 
+@dataclass(frozen=True)
 class PipelineInfo:
     """Static description of a registered pipeline type.
 
@@ -75,16 +78,13 @@ class PipelineInfo:
     introspected from Python without a running editor.
     """
 
-    __slots__ = ("value", "type_id", "stage", "description", "process")
-
-    def __init__(self, value, type_id, stage, description, process=None):
-        self.value = value
-        #: Enum name without the ``pnanovdb_pipeline_type_`` prefix.
-        self.type_id = type_id
-        self.stage = stage
-        self.description = description
-        #: Friendly ``process=`` alias accepted by the Scene helpers, if any.
-        self.process = process
+    value: int
+    #: Enum name without the ``pnanovdb_pipeline_type_`` prefix.
+    type_id: str
+    stage: int
+    description: str
+    #: Friendly ``process=`` alias accepted by the Scene helpers, if any.
+    process: Optional[str] = None
 
     @property
     def stage_name(self):
