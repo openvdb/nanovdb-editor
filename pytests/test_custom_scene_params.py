@@ -60,8 +60,10 @@ class TestCustomSceneParams:
 
     def test_invalid_json_raises(self):
         scene = self.editor.get_token("bad_scene")
-        with pytest.raises(nve.PipelineError):
+        with pytest.raises(nve.PipelineError, match=".+") as exc_info:
             self.editor.set_custom_scene_params(scene, "{ this is not valid json ")
+        # Error text must come from the native error_buf (ABI write path).
+        assert exc_info.value.args[0].strip()
 
         # Unknown scene has no params attached.
         empty_scene = self.editor.get_token("empty_scene")

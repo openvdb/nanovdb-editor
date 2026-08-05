@@ -315,9 +315,22 @@ class Scene:
         return alias
 
     def _finalize(self, nvdb_array, name, add) -> Grid:
-        if add:
-            self._editor.add_nanovdb_2(self._token, self._editor.get_token(name), nvdb_array)
-        return Grid(self._editor._compute, nvdb_array)
+        """Register (optional) and wrap ``nvdb_array``; destroy it if that fails."""
+        try:
+            if add:
+                self._editor.add_nanovdb_2(self._token, self._editor.get_token(name), nvdb_array)
+            return Grid(self._editor._compute, nvdb_array)
+        except Exception:
+            if add:
+                try:
+                    self.remove(name)
+                except Exception:
+                    pass
+            try:
+                self._editor._compute.destroy_array(nvdb_array)
+            except Exception:
+                pass
+            raise
 
     def add_grid(self, grid, name: str) -> Grid:
         """Register an existing :class:`Grid` (or raw array) under ``name``."""
@@ -767,13 +780,20 @@ class Scene:
                 grid_name = f"{name}_d{i}" if len(directions) > 1 else name
                 grids.append(self._finalize(array, grid_name, do_register))
         except Exception:
-            for grid in grids:
+            # Successful wraps: unregister (scene owns a duplicate) then destroy.
+            for i, grid in enumerate(grids):
+                grid_name = f"{name}_d{i}" if len(directions) > 1 else name
+                if do_register:
+                    try:
+                        self.remove(grid_name)
+                    except Exception:
+                        pass
                 try:
                     grid.close()
                 except Exception:
                     pass
-            # Any arrays not yet wrapped still need cleanup.
-            for array in arrays[len(grids) :]:
+            # ``_finalize`` destroys the array it failed on; only later ones remain.
+            for array in arrays[len(grids) + 1 :]:
                 try:
                     self._editor._compute.destroy_array(array)
                 except Exception:

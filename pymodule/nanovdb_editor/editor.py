@@ -1168,26 +1168,20 @@ class Editor:
         """Set (or append) a process-step pipeline on a scene object.
 
         When ``step_index`` equals the current step count, a new step is
-        appended. Index and pipeline stage are validated before the native
-        call; a short post-check still detects silent native rejection.
+        appended. The index is validated before the native call; acceptance of
+        the pipeline type is left to the native side and confirmed by a short
+        post-check (so a stale Python registry cannot reject a still-valid C
+        pipeline or paper over a native rejection).
 
         Raises:
             PipelineError: If the native API rejects the request (chain
                 template, non-process pipeline, out-of-range index, etc.).
         """
-        from .pipelines import PIPELINE_STAGE_PROCESS, get_pipeline_info
-
         step_index = int(step_index)
         if step_index < 0:
             raise PipelineError(f"process step index {step_index} out of range")
 
         resolved = self._resolve_pipeline_type(pipeline)
-        info = get_pipeline_info(resolved)
-        if info is not None and info.stage != PIPELINE_STAGE_PROCESS:
-            raise PipelineError(
-                f"pipeline {pipeline!r} is stage {info.stage_name!r}; process steps require a process pipeline"
-            )
-
         count_before = self.get_process_step_count(scene, name)
         if step_index > count_before:
             raise PipelineError(f"process step index {step_index} out of range for chain of length {count_before}")
