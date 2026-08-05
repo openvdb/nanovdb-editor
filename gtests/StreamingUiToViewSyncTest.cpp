@@ -143,18 +143,36 @@ TEST(StreamingUiToViewSync, PoolMutationPropagatesToObjectBufferEachFrame)
 
     constexpr float kSentinel = 7.5f;
     auto& shader_params = editor.impl->scene_manager->shader_params;
-    pnanovdb_compute_array_t* pool_array = shader_params.get_compute_array_for_shader(kDefaultEditorShader, &compute);
-    ASSERT_NE(pool_array, nullptr) << "No compute array for default editor shader; cannot exercise UI sync";
-    ASSERT_NE(pool_array->data, nullptr);
-    ASSERT_GE(pool_array->element_size * pool_array->element_count, sizeof(float));
-    *reinterpret_cast<float*>(pool_array->data) = kSentinel;
-    shader_params.set_compute_array_for_shader(kDefaultEditorShader, pool_array);
-    compute.destroy_array(pool_array);
+    auto stamp_ui_pool = [&]() -> bool
+    {
+        // Coordinate with the render thread's shader-params critical section so a
+        // concurrent Properties writeback cannot observe a torn update.
+        std::lock_guard<std::recursive_mutex> lock(worker->shader_params_mutex);
+        pnanovdb_compute_array_t* pool_array =
+            shader_params.get_compute_array_for_shader(kDefaultEditorShader, &compute);
+        if (!pool_array || !pool_array->data ||
+            pool_array->element_size * pool_array->element_count < sizeof(float))
+        {
+            if (pool_array)
+            {
+                compute.destroy_array(pool_array);
+            }
+            return false;
+        }
+        *reinterpret_cast<float*>(pool_array->data) = kSentinel;
+        shader_params.set_compute_array_for_shader(kDefaultEditorShader, pool_array);
+        compute.destroy_array(pool_array);
+        return true;
+    };
+    ASSERT_TRUE(stamp_ui_pool()) << "No compute array for default editor shader; cannot exercise UI sync";
 
     std::array<uint8_t, 64> after{};
     const bool propagated = wait_until(
         [&]()
         {
+            // Re-stamp each poll so a single lost race against ImGui snapshot
+            // writeback cannot suppress the sentinel for the full timeout.
+            (void)stamp_ui_pool();
             std::memset(after.data(), 0, after.size());
             pnanovdb_editor_test::snapshot_object_shader_params(
                 &editor, scene_token, name_token, after.data(), after.size());

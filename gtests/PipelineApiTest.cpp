@@ -696,3 +696,22 @@ TEST_F(PipelineApiTest, GetPipelineTypeResolvesEnumTokenOnly)
     EXPECT_EQ(editor.get_pipeline_type(&editor, nullptr, &resolved), PNANOVDB_FALSE);
     EXPECT_EQ(editor.get_pipeline_type(&editor, noop_token, nullptr), PNANOVDB_FALSE);
 }
+
+TEST_F(PipelineApiTest, SetCustomSceneParamsReportsErrorsWithoutCrossingAbi)
+{
+    // Null / incomplete args must fail cleanly and fill the error buffer.
+    char error_buf[256] = {};
+    EXPECT_EQ(editor.set_custom_scene_params(&editor, nullptr, nullptr, error_buf, sizeof(error_buf)), PNANOVDB_FALSE);
+    EXPECT_NE(error_buf[0], '\0');
+
+    // Invalid JSON must not throw across the C ABI; it returns FALSE + a reason.
+    std::memset(error_buf, 0, sizeof(error_buf));
+    pnanovdb_editor_token_t* json_token = editor.get_token("{ this is not valid json ");
+    ASSERT_NE(json_token, nullptr);
+    EXPECT_EQ(editor.set_custom_scene_params(&editor, scene_token, json_token, error_buf, sizeof(error_buf)),
+              PNANOVDB_FALSE);
+    EXPECT_NE(error_buf[0], '\0');
+
+    // A null error buffer must still be safe (errors are optional).
+    EXPECT_EQ(editor.set_custom_scene_params(&editor, scene_token, json_token, nullptr, 0), PNANOVDB_FALSE);
+}

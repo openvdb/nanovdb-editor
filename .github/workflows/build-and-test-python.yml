@@ -199,6 +199,9 @@ jobs:
       - name: Run Python tests
         run: |
           conda activate nanovdb_editor
+          # lavapipe hangs for ~20 minutes inside nanovdb_from_triangles_array
+          # even for a one-triangle mesh; macOS MoltenVK still runs the smoke.
+          export NANOVDB_EDITOR_SKIP_PIPELINE_CONVERSION_TESTS=1
           pytest -vvv -s -ra --tb=long
 
   nanovdb-editor-build-python-macos:
@@ -471,6 +474,9 @@ jobs:
       - name: Run Python tests
         run: |
           conda activate nanovdb_editor
+          # lavapipe access-violates / hangs in nanovdb_from_triangles_array;
+          # macOS MoltenVK still runs the light conversion smoke.
+          export NANOVDB_EDITOR_SKIP_PIPELINE_CONVERSION_TESTS=1
           python -X faulthandler -m pytest pytests -vvv -s -ra --tb=long
 
   nanovdb-editor-build-python-windows-arm:
@@ -698,6 +704,9 @@ jobs:
 
       - name: Run Python tests
         run: |
+          # lavapipe access-violates in nanovdb_from_triangles_array on WinARM;
+          # macOS MoltenVK still runs the light conversion smoke.
+          $env:NANOVDB_EDITOR_SKIP_PIPELINE_CONVERSION_TESTS = "1"
           python -X faulthandler -m pytest pytests -vvv -s -ra --tb=long
 
   nanovdb-editor-build-python-linux-arm:
@@ -780,4 +789,7 @@ jobs:
           # the ARM64 Python suite active here; the streaming smoke tests still
           # run on Linux x86_64, macOS, Windows, and Windows ARM64.
           export NANOVDB_EDITOR_SKIP_STREAMING_SMOKE_TESTS=1
+          # Tiny VoxelBVH mesh builds exceed the 300s pytest timeout on this
+          # lavapipe runner; the light conversion smoke still runs on macOS.
+          export NANOVDB_EDITOR_SKIP_PIPELINE_CONVERSION_TESTS=1
           python3 -X faulthandler -m pytest pytests -vvv -s -ra --tb=long --timeout=300 --timeout-method=thread

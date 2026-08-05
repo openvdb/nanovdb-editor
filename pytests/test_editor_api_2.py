@@ -268,9 +268,7 @@ class TestEditorAPI2:
             sleep(0.2)
 
             incomplete_name_token = self.editor.get_token("test_gaussians_incomplete")
-            self.editor.add_named_array(
-                scene_token, incomplete_name_token, self.editor.get_token("means"), means_array
-            )
+            self.editor.add_named_array(scene_token, incomplete_name_token, self.editor.get_token("means"), means_array)
             # Reject an object that does not have all required arrays.
             self.editor.add_gaussian_data_4(scene_token, incomplete_name_token, 0, 2)
             sleep(0.1)

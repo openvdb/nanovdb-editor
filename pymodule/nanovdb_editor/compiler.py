@@ -208,12 +208,26 @@ class Compiler:
         )
 
     def destroy_instance(self) -> None:
-        if not self._instance:
+        """Destroy the native compiler instance.
+
+        The handle is only dropped once the native call returns without raising,
+        so a failed destroy stays retryable rather than leaking silently.
+        Callers that must not raise during teardown (such as
+        :meth:`Session.close`) catch the error and retry later.
+        """
+        instance = getattr(self, "_instance", None)
+        compiler = getattr(self, "_compiler", None)
+        if not instance or not compiler:
+            self._instance = None
             return
-
-        destroy_func = self._compiler.contents.destroy_instance
-        destroy_func(self._instance)
-
+        destroy_func = compiler.contents.destroy_instance
+        if not destroy_func:
+            raise RuntimeError("compiler destroy_instance is unavailable")
+        try:
+            destroy_func(instance)
+        except Exception:
+            # Keep _instance so Session.close can retry teardown.
+            raise
         self._instance = None
 
     def __del__(self):

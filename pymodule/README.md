@@ -25,19 +25,55 @@ docker run --runtime=nvidia --net=host --gpus=all ...
 ```py
 import nanovdb_editor as nve
 
-editor, compute, compiler = nve.create_default()
-
-config = nve.EditorConfig()
-
-# Default values, set as needed
-config.ip_address = b"127.0.0.1"
-config.port = 8080
-config.headless = 0
-config.streaming = 0
-
-editor.show(config)
-# editor.wait_for_interrupt()   # uncomment when streaming is enabled
+with nve.create_default() as app:
+    # Python-friendly kwargs (or pass make_editor_config(...))
+    app.show(ip="127.0.0.1", port=8080)
+    # Headless/streaming: app.run(gui=False, headless=True, streaming=True, ...)
+# Session closes here: worker stopped, editor shut down, compiler destroyed
 ```
+
+### Pipelines
+
+The editor's process pipelines can build NanoVDB grids from higher-level inputs
+directly in Python:
+
+```py
+with nve.create_default() as app:
+    scene = app.scene("main")
+
+    nvdb = scene.nanovdb_from_gaussians(
+        means=means, quats=quats, scales=scales,
+        sh_0=sh_0, sh_n=sh_n, opacities=opacities,
+        process="voxelbvh", resolution=512,
+    )
+
+    # Bake colors to an RGBA8 image grid, and choose how it's drawn
+    rgba8 = scene.nanovdb_to_rgba8(nvdb, name="splats_rgba8", register=False)
+    scene.set_render_pipeline("gaussians", "voxelbvh_rgba8_render")
+```
+
+You can also load an existing grid (`scene.nanovdb_from_file("grid.nvdb")`),
+tune per-object parameters (`scene.set_voxels_per_unit("gaussians", 256)`,
+`scene.set_resolution(...)`, `scene.set_inflation_radius(...)`),
+build multi-step process chains (`scene.process_steps("mesh").append(...)`), bake
+RGBA8 for several ray directions at once
+(`scene.nanovdb_to_rgba8_directions(...)`), and manage scene objects with
+`scene.remove` / `scene.add_grid` / `scene.update_camera` / `scene.add_image2d`.
+
+The returned `Grid` is a context manager, and `grid.map(dtype)` hands you a
+live, zero-copy NumPy view of its bytes that is unmapped on block exit:
+
+```py
+import numpy as np
+
+with scene.nanovdb_from_mesh(indices=indices, positions=positions, register=False) as grid:
+    with grid.map(np.uint32) as view:   # writes go back to the grid
+        print(int(view[0]))
+    grid.save("mesh.nvdb")
+```
+
+See [PIPELINES.md](PIPELINES.md) for the available pipelines, options, and a
+guide to exposing (pythonizing) more of them.
 
 ### Shader Parameters
 Shaders can have defined struct with shader parameters which are intended to be shown in the editor's UI:

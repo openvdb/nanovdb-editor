@@ -4,7 +4,7 @@
 import os
 import numpy as np
 
-from nanovdb_editor import Compiler, Compute, Editor, Raster
+import nanovdb_editor as nve
 
 
 TEST_RASTER_TO_NANOVDB = True
@@ -14,146 +14,65 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 TEST_NPZ = os.path.join(SCRIPT_DIR, "../data/splats.npz")
 TEST_NANOVDB = os.path.join(SCRIPT_DIR, "../data/raster_test.nvdb")
 
+VOXEL_SIZE = 1.0 / 128.0
+
 if __name__ == "__main__":
 
     print(f"Current Process ID (PID): {os.getpid()}")
 
-    compiler = Compiler()
-    compiler.create_instance()
+    with nve.create_default() as app:
 
-    compute = Compute(compiler)
-    compute.device_interface().create_device_manager()
-    compute.device_interface().create_device()
-
-    device = compute.device_interface().create_device()
-    raster = Raster(compute, device)
-
-    editor = Editor(compute, compiler)
-
-    def raster_func(filename_ptr):
-        if isinstance(filename_ptr, bytes):
-            _filename = filename_ptr.decode('utf-8')
-        else:
-            _filename = filename_ptr
-
-        try:
-            npz_array = np.load(TEST_NPZ)
-        except FileNotFoundError:
-            print(f"File '{_filename}' not found")
-            return
-
-        print(f"Rasterizing npz file '{_filename}'...")
-
-        # Get data from npz file
-        means_npz = npz_array["means"]
-        opacities_npz = npz_array["opacities"]
-        quaternions_npz = npz_array["quaternions"]
-        scales_npz = npz_array["scales"]
-        sh_npz = npz_array["sh"]
-
-        point_count = means_npz.shape[0]
-
-        # Create and fill position array
-        means = np.zeros((point_count, 3), dtype=np.float32)
-        means[:, 0] = means_npz[:, 0]
-        means[:, 1] = means_npz[:, 1]
-        means[:, 2] = means_npz[:, 2]
-
-        quaternions = np.zeros((point_count, 4), dtype=np.float32)
-        quaternions[:, 0] = quaternions_npz[:, 0]
-        quaternions[:, 1] = quaternions_npz[:, 1]
-        quaternions[:, 2] = quaternions_npz[:, 2]
-        quaternions[:, 3] = quaternions_npz[:, 3]
-
-        # Normalize quaternions
-        magnitudes = np.sqrt(np.sum(quaternions**2, axis=1, keepdims=True))
-        quaternions = quaternions / magnitudes
-
-        scales = np.zeros((point_count, 3), dtype=np.float32)
-        scales[:, 0] = scales_npz[:, 0]
-        scales[:, 1] = scales_npz[:, 1]
-        scales[:, 2] = scales_npz[:, 2]
-        scales = np.exp(scales)
-
-        # Calculate colors from spherical harmonics
-        C_0 = 0.28209479177387814
-        colors = np.zeros((point_count, 3), dtype=np.float32)
-        colors[:, 0] = C_0 * sh_npz[:, 0, 0] + 0.5
-        colors[:, 1] = C_0 * sh_npz[:, 0, 1] + 0.5
-        colors[:, 2] = C_0 * sh_npz[:, 0, 2] + 0.5
-
-        sh = np.zeros((point_count, 48), dtype=np.float32)
-        for j in range(0, 16):
-            for i in range(0, 3):
-                sh[:, j * 3 + i] = sh_npz[:, j, i]
-                sh[:, j * 3 + i] = sh_npz[:, j, i]
-                sh[:, j * 3 + i] = sh_npz[:, j, i]
-
-        opacities = np.zeros((point_count, 1), dtype=np.float32)
-        opacities[:, 0] = opacities_npz
-
-        # Apply sigmoid function to opacities
-        opacities = 1.0 / (1.0 + np.exp(-opacities))
-
-        def print_array_range(name, array):
-            if array.ndim == 1:
-                min_val = array.min()
-                max_val = array.max()
-                avg_val = array.mean()
-                print(f"array({name}) channel(0) min({min_val}) "
-                      f"max({max_val}) ave({avg_val})")
+        def raster_func(filename_ptr):
+            if isinstance(filename_ptr, bytes):
+                _filename = filename_ptr.decode("utf-8")
             else:
-                channel_count = array.shape[1]
-                for channel_idx in range(channel_count):
-                    channel_data = array[:, channel_idx]
-                    min_val = channel_data.min()
-                    max_val = channel_data.max()
-                    avg_val = channel_data.mean()
-                    print(f"array({name}) channel({channel_idx}) "
-                          f"min({min_val}) max({max_val}) ave({avg_val})")
+                _filename = filename_ptr
 
-        print_array_range("means", means)
-        print_array_range("quats", quaternions)
-        print_array_range("scales", scales)
-        print_array_range("colors", colors)
-        print_array_range("opacities", opacities)
+            try:
+                npz_array = np.load(TEST_NPZ)
+            except FileNotFoundError:
+                print(f"File '{_filename}' not found")
+                return None
 
-        # Create compute arrays
-        means_array = compute.create_array(means)
-        quaternions_array = compute.create_array(quaternions)
-        scales_array = compute.create_array(scales)
-        colors_array = compute.create_array(colors)
-        sh_array = compute.create_array(sh)
-        opacities_array = compute.create_array(opacities)
+            print(f"Rasterizing npz file '{_filename}'...")
 
-        VOXEL_SIZE = 1.0 / 128.0
+            # Feed the raw splat parameters straight to the pipeline: quaternion
+            # normalization, scale exp, color-from-SH and the opacity sigmoid are
+            # all applied inside the "raster3d" process.
+            means = npz_array["means"]
+            opacities = npz_array["opacities"].reshape(-1, 1)
+            quaternions = npz_array["quaternions"]
+            scales = npz_array["scales"]
+            sh = npz_array["sh"]  # (N, 16, 3): order-0 coeff + 15 higher-order RGB
 
-        nvdb_array = raster.raster_to_nanovdb(
-            VOXEL_SIZE,
-            means_array,
-            quaternions_array,
-            scales_array,
-            colors_array,
-            sh_array,
-            opacities_array
-        )
+            sh_0 = sh[:, 0, :]
+            sh_n = sh[:, 1:, :].reshape(sh.shape[0], -1)
 
-        scene_token = editor.get_token("main")
-        splats_token = editor.get_token("splats")
-        editor.add_nanovdb_2(scene_token, splats_token, nvdb_array)
+            # Build a NanoVDB grid and register it with the "main" scene as "splats".
+            return app.scene("main").nanovdb_from_gaussians(
+                means=means,
+                quats=quaternions,
+                scales=scales,
+                sh_0=sh_0,
+                sh_n=sh_n,
+                opacities=opacities,
+                process="raster3d",
+                voxel_size=VOXEL_SIZE,
+                name="splats",
+            )
 
-        compute.destroy_array(means_array)
-        compute.destroy_array(quaternions_array)
-        compute.destroy_array(scales_array)
-        compute.destroy_array(colors_array)
-        compute.destroy_array(sh_array)
-        compute.destroy_array(opacities_array)
+        if TEST_RASTER_TO_NANOVDB:
+            grid = raster_func(TEST_NPZ)
+            if grid is not None:
+                # Grid is a context manager: the native array is freed on block exit
+                # (the editor keeps its own copy of the registered grid).
+                with grid:
+                    # grid.map() yields a live, zero-copy view of the grid's bytes
+                    # and unmaps it automatically at the end of the block.
+                    with grid.map() as view:
+                        print(f"NanoVDB grid: {len(view)} elements, first byte {int(view[0])}")
+                    grid.save(TEST_NANOVDB)
 
-        compute.destroy_array(nvdb_array)
-
-    if TEST_RASTER_TO_NANOVDB:
-        raster_func(TEST_NPZ)
-        compute.save_nanovdb(editor.get_nanovdb(), TEST_NANOVDB)
-
-    editor.add_callable("Raster", raster_func)
-    editor.show()
+        app.editor.add_callable("Raster", raster_func)
+        app.show()
+    # Session closes here: worker stopped, editor shut down, compiler destroyed.

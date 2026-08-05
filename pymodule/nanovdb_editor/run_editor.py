@@ -4,7 +4,6 @@
 import argparse
 import sys
 import nanovdb_editor as nve
-from time import sleep
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="NanoVDB Editor")
@@ -17,30 +16,20 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     try:
-        editor, compute, compiler = nve.create_default(device_id=args.device)
+        session = nve.create_default(device_id=args.device)
     except Exception as e:
         print(f"Error initializing editor: {e}")
         sys.exit(1)
 
-    config = nve.EditorConfig()
-    config.ip_address = args.ip.encode("utf-8")
-    config.port = args.port
-    config.headless = 1 if args.headless else 0
-    config.streaming = 1 if args.stream else 0
-
     try:
         if args.headless:
-            editor.start(config)
+            session.start(ip=args.ip, port=args.port, headless=True, streaming=args.stream)
             print("Editor running at {}:{}.. Ctrl+C to exit".format(args.ip, args.port))
-            editor.wait_for_interrupt()
+            session.wait_for_interrupt()
         else:
-            editor.show(config)
+            session.show(ip=args.ip, port=args.port, streaming=args.stream)
     except Exception as e:
         print(f"Error starting editor: {e}")
     finally:
         print("Shutting down editor...")
-        if args.headless:
-            editor.stop()
-        editor = None
-        compute = None
-        compiler = None
+        session.close()
