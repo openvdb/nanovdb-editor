@@ -1110,6 +1110,12 @@ void ShaderParams::renderSnapshotsAndWriteBack(std::vector<RenderableParamSnapsh
         return;
     }
 
+    std::vector<std::vector<char>> originals(snapshots.size());
+    for (size_t i = 0; i < snapshots.size(); ++i)
+    {
+        originals[i] = snapshots[i].value;
+    }
+
     for (RenderableParamSnapshot& snap : snapshots)
     {
         ParamWidgetSpec ui_spec;
@@ -1131,9 +1137,14 @@ void ShaderParams::renderSnapshotsAndWriteBack(std::vector<RenderableParamSnapsh
 
     // Write any edited bytes back into the pool under the lock.
     std::lock_guard<std::recursive_mutex> lock(m_mutex);
-    for (const RenderableParamSnapshot& snap : snapshots)
+    for (size_t i = 0; i < snapshots.size(); ++i)
     {
+        const RenderableParamSnapshot& snap = snapshots[i];
         if (snap.pool_index >= shader_params_pool_.size())
+        {
+            continue;
+        }
+        if (snap.value == originals[i])
         {
             continue;
         }
