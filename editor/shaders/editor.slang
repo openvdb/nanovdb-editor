@@ -200,6 +200,10 @@ float4 ray_march_nanovdb_leaf_fetch_float(pnanovdb_grid_type_t grid_type,
         {
             value = pnanovdb_read_float(buf, address);
         }
+        else if (grid_type == PNANOVDB_GRID_TYPE_HALF)
+        {
+            value = pnanovdb_read_half(buf, address);
+        }
         else if (!pnanovdb_address_is_null(PNANOVDB_DEREF(acc).leaf.address))
         {
             pnanovdb_uint32_t leaf_n = pnanovdb_leaf_coord_to_offset(PNANOVDB_REF(ijk));

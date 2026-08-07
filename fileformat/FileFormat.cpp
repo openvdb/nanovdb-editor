@@ -19,7 +19,6 @@
 #include <cnpy.h>
 #include <fstream>
 #include <nlohmann/json.hpp>
-#include <zstr.hpp>
 
 #include <string>
 #include <cstring>
@@ -48,11 +47,13 @@ pnanovdb_compute_array_t* create_array(size_t element_size, pnanovdb_uint64_t el
     return g_compute_loader.compute.create_array(element_size, element_count, data);
 }
 
-static const char* s_supportedExtensions[] = { ".ply", ".npz",
+static const char* s_supportedExtensions[] = {
+    ".ply",
+    ".npz",
 #ifdef NANOVDB_EDITOR_E57_FORMAT
-                                               ".e57",
+    ".e57",
 #endif
-                                               ".ingp" };
+};
 
 static std::string get_file_extension(const char* filename)
 {
@@ -331,7 +332,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
             for (size_t idx = 0u; idx < element.size(); idx++)
             {
                 uint32_t val = *((uint32_t*)&element[idx]);
-                uint32_t val_new = (((val)&0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) |
+                uint32_t val_new = (((val) & 0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) |
                                    (((val >> 16u) & 0xFF) << 8u) | (((val >> 24u) & 0xFF) << 0u);
                 *((uint32_t*)&element[idx]) = val_new;
             }
@@ -462,7 +463,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
                     read_count += fread(&id, 1u, 4u, file);
                     if (is_big_endian)
                     {
-                        uint32_t id_new = (((id)&0xFF) << 24u) | (((id >> 8u) & 0xFF) << 16u) |
+                        uint32_t id_new = (((id) & 0xFF) << 24u) | (((id >> 8u) & 0xFF) << 16u) |
                                           (((id >> 16u) & 0xFF) << 8u) | (((id >> 24u) & 0xFF) << 0u);
                         id = id_new;
                     }
@@ -489,7 +490,7 @@ static pnanovdb_bool_t load_ply_file(const char* filename,
                 for (int k = 0; k < 2; k++)
                 {
                     uint32_t val = v[k];
-                    v[k] = (((val)&0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) | (((val >> 16u) & 0xFF) << 8u) |
+                    v[k] = (((val) & 0xFF) << 24u) | (((val >> 8u) & 0xFF) << 16u) | (((val >> 16u) & 0xFF) << 8u) |
                            (((val >> 24u) & 0xFF) << 0u);
                 }
             }
@@ -666,91 +667,6 @@ static void loadJsonArray(nlohmann::json& j, const char* key, pnanovdb_compute_a
     }
 }
 
-static pnanovdb_bool_t load_ingp_file(const char* filename,
-                                      pnanovdb_uint32_t array_count,
-                                      const char** array_names,
-                                      pnanovdb_compute_array_t** out_arrays)
-{
-    if (!filename || !array_names || !out_arrays)
-    {
-        return PNANOVDB_FALSE;
-    }
-
-    std::ifstream file(filename, std::ios::binary);
-    if (!file.is_open())
-    {
-        printf("Error: Could not open file: %s\n", filename);
-        return PNANOVDB_FALSE;
-    }
-
-    zstr::istream zstream(file);
-    try
-    {
-        nlohmann::json j = nlohmann::json::from_msgpack(zstream);
-
-        printf("Parsed %s, contains:\n", filename);
-        for (auto& [key, value] : j.items())
-        {
-            printf("%s\n", key.c_str());
-        }
-
-        size_t point_count = j["mog_num"];
-        int sph_degree = j["mog_sph_degree"];
-        bool halfPrecision = false;
-        if (j.contains("precision") && std::string(j["precision"]) == std::string("half"))
-        {
-            halfPrecision = true;
-        }
-
-        for (int i = 0; i < array_count; i++)
-        {
-            out_arrays[i] = nullptr;
-        }
-
-        // Expect the arrays to be in order: means, opacities, quaternions, scales, features
-        {
-            int i = 0;
-            {
-                loadJsonArray<pnanovdb_vec3_t>(j, array_names[i], &out_arrays[i], filename);
-                i++;
-            }
-            {
-                loadJsonArray<float>(j, array_names[i], &out_arrays[i], filename);
-                i++;
-            }
-            {
-                loadJsonArray<pnanovdb_vec4_t>(j, array_names[i], &out_arrays[i], filename);
-                i++;
-            }
-            {
-                loadJsonArray<pnanovdb_vec3_t>(j, array_names[i], &out_arrays[i], filename);
-                i++;
-            }
-            {
-                loadJsonArray<float>(j, array_names[i], &out_arrays[i], filename);
-                i++;
-            }
-        }
-
-        // "checksum"
-        for (int i = 0; i < array_count - 1; i++)
-        {
-            if (out_arrays[i] && out_arrays[i]->element_count != point_count)
-            {
-                printf("Warning: Array '%s' has wrong element count (%zu != %zu)\n", array_names[i],
-                       out_arrays[i]->element_count, point_count);
-            }
-        }
-    }
-    catch (const nlohmann::json::parse_error& e)
-    {
-        printf("Parse error: %s\n", e.what());
-        return PNANOVDB_FALSE;
-    }
-
-    return PNANOVDB_TRUE;
-}
-
 pnanovdb_bool_t load_file(const char* filename,
                           pnanovdb_uint32_t array_count,
                           const char** array_names,
@@ -784,10 +700,6 @@ pnanovdb_bool_t load_file(const char* filename,
         loaded = load_e57_file(filename, array_count, array_names, out_arrays);
     }
 #endif
-    else if (extension == ".ingp")
-    {
-        loaded = load_ingp_file(filename, array_count, array_names, out_arrays);
-    }
 
     if (loaded == PNANOVDB_FALSE)
     {

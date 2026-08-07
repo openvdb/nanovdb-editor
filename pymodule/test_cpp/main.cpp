@@ -17,7 +17,6 @@
 // #define TEST_NVDB
 // #define TEST_IMAGE2D
 // #define TEST_FILE_FORMAT
-// #define FORMAT_INGP
 #define FORMAT_PLY
 // #define TEST_TRAINIG
 
@@ -325,10 +324,7 @@ int main(int argc, char* argv[])
 
 #ifdef TEST_FILE_FORMAT
 
-#    if defined(FORMAT_INGP)
-    const char* filename = "../../data/ficus-30k.ingp";
-    const char* array_names[] = { "mog_positions", "mog_densities", "mog_rotations", "mog_scales", "mog_features" };
-#    elif defined(FORMAT_PLY)
+#    if defined(FORMAT_PLY)
     const char* filename = "../../data/ficus.ply";
     const char* array_names[] = { "means", "opacities", "quaternions", "scales", "sh" };
 #    else

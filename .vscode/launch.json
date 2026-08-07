@@ -34,33 +34,6 @@
             }
         },
         {
-            "name": "Debug NanoVDB Editor Test App",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/pnanovdbeditortestapp",
-            "args": [],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}",
-            "environment": [],
-            "externalConsole": false,
-            "MIMode": "gdb",
-            "setupCommands": [
-                {
-                    "description": "Enable pretty-printing for gdb",
-                    "text": "-enable-pretty-printing",
-                    "ignoreFailures": true
-                }
-            ],
-            "windows": {
-                "program": "${workspaceFolder}/build/Debug/pnanovdbeditortestapp.exe",
-                "MIMode": "gdb",
-                "miDebuggerPath": "gdb.exe"
-            },
-            "osx": {
-                "MIMode": "lldb"
-            }
-        },
-        {
             "name": "Debug NanoVDB Editor C Test App",
             "type": "cppdbg",
             "request": "launch",

@@ -17,6 +17,9 @@
 
 // ------------------------------------------------ Pipeline Types
 
+// This must align with Pipeline.h
+#ifndef PNANOVDB_PIPELINE_ENUM_DEFINED
+#    define PNANOVDB_PIPELINE_ENUM_DEFINED
 enum pnanovdb_pipeline_stage_t
 {
     pnanovdb_pipeline_stage_load = 0,
@@ -24,8 +27,8 @@ enum pnanovdb_pipeline_stage_t
     pnanovdb_pipeline_stage_render = 2,
     pnanovdb_pipeline_stage_count
 };
-
 typedef pnanovdb_uint32_t pnanovdb_pipeline_type_t;
+#endif
 
 // ------------------------------------------------ Pipeline Parameters
 

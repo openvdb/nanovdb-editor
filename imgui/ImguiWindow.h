@@ -67,11 +67,6 @@ PNANOVDB_REFLECT_END(0)
 typedef struct pnanovdb_imgui_settings_render_t
 {
     const pnanovdb_reflect_data_type_t* data_type;
-    pnanovdb_bool_t is_projection_rh = true;
-    pnanovdb_bool_t is_orthographic = false;
-    pnanovdb_bool_t is_reverse_z = true;
-    pnanovdb_bool_t is_y_up = true;
-    pnanovdb_bool_t is_upside_down = false;
     pnanovdb_bool_t vsync = true;
     pnanovdb_bool_t enable_encoder = false;
     pnanovdb_bool_t encode_to_file = false;
@@ -83,9 +78,6 @@ typedef struct pnanovdb_imgui_settings_render_t
     char server_address[256u] = { 'l', 'o', 'c', 'a', 'l', 'h', 'o', 's', 't', '\0' };
     pnanovdb_int32_t server_port = 8080;
     pnanovdb_int32_t server_create_max_attempts = 32;
-    pnanovdb_bool_t sync_camera = false;
-    pnanovdb_camera_state_t camera_state = {};
-    pnanovdb_camera_config_t camera_config = {};
     float camera_speed_multiplier = 1.f;
     char ui_profile_name[256u] = { 'd', 'e', 'f', 'a', 'u', 'l', 't', '\0' };
     // NOTE: When adding new fields here, ensure you categorize them as persistent, config-only,
@@ -95,11 +87,6 @@ typedef struct pnanovdb_imgui_settings_render_t
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_imgui_settings_render_t
 PNANOVDB_REFLECT_BEGIN()
-PNANOVDB_REFLECT_VALUE(pnanovdb_int32_t, is_projection_rh, 0, 0)
-PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, is_orthographic, 0, 0)
-PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, is_reverse_z, 0, 0)
-PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, is_y_up, 0, 0)
-PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, is_upside_down, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, vsync, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, enable_encoder, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, encode_to_file, 0, 0)
@@ -111,9 +98,6 @@ PNANOVDB_REFLECT_VALUE(char, encode_filename[0], 0, 0)
 PNANOVDB_REFLECT_VALUE(char, server_address[0], 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_int32_t, server_port, 0, 0)
 PNANOVDB_REFLECT_VALUE(pnanovdb_int32_t, server_create_max_attempts, 0, 0)
-PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, sync_camera, 0, 0)
-PNANOVDB_REFLECT_VALUE(pnanovdb_camera_state_t, camera_state, 0, 0)
-PNANOVDB_REFLECT_VALUE(pnanovdb_camera_config_t, camera_config, 0, 0)
 PNANOVDB_REFLECT_VALUE(float, camera_speed_multiplier, 0, 0)
 PNANOVDB_REFLECT_END(0)
 #undef PNANOVDB_REFLECT_TYPE
@@ -123,7 +107,7 @@ typedef struct pnanovdb_imgui_instance_interface_t
     PNANOVDB_REFLECT_INTERFACE();
 
     pnanovdb_imgui_instance_t*(PNANOVDB_ABI* create)(void* userdata,
-                                                     void* user_settings,
+                                                     const void* user_settings,
                                                      const pnanovdb_reflect_data_type_t* user_settings_data_type);
 
     void(PNANOVDB_ABI* destroy)(pnanovdb_imgui_instance_t* instance);
@@ -162,19 +146,14 @@ typedef struct pnanovdb_imgui_window_interface_t
 
     pnanovdb_imgui_window_t*(PNANOVDB_ABI* create)(const pnanovdb_compute_t* compute,
                                                    const pnanovdb_compute_device_t* device,
-                                                   pnanovdb_int32_t width,
-                                                   pnanovdb_int32_t height,
-                                                   void** imgui_user_settings,
-                                                   pnanovdb_bool_t enable_default_imgui,
-                                                   pnanovdb_imgui_instance_interface_t** imgui_instance_interfaces,
-                                                   void** imgui_instance_userdatas,
-                                                   pnanovdb_uint64_t imgui_instance_instance_count,
+                                                   const pnanovdb_imgui_settings_render_t* user_settings,
+                                                   pnanovdb_imgui_instance_interface_t* imgui_instance_interface,
+                                                   void* imgui_instance_userdata,
                                                    pnanovdb_bool_t headless);
 
     void(PNANOVDB_ABI* destroy)(const pnanovdb_compute_t* compute,
                                 pnanovdb_compute_queue_t* queue,
-                                pnanovdb_imgui_window_t* window,
-                                pnanovdb_imgui_settings_render_t* settings);
+                                pnanovdb_imgui_window_t* window);
 
     pnanovdb_bool_t(PNANOVDB_ABI* update)(const pnanovdb_compute_t* compute,
                                           pnanovdb_compute_queue_t* compute_queue,
@@ -184,21 +163,10 @@ typedef struct pnanovdb_imgui_window_interface_t
                                           void(PNANOVDB_ABI* report_resolved_port)(void* userdata, pnanovdb_int32_t port),
                                           void* report_resolved_port_userdata,
                                           pnanovdb_imgui_window_t* window,
-                                          pnanovdb_imgui_settings_render_t* user_settings,
+                                          pnanovdb_camera_t* camera,
+                                          const pnanovdb_imgui_settings_render_t* user_settings,
                                           pnanovdb_int32_t (*get_external_active_count)(void* external_active_count),
                                           void* external_active_count);
-
-    void(PNANOVDB_ABI* get_camera_view_proj)(pnanovdb_imgui_window_t* window,
-                                             pnanovdb_int32_t* out_width,
-                                             pnanovdb_int32_t* out_height,
-                                             pnanovdb_camera_mat_t* out_view,
-                                             pnanovdb_camera_mat_t* out_projection);
-
-    void(PNANOVDB_ABI* get_camera)(pnanovdb_imgui_window_t* window,
-                                   pnanovdb_camera_state_t* out_camera_state,
-                                   pnanovdb_camera_config_t* out_camera_config);
-
-    void(PNANOVDB_ABI* update_camera)(pnanovdb_imgui_window_t* window, pnanovdb_imgui_settings_render_t* user_settings);
 
 } pnanovdb_imgui_window_interface_t;
 
@@ -207,9 +175,6 @@ PNANOVDB_REFLECT_BEGIN()
 PNANOVDB_REFLECT_FUNCTION_POINTER(create, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(destroy, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(update, 0, 0)
-PNANOVDB_REFLECT_FUNCTION_POINTER(get_camera_view_proj, 0, 0)
-PNANOVDB_REFLECT_FUNCTION_POINTER(get_camera, 0, 0)
-PNANOVDB_REFLECT_FUNCTION_POINTER(update_camera, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE

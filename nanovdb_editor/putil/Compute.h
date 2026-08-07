@@ -781,6 +781,13 @@ PNANOVDB_REFLECT_END(0)
 
 typedef pnanovdb_uint32_t pnanovdb_compiler_api_t;
 
+struct pnanovdb_compute_token_t
+{
+    pnanovdb_uint64_t id;
+    const char* str;
+};
+typedef struct pnanovdb_compute_token_t pnanovdb_compute_token_t;
+
 typedef struct pnanovdb_compute_t
 {
     PNANOVDB_REFLECT_INTERFACE();
@@ -850,6 +857,10 @@ typedef struct pnanovdb_compute_t
                                                                       pnanovdb_uint32_t width,
                                                                       pnanovdb_uint32_t height);
     pnanovdb_compute_array_t*(PNANOVDB_ABI* duplicate_array)(pnanovdb_compute_array_t* array);
+    void(PNANOVDB_ABI* shader_context_map_shader_params_type)(pnanovdb_shader_context_t* shaderContext,
+                                                              const pnanovdb_reflect_data_type_t** out_data_type,
+                                                              const pnanovdb_reflect_data_type_t** out_metadata_type);
+    pnanovdb_compute_token_t*(PNANOVDB_ABI* get_token)(const char* name);
 } pnanovdb_compute_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_compute_t
@@ -874,6 +885,8 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(unmap_array, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(compute_array_print_range, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(nanovdb_from_image_rgba8, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(duplicate_array, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(shader_context_map_shader_params_type, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(get_token, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE

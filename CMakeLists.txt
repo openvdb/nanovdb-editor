@@ -226,7 +226,6 @@ create_nanovdb_library(pnanovdbfileformat
         ./
         ${nanovdb_SOURCE_DIR}/nanovdb
         ${cnpy_SOURCE_DIR}
-        ${zstr_SOURCE_DIR}/src
     LIBS
         nlohmann_json::nlohmann_json
         cnpy-static
@@ -774,31 +773,6 @@ if (NOT SKBUILD)
     endif()
 
     set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT pnanovdbeditorapp)
-
-    ### PNanoVDB Editor Test App
-
-    file(GLOB TEST_APP_SOURCE_FILES "test/*.cpp")
-
-    create_nanovdb_executable(pnanovdbeditortestapp
-        SOURCES ${TEST_APP_SOURCE_FILES}
-        INCLUDES
-            ./
-            ./test
-            ${nanovdb_SOURCE_DIR}/nanovdb
-            ${Slang_SOURCE_DIR}/include
-            ${argparse_SOURCE_DIR}/include
-        LIBS
-            pnanovdbcompiler
-            pnanovdbcompute
-            pnanovdbfileformat
-            pnanovdbeditor
-            $<$<BOOL:${NANOVDB_EDITOR_USE_H264}>:openh264>
-    )
-
-    add_dependencies(pnanovdbeditortestapp pnanovdbeditor_prebuild)
-    if(NANOVDB_EDITOR_USE_H264 AND TARGET openh264_build)
-        add_dependencies(pnanovdbeditortestapp openh264_build)
-    endif()
 endif()
 
 if (NOT WIN32)

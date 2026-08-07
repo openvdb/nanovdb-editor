@@ -55,6 +55,20 @@ PNANOVDB_REFLECT_VALUE(pnanovdb_uint32_t, sh_stride_rgbrgbrgb_override, 0, 0)
 PNANOVDB_REFLECT_END(&default_shader_params)
 #undef PNANOVDB_REFLECT_TYPE
 
+typedef struct pnanovdb_raster_gpu_buffers_t
+{
+    pnanovdb_uint64_t point_count;
+    pnanovdb_uint32_t sh_stride;
+
+    pnanovdb_compute_buffer_t* means;
+    pnanovdb_compute_buffer_t* quaternions;
+    pnanovdb_compute_buffer_t* scales;
+    pnanovdb_compute_buffer_t* colors;
+    pnanovdb_compute_buffer_t* sh_0;
+    pnanovdb_compute_buffer_t* sh_n;
+    pnanovdb_compute_buffer_t* opacities;
+} pnanovdb_raster_gpu_buffers_t;
+
 typedef struct pnanovdb_raster_t
 {
     PNANOVDB_REFLECT_INTERFACE();
@@ -171,6 +185,18 @@ typedef struct pnanovdb_raster_t
                                                                   pnanovdb_raster_gaussian_data_t** gaussian_data,
                                                                   pnanovdb_raster_shader_params_t* raster_params,
                                                                   pnanovdb_raster_context_t** raster_context);
+
+    void(PNANOVDB_ABI* raster_gaussian_2d_gpu)(const pnanovdb_compute_t* compute,
+                                               pnanovdb_compute_queue_t* queue,
+                                               pnanovdb_raster_context_t* context,
+                                               pnanovdb_raster_gpu_buffers_t* data,
+                                               pnanovdb_compute_texture_t* color_2d,
+                                               pnanovdb_uint32_t image_width,
+                                               pnanovdb_uint32_t image_height,
+                                               const pnanovdb_camera_mat_t* view,
+                                               const pnanovdb_camera_mat_t* projection,
+                                               const pnanovdb_raster_shader_params_t* shader_params,
+                                               pnanovdb_uint32_t composite);
 } pnanovdb_raster_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_raster_t
@@ -187,6 +213,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(raster_file, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(raster_to_nanovdb_from_arrays, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(create_gaussian_data_from_arrays, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(create_gaussian_data_from_desc, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(raster_gaussian_2d_gpu, 0, 0)
 PNANOVDB_REFLECT_POINTER(pnanovdb_compute_t, compute, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()

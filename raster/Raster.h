@@ -18,13 +18,12 @@
 namespace pnanovdb_raster
 {
 
-static const char* s_shader_names[shader_count] = { "raster/gaussian_count_tiles.slang",
-                                                    "raster/gaussian_projection.slang",
-                                                    "raster/gaussian_rasterize_2d.slang",
-                                                    "raster/gaussian_rasterize_2d_null.slang",
-                                                    "raster/gaussian_spherical_harmonics.slang",
-                                                    "raster/gaussian_tile_intersections.slang",
-                                                    "raster/gaussian_tile_offsets.slang" };
+static const char* s_shader_names[shader_count] = {
+    "raster/gaussian_count_tiles.slang",         "raster/gaussian_projection.slang",
+    "raster/gaussian_rasterize_2d.slang",        "raster/gaussian_rasterize_2d_null.slang",
+    "raster/gaussian_spherical_harmonics.slang", "raster/gaussian_tile_intersections.slang",
+    "raster/gaussian_tile_offsets.slang"
+};
 
 struct raster_context_t
 {
@@ -173,4 +172,17 @@ pnanovdb_bool_t create_gaussian_data_from_desc(pnanovdb_raster_t* raster,
                                                pnanovdb_raster_gaussian_data_t** gaussian_data,
                                                pnanovdb_raster_shader_params_t* raster_params,
                                                pnanovdb_raster_context_t** raster_context);
+
+void raster_gaussian_2d_gpu(const pnanovdb_compute_t* compute,
+                            pnanovdb_compute_queue_t* queue,
+                            pnanovdb_raster_context_t* context,
+                            pnanovdb_raster_gpu_buffers_t* data,
+                            pnanovdb_compute_texture_t* color_2d,
+                            pnanovdb_uint32_t image_width,
+                            pnanovdb_uint32_t image_height,
+                            const pnanovdb_camera_mat_t* view,
+                            const pnanovdb_camera_mat_t* projection,
+                            const pnanovdb_raster_shader_params_t* shader_params,
+                            pnanovdb_uint32_t composite);
+
 }

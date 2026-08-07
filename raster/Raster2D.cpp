@@ -89,17 +89,17 @@ static void extract_camera_info(pnanovdb_camera_mat_t view,
     *far_plane_out = is_reverse_z ? z_d0 : z_d1;
 }
 
-void raster_gaussian_2d(const pnanovdb_compute_t* compute,
-                        pnanovdb_compute_queue_t* queue,
-                        pnanovdb_raster_context_t* context_in,
-                        pnanovdb_raster_gaussian_data_t* data_in,
-                        pnanovdb_compute_texture_t* color_2d,
-                        pnanovdb_uint32_t image_width,
-                        pnanovdb_uint32_t image_height,
-                        const pnanovdb_camera_mat_t* view,
-                        const pnanovdb_camera_mat_t* projection,
-                        const pnanovdb_raster_shader_params_t* shader_params,
-                        pnanovdb_uint32_t composite)
+void raster_gaussian_2d_gpu(const pnanovdb_compute_t* compute,
+                            pnanovdb_compute_queue_t* queue,
+                            pnanovdb_raster_context_t* context_in,
+                            pnanovdb_raster_gpu_buffers_t* data,
+                            pnanovdb_compute_texture_t* color_2d,
+                            pnanovdb_uint32_t image_width,
+                            pnanovdb_uint32_t image_height,
+                            const pnanovdb_camera_mat_t* view,
+                            const pnanovdb_camera_mat_t* projection,
+                            const pnanovdb_raster_shader_params_t* shader_params,
+                            pnanovdb_uint32_t composite)
 {
     if (shader_params == nullptr)
     {
@@ -107,12 +107,9 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
     }
 
     auto ctx = cast(context_in);
-    auto data = cast(data_in);
 
     pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
     pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
-
-    upload_gaussian_data(compute, queue, context_in, data_in);
 
     pnanovdb_raster_shader_params_t gpu_params = *shader_params;
 
@@ -245,19 +242,19 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
         shader_params_buffer ? compute_interface->register_buffer_as_transient(context, shader_params_buffer) : nullptr;
 
     pnanovdb_compute_buffer_transient_t* means_transient =
-        compute_interface->register_buffer_as_transient(context, data->means_gpu_array->device_buffer);
+        compute_interface->register_buffer_as_transient(context, data->means);
     pnanovdb_compute_buffer_transient_t* quats_transient =
-        compute_interface->register_buffer_as_transient(context, data->quaternions_gpu_array->device_buffer);
+        compute_interface->register_buffer_as_transient(context, data->quaternions);
     pnanovdb_compute_buffer_transient_t* scales_transient =
-        compute_interface->register_buffer_as_transient(context, data->scales_gpu_array->device_buffer);
+        compute_interface->register_buffer_as_transient(context, data->scales);
     pnanovdb_compute_buffer_transient_t* colors_transient =
-        compute_interface->register_buffer_as_transient(context, data->colors_gpu_array->device_buffer);
+        compute_interface->register_buffer_as_transient(context, data->colors);
     pnanovdb_compute_buffer_transient_t* sh_0_transient =
-        compute_interface->register_buffer_as_transient(context, data->sh_0_gpu_array->device_buffer);
+        compute_interface->register_buffer_as_transient(context, data->sh_0);
     pnanovdb_compute_buffer_transient_t* sh_n_transient =
-        compute_interface->register_buffer_as_transient(context, data->sh_n_gpu_array->device_buffer);
+        compute_interface->register_buffer_as_transient(context, data->sh_n);
     pnanovdb_compute_buffer_transient_t* opacities_transient =
-        compute_interface->register_buffer_as_transient(context, data->opacities_gpu_array->device_buffer);
+        compute_interface->register_buffer_as_transient(context, data->opacities);
 
     buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED |
                      PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_SRC | PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_DST;
@@ -420,15 +417,15 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
     // due to flush, transients must be refreshed
     constant_transient = compute_interface->register_buffer_as_transient(context, constant_buffer);
     shader_params_transient = compute_interface->register_buffer_as_transient(context, shader_params_buffer);
-    means_transient = compute_interface->register_buffer_as_transient(context, data->means_gpu_array->device_buffer);
+    means_transient = compute_interface->register_buffer_as_transient(context, data->means);
     quats_transient =
-        compute_interface->register_buffer_as_transient(context, data->quaternions_gpu_array->device_buffer);
-    scales_transient = compute_interface->register_buffer_as_transient(context, data->scales_gpu_array->device_buffer);
-    colors_transient = compute_interface->register_buffer_as_transient(context, data->colors_gpu_array->device_buffer);
-    sh_0_transient = compute_interface->register_buffer_as_transient(context, data->sh_0_gpu_array->device_buffer);
-    sh_n_transient = compute_interface->register_buffer_as_transient(context, data->sh_n_gpu_array->device_buffer);
+        compute_interface->register_buffer_as_transient(context, data->quaternions);
+    scales_transient = compute_interface->register_buffer_as_transient(context, data->scales);
+    colors_transient = compute_interface->register_buffer_as_transient(context, data->colors);
+    sh_0_transient = compute_interface->register_buffer_as_transient(context, data->sh_0);
+    sh_n_transient = compute_interface->register_buffer_as_transient(context, data->sh_n);
     opacities_transient =
-        compute_interface->register_buffer_as_transient(context, data->opacities_gpu_array->device_buffer);
+        compute_interface->register_buffer_as_transient(context, data->opacities);
 
     radii_transient = compute_interface->register_buffer_as_transient(context, radii_buffer);
     means2d_transient = compute_interface->register_buffer_as_transient(context, means2d_buffer);
@@ -621,6 +618,55 @@ void raster_gaussian_2d(const pnanovdb_compute_t* compute,
     compute_interface->destroy_buffer(context, resolved_color_buffer);
     compute_interface->destroy_buffer(context, num_tiles_per_gaussian_buffer);
     compute_interface->destroy_buffer(context, scan_tiles_per_gaussian_buffer);
+}
+
+void raster_gaussian_2d(const pnanovdb_compute_t* compute,
+                        pnanovdb_compute_queue_t* queue,
+                        pnanovdb_raster_context_t* context_in,
+                        pnanovdb_raster_gaussian_data_t* data_in,
+                        pnanovdb_compute_texture_t* color_2d,
+                        pnanovdb_uint32_t image_width,
+                        pnanovdb_uint32_t image_height,
+                        const pnanovdb_camera_mat_t* view,
+                        const pnanovdb_camera_mat_t* projection,
+                        const pnanovdb_raster_shader_params_t* shader_params,
+                        pnanovdb_uint32_t composite)
+{
+    if (shader_params == nullptr)
+    {
+        return;
+    }
+
+    auto ctx = cast(context_in);
+    auto data = cast(data_in);
+
+    pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
+    pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
+
+    upload_gaussian_data(compute, queue, context_in, data_in);
+
+    pnanovdb_raster_gpu_buffers_t gpu_buffers = {};
+    gpu_buffers.point_count = data->point_count;
+    gpu_buffers.sh_stride = data->sh_stride;
+    gpu_buffers.means = data->means_gpu_array->device_buffer;
+    gpu_buffers.quaternions = data->quaternions_gpu_array->device_buffer;
+    gpu_buffers.scales = data->scales_gpu_array->device_buffer;
+    gpu_buffers.colors = data->colors_gpu_array->device_buffer;
+    gpu_buffers.sh_0 = data->sh_0_gpu_array->device_buffer;
+    gpu_buffers.sh_n = data->sh_n_gpu_array->device_buffer;
+    gpu_buffers.opacities = data->opacities_gpu_array->device_buffer;
+
+    raster_gaussian_2d_gpu(compute,
+                           queue,
+                           context_in,
+                           &gpu_buffers,
+                           color_2d,
+                           image_width,
+                           image_height,
+                           view,
+                           projection,
+                           shader_params,
+                           composite);
 }
 
 }

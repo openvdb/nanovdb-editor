@@ -17,6 +17,9 @@
 #include <mutex>
 #include <stdio.h>
 #include <unordered_map>
+#include <optional>
+
+#include "ShaderParamsTypes.h"
 
 // Adding missing NanoVDB load single handle functionality
 namespace nanovdb
@@ -154,6 +157,14 @@ struct shader_context_t
     pnanovdb_compute_shader_build_t* shader_build;
     pnanovdb_compute_pipeline_t* pipeline;
     pnanovdb_compute_shader_source_t source;
+
+    pnanovdb_reflect_data_type_t shader_params_data_type = {};
+    pnanovdb_reflect_data_type_t shader_params_metadata_type = {};
+    std::vector<pnanovdb_reflect_data_t> reflect_datas;
+    std::vector<pnanovdb_reflect_data_t> reflect_metadatas;
+    std::vector<uint8_t> shader_params_default;
+    std::vector<uint8_t> shader_params_metadefault;
+    std::vector<std::unique_ptr<std::string>> owned_strings;
 };
 
 PNANOVDB_CAST_PAIR(pnanovdb_shader_context_t, shader_context_t)
@@ -192,6 +203,11 @@ pnanovdb_compute_array_t* load_nanovdb(const char* filepath)
         gridHandle = nanovdb::io::readGridSegment(filepath, 0, 0, hostBuffer);
     }
     catch (const std::ios_base::failure& e)
+    {
+        printf("Error: Could not open nanovdb '%s'\n", filepath);
+        return nullptr;
+    }
+    catch (...)
     {
         printf("Error: Could not open nanovdb '%s'\n", filepath);
         return nullptr;
@@ -318,6 +334,342 @@ void destroy_shader(pnanovdb_compute_interface_t* computeInterface,
     {
         shaderInterface->destroy_shader(shader->shader);
         shader->shader = nullptr;
+    }
+}
+
+static nlohmann::ordered_json* getCompiledShaderParamsObject(nlohmann::ordered_json& json)
+{
+    if (json.contains(pnanovdb_shader::SHADER_PARAM_JSON))
+    {
+        return &json[pnanovdb_shader::SHADER_PARAM_JSON];
+    }
+    if (json.contains(pnanovdb_shader::GENERATED_SHADER_PARAM_JSON))
+    {
+        return &json[pnanovdb_shader::GENERATED_SHADER_PARAM_JSON];
+    }
+    return nullptr;
+}
+
+static const uint64_t json_type_name_count = 10u;
+static const char* json_type_names[json_type_name_count] = {
+    "", // SLANG_SCALAR_TYPE_NONE
+    "void", // SLANG_SCALAR_TYPE_VOID
+    "bool", // SLANG_SCALAR_TYPE_BOOL
+    "int", // SLANG_SCALAR_TYPE_INT32
+    "uint", // SLANG_SCALAR_TYPE_UINT32
+    "int64", // SLANG_SCALAR_TYPE_INT64
+    "uint64", // SLANG_SCALAR_TYPE_UINT64
+    "float16", // SLANG_SCALAR_TYPE_FLOAT16
+    "float", // SLANG_SCALAR_TYPE_FLOAT32
+    "double" // SLANG_SCALAR_TYPE_FLOAT64
+};
+static const pnanovdb_reflect_data_type_t* reflect_data_types[json_type_name_count] = {
+    nullptr, // SLANG_SCALAR_TYPE_NONE
+    PNANOVDB_REFLECT_DATA_TYPE(void), // SLANG_SCALAR_TYPE_VOID
+    PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_uint32_t), // SLANG_SCALAR_TYPE_BOOL
+    PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_int32_t), // SLANG_SCALAR_TYPE_INT32
+    PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_uint32_t), // SLANG_SCALAR_TYPE_UINT32
+    PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_int64_t), // SLANG_SCALAR_TYPE_INT64
+    PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_uint64_t), // SLANG_SCALAR_TYPE_UINT64
+    PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_uint16_t), // SLANG_SCALAR_TYPE_FLOAT16
+    PNANOVDB_REFLECT_DATA_TYPE(float), // SLANG_SCALAR_TYPE_FLOAT32
+    PNANOVDB_REFLECT_DATA_TYPE(double) // SLANG_SCALAR_TYPE_FLOAT64
+};
+
+static std::optional<nlohmann::ordered_json> loadJsonFileFromShaderPath(const std::string& relFilePath)
+{
+    std::string json_filePath = pnanovdb_shader::getShaderParamsFilePath(relFilePath.c_str());
+    std::ifstream json_file(json_filePath);
+    if (!json_file)
+    {
+        return std::nullopt;
+    }
+    if (!nlohmann::json::accept(json_file))
+    {
+        return std::nullopt;
+    }
+    json_file.clear();
+    json_file.seekg(0);
+    nlohmann::ordered_json json;
+    try
+    {
+        json_file >> json;
+    }
+    catch (const nlohmann::json::parse_error& e)
+    {
+        printf("Error parsing file '%s': %s\n", json_filePath.c_str(), e.what());
+        return std::nullopt;
+    }
+    return json;
+}
+
+static void copyReflectParameter(uint8_t* mapped_data, const pnanovdb_reflect_data_t* reflect_data, nlohmann::basic_json<nlohmann::ordered_map> val)
+{
+    printf("copyReflectParameter(%s) offset(%zu)\n", reflect_data->name, reflect_data->data_offset);
+    if (!val.is_number())
+    {
+        return;
+    }
+    uint8_t* data = mapped_data + reflect_data->data_offset;
+    if (reflect_data->data_type->data_type == PNANOVDB_REFLECT_TYPE_INT32)
+    {
+        int v = val.get<int>();
+        memcpy(data, &v, sizeof(int));
+    }
+    else if (reflect_data->data_type->data_type == PNANOVDB_REFLECT_TYPE_UINT32)
+    {
+        uint32_t v = val.get<uint32_t>();
+        memcpy(data, &v, sizeof(uint32_t));
+    }
+    else if (reflect_data->data_type->data_type == PNANOVDB_REFLECT_TYPE_FLOAT)
+    {
+        float v = val.get<float>();
+        memcpy(data, &v, sizeof(float));
+    }
+    else if (reflect_data->data_type->data_type == PNANOVDB_REFLECT_TYPE_BOOL32)
+    {
+        uint32_t v = val.get<uint32_t>();
+        memcpy(data, &v, sizeof(uint32_t));
+    }
+    else if (reflect_data->data_type->data_type == PNANOVDB_REFLECT_TYPE_UINT8)
+    {
+        uint8_t v = val.get<uint8_t>();
+        memcpy(data, &v, sizeof(uint8_t));
+    }
+    else if (reflect_data->data_type->data_type == PNANOVDB_REFLECT_TYPE_UINT16)
+    {
+        uint16_t v = val.get<uint16_t>();
+        memcpy(data, &v, sizeof(uint16_t));
+    }
+    else if (reflect_data->data_type->data_type == PNANOVDB_REFLECT_TYPE_UINT64)
+    {
+        uint64_t v = val.get<uint64_t>();
+        memcpy(data, &v, sizeof(uint64_t));
+    }
+    else if (reflect_data->data_type->data_type == PNANOVDB_REFLECT_TYPE_DOUBLE)
+    {
+        double v = val.get<double>();
+        memcpy(data, &v, sizeof(double));
+    }
+    else if (reflect_data->data_type->data_type == PNANOVDB_REFLECT_TYPE_INT64)
+    {
+        int64_t v = val.get<int64_t>();
+        memcpy(data, &v, sizeof(int64_t));
+    }
+}
+
+typedef struct pnanovdb_shader_params_metadata_t
+{
+    double min_double;
+    pnanovdb_int64_t min_int64;
+    double max_double;
+    pnanovdb_int64_t max_int64;
+    double step;
+    pnanovdb_bool_t is_bool;
+    pnanovdb_bool_t hidden;
+    pnanovdb_bool_t use_slider;
+} pnanovdb_shader_params_metadata_t;
+
+#define PNANOVDB_REFLECT_TYPE pnanovdb_shader_params_metadata_t
+PNANOVDB_REFLECT_BEGIN()
+PNANOVDB_REFLECT_VALUE(double, min_double, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_int64_t, min_int64, 0, 0)
+PNANOVDB_REFLECT_VALUE(double, max_double, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_int64_t, max_int64, 0, 0)
+PNANOVDB_REFLECT_VALUE(double, step, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, is_bool, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, hidden, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, use_slider, 0, 0)
+PNANOVDB_REFLECT_END(0)
+#undef PNANOVDB_REFLECT_TYPE
+
+void shader_context_map_shader_params_type(pnanovdb_shader_context_t* shaderContext,
+                                           const pnanovdb_reflect_data_type_t** out_data_type,
+                                           const pnanovdb_reflect_data_type_t** out_metadata_type)
+{
+    if (!shaderContext)
+    {
+        return;
+    }
+    shader_context_t* ptr = cast(shaderContext);
+
+    ptr->reflect_datas.clear();
+    ptr->reflect_metadatas.clear();
+    ptr->owned_strings.clear();
+    ptr->shader_params_default.clear();
+    ptr->shader_params_metadefault.clear();
+
+    // load parameters from compiled shader
+    std::string shader_json_path = pnanovdb_shader::getCompiledShaderParamsFilePath(ptr->source.source_filename);
+    std::ifstream shader_json_file(shader_json_path);
+    if (shader_json_file)
+    {
+        nlohmann::ordered_json shader_json;
+        shader_json_file >> shader_json;
+        pnanovdb_uint64_t global_offset = 0llu;
+        pnanovdb_uint64_t global_metaoffset = 0llu;
+        if (nlohmann::ordered_json* shader_params = getCompiledShaderParamsObject(shader_json))
+        {
+            for (auto& [key, value] : shader_params->items())
+            {
+                // this breaks offset math
+                //if (key.find("_pad") != std::string::npos)
+                //{
+                //    continue;
+                //}
+                assert(value.contains("type"));
+
+                ptr->owned_strings.push_back(std::make_unique<std::string>(value["type"]));
+                std::string* type_str = ptr->owned_strings.back().get();
+                ptr->owned_strings.push_back(std::make_unique<std::string>(key));
+                std::string* key_str = ptr->owned_strings.back().get();
+
+                size_t num_elements = value["elementCount"];
+                printf("type(%s) name(%s) elementCount(%zu)\n", type_str->c_str(), key_str->c_str(), num_elements);
+
+                pnanovdb_reflect_data_t reflect_data = {};
+                reflect_data.reflect_mode = PNANOVDB_REFLECT_MODE_VALUE;
+                for (uint64_t type_idx = 0u; type_idx < json_type_name_count; type_idx++)
+                {
+                    if (*type_str == json_type_names[type_idx])
+                    {
+                        reflect_data.data_type = reflect_data_types[type_idx];
+                    }
+                }
+                if (num_elements > 1u)
+                {
+                    reflect_data.data_type = get_vector_type(num_elements, reflect_data.data_type->data_type);
+                    if (!reflect_data.data_type)
+                    {
+                        printf("Failed to resolve vector or matrix type!!!\n");
+                    }
+                }
+                reflect_data.name = key_str->c_str();
+                reflect_data.data_offset = global_offset;
+
+                global_offset += reflect_data.data_type->element_size;
+
+                ptr->reflect_datas.push_back(reflect_data);
+            }
+        }
+        shader_json_file.close();
+
+        ptr->shader_params_data_type.data_type = PNANOVDB_REFLECT_TYPE_STRUCT;
+        ptr->shader_params_data_type.element_size = global_offset;
+        ptr->shader_params_data_type.struct_typename = "shader_params_t";
+        ptr->shader_params_data_type.child_reflect_datas = ptr->reflect_datas.data();
+        ptr->shader_params_data_type.child_reflect_data_count = ptr->reflect_datas.size();
+        ptr->shader_params_data_type.default_value = nullptr;
+
+        ptr->shader_params_default.resize(global_offset);
+        const std::optional<nlohmann::ordered_json> json = loadJsonFileFromShaderPath(ptr->source.source_filename);
+        if (json && json->contains(pnanovdb_shader::SHADER_PARAM_JSON))
+        {
+            uint8_t* params_data = ptr->shader_params_default.data();
+            ptr->shader_params_data_type.default_value = params_data;
+
+            auto section = (*json)[pnanovdb_shader::SHADER_PARAM_JSON];
+            for (auto& [name, value] : section.items())
+            {
+                // create owned version of name
+                ptr->owned_strings.push_back(std::make_unique<std::string>(name));
+                std::string* key_str = ptr->owned_strings.back().get();
+
+                auto val = value["value"];
+                // scatter default value
+                for(pnanovdb_uint64_t reflect_idx = 0u;
+                    reflect_idx < ptr->shader_params_data_type.child_reflect_data_count;
+                    reflect_idx++)
+                {
+                    auto reflect_data = ptr->shader_params_data_type.child_reflect_datas[reflect_idx];
+                    if (pnanovdb_reflect_string_compare(
+                            reflect_data.name,
+                            name.c_str()) == 0)
+                    {
+                        if (val.is_array())
+                        {
+                            if (reflect_data.data_type->data_type == PNANOVDB_REFLECT_TYPE_STRUCT)
+                            {
+                                const pnanovdb_reflect_data_type_t* data_type2 = reflect_data.data_type;
+                                uint8_t* params_data2 = params_data + reflect_data.data_offset;
+                                auto it = val.begin();
+                                for (pnanovdb_uint64_t idx2 = 0u; idx2 < data_type2->child_reflect_data_count; idx2++)
+                                {
+                                    auto reflect_data2 = &data_type2->child_reflect_datas[idx2];
+                                    copyReflectParameter(params_data2, reflect_data2, *it);
+                                    it++;
+                                }
+                            }
+                            else
+                            {
+                                printf("Json metadata has array of values, but data_type is not a struct\n");
+                            }
+                        }
+                        else
+                        {
+                            copyReflectParameter(params_data, &reflect_data, val);
+                        }
+                    }
+                }
+                // add to metadata
+                pnanovdb_shader_params_metadata_t meta = {};
+                if (value.contains("min"))
+                {
+                    meta.min_double = value["min"].get<double>();
+                    meta.min_int64 = value["min"].get<int64_t>();
+                }
+                if (value.contains("max"))
+                {
+                    meta.max_double = value["max"].get<double>();
+                    meta.max_int64 = value["max"].get<int64_t>();
+                }
+                if (value.contains("step"))
+                {
+                    meta.step = value["step"].get<double>();
+                }
+                if (value.contains("isBool"))
+                {
+                    meta.is_bool = value["isBool"].get<bool>() ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+                }
+                if (value.contains("hidden"))
+                {
+                    meta.hidden = value["hidden"].get<bool>() ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+                }
+                if (value.contains("useSlider"))
+                {
+                    meta.use_slider = value["useSlider"].get<bool>() ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+                }
+
+                pnanovdb_reflect_data_t reflect_data = {};
+                reflect_data.reflect_mode = PNANOVDB_REFLECT_MODE_VALUE;
+                reflect_data.data_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_shader_params_metadata_t);
+                reflect_data.name = key_str->c_str();
+                reflect_data.data_offset = global_metaoffset;
+
+                // commit
+                ptr->shader_params_metadefault.insert(
+                    ptr->shader_params_metadefault.end(),
+                    (uint8_t*)&meta,
+                    (uint8_t*)&meta + sizeof(meta));
+                ptr->reflect_metadatas.push_back(reflect_data);
+                global_metaoffset += sizeof(pnanovdb_shader_params_metadata_t);
+            }
+        }
+
+        ptr->shader_params_metadata_type.data_type = PNANOVDB_REFLECT_TYPE_STRUCT;
+        ptr->shader_params_metadata_type.element_size = global_metaoffset;
+        ptr->shader_params_metadata_type.struct_typename = "shader_params_meta_t";
+        ptr->shader_params_metadata_type.child_reflect_datas = ptr->reflect_metadatas.data();
+        ptr->shader_params_metadata_type.child_reflect_data_count = ptr->reflect_metadatas.size();
+        ptr->shader_params_metadata_type.default_value = ptr->shader_params_metadefault.data();
+    }
+    if (out_data_type)
+    {
+        *out_data_type = &ptr->shader_params_data_type;
+    }
+    if (out_metadata_type)
+    {
+        *out_metadata_type = &ptr->shader_params_metadata_type;
     }
 }
 
@@ -714,7 +1066,8 @@ pnanovdb_compute_array_t* create_array(size_t element_size, pnanovdb_uint64_t el
     {
         alloc_size = 65536u;
     }
-    array->data = new char[alloc_size];
+    // new char[alloc_size];
+    array->data = aligned_alloc(32u, alloc_size);
     memset(array->data, 0, 65536u);
     if (data)
     {
@@ -754,7 +1107,8 @@ void destroy_array(pnanovdb_compute_array_t* array)
     g_leak_tracker.set(array, false);
 #endif
 
-    delete[] (char*)array->data;
+    //delete[] (char*)array->data;
+    free(array->data);
     array->data = nullptr;
     delete array;
 }
@@ -947,6 +1301,34 @@ pnanovdb_compute_array_t* nanovdb_from_image_rgba8(pnanovdb_compute_array_t* ima
     return nvdb_array;
 }
 
+std::mutex token_mutex;
+std::unordered_map<std::string, std::unique_ptr<pnanovdb_compute_token_t>> tokens;
+std::vector<std::unique_ptr<std::string>> strings;
+
+pnanovdb_compute_token_t* get_token(const char* name)
+{
+    std::lock_guard<std::mutex> token_lock(token_mutex);
+
+    std::string key(name);
+    auto it = tokens.find(key);
+    if (it != tokens.end())
+    {
+        return it->second.get();
+    }
+
+    strings.push_back(std::make_unique<std::string>(std::move(key)));
+
+    std::unique_ptr<pnanovdb_compute_token_t> token = std::make_unique<pnanovdb_compute_token_t>();
+
+    pnanovdb_compute_token_t* ret = token.get();
+    ret->id = strings.size();
+    ret->str = strings.back().get()->c_str();
+
+    tokens[*(strings.back().get())] = std::move(token);
+
+    return ret;
+}
+
 PNANOVDB_API pnanovdb_compute_t* pnanovdb_get_compute()
 {
     static pnanovdb_compute_t compute = { PNANOVDB_REFLECT_INTERFACE_INIT(pnanovdb_compute_t) };
@@ -967,6 +1349,8 @@ PNANOVDB_API pnanovdb_compute_t* pnanovdb_get_compute()
     compute.unmap_array = unmap_array;
     compute.compute_array_print_range = compute_array_print_range;
     compute.nanovdb_from_image_rgba8 = nanovdb_from_image_rgba8;
+    compute.shader_context_map_shader_params_type = shader_context_map_shader_params_type;
+    compute.get_token = get_token;
 
     return &compute;
 }

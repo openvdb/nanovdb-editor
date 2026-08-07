@@ -203,6 +203,7 @@ pnanovdb_raster_t* pnanovdb_get_raster()
     raster.raster_to_nanovdb_from_arrays = pnanovdb_raster::raster_to_nanovdb_from_arrays;
     raster.create_gaussian_data_from_arrays = pnanovdb_raster::create_gaussian_data_from_arrays;
     raster.create_gaussian_data_from_desc = pnanovdb_raster::create_gaussian_data_from_desc;
+    raster.raster_gaussian_2d_gpu = pnanovdb_raster::raster_gaussian_2d_gpu;
 
     return &raster;
 }

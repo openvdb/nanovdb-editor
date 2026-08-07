@@ -381,7 +381,6 @@ This project makes use of the following libraries:
 - [filewatch](https://github.com/ThomasMonkman/filewatch) – Cross-platform file watching
 - [JSON for Modern C++](https://github.com/nlohmann/json) – JSON serialization for C++
 - [cnpy](https://github.com/rogersce/cnpy) – Read/write NumPy .npy/.npz files from C++
-- [zstr](https://github.com/mateidavid/zstr) – Transparent zlib iostream wrappers
 - [llhttp](https://github.com/nodejs/llhttp) – High-performance HTTP parser
 - [Asio](https://github.com/chriskohlhoff/asio) – Asynchronous networking and concurrency primitives
 - [RESTinio](https://github.com/Stiffstream/restinio) – Lightweight HTTP server framework

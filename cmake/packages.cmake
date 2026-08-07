@@ -19,8 +19,8 @@ set(BUILD_STATIC_LIBS ON CACHE BOOL "Build static libraries" FORCE)
 # Core dependencies
 CPMAddPackage(
     NAME nanovdb
-    GITHUB_REPOSITORY AcademySoftwareFoundation/openvdb
-    GIT_TAG cfba6dff785629c9f02583fde6e38bf845b3509b
+    GITHUB_REPOSITORY areidmeyer/openvdb_public
+    GIT_TAG 3c2a559ab16216a224aa2b5254cc4dd1ca51667d
     DOWNLOAD_ONLY YES
 )
 
@@ -588,15 +588,6 @@ elseif(cnpy_ADDED AND TARGET ZLIB::ZLIB)
         target_link_libraries(cnpy-static ZLIB::ZLIB)
     endif()
 endif()
-
-CPMAddPackage(
-    NAME zstr
-    GITHUB_REPOSITORY mateidavid/zstr
-    GIT_TAG v1.0.7
-    VERSION 1.0.7
-    OPTIONS
-        "CMAKE_POSITION_INDEPENDENT_CODE ON"
-)
 
 # Networking and HTTP
 CPMAddPackage(
