@@ -75,6 +75,90 @@ with scene.nanovdb_from_mesh(indices=indices, positions=positions, register=Fals
 See [PIPELINES.md](PIPELINES.md) for the available pipelines, options, and a
 guide to exposing (pythonizing) more of them.
 
+### CPU NanoVDB buffers
+
+Pass raw, uncompressed grid bytes directly from a simulation. The buffer is
+copied into editor-owned memory, so the source can be released after the call:
+
+```py
+with nve.create_default() as app:
+    scene = app.scene("smoke")
+    with scene.nanovdb_from_buffer(
+        smoke_bytes + temperature_bytes,
+        name="smoke",
+        shader="editor/flow_smoke.slang",
+        shader_parameters={"attenuation": 0.05},
+    ):
+        app.show()
+```
+
+`bytes`, `bytearray`, contiguous `memoryview`, and contiguous NumPy arrays are
+accepted. Supply raw NanoVDB grids, without a compressed `.nvdb` file header.
+Concatenated grids are kept in order; the shader defines their interpretation.
+The Flow shader reads smoke first and optional temperature second. Header and
+size checks do not replace validation of the tree data by the producer.
+
+The buffer is registered before the optional material update. If that update
+fails, the object keeps the registered buffer and its current material.
+
+Reusing the same object name replaces its grid and preserves material edits.
+Set the shader and initial material on the first frame; omit them on later
+updates to keep changes made in the UI. The returned `Grid` owns a separate copy
+and can be closed immediately after registration. Use `register=False` to create
+an owned grid without adding it to the scene.
+
+`scene.set_shader(name, path, parameters={...})` compiles a custom shader and
+sets per-object values by reflected field name. Unspecified values use the
+shader's JSON defaults. Invalid fields and values raise an error without
+changing an existing shader assignment.
+
+### Application controls
+
+Named scenes and replaceable scene objects follow the same ownership pattern as
+[fVDB's visualization API](https://github.com/openvdb/fvdb-core/tree/main/fvdb/viz).
+Use custom scene parameters to connect application logic to editor controls:
+
+```py
+scene.set_custom_params({"SceneParams": {
+    "Play": {"type": "bool", "value": True,
+             "widget": "toggleButton", "activeLabel": "Stop"},
+    "Restart": {"type": "bool", "value": False,
+                "widget": "button", "sameLine": True, "tooltip": "Reload the simulation"},
+    "Frame": {"type": "uint", "value": 0, "readOnly": True},
+}})
+
+with scene.custom_params() as controls:
+    playing = controls["Play"]
+    restart = controls["Restart"]
+    controls["Restart"] = False
+    controls["Frame"] = frame_number
+# Advance the application after releasing the mapped controls.
+```
+
+The mapping reads current UI values and writes application values. It supports
+scalar numbers, booleans, strings, and numeric tuples. Field names are dictionary
+keys and can contain spaces. The mapping is valid only inside the context;
+returned values are copies. Use `dict(controls)` to copy all values at once.
+The context locks UI access, so
+keep it short and do not run simulation or rendering work inside it. Do not
+reload the schema inside a mapped context. Schema updates from other Python
+threads wait for the context to exit. Direct native calls are outside this
+Python lock.
+
+Scalar boolean fields support `widget="button"` and `widget="toggleButton"`.
+A button latches its value to true; the application reads and clears it to
+acknowledge the action. Multiple clicks before that clear represent one pending
+action. A toggle button flips its value and uses `activeLabel`, if supplied,
+when true. `sameLine: true` places a field beside the preceding visible field;
+`tooltip` supplies hover text. Without `widget`, fields keep their usual controls.
+
+`readOnly` disables UI edits, while Python can still publish status. With
+`ui_profile="nvflow"`, the title is "NanoVDB Editor - NvFlow" and the layout is
+the same as `ui_profile="viewer"` (fVDB). Custom scene controls appear in
+**Params**, including fields with a `group` tag. Shader material controls,
+including color ramps, appear in **Properties**. Controls define state only: the application must poll and implement
+actions such as play or restart. No callbacks execute on the render thread.
+
 ### Shader Parameters
 Shaders can have defined struct with shader parameters which are intended to be shown in the editor's UI:
 ```hlsl
@@ -104,6 +188,35 @@ Shader parameters can have defined default values in the json file:
 Supported types: `bool`, `int`, `uint`, `int64`, `uint64`, `float` and its vectors and 4x4 matrix.
 Variables with `_pad` in the name are not shown in the UI.
 Those parameters can be interactively changed with generated UI in the editor's Params tab.
+
+A scalar `uint` count field can combine several parameters into a color ramp:
+
+```json
+{
+    "ShaderParams": {
+        "count": {
+            "value": 2,
+            "widget": "colorRamp",
+            "label": "Color ramp",
+            "positions": ["positions"],
+            "colors": ["cold", "hot"]
+        },
+        "positions": {"value": [0.0, 1.0]},
+        "cold": {"value": [0.1, 0.2, 1.0, 0.8]},
+        "hot": {"value": [1.0, 0.2, 0.0, 0.8]}
+    }
+}
+```
+
+The shader must declare the matching fields: a `uint` count, float position
+fields, and one `float4` RGBA field per stop slot. `positions` lists fields whose
+components supply the stop positions; their total component count must equal
+`colors.length`. The count chooses the active slots. The widget edits the
+existing shader buffer, so Python material overrides and scene serialization
+keep the same field names and layout. It replaces the bound scalar controls
+when the binding and values are valid; otherwise those controls remain
+available. The ramp supports stop selection, dragging, adding, removing, and
+HDR color and alpha editing. Its position range is zero through one.
 
 To display a group of shader parameters from different shaders define a json file with various shader paths:
 ```json

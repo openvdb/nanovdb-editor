@@ -73,6 +73,7 @@ struct server_instance_t
     restinio::running_server_handle_t<traits_t> server;
 
     std::string serveraddress;
+    std::string title = "NanoVDB Editor";
     pnanovdb_int32_t port;
     pnanovdb_compute_log_print_t log_print;
 
@@ -164,13 +165,35 @@ std::unique_ptr<router_t> server_handler(restinio::asio_ns::io_context& ioctx)
     router->http_get("/",
                      [](auto req, auto params)
                      {
-                         // printf("/index.html !!!!\n");
+                         std::string page = INDEX_HTML;
+                         std::string title;
+                         {
+                             std::lock_guard<std::mutex> guard(g_mutex[instance_idx]);
+                             title = g_server_instance[instance_idx]->title;
+                         }
+                         std::string escaped_title;
+                         for (char c : title)
+                         {
+                             if (c == '&')
+                                 escaped_title += "&amp;";
+                             else if (c == '<')
+                                 escaped_title += "&lt;";
+                             else if (c == '>')
+                                 escaped_title += "&gt;";
+                             else
+                                 escaped_title += c;
+                         }
+                         const auto title_pos = page.find("<title></title>");
+                         if (title_pos != std::string::npos)
+                         {
+                             page.replace(title_pos, std::strlen("<title></title>"), "<title>" + escaped_title + "</title>");
+                         }
 
                          return req->create_response()
                              .append_header(restinio::http_field::server, "NanoVDB Editor Server")
                              .append_header_date_field()
                              .append_header(restinio::http_field::content_type, "text/html")
-                             .set_body(INDEX_HTML)
+                             .set_body(std::move(page))
                              .done();
                      });
 
@@ -805,6 +828,13 @@ int code_to_imgui(const std::string& code)
 {
     return ImGuiKey_None;
 }
+}
+
+void pnanovdb_server_set_title(pnanovdb_server_instance_t* instance, const char* title)
+{
+    auto* ptr = cast(instance);
+    std::lock_guard<std::mutex> guard(g_mutex[ptr->instance_idx]);
+    ptr->title = title ? title : "NanoVDB Editor";
 }
 
 pnanovdb_server_t* pnanovdb_get_server()

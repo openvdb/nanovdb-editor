@@ -13,8 +13,11 @@ is one-way (``Editor.scene`` lazily imports this module) to avoid an import
 cycle.
 """
 
+import json
 import math
 import os
+import struct
+from contextlib import contextmanager
 from ctypes import POINTER, c_float, c_int32, c_uint32, cast
 from typing import TYPE_CHECKING, Iterator, List, Optional, Sequence, Tuple, Union
 
@@ -356,8 +359,50 @@ class Scene:
         self._editor.save_scene(filepath)
 
     def set_custom_params(self, json_string) -> None:
-        """Attach scene-level custom UI params from a JSON string/bytes."""
+        """Attach scene controls from a JSON string, bytes, or dictionary.
+
+        Fields appear in the Params tab. Use ``readOnly`` to show application
+        state without UI edits.
+        Scalar booleans support ``widget="button"`` (latched action) or
+        ``widget="toggleButton"`` (toggle state). The application polls values
+        and clears action booleans after reading them.
+        """
+        if isinstance(json_string, dict):
+            json_string = json.dumps(json_string, allow_nan=False)
         self._editor.set_custom_scene_params(self._token, json_string)
+
+    @contextmanager
+    def custom_params(self):
+        """Map scene controls as a mutable mapping for this context only.
+
+        Values are Python scalars, strings, or tuples. Assign a whole tuple to
+        update a vector. The editor UI cannot edit controls while they are
+        mapped. Keep this context short; do simulation work after it exits.
+        ``readOnly`` limits UI edits only, so the application can update status.
+
+        Example::
+
+            with scene.custom_params() as params:
+                playing = params["Play"]
+                params["Frame"] = frame_number
+
+        Schema updates through this editor from other Python threads wait for
+        this context to exit. Do not reload the schema inside the context.
+        """
+        from ._params import MappedParams
+
+        with self._editor._custom_params_lock:
+            data_type = self._editor.get_custom_scene_params_data_type(self._token)
+            if not data_type:
+                raise PipelineError("Scene has no custom parameters")
+            with self._editor.params(self._token, None, data_type) as address:
+                if not address:
+                    raise PipelineError("Cannot map scene custom parameters")
+                params = MappedParams(address, data_type)
+                try:
+                    yield params
+                finally:
+                    params.close()
 
     def set_custom_params_from_file(self, filepath) -> None:
         """Attach scene-level custom params from a JSON file on disk."""
@@ -385,12 +430,10 @@ class Scene:
         Pass a full :class:`~nanovdb_editor.Camera` value, or override selected
         state fields with plain Python sequences/floats.
         """
-        from .editor import Camera, Vec3
+        from .editor import Vec3
 
         if camera is None:
-            camera = self.get_camera()
-            if camera is None:
-                camera = Camera()
+            camera = self._editor.get_camera_2(self._token, default=True)
         if position is not None:
             x, y, z = position
             camera.state.position = Vec3(float(x), float(y), float(z))
@@ -438,6 +481,73 @@ class Scene:
         finally:
             if owned is not None:
                 compute.destroy_array(owned)
+
+    def nanovdb_from_buffer(
+        self,
+        data,
+        name: str = "nanovdb",
+        *,
+        register: bool = True,
+        shader: Optional[str] = None,
+        shader_parameters: Optional[dict] = None,
+    ) -> Grid:
+        """Copy raw CPU NanoVDB grids into an owned grid and optionally this scene.
+
+        ``data`` must expose a contiguous buffer (for example ``bytes``, a
+        ``memoryview``, or a NumPy array). It contains one or more consecutive
+        uncompressed NanoVDB grids, without a file container header. Each grid's
+        header and declared size are checked; callers must supply valid tree
+        data. The selected shader determines how additional grids are used.
+
+        The editor keeps its own copy. The source and returned Grid can be
+        released after this call. Reusing ``name`` for a raw NanoVDB object
+        replaces its buffer and preserves its shader, material edits, visibility,
+        and pipeline settings. Registration waits for scene-view synchronization.
+        Passing ``shader`` explicitly applies new material settings;
+        ``shader_parameters`` maps reflected shader field names to values.
+        If the material update fails, the registered buffer remains with its
+        current material and the error is raised.
+        """
+        if not register and (shader is not None or shader_parameters is not None):
+            raise InvalidArgumentError("shader options require register=True")
+        if shader_parameters is not None and shader is None:
+            raise InvalidArgumentError("shader_parameters requires shader")
+        try:
+            view = memoryview(data)
+        except TypeError as exc:
+            raise InvalidArgumentError("data must support the buffer protocol") from exc
+        if not view.c_contiguous:
+            raise InvalidArgumentError("data must be C-contiguous")
+        view = view.cast("B")
+        offset = 0
+        if not view.nbytes:
+            raise InvalidArgumentError("NanoVDB buffer is empty")
+        while offset < view.nbytes:
+            if view.nbytes - offset < 736:
+                raise InvalidArgumentError("NanoVDB grid header or tree is truncated")
+            if bytes(view[offset : offset + 8]) not in (b"NanoVDB0", b"NanoVDB1"):
+                raise InvalidArgumentError("Expected raw NanoVDB grids, without a file container header")
+            grid_size = struct.unpack_from("<Q", view, offset + 32)[0]
+            if grid_size < 736 or grid_size % 32 or grid_size > view.nbytes - offset:
+                raise InvalidArgumentError("Invalid or truncated NanoVDB grid size")
+            offset += grid_size
+        array = self._editor._compute.create_array(np.frombuffer(view, dtype=np.uint32))
+        grid = self._finalize(array, name, register)
+        if shader is not None:
+            try:
+                self.set_shader(name, shader, parameters=shader_parameters)
+            except Exception:
+                grid.close()
+                raise
+        return grid
+
+    def set_shader(self, name: str, shader: str, *, parameters: Optional[dict] = None) -> None:
+        """Compile and assign a shader, with per-object parameter overrides.
+
+        Unspecified fields use the shader's JSON defaults. Unknown fields,
+        invalid values, compilation errors, and missing objects raise an error.
+        """
+        self._editor.set_shader(self._token, self._editor.get_token(name), shader, parameters=parameters)
 
     def nanovdb_from_file(
         self,

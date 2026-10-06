@@ -194,6 +194,13 @@ public:
                      pnanovdb_pipeline_type_t render_pipeline,
                      std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_gaussian_owner_out = nullptr);
 
+    // Take ownership of a raw buffer. Preserve raw NanoVDB objects' material and pipeline settings.
+    bool add_nanovdb_buffer(pnanovdb_editor_token_t* scene,
+                            pnanovdb_editor_token_t* name,
+                            pnanovdb_compute_array_t* array,
+                            const pnanovdb_compute_t* compute,
+                            pnanovdb_editor_token_t* default_shader_name);
+
     bool reserve_load_target(pnanovdb_editor_token_t* scene,
                              pnanovdb_editor_token_t* name,
                              uint64_t* lifetime_id,

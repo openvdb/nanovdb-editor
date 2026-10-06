@@ -180,6 +180,100 @@ TEST(StreamingUiToViewSync, PoolMutationPropagatesToObjectBufferEachFrame)
         },
         kPropagationTimeout);
 
+    const auto synchronized_alpha = [&]()
+    {
+        float alpha = 0.f;
+        // Separate task batches allow a complete render-loop synchronization.
+        worker->render_thread_tasks.run_blocking([]() { return PNANOVDB_TRUE; });
+        worker->render_thread_tasks.run_blocking(
+            [&]()
+            {
+                pnanovdb_editor_test::snapshot_object_shader_params(
+                    &editor, scene_token, name_token, &alpha, sizeof(alpha));
+                return PNANOVDB_TRUE;
+            });
+        return alpha;
+    };
+    char error[256]{};
+    EXPECT_TRUE(editor.set_shader(
+        &editor, scene_token, name_token, kDefaultEditorShader, "{\"alpha_scale\":0.25}", error, sizeof(error)))
+        << error;
+    EXPECT_EQ(synchronized_alpha(), 0.25f) << "UI synchronization must preserve live API shader values";
+
+    EXPECT_TRUE(editor.set_shader(
+        &editor, scene_token, second_name_token, kDefaultEditorShader, "{\"alpha_scale\":0.5}", error, sizeof(error)))
+        << error;
+    EXPECT_EQ(synchronized_alpha(), 0.25f) << "Updating another object must preserve the active material";
+
+    pnanovdb_compute_array_t* replacement_array =
+        compute.create_array(4u, second_sphere_grid.bufferSize() / 4u, second_sphere_grid.data());
+    ASSERT_TRUE(worker->render_thread_tasks.run_blocking(
+        [&]()
+        {
+            if (!stamp_ui_pool())
+                return PNANOVDB_FALSE;
+            // Replace before the next frame copies the UI edit into the object.
+            editor.add_nanovdb_2(&editor, scene_token, name_token, replacement_array);
+            return PNANOVDB_TRUE;
+        }));
+    compute.destroy_array(replacement_array);
+    EXPECT_EQ(synchronized_alpha(), kSentinel) << "Buffer replacement must preserve material edits from the UI";
+    EXPECT_TRUE(editor.set_shader(
+        &editor, scene_token, name_token, kDefaultEditorShader, "{\"alpha_scale\":0.75}", error, sizeof(error)))
+        << error;
+    EXPECT_EQ(synchronized_alpha(), 0.75f) << "Replacing the active grid must refresh its material";
+    EXPECT_TRUE(worker->render_thread_tasks.run_blocking(
+        [&]()
+        {
+            bool uses_replacement = false;
+            editor.impl->scene_manager->with_object(scene_token, name_token,
+                                                    [&](pnanovdb_editor::SceneObject* obj)
+                                                    {
+                                                        uses_replacement =
+                                                            obj && editor.impl->nanovdb_array == obj->nanovdb_array() &&
+                                                            editor.impl->shader_params == obj->shader_params();
+                                                    });
+            return uses_replacement;
+        }))
+        << "The active render view must use the replacement object buffers";
+
+    auto* custom_schema = editor.get_token(R"json({"SceneParams": {
+        "Play": {"type": "bool", "value": false}
+    }})json");
+    ASSERT_TRUE(editor.set_custom_scene_params(&editor, scene_token, custom_schema, error, sizeof(error))) << error;
+    const auto* custom_type = editor.get_custom_scene_params_data_type(&editor, scene_token);
+    ASSERT_NE(custom_type, nullptr);
+    for (bool write_custom_value : { false, true })
+    {
+        ASSERT_TRUE(editor.set_shader(
+            &editor, scene_token, name_token, kDefaultEditorShader, "{\"alpha_scale\":0.75}", error, sizeof(error)))
+            << error;
+        ASSERT_EQ(synchronized_alpha(), 0.75f);
+        ASSERT_TRUE(worker->render_thread_tasks.run_blocking(
+            [&]()
+            {
+                if (!stamp_ui_pool())
+                {
+                    return PNANOVDB_FALSE;
+                }
+                // Poll scene controls before this frame copies the material edit to the object.
+                auto* custom_data = static_cast<pnanovdb_bool_t*>(
+                    editor.map_params(&editor, scene_token, nullptr, custom_type));
+                if (!custom_data)
+                {
+                    return PNANOVDB_FALSE;
+                }
+                if (write_custom_value)
+                {
+                    *custom_data = PNANOVDB_TRUE;
+                }
+                editor.unmap_params(&editor, scene_token, nullptr);
+                return PNANOVDB_TRUE;
+            }));
+        EXPECT_EQ(synchronized_alpha(), kSentinel)
+            << "Reading or updating scene controls must preserve pending material edits";
+    }
+
     editor.stop(&editor);
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     pnanovdb_editor_free(&editor);

@@ -896,7 +896,8 @@ nlohmann::ordered_json shader_params_to_json(ShaderParams& shader_params,
 bool json_to_shader_params(ShaderParams& shader_params,
                            const std::string& shader_name,
                            const nlohmann::json& j,
-                           std::vector<unsigned char>& out_bytes)
+                           std::vector<unsigned char>& out_bytes,
+                           bool strict)
 {
     if (shader_name.empty() || !j.is_object())
     {
@@ -928,12 +929,13 @@ bool json_to_shader_params(ShaderParams& shader_params,
     out_bytes.assign(buffer_size, 0u);
     shader_params.copy_default_params_to_buffer(shader_name, out_bytes.data(), out_bytes.size());
 
-    return apply_shader_params_json(params, j, out_bytes);
+    return apply_shader_params_json(params, j, out_bytes, strict);
 }
 
 bool apply_shader_params_json(const std::vector<ShaderParam>& params,
                               const nlohmann::json& j,
-                              std::vector<unsigned char>& bytes)
+                              std::vector<unsigned char>& bytes,
+                              bool strict)
 {
     if (!j.is_object())
     {
@@ -968,14 +970,16 @@ bool apply_shader_params_json(const std::vector<ShaderParam>& params,
             }
             if (p.num_elements == 1)
             {
-                write_shader_scalar(p.type, p.size, bytes.data() + offset, *value);
+                if (!write_shader_scalar(p.type, p.size, bytes.data() + offset, *value) && strict)
+                    return false;
             }
             else if (value->is_array())
             {
                 const size_t count = std::min(p.num_elements, value->size());
                 for (size_t e = 0; e < count; ++e)
                 {
-                    write_shader_scalar(p.type, p.size, bytes.data() + offset + e * p.size, (*value)[e]);
+                    if (!write_shader_scalar(p.type, p.size, bytes.data() + offset + e * p.size, (*value)[e]) && strict)
+                        return false;
                 }
             }
         }

@@ -291,6 +291,15 @@ typedef struct pnanovdb_editor_t
                                             pnanovdb_pipeline_type_t process_pipeline,
                                             pnanovdb_pipeline_type_t render_pipeline);
 
+    // Apply JSON field values over the shader defaults. Failure leaves the object unchanged.
+    pnanovdb_bool_t(PNANOVDB_ABI* set_shader)(pnanovdb_editor_t* editor,
+                                              pnanovdb_editor_token_t* scene,
+                                              pnanovdb_editor_token_t* name,
+                                              const char* shader_name,
+                                              const char* parameters_json,
+                                              char* error_buf,
+                                              pnanovdb_uint64_t error_buf_size);
+
 } pnanovdb_editor_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_editor_t
@@ -345,6 +354,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(save_scene, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_pipeline_type, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_camera_2, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_gaussian_data_4, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(set_shader, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE

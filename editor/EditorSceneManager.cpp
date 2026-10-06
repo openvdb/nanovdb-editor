@@ -907,6 +907,45 @@ bool EditorSceneManager::add_nanovdb_impl(pnanovdb_editor_token_t* scene,
     return true;
 }
 
+bool EditorSceneManager::add_nanovdb_buffer(pnanovdb_editor_token_t* scene,
+                                            pnanovdb_editor_token_t* name,
+                                            pnanovdb_compute_array_t* array,
+                                            const pnanovdb_compute_t* compute,
+                                            pnanovdb_editor_token_t* default_shader_name)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    const uint64_t key = make_key(scene, name);
+    auto it = m_objects.find(key);
+    if (it != m_objects.end() && it->second.type == SceneObjectType::NanoVDB &&
+        it->second.resources.source_filepath.empty())
+    {
+        SceneObject& obj = it->second;
+        auto owner = make_compute_array_owner(
+            array, compute, find_array_owner(m_objects, m_file_replacement_backups, array), "nanovdb array");
+        // Reject results from workers that still use the previous source buffer.
+        begin_object_lifetime(obj, key);
+        obj.pipeline.load().output.clear();
+        obj.pipeline.load().output.set_array(k_stage_output_nanovdb, array, std::move(owner));
+        obj.pipeline.load().bump_revision();
+        obj.pipeline.render().output.clear();
+        for (size_t i = 0; i < obj.pipeline.process_count(); ++i)
+        {
+            obj.pipeline.process_step(i).output.clear();
+        }
+        obj.clear_process_run_snapshot();
+        obj.clear_process_cancel_state();
+        obj.pipeline.active_process_step = 0;
+        obj.mark_process_dirty();
+        obj.resolve_resources();
+        return true;
+    }
+
+    auto* params = create_isolated_shader_params(compute, default_shader_name ? default_shader_name->str : nullptr,
+                                                 nullptr, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
+    return add_nanovdb_impl(scene, name, array, params, compute, default_shader_name, pnanovdb_pipeline_type_noop,
+                            pnanovdb_pipeline_type_nanovdb_render, false, nullptr);
+}
+
 bool EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,
                                            pnanovdb_editor_token_t* name,
                                            pnanovdb_raster_gaussian_data_t* gaussian_data,

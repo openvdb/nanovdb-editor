@@ -362,6 +362,12 @@ void update(pnanovdb_imgui_instance_t* instance)
             if (isViewerProfile)
             {
                 ImGui::LoadIniSettingsFromMemory(viewer_ini.c_str(), viewer_ini.size());
+                // Keep the requested profile when loading the shared viewer layout.
+                for (auto& entry : ptr->saved_render_settings)
+                {
+                    snprintf(entry.second.ui_profile_name, sizeof(entry.second.ui_profile_name), "%s",
+                             ptr->current_profile_name.c_str());
+                }
             }
             else if (io.IniFilename && *io.IniFilename)
             {
@@ -387,13 +393,24 @@ void update(pnanovdb_imgui_instance_t* instance)
             // Apply loaded camera state from INI
             if (ptr->editor_scene)
             {
-                pnanovdb_editor_token_t* name_token =
-                    pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
-                const pnanovdb_camera_state_t* state = ptr->editor_scene->get_saved_camera_state(name_token);
-                if (state)
+                if (isViewerProfile)
                 {
-                    ptr->render_settings->camera_state = *state;
-                    ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                    ptr->editor_scene->initialize_for_startup(true);
+                    auto* settings = ptr->render_settings;
+                    settings->is_projection_rh = settings->camera_config.is_projection_rh;
+                    settings->is_orthographic = settings->camera_config.is_orthographic;
+                    settings->is_reverse_z = settings->camera_config.is_reverse_z;
+                }
+                else
+                {
+                    pnanovdb_editor_token_t* name_token =
+                        pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
+                    const pnanovdb_camera_state_t* state = ptr->editor_scene->get_saved_camera_state(name_token);
+                    if (state)
+                    {
+                        ptr->render_settings->camera_state = *state;
+                        ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                    }
                 }
             }
         }
@@ -450,10 +467,10 @@ void Instance::update_ini_filename_for_profile(const char* profile_name)
 
     current_profile_name = profile_name ? profile_name : "";
 
-    bool isViewer = (profile_name && strcmp(profile_name, s_viewer_profile_name) == 0);
-    if (isViewer)
+    const auto layout = pnanovdb_imgui::ui_profile(profile_name).layout;
+    if (layout == pnanovdb_imgui::UiLayout::Viewer)
     {
-        // Viewer profile: load from memory, no file persistence
+        // Embedded profiles do not persist application settings.
         io.IniFilename = nullptr;
         current_ini_filename = "";
     }

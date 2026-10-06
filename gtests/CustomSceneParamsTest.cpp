@@ -252,3 +252,97 @@ TEST(NanoVDBEditor, CustomSceneParamsRejectsStringWithNumericOptions)
     EXPECT_FALSE(params.loadFromJsonString(json, "rejectTest", &error_message));
     EXPECT_NE(error_message.find("not supported"), std::string::npos);
 }
+
+TEST(NanoVDBEditor, CustomSceneParamsGroupAndReadOnlyKeepMappedValues)
+{
+    pnanovdb_editor::CustomSceneParams params;
+    std::string error_message;
+    ASSERT_TRUE(params.loadFromJsonString(R"json({"SceneParams": {
+        "Play": {"type": "bool", "value": true, "group": "Settings"},
+        "Frame": {"type": "uint", "value": 12, "readOnly": true, "group": "Settings"}
+    }})json", "controls", &error_message)) << error_message;
+    const auto* data_type = params.dataType();
+    ASSERT_NE(data_type, nullptr);
+    ASSERT_EQ(data_type->child_reflect_data_count, 2u);
+    const auto& frame = data_type->child_reflect_datas[1];
+    auto* frame_value = reinterpret_cast<pnanovdb_uint32_t*>(static_cast<char*>(params.data()) + frame.data_offset);
+    EXPECT_EQ(*frame_value, 12u);
+    *frame_value = 13u;
+    EXPECT_EQ(*frame_value, 13u);
+}
+
+TEST(NanoVDBEditor, CustomSceneParamsRejectsInvalidGroupAndReadOnly)
+{
+    pnanovdb_editor::CustomSceneParams params;
+    std::string error_message;
+    EXPECT_FALSE(params.loadFromJsonString(R"json({"SceneParams": {
+        "Play": {"type": "bool", "group": 123}
+    }})json", "controls", &error_message));
+    EXPECT_NE(error_message.find("invalid 'group'"), std::string::npos);
+    EXPECT_FALSE(params.loadFromJsonString(R"json({"SceneParams": {
+        "Frame": {"type": "uint", "readOnly": "true"}
+    }})json", "controls", &error_message));
+    EXPECT_NE(error_message.find("invalid 'readOnly'"), std::string::npos);
+}
+
+TEST(NanoVDBEditor, CustomSceneParamsSimulationVisibilityAndExclusion)
+{
+    pnanovdb_editor::CustomSceneParams params;
+    ASSERT_TRUE(params.loadFromJsonString(R"json({"SceneParams": {
+        "Play": {"type": "bool", "group": "Simulation"},
+        "Frame": {"type": "uint", "group": "Simulation", "readOnly": true},
+        "Counter": {"type": "uint", "group": "Hidden", "hidden": true},
+        "Gain": {"type": "float"},
+        "Other": {"type": "float", "group": "Other"}
+    }})json"));
+    EXPECT_TRUE(params.hasVisibleFields("Simulation"));
+    EXPECT_TRUE(params.hasVisibleFields("Simulation", true));
+    EXPECT_TRUE(params.hasVisibleFields(""));
+    EXPECT_TRUE(params.hasVisibleFields("Other"));
+    EXPECT_FALSE(params.hasVisibleFields("Hidden"));
+    EXPECT_FALSE(params.hasVisibleFields("missing"));
+
+    ASSERT_TRUE(params.loadFromJsonString(R"json({"SceneParams": {
+        "Frame": {"type": "uint", "group": "Simulation", "readOnly": true}
+    }})json"));
+    EXPECT_TRUE(params.hasVisibleFields("Simulation"));
+    EXPECT_FALSE(params.hasVisibleFields("Simulation", true));
+
+    ASSERT_TRUE(params.loadFromJsonString(R"json({"SceneParams": {
+        "Counter": {"type": "uint", "group": "Simulation", "hidden": true}
+    }})json"));
+    EXPECT_FALSE(params.hasVisibleFields("Simulation"));
+    EXPECT_FALSE(params.hasVisibleFields());
+}
+
+TEST(NanoVDBEditor, CustomSceneParamsRejectsInvalidPlaybackWidgets)
+{
+    const char* invalid_fields[] = {
+        R"({"type":"bool","widget":true})",
+        R"({"type":"bool","widget":"unknown"})",
+        R"({"type":"bool","widget":""})",
+        R"({"type":"bool","activeLabel":"Stop"})",
+        R"({"type":"bool","widget":"button","activeLabel":"Stop"})",
+        R"({"type":"bool","widget":"toggleButton","activeLabel":true})",
+        R"({"type":"bool","widget":"button","sameLine":"true"})",
+        R"({"type":"bool","widget":"button","tooltip":false})",
+        R"({"type":"float","widget":"button"})",
+        R"({"type":"int","isBool":true,"widget":"toggleButton"})",
+        R"({"type":"string","widget":"button"})",
+        R"({"type":"bool","widget":"button","elementCount":2})",
+        R"({"type":"bool","widget":"button","elementCount":0})",
+        R"({"type":"bool","widget":"button","elementCount":1.0})",
+        R"({"type":"bool","widget":"button","elementCount":"1"})",
+        R"({"type":"bool","widget":"button","value":[false]})",
+        R"({"type":"bool","widget":"toggleButton","value":1})",
+    };
+    pnanovdb_editor::CustomSceneParams params;
+    for (const char* field : invalid_fields)
+    {
+        SCOPED_TRACE(field);
+        std::string error;
+        EXPECT_FALSE(params.loadFromJsonString(
+            std::string("{\"SceneParams\":{\"Control\":") + field + "}}", "playback", &error));
+        EXPECT_NE(error.find("field 'Control'"), std::string::npos) << error;
+    }
+}

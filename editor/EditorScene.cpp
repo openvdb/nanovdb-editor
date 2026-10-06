@@ -197,13 +197,18 @@ bool SceneSelection::operator!=(const SceneSelection& other) const
 
 EditorScene::EditorScene(const EditorSceneConfig& config)
     : m_imgui_instance(config.imgui_instance),
-      m_editor(config.editor),
+      m_editor_interface(*pnanovdb_get_editor()),
+      m_editor(&m_editor_interface),
       m_scene_manager(*config.editor->impl->scene_manager),
       m_scene_view(*config.editor->impl->scene_view),
       m_compute(config.editor->impl->compute),
       m_imgui_settings(config.imgui_settings),
       m_device_queue(config.device_queue)
 {
+    // Older clients can omit callbacks that the current UI requires.
+    m_editor_interface.module = config.editor->module;
+    m_editor_interface.impl = config.editor->impl;
+
     // Setup views UI - ImguiInstance accesses views through EditorScene
     m_imgui_instance->editor_scene = this;
 
@@ -854,6 +859,11 @@ void EditorScene::sync_object_from_scene_manager(pnanovdb_editor_token_t* scene,
     m_scene_manager.with_object(
         scene, name, [this, &added_camera](SceneObject* obj) { added_camera = sync_object_into_view(obj); });
 
+    const SceneSelection updated_view{ determine_view_type(name, scene), name, scene };
+    if (m_render_view_selection.is_valid() && m_render_view_selection == updated_view)
+    {
+        set_render_view(updated_view.type, name, scene);
+    }
     select_view_for_added_object(scene, name, added_camera);
 }
 

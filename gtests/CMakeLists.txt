@@ -66,7 +66,22 @@ ConfigureTest(EditorViewportCameraSyncTest
   ../editor/SceneView.cpp
 )
 ConfigureTest(EditorSlangCompileSpeedTest EditorSlangCompileSpeedTest.cpp)
-ConfigureTest(CustomSceneParamsTest CustomSceneParamsTest.cpp ../editor/CustomSceneParams.cpp)
+ConfigureTest(CustomSceneParamsTest
+  CustomSceneParamsTest.cpp
+  CustomSceneParamsRenderTest.cpp
+  ../editor/CustomSceneParams.cpp
+  ../editor/CustomSceneParamsRender.cpp
+  ../editor/ParamWidget.cpp
+)
+ConfigureTest(ColorRampTest ColorRampTest.cpp ../editor/ColorRamp.cpp)
+ConfigureTest(ShaderColorRampTest
+  ShaderColorRampTest.cpp
+  ../editor/ColorRamp.cpp
+  ../editor/Console.cpp
+  ../editor/ParamWidget.cpp
+  ../editor/ShaderParams.cpp
+)
+target_link_libraries(ShaderColorRampTest PRIVATE ImGuiColorTextEdit)
 ConfigureTest(MapPinTest MapPinTest.cpp EditorTestSupport.cpp)
 ConfigureTest(ShaderParamsReadOnlyTest ShaderParamsReadOnlyTest.cpp EditorTestSupport.cpp)
 ConfigureTest(ShaderNameSwapResetsParamsTest ShaderNameSwapResetsParamsTest.cpp EditorTestSupport.cpp)
@@ -83,6 +98,7 @@ ConfigureTest(SceneObjectProcessChainTest SceneObjectProcessChainTest.cpp)
 ConfigureTest(SceneObjectReplacementTest SceneObjectReplacementTest.cpp)
 ConfigureTest(SceneSerializerTest
   SceneSerializerTest.cpp
+  ../editor/ColorRamp.cpp
   ../editor/Console.cpp
   ../editor/CustomSceneParams.cpp
   ../editor/EditorSceneManager.cpp

@@ -29,6 +29,7 @@
 #include "misc/cpp/imgui_stdlib.h" // for std::string text input
 
 #include <ImGuiFileDialog.h>
+#include <imgui_internal.h>
 
 #include <cmath>
 #include <memory>
@@ -194,10 +195,10 @@ void createMenu(imgui_instance_user::Instance* ptr)
                 centerText += std::string(selection.name_token->str) + " - ";
             }
 
-            centerText += "NanoVDB Editor";
+            centerText += ptr->profile().title;
             if (isViewerProfile)
             {
-                centerText += " - fVDB (" + std::to_string(ptr->render_settings->server_port) + ")";
+                centerText += " (" + std::to_string(ptr->render_settings->server_port) + ")";
             }
             else
             {
@@ -340,14 +341,16 @@ void showSceneParamsWindow(imgui_instance_user::Instance* ptr)
     }
 
     std::shared_ptr<CustomSceneParams> custom_params = scene_manager->get_custom_scene_params(scene_token);
-    if (!custom_params || custom_params->empty())
+    if (!custom_params || !custom_params->hasVisibleFields())
     {
         ImGui::TextDisabled("No custom scene params loaded for this scene.");
         ImGui::End();
         return;
     }
 
+    ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
     custom_params->render();
+    ImGui::PopItemWidth();
     ImGui::End();
 }
 
@@ -605,17 +608,17 @@ void showRenderSettingsWindow(imgui_instance_user::Instance* ptr)
         if (!ptr->is_viewer())
         {
             ImGui::SeparatorText("UI Profile");
-            const char* profile_options[] = { "default", "viewer" };
+            const auto& profile_options = pnanovdb_imgui::ui_profiles;
             const char* current_profile =
                 ptr->render_settings->ui_profile_name[0] != '\0' ? ptr->render_settings->ui_profile_name : "default";
             if (ImGui::BeginCombo("##ui_profile", current_profile))
             {
                 for (int i = 0; i < IM_ARRAYSIZE(profile_options); i++)
                 {
-                    bool is_selected = (strcmp(current_profile, profile_options[i]) == 0);
-                    if (ImGui::Selectable(profile_options[i], is_selected))
+                    bool is_selected = (strcmp(current_profile, profile_options[i].name) == 0);
+                    if (ImGui::Selectable(profile_options[i].name, is_selected))
                     {
-                        strcpy(ptr->render_settings->ui_profile_name, profile_options[i]);
+                        strcpy(ptr->render_settings->ui_profile_name, profile_options[i].name);
                     }
                     if (is_selected)
                     {

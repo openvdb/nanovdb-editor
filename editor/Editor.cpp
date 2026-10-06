@@ -24,6 +24,7 @@
 #include "ShaderCompileUtils.h"
 #include "EditorScene.h"
 #include "SceneSerializer.h"
+#include "ParamWidget.h"
 #include "ImguiInstance.h"
 #include "RenderSettingsConfig.h"
 
@@ -36,9 +37,12 @@
 #include "nanovdb_editor/putil/WorkerThread.hpp"
 
 #include <algorithm>
+#include <cstdio>
+#include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <map>
+#include <limits>
 #include <mutex>
 
 // signal handling
@@ -498,12 +502,12 @@ pnanovdb_int32_t editor_get_external_active_count(void* external_active_count)
         return 0;
     }
 
-    pnanovdb_int32_t count = 0;
     if (worker->should_stop.load())
     {
-        count = 1;
+        return 1;
     }
-    return count;
+    std::lock_guard<std::mutex> lock(worker->render_thread_tasks.mutex);
+    return worker->render_thread_tasks.tasks.empty() ? 0 : 1;
 };
 
 static pnanovdb_bool_t apply_load_scene(pnanovdb_editor_t* editor, const char* filepath, pnanovdb_bool_t overwrite);
@@ -733,11 +737,7 @@ static void run_show_loop(pnanovdb_editor_t* editor,
             editor->impl->voxelbvh->create_context(editor->impl->voxelbvh->compute, device_queue);
     }
 
-    // Skip default scene creation on viewer profile
-    bool is_viewer_profile =
-        imgui_user_settings && imgui_user_settings->ui_profile_name &&
-        strcmp(imgui_user_settings->ui_profile_name, imgui_instance_user::s_viewer_profile_name) == 0;
-    if (!is_viewer_profile && editor->impl->scene_view)
+    if (imgui_user_instance->profile().layout == pnanovdb_imgui::UiLayout::Editor && editor->impl->scene_view)
     {
         pnanovdb_editor_token_t* default_scene = EditorToken::getInstance().getToken(pnanovdb_editor::DEFAULT_SCENE_NAME);
         editor->impl->scene_view->get_or_create_scene(default_scene);
@@ -1397,38 +1397,29 @@ void add_nanovdb_2(pnanovdb_editor_t* editor,
         return;
     }
 
-    run_add_with_render_sync(
-        editor,
-        [=](bool defer_sync)
-        {
-            // we need to duplicate array for now to take proper ownership
-            pnanovdb_compute_array_t* array = editor->impl->compute->duplicate_array(array_in);
-            if (!array)
-            {
-                Console::getInstance().addLog(Console::LogLevel::Error,
-                                              "add_nanovdb_2: failed to duplicate input array for '%s'",
-                                              token_to_string_log(name));
-                return;
-            }
+    on_render_thread(editor,
+                     [=]()
+                     {
+                         pnanovdb_compute_array_t* array = editor->impl->compute->duplicate_array(array_in);
+                         if (!array)
+                         {
+                             Console::getInstance().addLog(Console::LogLevel::Error,
+                                                           "add_nanovdb_2: failed to duplicate input array for '%s'",
+                                                           token_to_string_log(name));
+                             return;
+                         }
 
-            Console::getInstance().addLog(Console::LogLevel::Debug,
-                                          "add_nanovdb_2: scene='%s' (id=%llu), name='%s' (id=%llu)",
-                                          token_to_string_log(scene), (unsigned long long)scene->id,
-                                          token_to_string_log(name), (unsigned long long)name->id);
-
-            pnanovdb_compute_array_t* params_array = pnanovdb_editor::EditorSceneManager::create_isolated_shader_params(
-                editor->impl->compute, editor->impl->shader_name.c_str(), nullptr,
-                PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
-
-            pnanovdb_editor_token_t* shader_name_token = get_token(editor->impl->shader_name.c_str());
-            editor->impl->scene_manager->add_nanovdb(
-                scene, name, array, params_array, editor->impl->compute, shader_name_token);
-
-            Console::getInstance().addLog(
-                Console::LogLevel::Debug, "Added NanoVDB '%s' to scene '%s'", name->str, scene->str);
-
-            sync_added_object(editor, scene, name, defer_sync);
-        });
+                         if (editor->impl->editor_scene)
+                         {
+                             editor->impl->editor_scene->sync_shader_params_from_editor();
+                         }
+                         pnanovdb_editor_token_t* shader_name_token = get_token(editor->impl->shader_name.c_str());
+                         if (editor->impl->scene_manager->add_nanovdb_buffer(
+                                 scene, name, array, editor->impl->compute, shader_name_token))
+                         {
+                             sync_added_object(editor, scene, name);
+                         }
+                     });
 }
 
 static pnanovdb_editor_gaussian_data_desc_t duplicate_gaussian_desc(const pnanovdb_compute_t* compute,
@@ -2167,8 +2158,11 @@ void unmap_params(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pna
 
     if (frame.worker)
     {
+        if (frame.key.kind != ParamMapKind::CustomSceneParams)
+        {
+            frame.worker->params_dirty.store(true);
+        }
         frame.worker->shader_params_mutex.unlock();
-        frame.worker->params_dirty.store(true);
     }
 }
 
@@ -2954,6 +2948,113 @@ pnanovdb_compute_array_t* get_named_array(pnanovdb_editor_t* editor,
     return result;
 }
 
+pnanovdb_bool_t set_shader(pnanovdb_editor_t* editor,
+                           pnanovdb_editor_token_t* scene,
+                           pnanovdb_editor_token_t* name,
+                           const char* shader_name,
+                           const char* parameters_json,
+                           char* error_buf,
+                           pnanovdb_uint64_t error_buf_size)
+{
+    const auto fail = [=](const char* message)
+    {
+        if (error_buf && error_buf_size)
+            std::snprintf(error_buf, size_t(error_buf_size), "%s", message);
+        return PNANOVDB_FALSE;
+    };
+    if (!editor || !editor->impl || !scene || !name || !shader_name || !*shader_name)
+        return fail("Editor, scene, object, and shader are required");
+
+    try
+    {
+        const auto values = nlohmann::json::parse(parameters_json ? parameters_json : "{}");
+        if (!values.is_object())
+            return fail("Shader parameters must be a JSON object");
+        ShaderParams reflected;
+        if (!reflected.load(shader_name, false))
+            return fail("Shader reflection is unavailable; compile the shader first");
+        const auto fields = reflected.snapshot(shader_name);
+        auto stored_values = values;
+        for (auto it = values.begin(); it != values.end(); ++it)
+        {
+            const auto field = std::find_if(
+                fields.begin(), fields.end(), [&](const ShaderParam& param) { return param.name == it.key(); });
+            if (field == fields.end())
+                return fail(("Unknown shader parameter: " + it.key()).c_str());
+            const auto scalar_valid = [&](const nlohmann::json& value)
+            {
+                if (value.is_boolean())
+                    return field->is_bool || field->type == ImGuiDataType_Bool;
+                return value.is_number();
+            };
+            const auto& value = it.value();
+            if (field->num_elements == 1 ? !scalar_valid(value) :
+                                           (!value.is_array() || value.size() != field->num_elements ||
+                                            !std::all_of(value.begin(), value.end(), scalar_valid)))
+                return fail(("Invalid shader parameter: " + it.key()).c_str());
+            if (field->type == ImGuiDataType_Float && field->size == sizeof(uint16_t))
+            {
+                // Scene serialization stores half values as bits; the API accepts numbers.
+                const auto encode_half = [](nlohmann::json& number)
+                {
+                    const double value = number.get<double>();
+                    if (!std::isfinite(value) || std::abs(value) > std::numeric_limits<float>::max())
+                        return false;
+                    const uint16_t bits = float_to_half_bits(static_cast<float>(value));
+                    if (!std::isfinite(half_bits_to_float(bits)))
+                        return false;
+                    number = bits;
+                    return true;
+                };
+                auto& stored = stored_values[it.key()];
+                if (field->num_elements == 1 ? !encode_half(stored) :
+                                              !std::all_of(stored.begin(), stored.end(), encode_half))
+                    return fail(("Invalid shader parameter: " + it.key()).c_str());
+            }
+        }
+        std::vector<unsigned char> bytes;
+        if (!json_to_shader_params(reflected, shader_name, stored_values, bytes, true))
+        {
+            if (!values.empty() || !fields.empty())
+                return fail("Cannot create shader parameters");
+            bytes.resize(PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE, 0);
+        }
+        const auto* compute = editor->impl->compute;
+        auto* array = compute->create_array(1u, bytes.size(), bytes.data());
+        if (!array)
+            return fail("Cannot allocate shader parameters");
+        auto owner = std::shared_ptr<pnanovdb_compute_array_t>(
+            array, [compute](pnanovdb_compute_array_t* ptr) { compute->destroy_array(ptr); });
+        auto* shader_token = get_token(shader_name);
+        const auto apply = [=]() -> pnanovdb_bool_t
+        {
+            bool found = false;
+            editor->impl->scene_manager->with_object(scene, name,
+                                                     [&](SceneObject* obj)
+                                                     {
+                                                         if (!obj || obj->type != SceneObjectType::NanoVDB)
+                                                             return;
+                                                         obj->shader_name() = shader_token;
+                                                         obj->params.shader_params_array = array;
+                                                         obj->params.shader_params_array_owner = owner;
+                                                         obj->shader_params() = array->data;
+                                                         obj->shader_params_data_type() = nullptr;
+                                                         found = true;
+                                                     });
+            if (found)
+                sync_added_object(editor, scene, name);
+            return found ? PNANOVDB_TRUE : PNANOVDB_FALSE;
+        };
+        if (!(get_worker(editor) ? run_on_render_thread(editor, apply) : apply()))
+            return fail("NanoVDB object does not exist");
+        return PNANOVDB_TRUE;
+    }
+    catch (const std::exception& error)
+    {
+        return fail(error.what());
+    }
+}
+
 PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
 {
     static pnanovdb_editor_t editor = { PNANOVDB_REFLECT_INTERFACE_INIT(pnanovdb_editor_t) };
@@ -2993,6 +3094,7 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
     editor.add_nanovdb_3 = add_nanovdb_3;
     editor.add_gaussian_data_3 = add_gaussian_data_3;
     editor.add_gaussian_data_4 = add_gaussian_data_4;
+    editor.set_shader = set_shader;
     editor.set_visible = set_visible;
     editor.get_visible = get_visible;
     editor.add_named_array = add_named_array;

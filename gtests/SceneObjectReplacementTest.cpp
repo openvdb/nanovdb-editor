@@ -85,6 +85,59 @@ TEST(SceneObjectReplacementTest, SourceResetClearsAliasesAndKeepsPipelineConfigu
     EXPECT_EQ(obj.pipeline.process().params.size, 4u);
 }
 
+TEST(SceneObjectReplacementTest, RawBufferUpdateInvalidatesDerivedDataAndOldLoadReservations)
+{
+    EditorSceneManager manager;
+    pnanovdb_compute_t compute{};
+    compute.destroy_array = count_retained_array_destroy;
+    g_retained_array_destroy_count = 0;
+    pnanovdb_editor_token_t scene{ 231u, "scene" };
+    pnanovdb_editor_token_t name{ 232u, "target" };
+    pnanovdb_compute_array_t original{};
+    pnanovdb_compute_array_t processed{};
+    pnanovdb_compute_array_t replacement{};
+    pnanovdb_compute_array_t late{};
+    ASSERT_TRUE(manager.add_nanovdb(&scene, &name, &original, nullptr, &compute));
+    uint64_t old_lifetime = 0;
+    ASSERT_TRUE(manager.reserve_load_target(&scene, &name, &old_lifetime, true));
+    uint64_t old_revision = 0;
+    manager.with_object(&scene, &name,
+                        [&](SceneObject* obj)
+                        {
+                            ASSERT_NE(obj, nullptr);
+                            obj->pipeline.load().configured = true;
+                            obj->pipeline.process().type = pnanovdb_pipeline_type_voxelbvh_build;
+                            obj->pipeline.process().configured = true;
+                            obj->pipeline.process().dirty = false;
+                            obj->pipeline.process().output.set_array(
+                                k_stage_output_nanovdb, &processed,
+                                std::shared_ptr<pnanovdb_compute_array_t>(&processed, count_retained_array_destroy));
+                            old_revision = obj->pipeline.process().revision;
+                            obj->resolve_resources();
+                        });
+
+    ASSERT_TRUE(manager.add_nanovdb_buffer(&scene, &name, &replacement, &compute, nullptr));
+    EXPECT_EQ(g_retained_array_destroy_count, 2);
+    EXPECT_FALSE(manager.commit_reserved_nanovdb(&scene, &name, old_lifetime, &late, nullptr, &compute, nullptr,
+                                                 pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_nanovdb_render));
+    manager.with_object(&scene, &name,
+                        [&](SceneObject* obj)
+                        {
+                            ASSERT_NE(obj, nullptr);
+                            EXPECT_NE(obj->lifetime_id, old_lifetime);
+                            EXPECT_EQ(obj->nanovdb_array(), &replacement);
+                            EXPECT_EQ(obj->converted_nanovdb(), nullptr);
+                            EXPECT_TRUE(obj->pipeline.load().configured);
+                            EXPECT_TRUE(obj->pipeline.process().configured);
+                            EXPECT_EQ(obj->pipeline.process().type, pnanovdb_pipeline_type_voxelbvh_build);
+                            EXPECT_TRUE(obj->pipeline.process().dirty);
+                            EXPECT_GT(obj->pipeline.process().revision, old_revision);
+                            EXPECT_TRUE(obj->pipeline.process().output.empty());
+                        });
+    manager.clear();
+    EXPECT_EQ(g_retained_array_destroy_count, 3);
+}
+
 TEST(SceneObjectReplacementTest, NamedArrayCopyPreservesBorrowedAndOwnedBindings)
 {
     SceneObject source;

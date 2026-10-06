@@ -2,8 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
+import json
 
 from contextlib import contextmanager
+from threading import RLock
 from typing import TYPE_CHECKING, Optional
 from ctypes import (
     Structure,
@@ -610,6 +612,13 @@ class pnanovdb_Editor(Structure):
                 c_uint32,  # render_pipeline
             ),
         ),
+        (
+            "set_shader",
+            CFUNCTYPE(
+                pnanovdb_bool_t, c_void_p, POINTER(EditorToken), POINTER(EditorToken),
+                c_char_p, c_char_p, POINTER(c_char), c_uint64,
+            ),
+        ),
     ]
 
 
@@ -678,6 +687,7 @@ class Editor:
         # Custom scene params hot-reload bookkeeping, keyed by scene token id:
         #   _custom_params_files: {scene_id: (abs_path, last_mtime)}
         self._custom_params_files = {}
+        self._custom_params_lock = RLock()
 
     def _get_or_default_config(
         self,
@@ -983,21 +993,41 @@ class Editor:
         get_camera_func = self._editor.contents.get_camera
         return get_camera_func(self._editor, scene)
 
-    def get_camera_2(self, scene):
+    def get_camera_2(self, scene, *, default=False):
         """Get a copy of the camera for a given scene.
 
         Returns a fresh Camera value (safe to keep and to call concurrently), or
-        None if the scene has not been seen yet.
+        None if the scene has not been seen yet. With ``default=True``, return
+        the native default camera when the scene has no stored camera.
         """
         camera = Camera()
         get_camera_2_func = self._editor.contents.get_camera_2
         found = get_camera_2_func(self._editor, scene, byref(camera))
-        return camera if found else None
+        return camera if found or default else None
 
     def add_nanovdb_2(self, scene, name, array):
         """Add NanoVDB data to scene with token-based API."""
         add_nanovdb_2_func = self._editor.contents.add_nanovdb_2
         add_nanovdb_2_func(self._editor, scene, name, pointer(array))
+
+    def set_shader(self, scene, name, shader, *, parameters=None) -> None:
+        """Compile and assign a scene object's shader and JSON parameter values."""
+        shader = os.fspath(shader)
+        if not isinstance(shader, str) or not shader or "\0" in shader:
+            raise InvalidArgumentError("shader must be a nonempty path without null bytes")
+        if parameters is not None and not isinstance(parameters, dict):
+            raise InvalidArgumentError("parameters must be a dictionary")
+        try:
+            params_json = json.dumps(parameters or {}, allow_nan=False).encode("utf-8")
+        except (TypeError, ValueError) as exc:
+            raise InvalidArgumentError("parameters must contain finite JSON values") from exc
+        if not self._compiler.compile_shader(shader):
+            raise PipelineError(f"Failed to compile shader {shader}: {self._compiler.get_diagnostics()}")
+        error = create_string_buffer(1024)
+        if not self._editor.contents.set_shader(
+            self._editor, scene, name, shader.encode("utf-8"), params_json, error, len(error)
+        ):
+            raise PipelineError(error.value.decode("utf-8", errors="replace") or "Failed to set shader")
 
     def add_gaussian_data_2(self, scene, name, desc):
         """Add Gaussian data to scene with token-based API."""
@@ -1262,13 +1292,14 @@ class Editor:
         # catches C++ exceptions at the ABI boundary).
         json_token = self.get_token(json_string)
         error_buf = create_string_buffer(1024)
-        ok = self._editor.contents.set_custom_scene_params(
-            self._editor,
-            scene,
-            json_token,
-            error_buf,
-            c_uint64(sizeof(error_buf)),
-        )
+        with self._custom_params_lock:
+            ok = self._editor.contents.set_custom_scene_params(
+                self._editor,
+                scene,
+                json_token,
+                error_buf,
+                c_uint64(sizeof(error_buf)),
+            )
         if not ok:
             message = error_buf.value.decode("utf-8", "replace") or "set_custom_scene_params failed"
             raise PipelineError(message)

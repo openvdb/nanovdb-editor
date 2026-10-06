@@ -100,5 +100,6 @@ PNANOVDB_REFLECT_INTERFACE_IMPL()
 typedef pnanovdb_server_t*(PNANOVDB_ABI* PFN_pnanovdb_get_server)();
 
 PNANOVDB_API pnanovdb_server_t* pnanovdb_get_server();
+void pnanovdb_server_set_title(pnanovdb_server_instance_t* instance, const char* title);
 
 #endif

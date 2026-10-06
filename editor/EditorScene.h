@@ -457,6 +457,7 @@ private:
     void* get_view_params_with_fallback(SceneShaderParams& params, void* obj_params) const;
 
     imgui_instance_user::Instance* m_imgui_instance;
+    pnanovdb_editor_t m_editor_interface;
     pnanovdb_editor_t* m_editor;
     EditorSceneManager& m_scene_manager;
     SceneView& m_scene_view;
