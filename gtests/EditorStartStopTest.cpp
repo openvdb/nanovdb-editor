@@ -368,7 +368,7 @@ CreateArrayFn tracked_create_array = nullptr;
 DestroyArrayFn tracked_destroy_array = nullptr;
 std::atomic<int> live_param_arrays{0};
 
-pnanovdb_compute_array_t* count_param_array_create(pnanovdb_uint64_t size,
+pnanovdb_compute_array_t* count_param_array_create(size_t size,
                                                    pnanovdb_uint64_t count,
                                                    const void* data)
 {
