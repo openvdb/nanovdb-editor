@@ -20,6 +20,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstring>
+#include <filesystem>
 #include <memory>
 #include <thread>
 #include <tuple>
@@ -464,6 +465,21 @@ protected:
         EditorStreamingTest::SetUp();
         if (HasFatalFailure() || IsSkipped())
             return;
+        auto* compiler_inst = compiler.create_instance();
+        ASSERT_NE(compiler_inst, nullptr);
+        pnanovdb_compiler_settings_t settings{};
+        pnanovdb_compiler_settings_init(&settings);
+        settings.compile_target = PNANOVDB_COMPILE_TARGET_VULKAN;
+        std::strcpy(settings.entry_point_name, "main");
+        const auto shader_dir = std::filesystem::path(__FILE__).parent_path().parent_path() / "editor" / "shaders";
+        bool shaders_compiled = true;
+        for (const char* shader : { "flow_smoke.slang", "wireframe.slang" })
+        {
+            shaders_compiled &= compiler.compile_shader_from_file(
+                compiler_inst, (shader_dir / shader).string().c_str(), &settings, nullptr) != PNANOVDB_FALSE;
+        }
+        compiler.destroy_instance(compiler_inst);
+        ASSERT_TRUE(shaders_compiled);
         tracked_dispatch_nanovdb = compute.dispatch_shader_on_nanovdb_array;
         tracked_init_shader = compute.init_shader;
         compute.dispatch_shader_on_nanovdb_array = count_material_dispatch;
@@ -511,7 +527,8 @@ TEST_F(EditorMaterialRenderTest, MixedShadersKeepObjectValuesAcrossFramesAndRelo
     editor.add_nanovdb_2(&editor, scene_token, second, nanovdb_array);
     char error[1024]{};
     ASSERT_TRUE(editor.set_shader(&editor, scene_token, object_token, "editor/flow_smoke.slang",
-                                  R"({"attenuation":7.75})", error, sizeof(error))) << error;
+                                  R"({"attenuation":7.75,"step_size_scale":4,"shadow_num_steps":1})", error, sizeof(error)))
+        << error;
     ASSERT_TRUE(editor.set_shader(&editor, scene_token, second, "editor/wireframe.slang",
                                   R"({"highlight_bbox":1})", error, sizeof(error))) << error;
     auto& manager = *editor.impl->scene_manager;
@@ -544,6 +561,9 @@ TEST_F(EditorMaterialRenderTest, MixedShadersKeepObjectValuesAcrossFramesAndRelo
 TEST_F(EditorMaterialRenderTest, SourceRevisionInvalidatesAnUnchangedArrayAddress)
 {
     editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
+    char error[1024]{};
+    ASSERT_TRUE(editor.set_shader(&editor, scene_token, object_token, "editor/wireframe.slang",
+                                  "{}", error, sizeof(error))) << error;
     editor.impl->scene_manager->with_object(scene_token, object_token,
         [](pnanovdb_editor::SceneObject* obj) { tracked_array_a = obj->nanovdb_array(); });
     editor.start(&editor, device, &cfg);
