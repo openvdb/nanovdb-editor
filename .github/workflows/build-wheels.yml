@@ -538,9 +538,9 @@ jobs:
 
     - name: Install CMake and Ninja (Windows)
       if: runner.os == 'Windows'
-      uses: lukka/get-cmake@e6906078ebd1ccb8ce51ab4626ac46a1b5a517e3 # v4.4.0
-      with:
-        cmakeVersion: "4.4.3"
+      shell: pwsh
+      run: |
+        python -m pip install --only-binary=:all: "cmake==4.4.3" "ninja==1.13.2"
 
     - name: Build Windows wheels
       if: runner.os == 'Windows'
