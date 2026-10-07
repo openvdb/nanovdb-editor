@@ -383,11 +383,17 @@ jobs:
 
       - name: Install Vulkan Runtime
         run: |
-          # Download and install Vulkan Runtime (vulkan-1.dll loader)
-          $VulkanRuntimeUrl = "https://sdk.lunarg.com/sdk/download/1.3.290.0/windows/VulkanRT-1.3.290.0-Installer.exe"
+          $VulkanRuntimeUrl = "https://sdk.lunarg.com/sdk/download/1.4.363.0/windows/VulkanRT-X64-1.4.363.0-Installer.exe"
+          $VulkanRuntimeSha256 = "3f03bda2522d1d10d05461ce8a47364f9af6f5dc8642b7c45e43943dba164303"
           $VulkanInstaller = "$env:TEMP\VulkanRT-Installer.exe"
           Invoke-WebRequest -Uri $VulkanRuntimeUrl -OutFile $VulkanInstaller
-          Start-Process -FilePath $VulkanInstaller -ArgumentList "/S" -Wait
+          if ((Get-FileHash -Path $VulkanInstaller -Algorithm SHA256).Hash -ne $VulkanRuntimeSha256) {
+            throw "Vulkan runtime installer checksum mismatch"
+          }
+          $InstallProcess = Start-Process -FilePath $VulkanInstaller -ArgumentList "/S" -Wait -PassThru
+          if ($InstallProcess.ExitCode -ne 0) {
+            throw "Vulkan runtime installer failed with exit code $($InstallProcess.ExitCode)"
+          }
 
           $SystemLoader = @(
             "C:\Windows\System32\vulkan-1.dll",

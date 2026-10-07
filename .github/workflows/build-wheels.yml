@@ -540,7 +540,7 @@ jobs:
       if: runner.os == 'Windows'
       uses: lukka/get-cmake@e6906078ebd1ccb8ce51ab4626ac46a1b5a517e3 # v4.4.0
       with:
-        cmakeVersion: "3.31.6"
+        cmakeVersion: "4.4.3"
 
     - name: Build Windows wheels
       if: runner.os == 'Windows'
