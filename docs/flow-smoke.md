@@ -58,7 +58,7 @@ the preview clamps colors for display without changing the stored values.
 Alpha controls the density multiplier used by the opacity calculation.
 
 Ramp positions run from zero to one over the temperature range set by
-`colormap_min` and `colormap_max`. The PR28 smoke scene has zero temperature,
+`colormap_min` and `colormap_max`. The ovflow example scene `smoke.usda` has zero temperature,
 so edit the leftmost stops to tint it. The filtered lookup blends nearby stops;
 a color change at the hot end alone will not affect cold smoke. Live buffer
 updates preserve ramp edits, just like other material parameters.
@@ -78,13 +78,24 @@ one for the native fine shadow spacing. `shadow_factor=0` disables shadowing.
 Both camera and shadow rays use NvFlow's deterministic directional jitter.
 Camera rays use at most 4096 samples. Longer rays increase sample spacing to
 cover the full volume and use that spacing in the opacity calculation. Shadow
-rays clamp `shadow_num_steps` to 128, the upper limit of its UI control. Camera
-sample offsets are relative to the volume entry point so a distant camera does
-not prevent small steps from advancing.
+rays clamp `shadow_num_steps` to 128, the upper limit of its UI control. Each
+camera ray also has a total budget of 4096 shadow samples. Rays above that budget
+reuse lighting between camera samples, while density and temperature retain the
+full camera sampling rate. With 16 shadow steps, rays of up to 256 camera samples
+keep per-sample lighting. This reduces shadow detail on longer rays and bounds
+sampling work; it does not guarantee a maximum frame time. Camera sample offsets
+are relative to the volume entry point so a distant camera does not prevent
+small steps from advancing.
 
-Lighting is computed per camera sample from the full-resolution NanoVDB
-fields. The native renderer computes a shadow volume before rendering and, by
-default, downsamples density then upsamples the resulting shadow field. This
+Mesa lavapipe can terminate long shader invocations before the ray finishes.
+The maximum-length render regression executes on hardware and software Vulkan.
+It records an expected failure only when a device named `llvmpipe` or
+`lavapipe` returns less attenuation than the full ray requires. Shorter render tests still require correct pixels.
+The 4096-sample case passes on NVIDIA hardware; software Vulkan is not a
+reliable reference for this extreme case.
+
+Lighting is sampled from the full-resolution NanoVDB fields. The native renderer
+computes a shadow volume before rendering and, by default, downsamples density then upsamples the resulting shadow field. This
 shader does not reproduce that coarse filtering or shadow-volume interpolation,
 so matching parameters do not establish pixel parity. Inline shadow rays also
 cost more per displayed pixel than a reusable shadow prepass.
@@ -94,7 +105,7 @@ accumulation, and tone mapping are not implemented. The raw burn channel is not
 a shadow-lighting channel. USDA material extraction belongs to the caller;
 selecting this shader does not import stage materials automatically.
 
-`pytests/test_flow_smoke.py` compiles the renderer and executes its shared
-material functions through Slang's CPU target. It checks temperature lookup,
-step-dependent opacity, density clamping, compositing, transparent controls,
-shadow transmittance, and the native minimum-light floor.
+`pytests/test_flow_smoke.py` executes the shared material functions through
+Slang's CPU and Vulkan targets. It also renders synthetic smoke and temperature
+NanoVDB volumes through the same ray marcher used by the viewer. Tests cover
+color, opacity, shadowing, long rays, and the total shadow-sample budget.

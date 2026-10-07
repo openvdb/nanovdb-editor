@@ -3,11 +3,13 @@
 
 import ctypes
 import json
+import struct
 from pathlib import Path
 import unittest
 from tempfile import TemporaryDirectory
 
 import numpy as np
+import pytest
 
 from nanovdb_editor import Compiler, Compute, CompileTarget, MemoryBuffer
 
@@ -17,6 +19,7 @@ from test_dispatch import cpu_target_supported
 ROOT = Path(__file__).resolve().parents[1]
 SHADER = ROOT / "editor/shaders/flow_smoke.slang"
 MATERIAL_TEST = ROOT / "pytests/shaders/test_flow_smoke.slang"
+RENDER_TEST = ROOT / "pytests/shaders/test_flow_smoke_render.slang"
 
 
 class Material(ctypes.Structure):
@@ -52,7 +55,17 @@ class UniformState(ctypes.Structure):
     ]
 
 
-class TestFlowSmoke(unittest.TestCase):
+class PhysicalDeviceDesc(ctypes.Structure):
+    _fields_ = [
+        ("device_name", ctypes.c_char * 256),
+        ("device_uuid", ctypes.c_uint8 * 16),
+        ("device_luid", ctypes.c_uint8 * 8),
+        ("device_node_mask", ctypes.c_uint32),
+        ("device_luid_valid", ctypes.c_int32),
+    ]
+
+
+class FlowSmokeTestCase(unittest.TestCase):
     compile_target = CompileTarget.VULKAN
 
     def setUp(self):
@@ -66,23 +79,7 @@ class TestFlowSmoke(unittest.TestCase):
             value = defaults[name]["value"]
             setattr(self.material, name, field_type(*value) if isinstance(value, list) else value)
 
-    def run_material(self, samples, entry_point="computeMain"):
-        source = np.asarray(samples, dtype=np.float32)
-        result = np.zeros_like(source)
-        if self.compile_target == CompileTarget.CPU:
-            success = self.compiler.compile_shader(
-                str(MATERIAL_TEST), entry_point_name=entry_point, compile_target=self.compile_target
-            )
-            self.assertTrue(success, self.compiler.get_diagnostics())
-            uniforms = UniformState(
-                MemoryBuffer(source), ctypes.addressof(self.material), MemoryBuffer(result)
-            )
-            success = self.compiler.execute_cpu(
-                str(MATERIAL_TEST), (len(samples), 1, 1), None, ctypes.addressof(uniforms)
-            )
-            self.assertTrue(success, self.compiler.get_diagnostics())
-            return result
-
+    def get_compute(self):
         if self.compute is None:
             self.compute = Compute(self.compiler)
             device_interface = self.compute.device_interface()
@@ -91,11 +88,40 @@ class TestFlowSmoke(unittest.TestCase):
             self.addCleanup(native.destroy_device_manager, device_interface._device_manager)
             device = device_interface.create_device()
             self.addCleanup(native.destroy_device, device_interface._device_manager, device)
-        compute = self.compute
+        return self.compute
+
+
+class TestFlowSmoke(FlowSmokeTestCase):
+    def setUp(self):
+        super().setUp()
+        directory = TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.material_shader = Path(directory.name) / "material_test.slang"
+        self.material_shader.write_text(MATERIAL_TEST.read_text().replace(
+            '"flow_smoke_material.slang"', f'"{(SHADER.parent / "flow_smoke_material.slang").as_posix()}"'))
+
+    def run_material(self, samples, entry_point="computeMain"):
+        source = np.asarray(samples, dtype=np.float32)
+        result = np.zeros_like(source)
+        if self.compile_target == CompileTarget.CPU:
+            success = self.compiler.compile_shader(
+                str(self.material_shader), entry_point_name=entry_point, compile_target=self.compile_target
+            )
+            self.assertTrue(success, self.compiler.get_diagnostics())
+            uniforms = UniformState(
+                MemoryBuffer(source), ctypes.addressof(self.material), MemoryBuffer(result)
+            )
+            success = self.compiler.execute_cpu(
+                str(self.material_shader), (len(samples), 1, 1), None, ctypes.addressof(uniforms)
+            )
+            self.assertTrue(success, self.compiler.get_diagnostics())
+            return result
+
+        compute = self.get_compute()
         with TemporaryDirectory() as directory:
             shader = Path(directory) / "material.slang"
             shader.write_text(
-                f'#include "{MATERIAL_TEST.as_posix()}"\n'
+                f'#include "{self.material_shader.as_posix()}"\n'
                 '[shader("compute")][numthreads(1, 1, 1)]\n'
                 f'void main(uint3 thread_id : SV_DispatchThreadID) {{ {entry_point}(thread_id); }}\n'
             )
@@ -111,7 +137,10 @@ class TestFlowSmoke(unittest.TestCase):
                     return mapped.copy().reshape(source.shape)
 
     def test_renderer_compiles(self):
-        self.assertTrue(self.compiler.compile_shader(str(SHADER)), self.compiler.get_diagnostics())
+        with TemporaryDirectory() as directory:
+            shader = Path(directory) / "renderer.slang"
+            shader.write_text(f'#include "{SHADER.as_posix()}"\n')
+            self.assertTrue(self.compiler.compile_shader(str(shader)), self.compiler.get_diagnostics())
 
     def test_distant_camera_steps_advance_and_cover_the_interval(self):
         near = np.float32(1e6)
@@ -161,6 +190,18 @@ class TestFlowSmoke(unittest.TestCase):
                 count = min(requested, 128)
                 self.assertEqual(result[0], count)
                 self.assertAlmostEqual(result[1], np.float32(0.99)**count, places=6)
+
+    def test_total_shadow_samples_per_ray_are_bounded(self):
+        lengths = [0, 1, 31, 32, 33, 64, 255, 256, 257, 1000, 4095, 4096]
+        for requested in (0, 1, 16, 128, 2**32 - 1):
+            with self.subTest(requested=requested):
+                self.material.shadow_num_steps = requested
+                result = self.run_material([[n, 0, 0, 0] for n in lengths],
+                                           entry_point="computeShadowBudgetMain")
+                self.assertTrue((result[:, 0] <= 4096).all())
+                for length, (_, stride, _, _) in zip(lengths, result):
+                    if length * min(requested, 128) <= 4096:
+                        self.assertEqual(stride, 1)
 
     def test_flow_opacity_and_front_to_back_compositing(self):
         self.material.point_count = 2
@@ -240,6 +281,118 @@ class TestFlowSmoke(unittest.TestCase):
 @unittest.skipUnless(cpu_target_supported(), "CPU shader target is unavailable on Linux and Windows ARM64")
 class TestFlowSmokeCPU(TestFlowSmoke):
     compile_target = CompileTarget.CPU
+
+
+class TestFlowSmokeRender(FlowSmokeTestCase):
+    def setUp(self):
+        super().setUp()
+        directory = TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.shader = Path(directory.name) / "render.slang"
+        source = RENDER_TEST.read_text()
+        for name in ("flow_smoke_material.slang", "flow_smoke_ray_march.slang"):
+            source = source.replace(f'"{name}"', f'"{(SHADER.parent / name).as_posix()}"')
+        self.shader.write_text(source)
+        self.material.shadow_direction[:] = [1, 0, 0]
+        self.material.fallback_temperature = 0.5
+        self.material.step_size_scale = 64
+
+    @staticmethod
+    def constant_grid(value, voxel_size=1 / 1024):
+        # One active root tile covers [0, 4096)^3; values outside the tile are zero.
+        data = bytearray(832)
+        data[:8] = b"NanoVDB1"
+        struct.pack_into("<I", data, 16, 32 << 21)
+        struct.pack_into("<I", data, 28, 1)
+        struct.pack_into("<Q", data, 32, len(data))
+        for offset, fmt, diagonal in ((296, "<9f", voxel_size), (332, "<9f", 1 / voxel_size),
+                                     (384, "<9d", voxel_size), (456, "<9d", 1 / voxel_size)):
+            struct.pack_into(fmt, data, offset, diagonal, 0, 0, 0, diagonal, 0, 0, 0, diagonal)
+        struct.pack_into("<6d", data, 560, 0, 0, 0, *(3 * [4096 * voxel_size]))
+        struct.pack_into("<3d", data, 608, *(3 * [voxel_size]))
+        struct.pack_into("<II", data, 632, 2, 1)
+        struct.pack_into("<Q", data, 696, 64)
+        struct.pack_into("<I", data, 724, 1)
+        struct.pack_into("<Q", data, 728, 4096**3)
+        struct.pack_into("<3i", data, 748, 4095, 4095, 4095)
+        struct.pack_into("<I", data, 760, 1)
+        struct.pack_into("<4f", data, 768, value, value, value, 0)
+        struct.pack_into("<If", data, 816, 1, value)
+        return data
+
+    def render(self, data):
+        width = 4
+        compute = self.get_compute()
+        self.assertTrue(self.compiler.compile_shader(str(self.shader)), self.compiler.get_diagnostics())
+        pixels = np.zeros((width * width, 4), dtype=np.float32)
+        with compute.array(np.frombuffer(data, dtype=np.uint64)) as data_in, \
+                compute.array(np.frombuffer(self.material, dtype=np.uint32)) as constants, \
+                compute.array(pixels) as data_out:
+            self.assertTrue(compute.dispatch_shader_on_array(
+                str(self.shader), (width, width, 1), data_in.raw, constants.raw, data_out.raw))
+            with compute.mapped_array(data_out.raw, pixels.dtype) as mapped:
+                return mapped.copy().reshape(pixels.shape)
+
+    def device_name(self):
+        device_interface = self.get_compute().device_interface()
+        native = device_interface.get_device_interface().contents
+        desc = PhysicalDeviceDesc()
+        device_index = native.get_device_index(device_interface.get_device())
+        self.assertTrue(native.enumerate_devices(
+            device_interface._device_manager, device_index,
+            ctypes.cast(ctypes.byref(desc), ctypes.POINTER(ctypes.c_void_p))))
+        return desc.device_name.decode("utf-8")
+
+    def test_smoke_pixels_include_shadow_and_transmittance(self):
+        grid = self.constant_grid(0.5)
+        lit = self.render(grid)
+        self.material.shadow_factor = 0
+        unshadowed = self.render(grid)
+        self.assertTrue(np.isfinite(lit).all())
+        self.assertTrue((lit[:, :3] > 0).all())
+        self.assertTrue((lit[:, :3] < unshadowed[:, :3]).all())
+        np.testing.assert_array_equal(lit[:, 3], unshadowed[:, 3])
+        alpha = float(np.float16(0.904902)) * 0.5 * (1 - np.exp(-0.05 / 16))
+        np.testing.assert_allclose(lit[:, 3], (1 - alpha)**64, rtol=2e-5)
+
+    def test_temperature_grid_changes_rendered_color(self):
+        self.material.point_count = 2
+        self.material.point_positions0[:] = [0, 1, 1, 1]
+        self.material.point_color0[:] = [0.1, 0.1, 0.1, 0.5]
+        self.material.point_color1[:] = [3, 1, 0.1, 0.5]
+        smoke = self.constant_grid(0.5)
+        cold = self.render(smoke + self.constant_grid(0.1))
+        hot = self.render(smoke + self.constant_grid(0.9))
+        self.assertTrue((hot[:, 0] > 2 * cold[:, 0]).all())
+        np.testing.assert_allclose(hot[:, 3], cold[:, 3], atol=1e-6)
+
+    def test_shadow_budget_keeps_full_volume(self):
+        self.material.step_size_scale = 4096 / 33
+        self.material.point_count = 1
+        self.material.point_color0[:] = [0.9, 0.9, 0.9, 0.904902]
+        self.material.shadow_num_steps = 128
+        grid = self.constant_grid(0.5)
+        lit = self.render(grid)
+        self.assertTrue(np.isfinite(lit).all())
+        self.assertTrue((lit[:, :3] > 0).all())
+        alpha = float(np.float16(0.904902)) * 0.5 * (1 - np.exp(-0.05 * 4 / 33))
+        np.testing.assert_allclose(lit[:, 3], (1 - alpha)**33, rtol=2e-5)
+
+    def test_maximum_ray_steps_keep_full_volume(self):
+        self.material.step_size_scale = 0.01
+        self.material.shadow_num_steps = 128
+        lit = self.render(self.constant_grid(0.5))
+        self.assertTrue(np.isfinite(lit).all())
+        self.assertTrue((lit[:, :3] > 0).all())
+        alpha = float(np.float16(0.904902)) * 0.5 * (1 - np.exp(-0.05 / 1024))
+        expected = (1 - alpha)**4096
+        try:
+            np.testing.assert_allclose(lit[:, 3], expected, rtol=4e-4)
+        except AssertionError:
+            name = self.device_name()
+            if name.lower().startswith(("llvmpipe", "lavapipe")) and (lit[:, 3] > expected).all():
+                pytest.xfail(f"{name} truncates nested ray loops; see docs/flow-smoke.md")
+            raise
 
 
 if __name__ == "__main__":

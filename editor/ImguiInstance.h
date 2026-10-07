@@ -128,6 +128,7 @@ struct UniformState
 
 struct Instance
 {
+    ImGuiContext* context = nullptr;
     PendingState pending;
     WindowState window;
 

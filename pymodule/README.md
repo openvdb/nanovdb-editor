@@ -101,11 +101,19 @@ size checks do not replace validation of the tree data by the producer.
 The buffer is registered before the optional material update. If that update
 fails, the object keeps the registered buffer and its current material.
 
-Reusing the same object name replaces its grid and preserves material edits.
-Set the shader and initial material on the first frame; omit them on later
-updates to keep changes made in the UI. The returned `Grid` owns a separate copy
-and can be closed immediately after registration. Use `register=False` to create
-an owned grid without adding it to the scene.
+`nanovdb_from_buffer` registers a new object. Reusing a name replaces its source
+and selects the default volume shader and material unless shader options are
+supplied. Explicitly configured pipelines are retained, as with ordinary grid
+registration. Its returned `Grid` owns a separate copy and can be closed
+immediately after registration.
+Use `register=False` to create an owned grid without adding it to the scene.
+
+For live simulation, create the object and set its material once, then call
+`scene.update_nanovdb_from_buffer(payload, name="smoke")` for later frames. This
+method requires an existing volume and preserves its material and pipelines.
+It copies the supplied buffer once into editor-owned memory and returns no
+`Grid`. The renderer uses the latest buffer on its next frame; submissions do
+not wait for a frame or accumulate queued copies.
 
 `scene.set_shader(name, path, parameters={...})` compiles a custom shader and
 sets per-object values by reflected field name. Unspecified values use the
@@ -140,8 +148,11 @@ scalar numbers, booleans, strings, and numeric tuples. Field names are dictionar
 keys and can contain spaces. The mapping is valid only inside the context;
 returned values are copies. Use `dict(controls)` to copy all values at once.
 The context locks UI access, so
-keep it short and do not run simulation or rendering work inside it. Do not
-reload the schema inside a mapped context. Schema updates from other Python
+keep it short and do simulation work after it exits. Grid registration and live
+buffer updates can run inside the context, but `set_shader` fails with a mapped
+parameter error because it requires the render thread. Do not call editor
+lifecycle methods, save or load scenes, or reload the schema inside a mapped
+context. Schema updates from other Python
 threads wait for the context to exit. Direct native calls are outside this
 Python lock.
 
@@ -155,7 +166,7 @@ when true. `sameLine: true` places a field beside the preceding visible field;
 `readOnly` disables UI edits, while Python can still publish status. With
 `ui_profile="nvflow"`, the title is "NanoVDB Editor - NvFlow" and the layout is
 the same as `ui_profile="viewer"` (fVDB). Custom scene controls appear in
-**Params**, including fields with a `group` tag. Shader material controls,
+**Params**. Shader material controls,
 including color ramps, appear in **Properties**. Controls define state only: the application must poll and implement
 actions such as play or restart. No callbacks execute on the render thread.
 

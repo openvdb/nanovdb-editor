@@ -5,8 +5,6 @@ enable_testing()
 
 include(GoogleTest)
 
-target_sources(pnanovdbeditor PRIVATE EditorUiTestSupport.cpp)
-
 function(ConfigureTest CMAKE_TEST_NAME)
   add_executable(${CMAKE_TEST_NAME} ${ARGN})
 
@@ -61,6 +59,7 @@ ConfigureTest(ShaderCompileCpuTest ShaderCompileCpuTest.cpp)
 ConfigureTest(FileFormatTest FileFormatTest.cpp)
 ConfigureTest(EditorStartStopTest EditorStartStopTest.cpp)
 ConfigureTest(RenderThreadTaskQueueTest RenderThreadTaskQueueTest.cpp)
+ConfigureTest(StreamingApiTest StreamingApiTest.cpp)
 ConfigureTest(EditorRapidAddRemoveTest EditorRapidAddRemoveTest.cpp GpuTestSupport.cpp)
 ConfigureTest(EditorHeadlessNonStreamingTest EditorHeadlessNonStreamingTest.cpp)
 ConfigureTest(EditorViewportCameraSyncTest

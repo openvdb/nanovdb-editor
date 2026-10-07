@@ -12,9 +12,11 @@
 #include "EditorTestSupport.h"
 
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <vector>
 
 namespace
@@ -266,4 +268,74 @@ TEST_F(ShaderParamsResetToDefaultsTest, ResetRejectsInvalidShaderName)
     EXPECT_FALSE(scene_manager.reset_shader_params_to_defaults(&compute, nullptr));
     EXPECT_FALSE(scene_manager.reset_shader_params_to_defaults(&compute, ""));
     EXPECT_FALSE(scene_manager.reset_shader_params_to_defaults(&compute, "editor/does_not_exist.slang"));
+}
+
+TEST_F(ShaderParamsResetToDefaultsTest, RefreshPreservesDistinctObjectValues)
+{
+    auto& manager = *editor.impl->scene_manager;
+    void* a = pnanovdb_editor_test::get_object_shader_params_ptr(&editor, scene_token, name_a);
+    void* b = pnanovdb_editor_test::get_object_shader_params_ptr(&editor, scene_token, name_b);
+    std::memset(a, 0x11, kBufSize);
+    std::memset(b, 0x22, kBufSize);
+    stampPoolWithPattern(default_editor_shader(), 0x33);
+    for (int i = 0; i < 4; ++i)
+    {
+        manager.refresh_params_for_shader(&compute, default_editor_shader());
+        EXPECT_EQ(*static_cast<uint8_t*>(pnanovdb_editor_test::get_object_shader_params_ptr(
+                      &editor, scene_token, name_a)), 0x11);
+        EXPECT_EQ(*static_cast<uint8_t*>(pnanovdb_editor_test::get_object_shader_params_ptr(
+                      &editor, scene_token, name_b)), 0x22);
+    }
+}
+
+TEST_F(ShaderParamsResetToDefaultsTest, HotReloadMigratesOnlyCompatibleFields)
+{
+    const auto id = std::chrono::steady_clock::now().time_since_epoch().count();
+    const auto directory = std::filesystem::temp_directory_path() / ("material_reload_" + std::to_string(id));
+    std::filesystem::create_directories(directory);
+    const std::string shader = (directory / ("material_" + std::to_string(id) + ".slang")).string();
+    struct Cleanup
+    {
+        std::filesystem::path directory;
+        ~Cleanup() { std::filesystem::remove_all(directory); }
+    } cleanup{directory};
+    auto write_shader = [&](const char* fields)
+    {
+        std::ofstream(shader) << "struct shader_params_t {" << fields << "};\n"
+            << "ConstantBuffer<shader_params_t> shader_params; RWStructuredBuffer<float> output;\n"
+            << "[numthreads(1,1,1)] void main(uint3 id:SV_DispatchThreadID) {"
+            << "output[id.x] = shader_params.gain + shader_params.mode + shader_params.color.x; }\n";
+    };
+    write_shader("float gain; uint mode; float3 color;");
+    ASSERT_TRUE(compileToCache(shader.c_str()));
+    std::ofstream(shader + ".json") << R"({"ShaderParams":{"gain":{"value":1.0},"mode":{"value":2},"color":{"value":[1,1,1]},"new_field":{"value":3.0}}})";
+    auto& manager = *editor.impl->scene_manager;
+    for (auto* name : {name_a, name_b})
+    {
+        manager.with_object(scene_token, name, [&](pnanovdb_editor::SceneObject* obj)
+        {
+            obj->shader_name() = editor.get_token(shader.c_str());
+            ASSERT_TRUE(manager.refresh_params_for_object(&compute, *obj));
+            float values[] = {name == name_a ? 7.0f : 9.0f, 0.0f, 0.2f, 0.4f, 0.6f};
+            std::memcpy(obj->shader_params(), values, sizeof(values));
+            static_cast<uint32_t*>(obj->shader_params())[1] = 42;
+        });
+    }
+    write_shader("float new_field; float gain; float mode; float4 color;");
+    ASSERT_TRUE(compileToCache(shader.c_str()));
+    ASSERT_TRUE(manager.refresh_params_for_shader(&compute, shader.c_str()));
+    for (auto* name : {name_a, name_b})
+    {
+        manager.with_object(scene_token, name, [&](pnanovdb_editor::SceneObject* obj)
+        {
+            const float* values = static_cast<const float*>(obj->shader_params());
+            EXPECT_FLOAT_EQ(values[0], 3.0f);
+            EXPECT_FLOAT_EQ(values[1], name == name_a ? 7.0f : 9.0f);
+            EXPECT_FLOAT_EQ(values[2], 2.0f);
+            EXPECT_FLOAT_EQ(values[3], 1.0f);
+            EXPECT_FLOAT_EQ(values[4], 1.0f);
+            EXPECT_FLOAT_EQ(values[5], 1.0f);
+            EXPECT_FLOAT_EQ(values[6], 0.0f);
+        });
+    }
 }

@@ -163,3 +163,32 @@ void main(uint3 id : SV_DispatchThreadID) { texture_out[id.xy] = float4(float(sh
     scene.set_shader("nanovdb", shader, parameters={"value": value})
     with pytest.raises(nve.PipelineError, match="Invalid shader parameter"):
         scene.set_shader("nanovdb", shader, parameters={"value": 1e10})
+
+
+@pytest.mark.parametrize("wrap", [bytes, bytearray, memoryview, lambda data: np.frombuffer(data, dtype=np.uint32)])
+def test_streaming_update_uses_borrowed_input(app, monkeypatch, wrap):
+    scene = app.scene("streaming")
+    with scene.nanovdb_from_buffer(raw_empty_grid()):
+        pass
+    supplied = wrap(raw_empty_grid())
+    expected_pointer = np.frombuffer(supplied, dtype=np.uint32).ctypes.data
+    native_update = app.editor.update_nanovdb_buffer
+    observed = []
+
+    def update(scene_token, name_token, array):
+        observed.append(array.data)
+        native_update(scene_token, name_token, array)
+
+    monkeypatch.setattr(app.editor, "update_nanovdb_buffer", update)
+    assert scene.update_nanovdb_from_buffer(supplied) is None
+    assert observed == [expected_pointer]
+
+
+def test_streaming_update_requires_existing_object(app):
+    with pytest.raises(nve.PipelineError, match="missing"):
+        app.scene("streaming").update_nanovdb_from_buffer(raw_empty_grid())
+
+
+def test_streaming_update_validates_buffer(app):
+    with pytest.raises(nve.InvalidArgumentError, match="truncated"):
+        app.scene("streaming").update_nanovdb_from_buffer(b"NanoVDB1")

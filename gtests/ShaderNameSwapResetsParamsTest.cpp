@@ -297,7 +297,7 @@ TEST_F(ShaderNameSwapResetsParamsTest, SetShaderRejectsInvalidValuesWithoutMutat
         &editor, scene_token, editor.get_token("missing"), default_editor_shader(), "{}", error, sizeof(error)));
 }
 
-TEST_F(ShaderNameSwapResetsParamsTest, RawBufferReplacementPreservesShaderStateAndOwnsCopy)
+TEST_F(ShaderNameSwapResetsParamsTest, RawBufferUpdatePreservesShaderStateAndOwnsCopy)
 {
     char error[256]{};
     ASSERT_TRUE(editor.set_shader(&editor, scene_token, name_token, alt_shader(), "{}", error, sizeof(error))) << error;
@@ -320,7 +320,7 @@ TEST_F(ShaderNameSwapResetsParamsTest, RawBufferReplacementPreservesShaderStateA
     const std::array<uint8_t, 16> bytes{ 1, 3, 5, 7, 9, 11, 13, 15 };
     auto* replacement = compute.create_array(sizeof(uint8_t), bytes.size(), bytes.data());
     ASSERT_NE(replacement, nullptr);
-    editor.add_nanovdb_2(&editor, scene_token, name_token, replacement);
+    ASSERT_TRUE(editor.update_nanovdb_buffer(&editor, scene_token, name_token, replacement));
     std::memset(replacement->data, 0, bytes.size());
     compute.destroy_array(replacement);
 

@@ -619,6 +619,11 @@ class pnanovdb_Editor(Structure):
                 c_char_p, c_char_p, POINTER(c_char), c_uint64,
             ),
         ),
+        (
+            "update_nanovdb_buffer",
+            CFUNCTYPE(pnanovdb_bool_t, c_void_p, POINTER(EditorToken), POINTER(EditorToken),
+                      POINTER(pnanovdb_ComputeArray)),
+        ),
     ]
 
 
@@ -1009,6 +1014,12 @@ class Editor:
         """Add NanoVDB data to scene with token-based API."""
         add_nanovdb_2_func = self._editor.contents.add_nanovdb_2
         add_nanovdb_2_func(self._editor, scene, name, pointer(array))
+
+    def update_nanovdb_buffer(self, scene, name, array) -> None:
+        """Copy a buffer into an existing NanoVDB object without changing its material."""
+        if not self._editor.contents.update_nanovdb_buffer(self._editor, scene, name, pointer(array)):
+            raise PipelineError("Cannot update NanoVDB buffer: object is missing, is not an in-memory grid, "
+                                "or the buffer could not be copied")
 
     def set_shader(self, scene, name, shader, *, parameters=None) -> None:
         """Compile and assign a scene object's shader and JSON parameter values."""

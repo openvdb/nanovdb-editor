@@ -163,6 +163,7 @@ typedef struct pnanovdb_editor_t
 
     // For any scene object, client can attempt to map parameters of a given type for read/write
     // Pass name=nullptr to map scene-level custom params using get_custom_scene_params_data_type()
+    // Calls that wait for the render thread fail while parameters are mapped on the calling thread.
     // It is the server's job to deal with binary layout compatbility, converting to client layout as needed
     void*(PNANOVDB_ABI* map_params)(pnanovdb_editor_t* editor,
                                     pnanovdb_editor_token_t* scene,
@@ -300,6 +301,13 @@ typedef struct pnanovdb_editor_t
                                               char* error_buf,
                                               pnanovdb_uint64_t error_buf_size);
 
+    // Copy a new source buffer into an existing in-memory NanoVDB object. Keep its material and pipelines.
+    // Returns false for a missing or incompatible object. The caller retains ownership of array.
+    pnanovdb_bool_t(PNANOVDB_ABI* update_nanovdb_buffer)(pnanovdb_editor_t* editor,
+                                                         pnanovdb_editor_token_t* scene,
+                                                         pnanovdb_editor_token_t* name,
+                                                         pnanovdb_compute_array_t* array);
+
 } pnanovdb_editor_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_editor_t
@@ -355,6 +363,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(get_pipeline_type, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_camera_2, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_gaussian_data_4, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(set_shader, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(update_nanovdb_buffer, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE

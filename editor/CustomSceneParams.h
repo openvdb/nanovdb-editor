@@ -38,7 +38,6 @@ public:
     struct Field
     {
         std::string name;
-        std::string group;
         Widget widget = Widget::Default;
         std::string active_label;
         std::string tooltip;
@@ -97,8 +96,8 @@ public:
         return m_fields.empty() ? nullptr : &m_data_type;
     }
 
-    bool hasVisibleFields(const char* group = nullptr, bool exclude_group = false) const;
-    void render(const char* group = nullptr, bool exclude_group = false);
+    bool hasVisibleFields() const;
+    void render();
     bool fillDesc(const char* shader_name, pnanovdb_shader_params_desc_t* out_desc) const;
 
     std::mutex& dataMutex() const
@@ -121,7 +120,6 @@ private:
         PNANOVDB_REFLECT_TYPE_STRUCT, 0u, "CustomSceneParams", nullptr, 0u, nullptr
     };
 
-    static bool matchesGroup(const Field& field, const char* group, bool exclude_group);
     void rebuildDescriptorViews();
 };
 

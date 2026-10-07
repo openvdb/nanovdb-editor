@@ -116,7 +116,7 @@ TEST(SceneObjectReplacementTest, RawBufferUpdateInvalidatesDerivedDataAndOldLoad
                             obj->resolve_resources();
                         });
 
-    ASSERT_TRUE(manager.add_nanovdb_buffer(&scene, &name, &replacement, &compute, nullptr));
+    ASSERT_TRUE(manager.update_nanovdb_buffer(&scene, &name, &replacement, &compute));
     EXPECT_EQ(g_retained_array_destroy_count, 2);
     EXPECT_FALSE(manager.commit_reserved_nanovdb(&scene, &name, old_lifetime, &late, nullptr, &compute, nullptr,
                                                  pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_nanovdb_render));

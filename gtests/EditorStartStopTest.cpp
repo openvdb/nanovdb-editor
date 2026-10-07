@@ -9,6 +9,7 @@
 
 #include "editor/Editor.h"
 #include "editor/EditorScene.h"
+#include "editor/EditorSceneManager.h"
 #include "editor/ImguiInstance.h"
 
 #include <imgui_internal.h>
@@ -22,8 +23,6 @@
 #include <memory>
 #include <thread>
 #include <tuple>
-
-PNANOVDB_API ImGuiContext* pnanovdb_editor_test_get_imgui_context();
 
 class EditorStreamingTest : public ::testing::Test
 {
@@ -142,7 +141,9 @@ TEST_P(EditorClientInterfaceTest, UiProfilesHeadlessStreaming)
     ASSERT_EQ(editor.get_pipeline(&editor, scene_token, object_token, pnanovdb_pipeline_stage_render),
               pnanovdb_pipeline_type_noop);
     editor.start(&editor, device, &cfg);
-    editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
+    ASSERT_TRUE(pnanovdb_editor::pnanovdb_get_editor()->update_nanovdb_buffer(
+        &editor, scene_token, object_token, nanovdb_array));
+    ASSERT_TRUE(editor.impl->editor_worker->render_thread_tasks.run_blocking([]() { return PNANOVDB_TRUE; }));
     compute.destroy_array(nanovdb_array);
     nanovdb_array = nullptr;
     ASSERT_EQ(editor.get_pipeline(&editor, scene_token, object_token, pnanovdb_pipeline_stage_render),
@@ -169,7 +170,7 @@ TEST_P(EditorClientInterfaceTest, UiProfilesHeadlessStreaming)
         return worker->render_thread_tasks.run_blocking([&]()
         {
             // The test and editor DLL keep separate ImGui context pointers.
-            ImGui::SetCurrentContext(pnanovdb_editor_test_get_imgui_context());
+            ImGui::SetCurrentContext(editor.impl->editor_scene->get_imgui_instance()->context);
             return task();
         });
     };
@@ -357,4 +358,205 @@ TEST(NanoVDBEditor, WorkerRestartUsesFreshTaskQueueState)
     worker_b->render_thread_tasks.drain();
     EXPECT_EQ(b_runs.load(std::memory_order_relaxed), 1)
         << "restarted worker's queue must accept and run work independent of the closed one";
+}
+
+namespace
+{
+using CreateArrayFn = decltype(pnanovdb_compute_t::create_array);
+using DestroyArrayFn = decltype(pnanovdb_compute_t::destroy_array);
+CreateArrayFn tracked_create_array = nullptr;
+DestroyArrayFn tracked_destroy_array = nullptr;
+std::atomic<int> live_param_arrays{0};
+
+pnanovdb_compute_array_t* count_param_array_create(pnanovdb_uint64_t size,
+                                                   pnanovdb_uint64_t count,
+                                                   const void* data)
+{
+    auto* array = tracked_create_array(size, count, data);
+    if (array && size * count == PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE)
+        ++live_param_arrays;
+    return array;
+}
+
+void count_param_array_destroy(pnanovdb_compute_array_t* array)
+{
+    if (array && array->element_size * array->element_count == PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE)
+        --live_param_arrays;
+    tracked_destroy_array(array);
+}
+}
+
+TEST_F(EditorStreamingTest, RepeatedSelectedBufferUpdatesKeepParameterAllocationsBounded)
+{
+    editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
+    editor.start(&editor, device, &cfg);
+    auto worker = editor.impl->editor_worker;
+    ASSERT_NE(worker, nullptr);
+    ASSERT_TRUE(worker->render_thread_tasks.run_blocking([&]()
+    {
+        tracked_create_array = compute.create_array;
+        tracked_destroy_array = compute.destroy_array;
+        compute.create_array = count_param_array_create;
+        compute.destroy_array = count_param_array_destroy;
+        live_param_arrays = 0;
+        for (int frame = 0; frame < 128; ++frame)
+        {
+            EXPECT_TRUE(editor.update_nanovdb_buffer(&editor, scene_token, object_token, nanovdb_array));
+        }
+        const int growth = live_param_arrays.load();
+        compute.create_array = tracked_create_array;
+        compute.destroy_array = tracked_destroy_array;
+        EXPECT_LE(growth, 1) << "Selected stream updates retain old UI parameter arrays";
+        return PNANOVDB_TRUE;
+    }));
+}
+
+namespace
+{
+using DispatchNanoVDBFn = decltype(pnanovdb_compute_t::dispatch_shader_on_nanovdb_array);
+using InitShaderFn = decltype(pnanovdb_compute_t::init_shader);
+DispatchNanoVDBFn tracked_dispatch_nanovdb = nullptr;
+InitShaderFn tracked_init_shader = nullptr;
+pnanovdb_compute_array_t* tracked_array_a = nullptr;
+pnanovdb_compute_array_t* tracked_array_b = nullptr;
+std::atomic<int> rendered_a{0}, rendered_b{0}, uploaded_a{0}, compiled_materials{0};
+
+pnanovdb_bool_t count_material_dispatch(const pnanovdb_compute_t* compute,
+                                       const pnanovdb_compute_device_t* device,
+                                       const pnanovdb_shader_context_t* shader,
+                                       pnanovdb_compute_array_t* array,
+                                       pnanovdb_int32_t width,
+                                       pnanovdb_int32_t height,
+                                       pnanovdb_compute_texture_t* background,
+                                       pnanovdb_compute_buffer_transient_t* editor_params,
+                                       pnanovdb_compute_buffer_transient_t* material_params,
+                                       pnanovdb_compute_buffer_t** buffer,
+                                       pnanovdb_compute_buffer_transient_t** readback)
+{
+    const bool uploads = !*buffer;
+    const auto result = tracked_dispatch_nanovdb(compute, device, shader, array, width, height, background,
+                                                 editor_params, material_params, buffer, readback);
+    if (result && array == tracked_array_a)
+    {
+        ++rendered_a;
+        if (uploads)
+            ++uploaded_a;
+    }
+    if (result && array == tracked_array_b)
+        ++rendered_b;
+    return result;
+}
+
+pnanovdb_bool_t count_material_compile(const pnanovdb_compute_t* compute,
+                                      pnanovdb_compute_queue_t* queue,
+                                      pnanovdb_shader_context_t* shader,
+                                      pnanovdb_compiler_settings_t* settings)
+{
+    ++compiled_materials;
+    return tracked_init_shader(compute, queue, shader, settings);
+}
+
+class EditorMaterialRenderTest : public EditorStreamingTest
+{
+protected:
+    void SetUp() override
+    {
+        EditorStreamingTest::SetUp();
+        if (HasFatalFailure() || IsSkipped())
+            return;
+        tracked_dispatch_nanovdb = compute.dispatch_shader_on_nanovdb_array;
+        tracked_init_shader = compute.init_shader;
+        compute.dispatch_shader_on_nanovdb_array = count_material_dispatch;
+        compute.init_shader = count_material_compile;
+        tracked_array_a = nullptr;
+        tracked_array_b = nullptr;
+        rendered_a = rendered_b = uploaded_a = compiled_materials = 0;
+        tracking = true;
+    }
+
+    void TearDown() override
+    {
+        if (tracking)
+        {
+            editor.stop(&editor);
+            compute.dispatch_shader_on_nanovdb_array = tracked_dispatch_nanovdb;
+            compute.init_shader = tracked_init_shader;
+        }
+        EditorStreamingTest::TearDown();
+    }
+
+    bool wait_for_frames(int a, int b = 0)
+    {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+        auto worker = editor.impl->editor_worker;
+        while (std::chrono::steady_clock::now() < deadline)
+        {
+            if (rendered_a >= a && rendered_b >= b)
+                return true;
+            if (!worker->render_thread_tasks.run_blocking([]() { return PNANOVDB_TRUE; }))
+                return false;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        return false;
+    }
+
+    bool tracking = false;
+};
+}
+
+TEST_F(EditorMaterialRenderTest, MixedShadersKeepObjectValuesAcrossFramesAndReload)
+{
+    auto* second = editor.get_token("wireframe");
+    editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
+    editor.add_nanovdb_2(&editor, scene_token, second, nanovdb_array);
+    char error[1024]{};
+    ASSERT_TRUE(editor.set_shader(&editor, scene_token, object_token, "editor/flow_smoke.slang",
+                                  R"({"attenuation":7.75})", error, sizeof(error))) << error;
+    ASSERT_TRUE(editor.set_shader(&editor, scene_token, second, "editor/wireframe.slang",
+                                  R"({"highlight_bbox":1})", error, sizeof(error))) << error;
+    auto& manager = *editor.impl->scene_manager;
+    manager.with_object(scene_token, object_token,
+                         [](pnanovdb_editor::SceneObject* obj) { tracked_array_a = obj->nanovdb_array(); });
+    manager.with_object(scene_token, second,
+                         [](pnanovdb_editor::SceneObject* obj) { tracked_array_b = obj->nanovdb_array(); });
+    editor.start(&editor, device, &cfg);
+    ASSERT_TRUE(wait_for_frames(3, 3));
+    const int compile_count = compiled_materials.load();
+    ASSERT_TRUE(wait_for_frames(rendered_a + 3, rendered_b + 3));
+    EXPECT_EQ(compiled_materials.load(), compile_count);
+    ASSERT_TRUE(editor.impl->editor_worker->render_thread_tasks.run_blocking([&]()
+    {
+        editor.impl->editor_scene->get_imgui_instance()->pending.update_shader = true;
+        return PNANOVDB_TRUE;
+    }));
+    ASSERT_TRUE(wait_for_frames(rendered_a + 2, rendered_b + 2));
+    EXPECT_GT(compiled_materials.load(), compile_count);
+    manager.with_object(scene_token, object_token, [](pnanovdb_editor::SceneObject* obj)
+    {
+        EXPECT_FLOAT_EQ(*static_cast<float*>(obj->shader_params()), 7.75f);
+    });
+    manager.with_object(scene_token, second, [](pnanovdb_editor::SceneObject* obj)
+    {
+        EXPECT_EQ(*static_cast<uint32_t*>(obj->shader_params()), 1u);
+    });
+}
+
+TEST_F(EditorMaterialRenderTest, SourceRevisionInvalidatesAnUnchangedArrayAddress)
+{
+    editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
+    editor.impl->scene_manager->with_object(scene_token, object_token,
+        [](pnanovdb_editor::SceneObject* obj) { tracked_array_a = obj->nanovdb_array(); });
+    editor.start(&editor, device, &cfg);
+    ASSERT_TRUE(wait_for_frames(3));
+    const int uploads = uploaded_a.load();
+    ASSERT_TRUE(wait_for_frames(rendered_a + 2));
+    EXPECT_EQ(uploaded_a.load(), uploads);
+    ASSERT_TRUE(editor.impl->editor_worker->render_thread_tasks.run_blocking([&]()
+    {
+        editor.impl->scene_manager->with_object(scene_token, object_token,
+            [](pnanovdb_editor::SceneObject* obj) { ++obj->lifetime_id; });
+        return PNANOVDB_TRUE;
+    }));
+    ASSERT_TRUE(wait_for_frames(rendered_a + 2));
+    EXPECT_EQ(uploaded_a.load(), uploads + 1);
 }

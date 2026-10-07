@@ -253,7 +253,7 @@ TEST(NanoVDBEditor, CustomSceneParamsRejectsStringWithNumericOptions)
     EXPECT_NE(error_message.find("not supported"), std::string::npos);
 }
 
-TEST(NanoVDBEditor, CustomSceneParamsGroupAndReadOnlyKeepMappedValues)
+TEST(NanoVDBEditor, CustomSceneParamsReadOnlyKeepsMappedValues)
 {
     pnanovdb_editor::CustomSceneParams params;
     std::string error_message;
@@ -271,47 +271,34 @@ TEST(NanoVDBEditor, CustomSceneParamsGroupAndReadOnlyKeepMappedValues)
     EXPECT_EQ(*frame_value, 13u);
 }
 
-TEST(NanoVDBEditor, CustomSceneParamsRejectsInvalidGroupAndReadOnly)
+TEST(NanoVDBEditor, CustomSceneParamsRejectsInvalidReadOnly)
 {
     pnanovdb_editor::CustomSceneParams params;
     std::string error_message;
-    EXPECT_FALSE(params.loadFromJsonString(R"json({"SceneParams": {
-        "Play": {"type": "bool", "group": 123}
-    }})json", "controls", &error_message));
-    EXPECT_NE(error_message.find("invalid 'group'"), std::string::npos);
     EXPECT_FALSE(params.loadFromJsonString(R"json({"SceneParams": {
         "Frame": {"type": "uint", "readOnly": "true"}
     }})json", "controls", &error_message));
     EXPECT_NE(error_message.find("invalid 'readOnly'"), std::string::npos);
 }
 
-TEST(NanoVDBEditor, CustomSceneParamsSimulationVisibilityAndExclusion)
+TEST(NanoVDBEditor, CustomSceneParamsVisibility)
 {
     pnanovdb_editor::CustomSceneParams params;
+    EXPECT_FALSE(params.hasVisibleFields());
     ASSERT_TRUE(params.loadFromJsonString(R"json({"SceneParams": {
         "Play": {"type": "bool", "group": "Simulation"},
-        "Frame": {"type": "uint", "group": "Simulation", "readOnly": true},
-        "Counter": {"type": "uint", "group": "Hidden", "hidden": true},
-        "Gain": {"type": "float"},
-        "Other": {"type": "float", "group": "Other"}
+        "Counter": {"type": "uint", "hidden": true}
     }})json"));
-    EXPECT_TRUE(params.hasVisibleFields("Simulation"));
-    EXPECT_TRUE(params.hasVisibleFields("Simulation", true));
-    EXPECT_TRUE(params.hasVisibleFields(""));
-    EXPECT_TRUE(params.hasVisibleFields("Other"));
-    EXPECT_FALSE(params.hasVisibleFields("Hidden"));
-    EXPECT_FALSE(params.hasVisibleFields("missing"));
+    EXPECT_TRUE(params.hasVisibleFields());
 
     ASSERT_TRUE(params.loadFromJsonString(R"json({"SceneParams": {
-        "Frame": {"type": "uint", "group": "Simulation", "readOnly": true}
+        "Frame": {"type": "uint", "readOnly": true}
     }})json"));
-    EXPECT_TRUE(params.hasVisibleFields("Simulation"));
-    EXPECT_FALSE(params.hasVisibleFields("Simulation", true));
+    EXPECT_TRUE(params.hasVisibleFields());
 
     ASSERT_TRUE(params.loadFromJsonString(R"json({"SceneParams": {
-        "Counter": {"type": "uint", "group": "Simulation", "hidden": true}
+        "Counter": {"type": "uint", "hidden": true}
     }})json"));
-    EXPECT_FALSE(params.hasVisibleFields("Simulation"));
     EXPECT_FALSE(params.hasVisibleFields());
 }
 

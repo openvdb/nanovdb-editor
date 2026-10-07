@@ -18,13 +18,13 @@
 namespace pnanovdb_editor
 {
 
-void CustomSceneParams::render(const char* group, bool exclude_group)
+void CustomSceneParams::render()
 {
     std::lock_guard<std::mutex> lock(m_data_mutex);
     bool rendered_any = false;
     for (auto& field : m_fields)
     {
-        if (!matchesGroup(field, group, exclude_group))
+        if (field.is_hidden)
         {
             continue;
         }

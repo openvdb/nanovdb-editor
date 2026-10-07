@@ -388,6 +388,9 @@ class Scene:
 
         Schema updates through this editor from other Python threads wait for
         this context to exit. Do not reload the schema inside the context.
+        Calls that wait for the viewer, including ``set_shader`` and scene
+        load/save, fail while parameters are mapped on the calling thread.
+        Buffer registration and streaming updates do not wait for the viewer.
         """
         from ._params import MappedParams
 
@@ -500,9 +503,10 @@ class Scene:
         data. The selected shader determines how additional grids are used.
 
         The editor keeps its own copy. The source and returned Grid can be
-        released after this call. Reusing ``name`` for a raw NanoVDB object
-        replaces its buffer and preserves its shader, material edits, visibility,
-        and pipeline settings. Registration waits for scene-view synchronization.
+        released after this call. Reusing ``name`` replaces its source, shader,
+        and material values, while preserving visibility and configured pipelines.
+        Use ``update_nanovdb_from_buffer`` to keep material and pipeline settings
+        while streaming. The viewer synchronizes asynchronously.
         Passing ``shader`` explicitly applies new material settings;
         ``shader_parameters`` maps reflected shader field names to values.
         If the material update fails, the registered buffer remains with its
@@ -512,6 +516,19 @@ class Scene:
             raise InvalidArgumentError("shader options require register=True")
         if shader_parameters is not None and shader is None:
             raise InvalidArgumentError("shader_parameters requires shader")
+        view = self._nanovdb_buffer_view(data)
+        array = self._editor._compute.create_array(np.frombuffer(view, dtype=np.uint32))
+        grid = self._finalize(array, name, register)
+        if shader is not None:
+            try:
+                self.set_shader(name, shader, parameters=shader_parameters)
+            except Exception:
+                grid.close()
+                raise
+        return grid
+
+    @staticmethod
+    def _nanovdb_buffer_view(data):
         try:
             view = memoryview(data)
         except TypeError as exc:
@@ -531,15 +548,20 @@ class Scene:
             if grid_size < 736 or grid_size % 32 or grid_size > view.nbytes - offset:
                 raise InvalidArgumentError("Invalid or truncated NanoVDB grid size")
             offset += grid_size
-        array = self._editor._compute.create_array(np.frombuffer(view, dtype=np.uint32))
-        grid = self._finalize(array, name, register)
-        if shader is not None:
-            try:
-                self.set_shader(name, shader, parameters=shader_parameters)
-            except Exception:
-                grid.close()
-                raise
-        return grid
+        return view
+
+    def update_nanovdb_from_buffer(self, data, name: str = "nanovdb") -> None:
+        """Copy a streamed frame into an existing in-memory NanoVDB object.
+
+        Keep its shader, material values, and pipeline settings. Create the
+        object first with ``nanovdb_from_buffer``. This makes one CPU copy and
+        returns after registration; the viewer synchronizes asynchronously.
+        The source buffer can be released or changed after this call returns.
+        """
+        view = self._nanovdb_buffer_view(data)
+        source = np.frombuffer(view, dtype=np.uint32)
+        array = pnanovdb_ComputeArray(source.ctypes.data, source.dtype.itemsize, source.size)
+        self._editor.update_nanovdb_buffer(self._token, self._editor.get_token(name), array)
 
     def set_shader(self, name: str, shader: str, *, parameters: Optional[dict] = None) -> None:
         """Compile and assign a shader, with per-object parameter overrides.

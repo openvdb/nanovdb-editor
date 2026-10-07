@@ -40,6 +40,7 @@ struct shader_params_t
 
 static const uint FLOW_MAX_RAY_STEPS = 4096u;
 static const uint FLOW_MAX_SHADOW_STEPS = 128u;
+static const uint FLOW_MAX_SHADOW_SAMPLES_PER_RAY = 4096u;
 
 struct flow_ray_steps_t
 {
@@ -67,6 +68,12 @@ flow_ray_steps_t flow_ray_steps(float near_t, float far_t, float requested_step,
 uint flow_shadow_step_count(uint requested)
 {
     return min(requested, FLOW_MAX_SHADOW_STEPS);
+}
+
+uint flow_shadow_sample_stride(uint ray_steps, uint shadow_steps)
+{
+    uint evaluations = FLOW_MAX_SHADOW_SAMPLES_PER_RAY / max(flow_shadow_step_count(shadow_steps), 1u);
+    return max(1u, (ray_steps + evaluations - 1u) / evaluations);
 }
 
 float4 flow_colormap_point(shader_params_t params, uint index)

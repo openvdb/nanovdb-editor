@@ -40,7 +40,7 @@ protected:
         ImGui::DestroyContext();
     }
 
-    Item frame(const char* group = nullptr, bool exclude_group = false, bool prefix = false)
+    Item frame(bool prefix = false)
     {
         ImGui::NewFrame();
         ImGui::SetNextWindowPos(ImVec2(0, 0));
@@ -49,7 +49,7 @@ protected:
         if (prefix)
             ImGui::Button("External control");
         const auto start = ImGui::GetCursorScreenPos();
-        params.render(group, exclude_group);
+        params.render();
         const auto& last = ImGui::GetCurrentContext()->LastItemData;
         Item item{ last.ID, last.Rect, start, 0 };
         const ImU32 active_color = ImGui::GetColorU32(ImGuiCol_ButtonActive);
@@ -63,18 +63,18 @@ protected:
         return item;
     }
 
-    Item click(Item item, const char* group = nullptr, bool exclude_group = false)
+    Item click(Item item)
     {
         auto& io = ImGui::GetIO();
         const ImVec2 center = item.rect.GetCenter();
         io.AddMousePosEvent(center.x, center.y);
-        frame(group, exclude_group);
+        frame();
         io.AddMouseButtonEvent(0, true);
-        frame(group, exclude_group);
+        frame();
         io.AddMouseButtonEvent(0, false);
-        frame(group, exclude_group);
+        frame();
         io.AddMousePosEvent(-100, -100);
-        return frame(group, exclude_group);
+        return frame();
     }
 
     pnanovdb_bool_t* value(const char* name)
@@ -92,7 +92,7 @@ protected:
     pnanovdb_editor::CustomSceneParams params;
 };
 
-TEST_F(CustomSceneParamsRenderTest, ButtonLatchesUntilConsumedAndFiltersGroups)
+TEST_F(CustomSceneParamsRenderTest, ButtonLatchesUntilConsumed)
 {
     ASSERT_TRUE(params.loadFromJsonString(R"({"SceneParams": {
         "Other": {"type":"bool", "widget":"button", "group":"Other"},
@@ -102,14 +102,13 @@ TEST_F(CustomSceneParamsRenderTest, ButtonLatchesUntilConsumedAndFiltersGroups)
     auto* other = value("Other");
     ASSERT_NE(step, nullptr);
     ASSERT_NE(other, nullptr);
-    click(frame("Simulation"), "Simulation");
+    click(frame());
     EXPECT_EQ(*step, PNANOVDB_TRUE);
     EXPECT_EQ(*other, PNANOVDB_FALSE);
-    frame("Simulation");
+    frame();
     EXPECT_EQ(*step, PNANOVDB_TRUE);
     *step = PNANOVDB_FALSE;
-    click(frame("Simulation", true), "Simulation", true);
-    EXPECT_EQ(*other, PNANOVDB_TRUE);
+    frame();
     EXPECT_EQ(*step, PNANOVDB_FALSE);
 }
 
@@ -147,12 +146,11 @@ TEST_F(CustomSceneParamsRenderTest, ReadOnlyButtonIgnoresClicks)
 TEST_F(CustomSceneParamsRenderTest, SameLineStartsAfterFirstVisibleFieldInThisCall)
 {
     ASSERT_TRUE(params.loadFromJsonString(R"({"SceneParams": {
-        "Other": {"type":"bool", "widget":"button", "group":"Other"},
         "Hidden": {"type":"bool", "widget":"button", "hidden":true, "group":"Simulation"},
         "Step": {"type":"bool", "widget":"button", "sameLine":true, "group":"Simulation"},
         "Restart": {"type":"bool", "widget":"button", "sameLine":true, "group":"Simulation"}
     }})"));
-    const Item last = frame("Simulation", false, true);
+    const Item last = frame(true);
     EXPECT_FLOAT_EQ(last.rect.Min.y, last.start.y);
     EXPECT_GT(last.rect.Min.x, last.start.x);
 }

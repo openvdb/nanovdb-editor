@@ -29,7 +29,6 @@
 #include "misc/cpp/imgui_stdlib.h" // for std::string text input
 
 #include <ImGuiFileDialog.h>
-#include <imgui_internal.h>
 
 #include <cmath>
 #include <memory>

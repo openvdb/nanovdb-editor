@@ -37,7 +37,7 @@ def cleanup_modules(exit_code=0):
         os._exit(1)
 
 
-@pytest.hookimpl(wrapper=True, tryfirst=True)
+@pytest.hookimpl(hookwrapper=True, tryfirst=True)
 def pytest_sessionfinish(session, exitstatus):
     yield
     sys.stdout.flush()

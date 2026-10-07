@@ -272,6 +272,11 @@ public:
         return m_editor;
     }
 
+    imgui_instance_user::Instance* get_imgui_instance() const
+    {
+        return m_imgui_instance;
+    }
+
     const std::map<uint64_t, CameraViewContext>& get_camera_views() const;
     const std::map<uint64_t, NanoVDBContext>& get_nanovdb_views() const;
     const std::map<uint64_t, GaussianDataContext>& get_gaussian_views() const;

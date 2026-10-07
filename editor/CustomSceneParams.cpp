@@ -311,7 +311,7 @@ bool CustomSceneParams::loadFromJsonString(const std::string& json_string,
         };
         std::string widget;
         field.active_label = field_name;
-        if (!read_string("group", field.group) || !read_string("widget", widget) ||
+        if (!read_string("widget", widget) ||
             !read_string("activeLabel", field.active_label) || !read_string("tooltip", field.tooltip) ||
             !read_bool("readOnly", field.is_read_only) || !read_bool("sameLine", field.same_line))
         {
@@ -610,16 +610,11 @@ void CustomSceneParams::rebuildDescriptorViews()
     m_data_type.default_value = nullptr;
 }
 
-bool CustomSceneParams::matchesGroup(const Field& field, const char* group, bool exclude_group)
-{
-    return !field.is_hidden && (!group || ((field.group == group) != exclude_group));
-}
-
-bool CustomSceneParams::hasVisibleFields(const char* group, bool exclude_group) const
+bool CustomSceneParams::hasVisibleFields() const
 {
     std::lock_guard<std::mutex> lock(m_data_mutex);
     return std::any_of(m_fields.begin(), m_fields.end(),
-                       [&](const Field& field) { return matchesGroup(field, group, exclude_group); });
+                       [](const Field& field) { return !field.is_hidden; });
 }
 
 } // namespace pnanovdb_editor

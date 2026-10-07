@@ -86,7 +86,7 @@ pnanovdb_imgui_instance_t* create(void* userdata,
     *((Instance**)userdata) = ptr;
 
     IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
+    ptr->context = ImGui::CreateContext();
 
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -117,7 +117,7 @@ void destroy(pnanovdb_imgui_instance_t* instance)
         pnanovdb_editor::saveIniSettings(ptr);
     }
 
-    ImGui::DestroyContext();
+    ImGui::DestroyContext(ptr->context);
 
     delete ptr;
 }

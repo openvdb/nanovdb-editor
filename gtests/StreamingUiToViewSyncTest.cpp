@@ -213,8 +213,7 @@ TEST(StreamingUiToViewSync, PoolMutationPropagatesToObjectBufferEachFrame)
             if (!stamp_ui_pool())
                 return PNANOVDB_FALSE;
             // Replace before the next frame copies the UI edit into the object.
-            editor.add_nanovdb_2(&editor, scene_token, name_token, replacement_array);
-            return PNANOVDB_TRUE;
+            return editor.update_nanovdb_buffer(&editor, scene_token, name_token, replacement_array);
         }));
     compute.destroy_array(replacement_array);
     EXPECT_EQ(synchronized_alpha(), kSentinel) << "Buffer replacement must preserve material edits from the UI";

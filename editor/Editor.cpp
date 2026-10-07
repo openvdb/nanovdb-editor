@@ -194,8 +194,33 @@ static std::shared_ptr<EditorWorker> get_worker(pnanovdb_editor_t* editor)
     return editor->impl->editor_worker;
 }
 
+static thread_local std::unordered_map<pnanovdb_editor_impl_t*, std::vector<std::shared_ptr<EditorWorker>>>
+    s_pipeline_params_map_workers;
+
+static std::vector<std::shared_ptr<EditorWorker>>& pipeline_params_map_workers(pnanovdb_editor_t* editor)
+{
+    return s_pipeline_params_map_workers[editor->impl];
+}
+
+static bool caller_has_mapped_params(pnanovdb_editor_t* editor)
+{
+    const auto it = s_pipeline_params_map_workers.find(editor ? editor->impl : nullptr);
+    return param_map_stack_depth(editor) != 0 || (it != s_pipeline_params_map_workers.end() && !it->second.empty());
+}
+
+static bool reject_mapped_wait(pnanovdb_editor_t* editor)
+{
+    if (!caller_has_mapped_params(editor))
+        return false;
+    Console::getInstance().addLog(
+        Console::LogLevel::Error, "Cannot wait for the editor while parameters are mapped on this thread");
+    return true;
+}
+
 void shutdown(pnanovdb_editor_t* editor)
 {
+    if (reject_mapped_wait(editor))
+        return;
     if (!editor || !editor->impl)
     {
         return;
@@ -517,6 +542,8 @@ static pnanovdb_bool_t apply_save_scene(pnanovdb_editor_t* editor, const char* f
 // otherwise marshals onto the render loop and blocks until it finishes.
 static pnanovdb_bool_t run_on_render_thread(pnanovdb_editor_t* editor, std::function<pnanovdb_bool_t()> fn)
 {
+    if (reject_mapped_wait(editor))
+        return PNANOVDB_FALSE;
     std::shared_ptr<EditorWorker> worker = get_worker(editor);
     if (worker && worker->render_thread_id.load() != std::this_thread::get_id())
     {
@@ -935,6 +962,8 @@ static void run_show_loop(pnanovdb_editor_t* editor,
                 pnanovdb_editor_token_t* scene_token = nullptr;
                 pnanovdb_editor_token_t* name_token = nullptr;
                 std::string shader_name;
+                std::shared_ptr<pnanovdb_compute_array_t> nanovdb_owner;
+                uint64_t source_revision = 0;
             };
             std::vector<OrderedRenderable> renderables;
             std::vector<pnanovdb_editor_token_t*> ordered_views =
@@ -966,7 +995,10 @@ static void run_show_loop(pnanovdb_editor_t* editor,
                             }
                             const char* shader = pnanovdb_editor::pipeline_get_shader(obj);
                             renderables.push_back({ render_method, array, nullptr, obj->scene_token, obj->name_token,
-                                                    (shader && shader[0] != '\0') ? shader : "" });
+                                                    (shader && shader[0] != '\0') ? shader : "",
+                                                    obj->nanovdb_array() ? obj->resources.nanovdb_array_owner :
+                                                                           obj->resources.converted_nanovdb_owner,
+                                                    obj->lifetime_id });
                         }
                         else if (render_method == pnanovdb_pipeline_render_method_gaussian && obj->gaussian_data() &&
                                  editor->impl->raster_ctx)
@@ -986,7 +1018,7 @@ static void run_show_loop(pnanovdb_editor_t* editor,
                     auto result = editor->impl->renderer->dispatch_nanovdb_shader(
                         item.nanovdb_array, shader_name, background_image, view, projection, image_width, image_height,
                         imgui_user_instance, editor->impl->editor_scene, editor->impl->scene_manager, composite,
-                        item.scene_token, item.name_token);
+                        item.scene_token, item.name_token, item.source_revision, item.nanovdb_owner);
                     if (result == ShaderDispatchResult::CompilationFailed)
                     {
                         cleanup_background();
@@ -1111,6 +1143,8 @@ static void run_show_loop(pnanovdb_editor_t* editor,
 
 void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb_editor_config_t* config)
 {
+    if (reject_mapped_wait(editor))
+        return;
     if (!editor || !editor->impl)
         return;
 
@@ -1133,6 +1167,8 @@ void show(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb
 
 pnanovdb_int32_t get_resolved_port(pnanovdb_editor_t* editor, pnanovdb_bool_t should_wait)
 {
+    if (should_wait && reject_mapped_wait(editor))
+        return editor->impl->resolved_port.load();
     while (should_wait && editor->impl->show_active.load() &&
            editor->impl->resolved_port.load() == PNANOVDB_EDITOR_RESOLVED_PORT_PENDING)
     {
@@ -1143,6 +1179,8 @@ pnanovdb_int32_t get_resolved_port(pnanovdb_editor_t* editor, pnanovdb_bool_t sh
 
 void start(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovdb_editor_config_t* config)
 {
+    if (reject_mapped_wait(editor))
+        return;
     if (!editor || !editor->impl || !config)
         return;
 
@@ -1181,6 +1219,8 @@ void start(pnanovdb_editor_t* editor, pnanovdb_compute_device_t* device, pnanovd
 
 void stop(pnanovdb_editor_t* editor)
 {
+    if (reject_mapped_wait(editor))
+        return;
     if (!editor || !editor->impl)
         return;
 
@@ -1236,6 +1276,8 @@ void stop(pnanovdb_editor_t* editor)
 
 void reset(pnanovdb_editor_t* editor)
 {
+    if (reject_mapped_wait(editor))
+        return;
     auto device = editor->impl->device;
     auto compute = editor->impl->compute;
     auto compiler = editor->impl->compiler;
@@ -1260,6 +1302,8 @@ void reset(pnanovdb_editor_t* editor)
 /// This function is typically called from the main thread to keep the application running while the editor is active.
 void wait_for_interrupt(pnanovdb_editor_t* editor)
 {
+    if (reject_mapped_wait(editor))
+        return;
     if (editor && editor->impl && editor->impl->show_active.load())
     {
         editor_sigint_register();
@@ -1305,6 +1349,8 @@ pnanovdb_camera_t* get_camera(pnanovdb_editor_t* editor, pnanovdb_editor_token_t
 
 pnanovdb_bool_t load_scene(pnanovdb_editor_t* editor, const char* filepath, pnanovdb_bool_t overwrite)
 {
+    if (reject_mapped_wait(editor))
+        return PNANOVDB_FALSE;
     if (!editor || !editor->impl || !filepath || filepath[0] == '\0')
         return PNANOVDB_FALSE;
 
@@ -1353,6 +1399,8 @@ static pnanovdb_bool_t apply_load_scene(pnanovdb_editor_t* editor, const char* f
 
 pnanovdb_bool_t save_scene(pnanovdb_editor_t* editor, const char* filepath)
 {
+    if (reject_mapped_wait(editor))
+        return PNANOVDB_FALSE;
     if (!editor || !editor->impl || !filepath || filepath[0] == '\0')
         return PNANOVDB_FALSE;
     if (get_worker(editor))
@@ -1393,33 +1441,54 @@ void add_nanovdb_2(pnanovdb_editor_t* editor,
                    pnanovdb_compute_array_t* array_in)
 {
     if (!editor || !editor->impl || !scene || !name || !array_in)
-    {
         return;
+
+    run_add_with_render_sync(
+        editor,
+        [=](bool defer_sync)
+        {
+            const auto* compute = editor->impl->compute;
+            auto* array = compute->duplicate_array(array_in);
+            if (!array)
+            {
+                Console::getInstance().addLog(Console::LogLevel::Error,
+                                              "add_nanovdb_2: failed to duplicate input array for '%s'",
+                                              token_to_string_log(name));
+                return;
+            }
+            const char* shader = pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_nanovdb_render);
+            auto* params = EditorSceneManager::create_isolated_shader_params(
+                compute, shader, nullptr, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
+            editor->impl->scene_manager->add_nanovdb(scene, name, array, params, compute, get_token(shader));
+            sync_added_object(editor, scene, name, defer_sync);
+        });
+}
+
+pnanovdb_bool_t update_nanovdb_buffer(pnanovdb_editor_t* editor,
+                                      pnanovdb_editor_token_t* scene,
+                                      pnanovdb_editor_token_t* name,
+                                      pnanovdb_compute_array_t* array_in)
+{
+    if (!editor || !editor->impl || !scene || !name || !array_in)
+        return PNANOVDB_FALSE;
+
+    const auto* compute = editor->impl->compute;
+    auto* array = compute->duplicate_array(array_in);
+    if (!array)
+        return PNANOVDB_FALSE;
+    if (!editor->impl->scene_manager->update_nanovdb_buffer(scene, name, array, compute))
+    {
+        compute->destroy_array(array);
+        return PNANOVDB_FALSE;
     }
-
-    on_render_thread(editor,
-                     [=]()
-                     {
-                         pnanovdb_compute_array_t* array = editor->impl->compute->duplicate_array(array_in);
-                         if (!array)
-                         {
-                             Console::getInstance().addLog(Console::LogLevel::Error,
-                                                           "add_nanovdb_2: failed to duplicate input array for '%s'",
-                                                           token_to_string_log(name));
-                             return;
-                         }
-
-                         if (editor->impl->editor_scene)
-                         {
-                             editor->impl->editor_scene->sync_shader_params_from_editor();
-                         }
-                         pnanovdb_editor_token_t* shader_name_token = get_token(editor->impl->shader_name.c_str());
-                         if (editor->impl->scene_manager->add_nanovdb_buffer(
-                                 scene, name, array, editor->impl->compute, shader_name_token))
-                         {
-                             sync_added_object(editor, scene, name);
-                         }
-                     });
+    post_to_render_thread(editor,
+                          [=]()
+                          {
+                              if (editor->impl->editor_scene)
+                                  editor->impl->editor_scene->sync_shader_params_from_editor();
+                              sync_added_object(editor, scene, name);
+                          });
+    return PNANOVDB_TRUE;
 }
 
 static pnanovdb_editor_gaussian_data_desc_t duplicate_gaussian_desc(const pnanovdb_compute_t* compute,
@@ -2164,12 +2233,6 @@ void unmap_params(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pna
         }
         frame.worker->shader_params_mutex.unlock();
     }
-}
-
-static std::vector<std::shared_ptr<EditorWorker>>& pipeline_params_map_workers(pnanovdb_editor_t* editor)
-{
-    thread_local std::unordered_map<pnanovdb_editor_t*, std::vector<std::shared_ptr<EditorWorker>>> s_workers;
-    return s_workers[editor];
 }
 
 /*!
@@ -2965,6 +3028,9 @@ pnanovdb_bool_t set_shader(pnanovdb_editor_t* editor,
     if (!editor || !editor->impl || !scene || !name || !shader_name || !*shader_name)
         return fail("Editor, scene, object, and shader are required");
 
+    if (caller_has_mapped_params(editor))
+        return fail("Cannot set a shader while parameters are mapped on this thread");
+
     try
     {
         const auto values = nlohmann::json::parse(parameters_json ? parameters_json : "{}");
@@ -3008,7 +3074,7 @@ pnanovdb_bool_t set_shader(pnanovdb_editor_t* editor,
                 };
                 auto& stored = stored_values[it.key()];
                 if (field->num_elements == 1 ? !encode_half(stored) :
-                                              !std::all_of(stored.begin(), stored.end(), encode_half))
+                                               !std::all_of(stored.begin(), stored.end(), encode_half))
                     return fail(("Invalid shader parameter: " + it.key()).c_str());
             }
         }
@@ -3026,6 +3092,7 @@ pnanovdb_bool_t set_shader(pnanovdb_editor_t* editor,
         auto owner = std::shared_ptr<pnanovdb_compute_array_t>(
             array, [compute](pnanovdb_compute_array_t* ptr) { compute->destroy_array(ptr); });
         auto* shader_token = get_token(shader_name);
+        const auto layout = EditorSceneManager::load_shader_params_layout(shader_name);
         const auto apply = [=]() -> pnanovdb_bool_t
         {
             bool found = false;
@@ -3037,6 +3104,7 @@ pnanovdb_bool_t set_shader(pnanovdb_editor_t* editor,
                                                          obj->shader_name() = shader_token;
                                                          obj->params.shader_params_array = array;
                                                          obj->params.shader_params_array_owner = owner;
+                                                         obj->params.shader_params_layout = layout;
                                                          obj->shader_params() = array->data;
                                                          obj->shader_params_data_type() = nullptr;
                                                          found = true;
@@ -3095,6 +3163,7 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
     editor.add_gaussian_data_3 = add_gaussian_data_3;
     editor.add_gaussian_data_4 = add_gaussian_data_4;
     editor.set_shader = set_shader;
+    editor.update_nanovdb_buffer = update_nanovdb_buffer;
     editor.set_visible = set_visible;
     editor.get_visible = get_visible;
     editor.add_named_array = add_named_array;

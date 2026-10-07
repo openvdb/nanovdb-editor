@@ -53,3 +53,12 @@ void computeColormapTexelMain(uint3 thread_id : SV_DispatchThreadID)
 {
     data_out[thread_id.x] = flow_quantize_colormap_texel(data_in[thread_id.x]);
 }
+
+void computeShadowBudgetMain(uint3 thread_id : SV_DispatchThreadID)
+{
+    uint ray_steps = uint(data_in[thread_id.x].x);
+    uint shadow_steps = flow_shadow_step_count(constants.shadow_num_steps);
+    uint stride = flow_shadow_sample_stride(ray_steps, shadow_steps);
+    uint evaluations = (ray_steps + stride - 1u) / stride;
+    data_out[thread_id.x] = float4(float(evaluations * shadow_steps), float(stride), 0.f, 0.f);
+}
