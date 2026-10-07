@@ -25,76 +25,128 @@
 
 PNANOVDB_API ImGuiContext* pnanovdb_editor_test_get_imgui_context();
 
-class EditorClientInterfaceTest : public ::testing::TestWithParam<std::tuple<bool, const char*>>
+class EditorStreamingTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        pnanovdb_compiler_load(&compiler);
+        ASSERT_NE(compiler.module, nullptr) << "Compiler module not available";
+
+        pnanovdb_compute_load(&compute, &compiler);
+        ASSERT_NE(compute.module, nullptr) << "Failed to load compute module";
+
+        device_manager = compute.device_interface.create_device_manager(PNANOVDB_FALSE);
+        ASSERT_NE(device_manager, nullptr) << "Failed to create compute device manager";
+
+        pnanovdb_compute_physical_device_desc_t phys_desc = {};
+        if (!compute.device_interface.enumerate_devices(device_manager, 0u, &phys_desc))
+        {
+            GTEST_SKIP() << "No Vulkan-compatible device available on this machine";
+        }
+
+        pnanovdb_compute_device_desc_t device_desc = {};
+        device = compute.device_interface.create_device(device_manager, &device_desc);
+        ASSERT_NE(device, nullptr) << "Failed to create compute device";
+
+        pnanovdb_editor_load(&editor, &compute, &compiler);
+        ASSERT_NE(editor.module, nullptr) << "Editor module failed to load";
+
+        auto sphere_grid = nanovdb::tools::createLevelSetSphere<float>(10.0f);
+        nanovdb_array = compute.create_array(4u, sphere_grid.bufferSize() / 4u, sphere_grid.data());
+        ASSERT_NE(nanovdb_array, nullptr) << "Failed to create nanovdb array";
+
+        scene_token = editor.get_token("main");
+        object_token = editor.get_token("test_object");
+        cfg.ip_address = "127.0.0.1";
+        cfg.port = 8080;
+        cfg.headless = PNANOVDB_TRUE;
+        cfg.streaming = PNANOVDB_TRUE;
+    }
+
+    void TearDown() override
+    {
+        if (editor.module)
+        {
+            editor.stop(&editor);
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            pnanovdb_editor_free(&editor);
+        }
+        if (nanovdb_array)
+        {
+            compute.destroy_array(nanovdb_array);
+        }
+        if (device)
+        {
+            compute.device_interface.destroy_device(device_manager, device);
+        }
+        if (device_manager)
+        {
+            compute.device_interface.destroy_device_manager(device_manager);
+        }
+        if (compute.module)
+        {
+            pnanovdb_compute_free(&compute);
+        }
+        if (compiler.module)
+        {
+            pnanovdb_compiler_free(&compiler);
+        }
+    }
+
+    pnanovdb_compiler_t compiler = {};
+    pnanovdb_compute_t compute = {};
+    pnanovdb_editor_t editor = {};
+    pnanovdb_compute_device_manager_t* device_manager = nullptr;
+    pnanovdb_compute_device_t* device = nullptr;
+    pnanovdb_compute_array_t* nanovdb_array = nullptr;
+    pnanovdb_editor_token_t* scene_token = nullptr;
+    pnanovdb_editor_token_t* object_token = nullptr;
+    pnanovdb_editor_config_t cfg = {};
+};
+
+TEST_F(EditorStreamingTest, EditorStartStopHeadlessStreaming)
+{
+    editor.start(&editor, device, &cfg);
+    editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
+    compute.destroy_array(nanovdb_array);
+    nanovdb_array = nullptr;
+
+    auto* mapped_shader = static_cast<pnanovdb_editor_shader_name_t*>(editor.map_params(
+        &editor, scene_token, object_token, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t)));
+    ASSERT_NE(mapped_shader, nullptr);
+    mapped_shader->shader_name = editor.get_token("editor/wireframe.slang");
+    editor.unmap_params(&editor, scene_token, object_token);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+}
+
+class EditorClientInterfaceTest : public EditorStreamingTest,
+                                  public ::testing::WithParamInterface<std::tuple<bool, const char*>>
 {
 };
 
-TEST_P(EditorClientInterfaceTest, EditorStartStopHeadlessStreaming)
+TEST_P(EditorClientInterfaceTest, UiProfilesHeadlessStreaming)
 {
-    // Load compiler
-    pnanovdb_compiler_t compiler = {};
-    pnanovdb_compiler_load(&compiler);
-    ASSERT_NE(compiler.module, nullptr) << "Compiler module not available";
-
-    // Load compute
-    pnanovdb_compute_t compute = {};
-    pnanovdb_compute_load(&compute, &compiler);
-    ASSERT_NE(compute.module, nullptr) << "Failed to load compute module";
-
-    // Create device manager and device
-    pnanovdb_compute_device_desc_t device_desc = {};
-    pnanovdb_compute_device_manager_t* device_manager = compute.device_interface.create_device_manager(PNANOVDB_FALSE);
-    ASSERT_NE(device_manager, nullptr) << "Failed to create compute device manager";
-
-    // Skip if no device available
-    pnanovdb_compute_physical_device_desc_t phys_desc = {};
-    if (!compute.device_interface.enumerate_devices(device_manager, 0u, &phys_desc))
-    {
-        compute.device_interface.destroy_device_manager(device_manager);
-        pnanovdb_compute_free(&compute);
-        pnanovdb_compiler_free(&compiler);
-        GTEST_SKIP() << "No Vulkan-compatible device available on this machine";
-    }
-
-    pnanovdb_compute_device_t* device = compute.device_interface.create_device(device_manager, &device_desc);
-    ASSERT_NE(device, nullptr) << "Failed to create compute device";
-
-    // Load editor
-    pnanovdb_editor_t editor = {};
-    pnanovdb_editor_load(&editor, &compute, &compiler);
-    ASSERT_NE(editor.module, nullptr) << "Editor module failed to load";
-
     if (std::get<0>(GetParam()))
     {
         // Old clients copy only the callbacks known to their headers.
         constexpr size_t legacy_size = offsetof(pnanovdb_editor_t, get_process_step_count);
         std::memset(reinterpret_cast<char*>(&editor) + legacy_size, 0, sizeof(editor) - legacy_size);
     }
-
-    // Create a minimal NanoVDB sphere grid programmatically
-    auto sphere_grid = nanovdb::tools::createLevelSetSphere<float>(10.0f);
-
-    // Create compute array from the grid data
-    pnanovdb_compute_array_t* nanovdb_array = compute.create_array(4u, sphere_grid.bufferSize() / 4u, sphere_grid.data());
-    ASSERT_NE(nanovdb_array, nullptr) << "Failed to create nanovdb array";
-
-    // Configure editor (headless, streaming mode)
-    pnanovdb_editor_config_t cfg = {};
-    cfg.ip_address = "127.0.0.1";
-    cfg.port = 8080;
-    cfg.headless = PNANOVDB_TRUE;
-    cfg.streaming = PNANOVDB_TRUE;
     cfg.ui_profile_name = std::get<1>(GetParam());
 
-    // Start, wait briefly, then stop
-    editor.start(&editor, device, &cfg);
-
-    // Add nanovdb to a scene with a token
-    pnanovdb_editor_token_t* scene_token = editor.get_token("main");
-    pnanovdb_editor_token_t* object_token = editor.get_token("test_object");
+    // Keep volume rendering outside the UI lifecycle checks.
     editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
+    editor.set_pipeline(&editor, scene_token, object_token, pnanovdb_pipeline_stage_render, pnanovdb_pipeline_type_noop);
+    ASSERT_EQ(editor.get_pipeline(&editor, scene_token, object_token, pnanovdb_pipeline_stage_render),
+              pnanovdb_pipeline_type_noop);
+    editor.start(&editor, device, &cfg);
     editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
     compute.destroy_array(nanovdb_array);
+    nanovdb_array = nullptr;
+    ASSERT_EQ(editor.get_pipeline(&editor, scene_token, object_token, pnanovdb_pipeline_stage_render),
+              pnanovdb_pipeline_type_noop);
 
     ASSERT_NE(editor.impl->editor_scene, nullptr);
     auto* ui_editor = editor.impl->editor_scene->get_editor();
@@ -231,30 +283,6 @@ TEST_P(EditorClientInterfaceTest, EditorStartStopHeadlessStreaming)
     }})json");
     EXPECT_TRUE(editor.set_custom_scene_params(&editor, scene_token, schema, nullptr, 0));
     EXPECT_TRUE(wait_for_ui(params_are_docked));
-
-    // Use map_params to set the shader to wireframe.slang
-    pnanovdb_editor_shader_name_t* mapped_shader = (pnanovdb_editor_shader_name_t*)editor.map_params(
-        &editor, scene_token, object_token, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t));
-    if (mapped_shader)
-    {
-        mapped_shader->shader_name = editor.get_token("editor/wireframe.slang");
-        editor.unmap_params(&editor, scene_token, object_token);
-    }
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    editor.stop(&editor);
-
-    // Give extra time for background thread cleanup
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-    // Cleanup - sphere_grid stays alive until here
-    pnanovdb_editor_free(&editor);
-    compute.device_interface.destroy_device(device_manager, device);
-    compute.device_interface.destroy_device_manager(device_manager);
-    pnanovdb_compute_free(&compute);
-    pnanovdb_compiler_free(&compiler);
-
-    SUCCEED();
 }
 
 INSTANTIATE_TEST_SUITE_P(CurrentAndLegacyClients,
