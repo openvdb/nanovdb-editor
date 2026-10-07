@@ -8,7 +8,7 @@ from base64 import b64encode
 from contextlib import closing
 from http.client import HTTPConnection
 from threading import Event, Thread
-from time import monotonic, sleep
+from time import monotonic
 from urllib.request import urlopen
 
 import pytest
@@ -94,8 +94,18 @@ def test_streamed_profile_title_and_viewer_startup_camera(tmp_path, monkeypatch,
 
 
 def test_buffer_update_wakes_stream_without_browser(tmp_path, monkeypatch):
+    from nanovdb_editor import device
     from test_nanovdb_buffer import raw_empty_grid
 
+    inactive = Event()
+    log_print = device.pnanovdb_compute_log_print
+
+    def observe_stream_state(level, message):
+        if message == b"Server stream going inactive.":
+            inactive.set()
+        log_print(level, message)
+
+    monkeypatch.setattr(device, "pnanovdb_compute_log_print", observe_stream_state)
     monkeypatch.chdir(tmp_path)
     with nve.create_default() as app:
         scene = app.scene("inactive-stream")
@@ -105,7 +115,8 @@ def test_buffer_update_wakes_stream_without_browser(tmp_path, monkeypatch):
         scene.set_render_pipeline("nanovdb", "noop")
         app.start(headless=True, streaming=True, ip="127.0.0.1", ui_profile="viewer")
         assert app.editor.get_resolved_port(wait=True) > 0
-        sleep(0.5)
+        # The port opens before the first frame finishes.
+        assert inactive.wait(60), "The stream did not become inactive after startup"
         completed = Event()
         errors = []
 
