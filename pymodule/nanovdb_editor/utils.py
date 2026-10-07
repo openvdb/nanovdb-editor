@@ -5,8 +5,14 @@ import ctypes
 import os
 import platform
 import sys
+import threading
 from ctypes import wintypes
 import site
+
+
+# Native libraries can load dependencies until process exit.
+_dll_directory_cookies = {}
+_dll_directory_lock = threading.Lock()
 
 
 def add_dll_search_directory(path):
@@ -16,21 +22,27 @@ def add_dll_search_directory(path):
     if not os.path.exists(path):
         return
 
-    # Enable extended DLL search
-    LOAD_LIBRARY_SEARCH_DEFAULT_DIRS = 0x00001000
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel32.SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS)
-
     abs_path = os.path.abspath(path)
     wide_path = os.fspath(abs_path)
+    directory_key = os.path.normcase(wide_path)
 
-    kernel32.AddDllDirectory.argtypes = [wintypes.LPCWSTR]
-    kernel32.AddDllDirectory.restype = ctypes.c_void_p
+    with _dll_directory_lock:
+        if directory_key in _dll_directory_cookies:
+            return
 
-    result = kernel32.AddDllDirectory(wide_path)
-    if not result:
-        error = ctypes.get_last_error()
-        raise ctypes.WinError(error)
+        # Enable extended DLL search
+        LOAD_LIBRARY_SEARCH_DEFAULT_DIRS = 0x00001000
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS)
+
+        kernel32.AddDllDirectory.argtypes = [wintypes.LPCWSTR]
+        kernel32.AddDllDirectory.restype = ctypes.c_void_p
+
+        result = kernel32.AddDllDirectory(wide_path)
+        if not result:
+            error = ctypes.get_last_error()
+            raise ctypes.WinError(error)
+        _dll_directory_cookies[directory_key] = result
 
 
 def _find_installed_lib_dir(pkg_dir: str) -> str:
