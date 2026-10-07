@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'dry_run builds and validates; prerelease/release also publish to GitHub and PyPI'
+        description: 'dry_run/dry_run_dev validate; dev publishes nanovdb-editor-dev to PyPI; prerelease/release publish to GitHub and PyPI'
         type: choice
-        options: [dry_run, prerelease, release]
+        options: [dry_run, dry_run_dev, dev, prerelease, release]
         default: dry_run
 
 concurrency:
@@ -28,6 +28,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
+      package: ${{ steps.version.outputs.package }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
@@ -49,7 +50,7 @@ jobs:
         run: python scripts/ci/check_release.py prepare --mode "$MODE" --ref "$REF"
 
       - name: Require an unused tag for publication
-        if: inputs.mode != 'dry_run'
+        if: inputs.mode == 'release' || inputs.mode == 'prerelease'
         env:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
@@ -59,10 +60,11 @@ jobs:
           fi
 
       - name: Require an unused PyPI version for publication
-        if: inputs.mode != 'dry_run'
+        if: inputs.mode == 'dev' || inputs.mode == 'release' || inputs.mode == 'prerelease'
         env:
           VERSION: ${{ steps.version.outputs.version }}
-        run: python scripts/ci/check_release.py check-pypi --version "$VERSION"
+          PACKAGE: ${{ steps.version.outputs.package }}
+        run: python scripts/ci/check_release.py check-pypi --version "$VERSION" --package "$PACKAGE"
 
   build:
     name: Build and test release packages
@@ -73,7 +75,7 @@ jobs:
       actions: read
     uses: ./.github/workflows/build-wheels.yml
     with:
-      is_dev: false
+      is_dev: ${{ needs.prepare.outputs.package == 'nanovdb-editor-dev' }}
       linux_x86_build_slang_from_source: false
       run_fvdb_viz_integration: true
     secrets:
@@ -112,9 +114,10 @@ jobs:
       - name: Verify complete package set and write checksums
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
+          PACKAGE: ${{ needs.prepare.outputs.package }}
         run: |
           python scripts/ci/check_release.py verify \
-            --directory artifacts --version "$VERSION" --output-directory dist
+            --directory artifacts --version "$VERSION" --package "$PACKAGE" --output-directory dist
           python -m twine check --strict dist/*.whl dist/*.tar.gz
 
       - name: Upload verified release assets
@@ -130,16 +133,17 @@ jobs:
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
           MODE: ${{ inputs.mode }}
+          PACKAGE: ${{ needs.prepare.outputs.package }}
         run: |
-          echo "Validated nanovdb-editor $VERSION from $GITHUB_SHA ($MODE)." >> "$GITHUB_STEP_SUMMARY"
-          if [ "$MODE" = dry_run ]; then
+          echo "Validated $PACKAGE $VERSION from $GITHUB_SHA ($MODE)." >> "$GITHUB_STEP_SUMMARY"
+          if [ "$MODE" = dry_run ] || [ "$MODE" = dry_run_dev ]; then
             echo 'Dry run: no tag, GitHub Release, or PyPI upload.' >> "$GITHUB_STEP_SUMMARY"
           fi
 
   draft:
     name: Create release tag and draft
     needs: [prepare, verify]
-    if: inputs.mode != 'dry_run' && github.ref == 'refs/heads/main'
+    if: (inputs.mode == 'release' || inputs.mode == 'prerelease') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -172,7 +176,13 @@ jobs:
 
   publish_pypi:
     name: Publish verified packages to PyPI
-    needs: [verify, draft]
+    needs: [prepare, verify, draft]
+    if: >-
+      ${{
+        !cancelled() && needs.verify.result == 'success' &&
+        ((inputs.mode == 'dev' && needs.prepare.result == 'success') ||
+         ((inputs.mode == 'release' || inputs.mode == 'prerelease') && needs.draft.result == 'success'))
+      }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -196,6 +206,7 @@ jobs:
   publish_github:
     name: Publish GitHub Release
     needs: [prepare, publish_pypi]
+    if: inputs.mode == 'release' || inputs.mode == 'prerelease'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

@@ -4,6 +4,8 @@
 
 import hashlib
 import io
+import itertools
+import os
 import pathlib
 import stat
 import tarfile
@@ -16,6 +18,7 @@ from unittest import mock
 import check_release
 
 VERSION = "0.1.8"
+PACKAGES = ("nanovdb-editor", "nanovdb-editor-dev")
 PLATFORMS = {
     "wheels-ubuntu-24.04-arm-ARM64": "manylinux_2_28_aarch64.manylinux_2_17_aarch64",
     "wheels-macos-15": "macosx_15_0_arm64",
@@ -31,13 +34,17 @@ def write_wheel(
     platform,
     version=VERSION,
     metadata_version=None,
-    name="nanovdb-editor",
+    name=None,
     tags=None,
     pure="false",
     extra=None,
+    package="nanovdb-editor",
+    dist_info_package=None,
 ):
-    path = directory / f"nanovdb_editor-{version}-py3-none-{platform}.whl"
-    dist_info = f"nanovdb_editor-{version}.dist-info"
+    distribution = package.replace("-", "_")
+    path = directory / f"{distribution}-{version}-py3-none-{platform}.whl"
+    dist_info_distribution = (dist_info_package or package).replace("-", "_")
+    dist_info = f"{dist_info_distribution}-{version}.dist-info"
     wheel_tags = (
         tags
         if tags is not None
@@ -46,7 +53,7 @@ def write_wheel(
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr(
             f"{dist_info}/METADATA",
-            f"Metadata-Version: 2.1\nName: {name}\nVersion: {metadata_version or version}\n",
+            f"Metadata-Version: 2.1\nName: {name or package}\nVersion: {metadata_version or version}\n",
         )
         archive.writestr(
             f"{dist_info}/WHEEL",
@@ -58,11 +65,18 @@ def write_wheel(
     return path
 
 
-def write_sdist(directory, version=VERSION, metadata_version=None, extra=None):
-    root = f"nanovdb_editor-{version}"
+def write_sdist(
+    directory,
+    version=VERSION,
+    metadata_version=None,
+    extra=None,
+    package="nanovdb-editor",
+    name=None,
+):
+    root = f"{package.replace('-', '_')}-{version}"
     path = directory / f"{root}.tar.gz"
     with tarfile.open(path, "w:gz") as archive:
-        data = f"Metadata-Version: 2.1\nName: nanovdb-editor\nVersion: {metadata_version or version}\n".encode()
+        data = f"Metadata-Version: 2.1\nName: {name or package}\nVersion: {metadata_version or version}\n".encode()
         member = tarfile.TarInfo(f"{root}/PKG-INFO")
         member.size = len(data)
         archive.addfile(member, io.BytesIO(data))
@@ -73,29 +87,35 @@ def write_sdist(directory, version=VERSION, metadata_version=None, extra=None):
 
 class PyPIVersionTests(unittest.TestCase):
     def test_unpublished_version_is_available(self):
-        for version in (VERSION, "0.1.8rc1", "0.1.8.dev1"):
-            url = f"https://pypi.org/pypi/nanovdb-editor/{version}/json"
+        for package, version in itertools.product(
+            PACKAGES, (VERSION, "0.1.8rc1", "0.1.8.dev1")
+        ):
+            url = f"https://pypi.org/pypi/{package}/{version}/json"
             with (
-                self.subTest(version=version),
+                self.subTest(package=package, version=version),
                 mock.patch(
                     "check_release.urllib.request.urlopen",
                     side_effect=urllib.error.HTTPError(url, 404, "Not Found", {}, None),
                 ) as urlopen,
             ):
-                check_release.check_pypi_version(version)
+                check_release.check_pypi_version(version, package)
                 urlopen.assert_called_once_with(url, timeout=15)
 
     def test_published_version_is_rejected(self):
-        with mock.patch("check_release.urllib.request.urlopen") as urlopen:
-            urlopen.return_value.__enter__.return_value.status = 200
-            with self.assertRaisesRegex(ValueError, "already"):
-                check_release.check_pypi_version(VERSION)
+        for package in PACKAGES:
+            with (
+                self.subTest(package=package),
+                mock.patch("check_release.urllib.request.urlopen") as urlopen,
+            ):
+                urlopen.return_value.__enter__.return_value.status = 200
+                with self.assertRaisesRegex(ValueError, f"{package}.*already"):
+                    check_release.check_pypi_version(VERSION, package)
 
     def test_http_failure_is_rejected(self):
-        url = f"https://pypi.org/pypi/nanovdb-editor/{VERSION}/json"
-        for status in (403, 429, 500):
+        for package, status in itertools.product(PACKAGES, (403, 429, 500)):
+            url = f"https://pypi.org/pypi/{package}/{VERSION}/json"
             with (
-                self.subTest(status=status),
+                self.subTest(package=package, status=status),
                 mock.patch(
                     "check_release.urllib.request.urlopen",
                     side_effect=urllib.error.HTTPError(
@@ -104,22 +124,28 @@ class PyPIVersionTests(unittest.TestCase):
                 ),
                 self.assertRaises(ValueError),
             ):
-                check_release.check_pypi_version(VERSION)
+                check_release.check_pypi_version(VERSION, package)
 
     def test_unexpected_response_is_rejected(self):
-        with mock.patch("check_release.urllib.request.urlopen") as urlopen:
-            urlopen.return_value.__enter__.return_value.status = 204
-            with self.assertRaises(ValueError):
-                check_release.check_pypi_version(VERSION)
+        for package in PACKAGES:
+            with (
+                self.subTest(package=package),
+                mock.patch("check_release.urllib.request.urlopen") as urlopen,
+            ):
+                urlopen.return_value.__enter__.return_value.status = 204
+                with self.assertRaises(ValueError):
+                    check_release.check_pypi_version(VERSION, package)
 
     def test_network_failure_is_rejected(self):
-        for error in (urllib.error.URLError("Connection refused"), TimeoutError()):
+        for package, error in itertools.product(
+            PACKAGES, (urllib.error.URLError("Connection refused"), TimeoutError())
+        ):
             with (
-                self.subTest(error=type(error).__name__),
+                self.subTest(package=package, error=type(error).__name__),
                 mock.patch("check_release.urllib.request.urlopen", side_effect=error),
                 self.assertRaises(ValueError),
             ):
-                check_release.check_pypi_version(VERSION)
+                check_release.check_pypi_version(VERSION, package)
 
     def test_invalid_version_is_rejected_before_request(self):
         for version in ("v0.1.8", "0.1.8+local", "1!0.1.8", "not-a-version"):
@@ -146,17 +172,17 @@ class ReleaseTests(unittest.TestCase):
         path.write_text(version + "\n", encoding="utf-8")
         return check_release.prepare(path, mode, ref)
 
-    def populate(self):
+    def populate(self, package="nanovdb-editor"):
         for artifact, platform in PLATFORMS.items():
             directory = self.artifacts / artifact
             directory.mkdir()
-            write_wheel(directory, platform)
+            write_wheel(directory, platform, package=package)
         directory = self.artifacts / "sdist"
         directory.mkdir()
-        write_sdist(directory)
+        write_sdist(directory, package=package)
 
-    def verify(self):
-        check_release.verify(self.artifacts, VERSION, self.output)
+    def verify(self, package="nanovdb-editor"):
+        check_release.verify(self.artifacts, VERSION, self.output, package)
 
     def replace_wheel(self, artifact="wheels-windows-latest", **kwargs):
         directory = self.artifacts / artifact
@@ -185,6 +211,22 @@ class ReleaseTests(unittest.TestCase):
                     self.prepare(version, mode, ref)
         self.assertEqual(self.prepare(VERSION, ref="refs/heads/topic"), VERSION)
 
+    def test_dev_publication_requires_a_branch(self):
+        for version, ref in itertools.product(
+            (VERSION, "0.1.8rc1", "0.1.8.dev1"),
+            ("refs/heads/main", "refs/heads/release/test"),
+        ):
+            with self.subTest(version=version, ref=ref):
+                self.assertEqual(self.prepare(version, "dev", ref), version)
+        for ref in ("refs/tags/v0.1.8", "refs/pull/225/merge", "main"):
+            with self.subTest(ref=ref), self.assertRaisesRegex(ValueError, "branch"):
+                self.prepare(VERSION, "dev", ref)
+
+    def test_dev_dry_run_accepts_branches_and_tags(self):
+        for ref in ("refs/heads/topic", "refs/tags/v0.1.8"):
+            with self.subTest(ref=ref):
+                self.assertEqual(self.prepare(VERSION, "dry_run_dev", ref), VERSION)
+
     def test_reject_noncanonical_and_private_versions(self):
         for version in (
             "v0.1.8",
@@ -200,16 +242,23 @@ class ReleaseTests(unittest.TestCase):
                 self.prepare(version)
 
     def test_complete_artifacts_generate_checksums(self):
-        self.populate()
-        self.verify()
-        lines = (self.output / "SHA256SUMS").read_text().splitlines()
-        self.assertEqual(len(lines), 7)
-        self.assertEqual(len(list(self.output.iterdir())), 8)
-        for line in lines:
-            digest, name = line.split("  ")
-            self.assertEqual(
-                digest, hashlib.sha256((self.output / name).read_bytes()).hexdigest()
-            )
+        for package in PACKAGES:
+            with self.subTest(package=package):
+                self.artifacts = self.root / package
+                self.artifacts.mkdir()
+                self.output = self.root / f"{package}-dist"
+                self.populate(package)
+                self.verify(package)
+                lines = (self.output / "SHA256SUMS").read_text().splitlines()
+                self.assertEqual(len(lines), 7)
+                self.assertEqual(len(list(self.output.iterdir())), 8)
+                for line in lines:
+                    digest, name = line.split("  ")
+                    self.assertTrue(name.startswith(package.replace("-", "_") + "-"))
+                    self.assertEqual(
+                        digest,
+                        hashlib.sha256((self.output / name).read_bytes()).hexdigest(),
+                    )
 
     def test_existing_output_is_preserved(self):
         self.populate()
@@ -271,6 +320,35 @@ class ReleaseTests(unittest.TestCase):
         self.replace_wheel(version="0.1.9")
         with self.assertRaisesRegex(ValueError, "wheel name or version"):
             self.verify()
+
+    def test_package_filename_must_match_selected_package(self):
+        for actual, expected in (PACKAGES, PACKAGES[::-1]):
+            with self.subTest(actual=actual, expected=expected):
+                wheel = write_wheel(self.root, "win_amd64", package=actual)
+                with self.assertRaisesRegex(ValueError, "wheel name or version"):
+                    check_release.check_wheel(wheel, VERSION, "win_amd64", expected)
+                sdist = write_sdist(self.root, package=actual)
+                with self.assertRaisesRegex(ValueError, "source distribution"):
+                    check_release.check_sdist(sdist, VERSION, expected)
+
+    def test_dist_info_must_match_selected_package(self):
+        for package, other in (PACKAGES, PACKAGES[::-1]):
+            with self.subTest(package=package):
+                wheel = write_wheel(
+                    self.root, "win_amd64", package=package, dist_info_package=other
+                )
+                with self.assertRaisesRegex(ValueError, "dist-info"):
+                    check_release.check_wheel(wheel, VERSION, "win_amd64", package)
+
+    def test_metadata_must_match_selected_package(self):
+        for package, other in (PACKAGES, PACKAGES[::-1]):
+            with self.subTest(package=package):
+                wheel = write_wheel(self.root, "win_amd64", package=package, name=other)
+                with self.assertRaisesRegex(ValueError, "metadata"):
+                    check_release.check_wheel(wheel, VERSION, "win_amd64", package)
+                sdist = write_sdist(self.root, package=package, name=other)
+                with self.assertRaisesRegex(ValueError, "metadata"):
+                    check_release.check_sdist(sdist, VERSION, package)
 
     def test_python_specific_wheel(self):
         self.populate()
@@ -346,6 +424,120 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unsafe archive"):
             self.verify()
         self.assertFalse((self.root / "outside").exists())
+
+    def test_prepare_cli_writes_outputs(self):
+        version_file = self.root / "VERSION.txt"
+        output_file = self.root / "github-output"
+        for mode, package, version, ref in (
+            ("dry_run", "nanovdb-editor", VERSION, "refs/heads/topic"),
+            ("release", "nanovdb-editor", VERSION, "refs/heads/main"),
+            ("prerelease", "nanovdb-editor", "0.1.8rc1", "refs/heads/main"),
+            ("dev", "nanovdb-editor-dev", VERSION, "refs/heads/topic"),
+            ("dry_run_dev", "nanovdb-editor-dev", VERSION, "refs/tags/v0.1.8"),
+        ):
+            version_file.write_text(version + "\n", encoding="utf-8")
+            output_file.write_text("existing=keep\n", encoding="utf-8")
+            arguments = [
+                "check_release.py",
+                "prepare",
+                "--version-file",
+                str(version_file),
+                "--mode",
+                mode,
+                "--ref",
+                ref,
+            ]
+            with (
+                self.subTest(mode=mode),
+                mock.patch("sys.argv", arguments),
+                mock.patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_file)}),
+                mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
+            ):
+                check_release.main()
+                expected = f"version={version}\ntag=v{version}\npackage={package}\n"
+                self.assertEqual(stdout.getvalue(), expected)
+                self.assertEqual(output_file.read_text(), "existing=keep\n" + expected)
+
+    def test_pypi_cli_selects_package(self):
+        for package, options in (
+            ("nanovdb-editor", []),
+            ("nanovdb-editor-dev", ["--package", "nanovdb-editor-dev"]),
+        ):
+            arguments = [
+                "check_release.py",
+                "check-pypi",
+                "--version",
+                VERSION,
+                *options,
+            ]
+            with (
+                self.subTest(package=package),
+                mock.patch("sys.argv", arguments),
+                mock.patch("check_release.check_pypi_version") as check,
+                mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
+            ):
+                check_release.main()
+                check.assert_called_once_with(VERSION, package)
+                self.assertEqual(
+                    stdout.getvalue(), f"{package} {VERSION} is not listed on PyPI\n"
+                )
+
+    def test_verify_cli_selects_package(self):
+        for package, options in (
+            ("nanovdb-editor", []),
+            ("nanovdb-editor-dev", ["--package", "nanovdb-editor-dev"]),
+        ):
+            arguments = [
+                "check_release.py",
+                "verify",
+                "--version",
+                VERSION,
+                "--directory",
+                str(self.artifacts),
+                "--output-directory",
+                str(self.output),
+                *options,
+            ]
+            with (
+                self.subTest(package=package),
+                mock.patch("sys.argv", arguments),
+                mock.patch("check_release.verify") as verify,
+                mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
+            ):
+                check_release.main()
+                verify.assert_called_once_with(
+                    self.artifacts, VERSION, self.output, package
+                )
+                self.assertEqual(
+                    stdout.getvalue(),
+                    f"Verified {package} {VERSION}: {self.output}\n",
+                )
+
+    def test_cli_rejects_unknown_mode_and_package(self):
+        for arguments in (
+            ["prepare", "--mode", "unknown", "--ref", "refs/heads/main"],
+            ["check-pypi", "--version", VERSION, "--package", "unrelated"],
+            [
+                "verify",
+                "--version",
+                VERSION,
+                "--directory",
+                str(self.artifacts),
+                "--output-directory",
+                str(self.output),
+                "--package",
+                "unrelated",
+            ],
+        ):
+            with (
+                self.subTest(command=arguments[0]),
+                mock.patch("sys.argv", ["check_release.py", *arguments]),
+                mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
+            ):
+                with self.assertRaises(SystemExit) as error:
+                    check_release.main()
+                self.assertEqual(error.exception.code, 2)
+                self.assertIn("invalid choice", stderr.getvalue())
 
 
 if __name__ == "__main__":

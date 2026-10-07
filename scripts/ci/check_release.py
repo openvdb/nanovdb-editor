@@ -44,8 +44,10 @@ def release_version(value: str) -> Version:
 def prepare(version_file: pathlib.Path, mode: str, ref: str) -> str:
     value = version_file.read_text(encoding="utf-8").strip()
     version = release_version(value)
-    if mode != "dry_run" and ref != "refs/heads/main":
+    if mode in ("release", "prerelease") and ref != "refs/heads/main":
         raise ValueError("Publish releases only from refs/heads/main")
+    if mode == "dev" and not ref.startswith("refs/heads/"):
+        raise ValueError("Publish dev packages only from a branch")
     if mode == "release" and version.is_prerelease:
         raise ValueError("A release requires a stable version")
     if mode == "prerelease" and not version.is_prerelease:
@@ -53,9 +55,9 @@ def prepare(version_file: pathlib.Path, mode: str, ref: str) -> str:
     return value
 
 
-def check_pypi_version(version: str) -> None:
+def check_pypi_version(version: str, package: str = "nanovdb-editor") -> None:
     release_version(version)
-    url = f"https://pypi.org/pypi/nanovdb-editor/{version}/json"
+    url = f"https://pypi.org/pypi/{package}/{version}/json"
     try:
         with urllib.request.urlopen(url, timeout=15) as response:
             status = response.status
@@ -71,7 +73,7 @@ def check_pypi_version(version: str) -> None:
         return
     if status == 200:
         raise ValueError(
-            f"nanovdb-editor {version} already exists on PyPI; select a new version"
+            f"{package} {version} already exists on PyPI; select a new version"
         )
     raise ValueError(f"Could not check PyPI version availability: HTTP {status}")
 
@@ -83,10 +85,10 @@ def metadata_field(metadata, name: str) -> str:
     return values[0]
 
 
-def check_metadata(data: bytes, version: str) -> None:
+def check_metadata(data: bytes, version: str, package: str) -> None:
     metadata = email.parser.BytesParser().parsebytes(data)
-    if canonicalize_name(metadata_field(metadata, "Name")) != "nanovdb-editor":
-        raise ValueError("Distribution metadata must name nanovdb-editor")
+    if canonicalize_name(metadata_field(metadata, "Name")) != package:
+        raise ValueError(f"Distribution metadata must name {package}")
     if metadata_field(metadata, "Version") != version:
         raise ValueError(f"Distribution metadata must have version {version}")
 
@@ -100,9 +102,9 @@ def check_member(name: str, seen: set) -> None:
     seen.add(name)
 
 
-def check_wheel(path: pathlib.Path, version: str, platform: str) -> None:
+def check_wheel(path: pathlib.Path, version: str, platform: str, package: str) -> None:
     name, parsed_version, _, tags = parse_wheel_filename(path.name)
-    if name != "nanovdb-editor" or str(parsed_version) != version:
+    if name != package or str(parsed_version) != version:
         raise ValueError(f"Unexpected wheel name or version: {path.name}")
     if not all(
         tag.interpreter == "py3"
@@ -112,7 +114,7 @@ def check_wheel(path: pathlib.Path, version: str, platform: str) -> None:
     ):
         raise ValueError(f"Unexpected wheel platform or Python tags: {path.name}")
 
-    dist_info = f"nanovdb_editor-{version}.dist-info"
+    dist_info = f"{package.replace('-', '_')}-{version}.dist-info"
     with zipfile.ZipFile(path) as archive:
         seen = set()
         for member in archive.infolist():
@@ -125,7 +127,7 @@ def check_wheel(path: pathlib.Path, version: str, platform: str) -> None:
             f"{dist_info}/WHEEL"
         }:
             raise ValueError(f"Expected one matching dist-info directory: {path.name}")
-        check_metadata(archive.read(f"{dist_info}/METADATA"), version)
+        check_metadata(archive.read(f"{dist_info}/METADATA"), version, package)
         metadata = email.parser.BytesParser().parsebytes(
             archive.read(f"{dist_info}/WHEEL")
         )
@@ -138,10 +140,10 @@ def check_wheel(path: pathlib.Path, version: str, platform: str) -> None:
             raise ValueError(f"WHEEL tags disagree with the filename: {path.name}")
 
 
-def check_sdist(path: pathlib.Path, version: str) -> None:
+def check_sdist(path: pathlib.Path, version: str, package: str) -> None:
     name, parsed_version = parse_sdist_filename(path.name)
     if (
-        name != "nanovdb-editor"
+        name != package
         or str(parsed_version) != version
         or not path.name.endswith(".tar.gz")
     ):
@@ -161,11 +163,14 @@ def check_sdist(path: pathlib.Path, version: str) -> None:
         if metadata is None:
             raise ValueError("Source distribution has no PKG-INFO file")
         with metadata:
-            check_metadata(metadata.read(), version)
+            check_metadata(metadata.read(), version, package)
 
 
 def verify(
-    directory: pathlib.Path, version: str, output_directory: pathlib.Path
+    directory: pathlib.Path,
+    version: str,
+    output_directory: pathlib.Path,
+    package: str = "nanovdb-editor",
 ) -> None:
     release_version(version)
     if directory.is_symlink() or not directory.is_dir():
@@ -193,9 +198,9 @@ def verify(
             raise ValueError(f"Duplicate distribution filename: {path.name}")
         names.add(path.name)
         if artifact.name == "sdist":
-            check_sdist(path, version)
+            check_sdist(path, version, package)
         else:
-            check_wheel(path, version, WHEEL_PLATFORMS[artifact.name])
+            check_wheel(path, version, WHEEL_PLATFORMS[artifact.name], package)
         files.append(path)
 
     output_directory.mkdir(parents=True)
@@ -216,7 +221,9 @@ def main() -> None:
     commands = parser.add_subparsers(dest="command", required=True)
     prepare_parser = commands.add_parser("prepare")
     prepare_parser.add_argument(
-        "--mode", choices=("dry_run", "prerelease", "release"), required=True
+        "--mode",
+        choices=("dry_run", "dry_run_dev", "dev", "prerelease", "release"),
+        required=True,
     )
     prepare_parser.add_argument("--ref", required=True)
     prepare_parser.add_argument(
@@ -230,21 +237,32 @@ def main() -> None:
     verify_parser.add_argument("--directory", type=pathlib.Path, required=True)
     verify_parser.add_argument("--version", required=True)
     verify_parser.add_argument("--output-directory", type=pathlib.Path, required=True)
+    for package_parser in (pypi_parser, verify_parser):
+        package_parser.add_argument(
+            "--package",
+            choices=("nanovdb-editor", "nanovdb-editor-dev"),
+            default="nanovdb-editor",
+        )
     args = parser.parse_args()
     try:
         if args.command == "prepare":
             version = prepare(args.version_file, args.mode, args.ref)
-            outputs = f"version={version}\ntag=v{version}\n"
+            package = (
+                "nanovdb-editor-dev"
+                if args.mode in ("dev", "dry_run_dev")
+                else "nanovdb-editor"
+            )
+            outputs = f"version={version}\ntag=v{version}\npackage={package}\n"
             if "GITHUB_OUTPUT" in os.environ:
                 with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
                     stream.write(outputs)
             print(outputs, end="")
         elif args.command == "check-pypi":
-            check_pypi_version(args.version)
-            print(f"nanovdb-editor {args.version} is not listed on PyPI")
+            check_pypi_version(args.version, args.package)
+            print(f"{args.package} {args.version} is not listed on PyPI")
         else:
-            verify(args.directory, args.version, args.output_directory)
-            print(f"Verified release {args.version}: {args.output_directory}")
+            verify(args.directory, args.version, args.output_directory, args.package)
+            print(f"Verified {args.package} {args.version}: {args.output_directory}")
     except (
         OSError,
         ValueError,

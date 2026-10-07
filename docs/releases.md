@@ -1,9 +1,11 @@
 # Cutting a release
 
 The [Release workflow](../.github/workflows/release.yml) builds the selected commit
-with the existing wheel workflow. It checks the package set before creating a
-version tag, uploads the same files to PyPI, and publishes a GitHub Release with
-generated notes and SHA-256 checksums. It does not change the editor or its API.
+with the existing wheel workflow and checks the package set before publication.
+Release and prerelease modes create a version tag, upload the same files to PyPI,
+and publish a GitHub Release with generated notes and SHA-256 checksums. Dev mode
+publishes the separate `nanovdb-editor-dev` package to PyPI. It does not change the
+editor or its API.
 
 ## Prepare and validate
 
@@ -27,12 +29,12 @@ package names, versions, and wheel tags, then runs `twine check --strict`.
 The Linux build chooses its final manylinux tag from the linked libraries; the
 artifact name alone does not establish the wheel's minimum glibc version.
 
-A dry run does not create a tag, publish a GitHub Release, or upload to PyPI.
-It runs the same builds and verification as publication. These checks cover
-packaging and the existing wheel tests; they do not replace the normal native
-and Python CI suites.
+Neither `dry_run` nor `dry_run_dev` creates a tag, publishes a GitHub Release, or
+uploads to PyPI. Each runs the same builds and verification as publication for
+its package. These checks cover packaging and the existing wheel tests; they do
+not replace the normal native and Python CI suites.
 
-## Publish
+## Publish a release
 
 Run **Release** again on `main`, selecting `release` for a stable version or
 `prerelease` for an `a`, `b`, `rc`, or `.dev` version. Both modes publish the
@@ -62,10 +64,30 @@ push a release tag while a Release run is in progress. Manual dispatch of the
 older **NanoVDB Editor Publish** workflow still targets TestPyPI, and
 **NanoVDB Editor Publish Dev** still publishes `nanovdb-editor-dev`.
 
+## Publish a dev package
+
+1. Set `pymodule/VERSION.txt` to a version that is unused for `nanovdb-editor-dev`
+   on PyPI, and push the reviewed changes to the branch you want to publish.
+   The build keeps this version unchanged; it does not add a `.dev` suffix.
+2. Run **Actions > Release > Run workflow** on that branch with `mode=dry_run_dev`.
+   Inspect the successful run and its `nanovdb-editor-release-assets` artifact.
+3. Run **Release** again on the intended branch commit with `mode=dev`.
+
+Dev mode checks version availability for `nanovdb-editor-dev` before building,
+runs the same package and integration checks, and uploads the verified wheels
+and source distribution to real PyPI using `PYPI_API_TOKEN`. It creates no Git
+tag or GitHub Release. Any branch is allowed; tag refs are refused. Versions in
+the separate `nanovdb-editor` project and existing Git tags do not block it.
+
+As with release publication, dev publication rebuilds its selected commit and
+does not reuse dry-run artifacts. Do not run the older **NanoVDB Editor Publish
+Dev** workflow for the same version at the same time.
+
 ## Recover a failed publication
 
 Build or verification failures create no release tag or package upload. Fix the
-failure and run again. Existing tags are rejected before a new publication run.
+failure and run again. Release and prerelease modes reject existing tags before
+a new publication run.
 
 If publication fails after tag creation, inspect the tag, draft release, and PyPI
 files before retrying. A completed tag/draft job is preserved when using **Re-run
