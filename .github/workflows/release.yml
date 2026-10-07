@@ -1,0 +1,222 @@
+# Copyright Contributors to the OpenVDB Project
+# SPDX-License-Identifier: Apache-2.0
+
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'dry_run/dry_run_dev validate; dev publishes nanovdb-editor-dev to PyPI; prerelease/release publish to GitHub and PyPI'
+        type: choice
+        options: [dry_run, dry_run_dev, dev, prerelease, release]
+        default: dry_run
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  prepare:
+    name: Validate release source
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      package: ${{ steps.version.outputs.package }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11'
+
+      - name: Install validation dependency
+        run: python -m pip install packaging
+
+      - name: Resolve version and source branch
+        id: version
+        env:
+          MODE: ${{ inputs.mode }}
+          REF: ${{ github.ref }}
+        run: python scripts/ci/check_release.py prepare --mode "$MODE" --ref "$REF"
+
+      - name: Require an unused tag for publication
+        if: inputs.mode == 'release' || inputs.mode == 'prerelease'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if git show-ref --verify --quiet "refs/tags/$TAG"; then
+            echo "::error::Tag $TAG already exists; select a new package version."
+            exit 1
+          fi
+
+      - name: Require an unused PyPI version for publication
+        if: inputs.mode == 'dev' || inputs.mode == 'release' || inputs.mode == 'prerelease'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PACKAGE: ${{ steps.version.outputs.package }}
+        run: python scripts/ci/check_release.py check-pypi --version "$VERSION" --package "$PACKAGE"
+
+  build:
+    name: Build and test release packages
+    needs: prepare
+    permissions:
+      contents: read
+      packages: write
+      actions: read
+    uses: ./.github/workflows/build-wheels.yml
+    with:
+      is_dev: ${{ needs.prepare.outputs.package == 'nanovdb-editor-dev' }}
+      linux_x86_build_slang_from_source: false
+      run_fvdb_viz_integration: true
+    secrets:
+      GHCR_PUSH_USERNAME: ${{ secrets.GHCR_PUSH_USERNAME }}
+      GHCR_PUSH_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN }}
+
+  verify:
+    name: Verify release packages
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11'
+
+      - name: Install validation tools
+        run: python -m pip install packaging twine
+
+      - name: Download wheels from this run
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: wheels-*
+          path: artifacts
+
+      - name: Download source distribution from this run
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: sdist
+          path: artifacts/sdist
+
+      - name: Verify complete package set and write checksums
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          PACKAGE: ${{ needs.prepare.outputs.package }}
+        run: |
+          python scripts/ci/check_release.py verify \
+            --directory artifacts --version "$VERSION" --package "$PACKAGE" --output-directory dist
+          python -m twine check --strict dist/*.whl dist/*.tar.gz
+
+      - name: Upload verified release assets
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nanovdb-editor-release-assets
+          path: dist/
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+
+      - name: Write release summary
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          MODE: ${{ inputs.mode }}
+          PACKAGE: ${{ needs.prepare.outputs.package }}
+        run: |
+          echo "Validated $PACKAGE $VERSION from $GITHUB_SHA ($MODE)." >> "$GITHUB_STEP_SUMMARY"
+          if [ "$MODE" = dry_run ] || [ "$MODE" = dry_run_dev ]; then
+            echo 'Dry run: no tag, GitHub Release, or PyPI upload.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  draft:
+    name: Create release tag and draft
+    needs: [prepare, verify]
+    if: (inputs.mode == 'release' || inputs.mode == 'prerelease') && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: nanovdb-editor-release-assets
+          path: dist
+
+      - name: Create tag and attach verified packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum --check SHA256SUMS)
+          gh api --method POST "repos/$GH_REPO/git/refs" \
+            -f "ref=refs/tags/$TAG" -f "sha=$GITHUB_SHA"
+          args=("$TAG" dist/*.whl dist/*.tar.gz dist/SHA256SUMS
+            --verify-tag --draft --title "NanoVDB Editor $VERSION" --generate-notes)
+          if [ "$MODE" = prerelease ]; then
+            args+=(--prerelease)
+          fi
+          gh release create "${args[@]}"
+
+  publish_pypi:
+    name: Publish verified packages to PyPI
+    needs: [prepare, verify, draft]
+    if: >-
+      ${{
+        !cancelled() && needs.verify.result == 'success' &&
+        ((inputs.mode == 'dev' && needs.prepare.result == 'success') ||
+         ((inputs.mode == 'release' || inputs.mode == 'prerelease') && needs.draft.result == 'success'))
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: nanovdb-editor-release-assets
+          path: dist
+
+      - name: Check package integrity
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum --check SHA256SUMS)
+          mkdir pypi-dist
+          cp dist/*.whl dist/*.tar.gz pypi-dist/
+
+      - uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # v1.14.1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: pypi-dist/
+
+  publish_github:
+    name: Publish GitHub Release
+    needs: [prepare, publish_pypi]
+    if: inputs.mode == 'release' || inputs.mode == 'prerelease'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Publish the completed release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          gh release edit "$TAG" --draft=false
+          gh release view "$TAG" --json url --jq .url >> "$GITHUB_STEP_SUMMARY"
