@@ -151,13 +151,6 @@ SlangCompiler::SlangCompiler()
 
 SlangCompiler::~SlangCompiler()
 {
-    for (auto& pair : sharedLibraries_)
-    {
-        if (pair.second)
-        {
-            pair.second->release();
-        }
-    }
     sharedLibraries_.clear();
 
     if (shader_)

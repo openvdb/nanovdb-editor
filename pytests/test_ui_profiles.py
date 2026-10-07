@@ -101,6 +101,8 @@ def test_buffer_update_wakes_stream_without_browser(tmp_path, monkeypatch):
         scene = app.scene("inactive-stream")
         with scene.nanovdb_from_buffer(raw_empty_grid()):
             pass
+        # Test the render-thread queue without compiling the volume renderer.
+        scene.set_render_pipeline("nanovdb", "noop")
         app.start(headless=True, streaming=True, ip="127.0.0.1", ui_profile="viewer")
         assert app.editor.get_resolved_port(wait=True) > 0
         sleep(0.5)

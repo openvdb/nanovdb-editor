@@ -89,22 +89,24 @@ TEST(NanoVDBEditor, ShaderCompilesViaCpuCompiler)
         GTEST_SKIP() << "Slang LLVM not found at: " << slangLlvmPath;
     }
 
-    // Create compiler instance
-    pnanovdb_compiler_instance_t* compiler_inst = compiler.create_instance();
-    ASSERT_NE(compiler_inst, nullptr);
-
     // Set up compilation settings for CPU target
     pnanovdb_compiler_settings_t compile_settings = {};
     pnanovdb_compiler_settings_init(&compile_settings);
     compile_settings.compile_target = PNANOVDB_COMPILE_TARGET_CPU;
     std::strcpy(compile_settings.entry_point_name, "computeMain");
 
-    // Compile the shader
-    pnanovdb_bool_t result =
-        compiler.compile_shader_from_file(compiler_inst, shader_path.c_str(), &compile_settings, nullptr);
+    for (int iteration = 0; iteration < 3; iteration++)
+    {
+        SCOPED_TRACE(iteration);
+        pnanovdb_compiler_instance_t* compiler_inst = compiler.create_instance();
+        ASSERT_NE(compiler_inst, nullptr);
 
-    ASSERT_NE(result, PNANOVDB_FALSE) << "Compilation of CPU shader failed: " << shader_path;
+        pnanovdb_bool_t result =
+            compiler.compile_shader_from_file(compiler_inst, shader_path.c_str(), &compile_settings, nullptr);
+        compiler.destroy_instance(compiler_inst);
 
-    // compiler.destroy_instance(compiler_inst);
-    // pnanovdb_compiler_free(&compiler);
+        ASSERT_NE(result, PNANOVDB_FALSE) << "Compilation of CPU shader failed: " << shader_path;
+    }
+
+    pnanovdb_compiler_free(&compiler);
 }
