@@ -394,7 +394,12 @@ bool ShaderParams::loadGroup(const std::string& group_file, bool reload)
             {
                 for (auto& param : *shader_params)
                 {
-                    if (getAllocatedPoolArray(param) && param.pool_index != SIZE_MAX)
+                    // Unauthored fields must not replace defaults from later shaders.
+                    if (param.pool_index == SIZE_MAX && !param.pending_value.is_null())
+                    {
+                        getAllocatedPoolArray(param);
+                    }
+                    if (param.pool_index != SIZE_MAX)
                     {
                         // Keep ramp metadata when shaders share a parameter pool.
                         const auto existing = group_params_.find(param.pool_index);
