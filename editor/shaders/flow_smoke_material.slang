@@ -110,6 +110,18 @@ float4 flow_colormap_texel(shader_params_t params, float u)
     return lerp(low_color, high_color, (u - low_position) / (high_position - low_position));
 }
 
+float4 flow_quantize_colormap_texel(float4 color)
+{
+    // Decode the half bits explicitly. Vulkan drivers can remove a pack/unpack round trip.
+    uint4 bits = f32tof16(color);
+    uint4 exponent = (bits >> 10u) & 31u;
+    uint4 mantissa = bits & 1023u;
+    float4 magnitude = ldexp(float4(mantissa + select(exponent == 0u, 0u, 1024u)),
+        int4(max(exponent, 1u)) - 25);
+    uint4 decoded = select(exponent == 31u, 0x7f800000u | (mantissa << 13u), asuint(magnitude));
+    return asfloat(decoded | ((bits & 0x8000u) << 16u));
+}
+
 float4 flow_sample_colormap(shader_params_t params, float temperature)
 {
     float width = params.colormap_max - params.colormap_min;
@@ -120,8 +132,8 @@ float4 flow_sample_colormap(shader_params_t params, float temperature)
     float upper = min(lower + 1.f, resolution - 1.f);
     float4 a = flow_colormap_texel(params, (lower + 0.5f) / resolution);
     float4 b = flow_colormap_texel(params, (upper + 0.5f) / resolution);
-    a = f16tof32(f32tof16(a));
-    b = f16tof32(f32tof16(b));
+    a = flow_quantize_colormap_texel(a);
+    b = flow_quantize_colormap_texel(b);
     return lerp(a, b, texel - lower);
 }
 

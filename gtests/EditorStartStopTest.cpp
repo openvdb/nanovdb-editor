@@ -23,6 +23,8 @@
 #include <thread>
 #include <tuple>
 
+PNANOVDB_API ImGuiContext* pnanovdb_editor_test_get_imgui_context();
+
 class EditorClientInterfaceTest : public ::testing::TestWithParam<std::tuple<bool, const char*>>
 {
 };
@@ -110,12 +112,21 @@ TEST_P(EditorClientInterfaceTest, EditorStartStopHeadlessStreaming)
     }
 
     auto worker = editor.impl->editor_worker;
+    auto run_on_render_thread = [&](std::function<pnanovdb_bool_t()> task)
+    {
+        return worker->render_thread_tasks.run_blocking([&]()
+        {
+            // The test and editor DLL keep separate ImGui context pointers.
+            ImGui::SetCurrentContext(pnanovdb_editor_test_get_imgui_context());
+            return task();
+        });
+    };
     auto wait_for_ui = [&](std::function<bool()> predicate)
     {
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
         while (std::chrono::steady_clock::now() < deadline)
         {
-            if (worker->render_thread_tasks.run_blocking(
+            if (run_on_render_thread(
                     [&]() { return predicate() ? PNANOVDB_TRUE : PNANOVDB_FALSE; }))
                 return true;
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -137,7 +148,7 @@ TEST_P(EditorClientInterfaceTest, EditorStartStopHeadlessStreaming)
         "Other": {"type": "bool", "value": false, "widget": "button", "group": "Other"}
     }})json");
     EXPECT_TRUE(editor.set_custom_scene_params(&editor, scene_token, schema, nullptr, 0));
-    EXPECT_TRUE(worker->render_thread_tasks.run_blocking([&]()
+    EXPECT_TRUE(run_on_render_thread([&]()
     {
         auto* params = ImGui::FindWindowByName("Params");
         if (!params)
@@ -159,7 +170,7 @@ TEST_P(EditorClientInterfaceTest, EditorStartStopHeadlessStreaming)
 
     for (const char* field_name : { "Play", "Restart", "Other" })
     {
-        EXPECT_TRUE(worker->render_thread_tasks.run_blocking([&]()
+        EXPECT_TRUE(run_on_render_thread([&]()
         {
             auto* params = ImGui::FindWindowByName("Params");
             if (!params)
@@ -191,7 +202,7 @@ TEST_P(EditorClientInterfaceTest, EditorStartStopHeadlessStreaming)
         })) << field_name;
     }
 
-    EXPECT_TRUE(worker->render_thread_tasks.run_blocking([&]()
+    EXPECT_TRUE(run_on_render_thread([&]()
     {
         auto* handler = ImGui::FindSettingsHandler("RenderSettings");
         if (!handler)

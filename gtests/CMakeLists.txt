@@ -5,6 +5,8 @@ enable_testing()
 
 include(GoogleTest)
 
+target_sources(pnanovdbeditor PRIVATE EditorUiTestSupport.cpp)
+
 function(ConfigureTest CMAKE_TEST_NAME)
   add_executable(${CMAKE_TEST_NAME} ${ARGN})
 
@@ -117,6 +119,11 @@ list(REMOVE_ITEM _scene_serializer_test_libs pnanovdbeditor)
 set_target_properties(SceneSerializerTest PROPERTIES LINK_LIBRARIES "${_scene_serializer_test_libs}")
 target_compile_definitions(SceneSerializerTest PRIVATE pnanovdbeditor_EXPORTS)
 target_link_libraries(SceneSerializerTest PRIVATE ImGuiColorTextEdit)
+
+foreach(test_target ColorRampTest CustomSceneParamsTest ShaderColorRampTest EditorStartStopTest SceneSerializerTest)
+  target_sources(${test_target} PRIVATE ImGuiTestSupport.cpp)
+  target_link_libraries(${test_target} PRIVATE imgui)
+endforeach()
 
 # CPU-only concurrency tests - run locally with: ctest -L threadsafety
 set_tests_properties(RenderThreadTaskQueueTest ShaderParamsConcurrencyTest PROPERTIES LABELS "threadsafety")

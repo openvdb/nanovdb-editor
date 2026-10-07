@@ -5,10 +5,13 @@ import ctypes
 import json
 from pathlib import Path
 import unittest
+from tempfile import TemporaryDirectory
 
 import numpy as np
 
-from nanovdb_editor import Compiler, CompileTarget, MemoryBuffer
+from nanovdb_editor import Compiler, Compute, CompileTarget, MemoryBuffer
+
+from test_dispatch import cpu_target_supported
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,9 +53,13 @@ class UniformState(ctypes.Structure):
 
 
 class TestFlowSmoke(unittest.TestCase):
+    compile_target = CompileTarget.VULKAN
+
     def setUp(self):
         self.compiler = Compiler()
         self.compiler.create_instance()
+        self.addCleanup(self.compiler.destroy_instance)
+        self.compute = None
         self.material = Material()
         defaults = json.loads(SHADER.with_suffix(".slang.json").read_text())["ShaderParams"]
         for name, field_type in Material._fields_:
@@ -60,20 +67,48 @@ class TestFlowSmoke(unittest.TestCase):
             setattr(self.material, name, field_type(*value) if isinstance(value, list) else value)
 
     def run_material(self, samples, entry_point="computeMain"):
-        success = self.compiler.compile_shader(
-            str(MATERIAL_TEST), entry_point_name=entry_point, compile_target=CompileTarget.CPU
-        )
-        self.assertTrue(success, self.compiler.get_diagnostics())
         source = np.asarray(samples, dtype=np.float32)
         result = np.zeros_like(source)
-        uniforms = UniformState(
-            MemoryBuffer(source), ctypes.addressof(self.material), MemoryBuffer(result)
-        )
-        success = self.compiler.execute_cpu(
-            str(MATERIAL_TEST), (len(samples), 1, 1), None, ctypes.addressof(uniforms)
-        )
-        self.assertTrue(success, self.compiler.get_diagnostics())
-        return result
+        if self.compile_target == CompileTarget.CPU:
+            success = self.compiler.compile_shader(
+                str(MATERIAL_TEST), entry_point_name=entry_point, compile_target=self.compile_target
+            )
+            self.assertTrue(success, self.compiler.get_diagnostics())
+            uniforms = UniformState(
+                MemoryBuffer(source), ctypes.addressof(self.material), MemoryBuffer(result)
+            )
+            success = self.compiler.execute_cpu(
+                str(MATERIAL_TEST), (len(samples), 1, 1), None, ctypes.addressof(uniforms)
+            )
+            self.assertTrue(success, self.compiler.get_diagnostics())
+            return result
+
+        if self.compute is None:
+            self.compute = Compute(self.compiler)
+            device_interface = self.compute.device_interface()
+            native = device_interface.get_device_interface().contents
+            device_interface.create_device_manager()
+            self.addCleanup(native.destroy_device_manager, device_interface._device_manager)
+            device = device_interface.create_device()
+            self.addCleanup(native.destroy_device, device_interface._device_manager, device)
+        compute = self.compute
+        with TemporaryDirectory() as directory:
+            shader = Path(directory) / "material.slang"
+            shader.write_text(
+                f'#include "{MATERIAL_TEST.as_posix()}"\n'
+                '[shader("compute")][numthreads(1, 1, 1)]\n'
+                f'void main(uint3 thread_id : SV_DispatchThreadID) {{ {entry_point}(thread_id); }}\n'
+            )
+            self.assertTrue(self.compiler.compile_shader(str(shader)), self.compiler.get_diagnostics())
+            with compute.array(source) as data_in, \
+                    compute.array(np.frombuffer(self.material, dtype=np.uint32)) as constants, \
+                    compute.array(result) as data_out:
+                success = compute.dispatch_shader_on_array(
+                    str(shader), (len(samples), 1, 1), data_in.raw, constants.raw, data_out.raw
+                )
+                self.assertTrue(success, self.compiler.get_diagnostics())
+                with compute.mapped_array(data_out.raw, source.dtype) as mapped:
+                    return mapped.copy().reshape(source.shape)
 
     def test_renderer_compiles(self):
         self.assertTrue(self.compiler.compile_shader(str(SHADER)), self.compiler.get_diagnostics())
@@ -125,7 +160,7 @@ class TestFlowSmoke(unittest.TestCase):
                 result = self.run_material([[0, 0, 0, 0]], entry_point="computeShadowCountMain")[0]
                 count = min(requested, 128)
                 self.assertEqual(result[0], count)
-                self.assertAlmostEqual(result[1], 0.99**count, places=6)
+                self.assertAlmostEqual(result[1], np.float32(0.99)**count, places=6)
 
     def test_flow_opacity_and_front_to_back_compositing(self):
         self.material.point_count = 2
@@ -142,6 +177,17 @@ class TestFlowSmoke(unittest.TestCase):
             lookup_rgb = np.asarray([0.2, 0.4, 0.8], dtype=np.float16).astype(np.float32)
             expected = [*(2 * lookup_rgb * (1 - transmittance)), transmittance]
             np.testing.assert_allclose(actual, expected, atol=1e-6)
+
+    def test_colormap_texels_preserve_half_precision(self):
+        samples = np.asarray([
+            [0, -0.0, 2**-25, 3 * 2**-25],
+            [2**-24, -2**-24, 2**-14, 2**-14 - 2**-24],
+            [0.2, 0.4, 0.8, 0.904902],
+            [65504, -65504, np.inf, -np.inf],
+        ], dtype=np.float32)
+        result = self.run_material(samples, entry_point="computeColormapTexelMain")
+        expected = samples.astype(np.float16).astype(np.float32)
+        np.testing.assert_array_equal(result.view(np.uint32), expected.view(np.uint32))
 
     def test_temperature_uses_filtered_colormap(self):
         self.material.point_count = 3
@@ -189,6 +235,11 @@ class TestFlowSmoke(unittest.TestCase):
         self.material.attenuation = 0
         result = self.run_material([[0.2, 100, 1, 10], [0.8, 100, 1, 10]])
         np.testing.assert_array_equal(result, [[0, 0, 0, 1], [0, 0, 0, 1]])
+
+
+@unittest.skipUnless(cpu_target_supported(), "CPU shader target is unavailable on Linux and Windows ARM64")
+class TestFlowSmokeCPU(TestFlowSmoke):
+    compile_target = CompileTarget.CPU
 
 
 if __name__ == "__main__":

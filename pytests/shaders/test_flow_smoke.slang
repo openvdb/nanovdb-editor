@@ -7,7 +7,6 @@ StructuredBuffer<float4> data_in;
 ConstantBuffer<shader_params_t> constants;
 RWStructuredBuffer<float4> data_out;
 
-[shader("compute")][numthreads(1, 1, 1)]
 void computeMain(uint3 thread_id : SV_DispatchThreadID)
 {
     float4 input_value = data_in[thread_id.x];
@@ -17,7 +16,6 @@ void computeMain(uint3 thread_id : SV_DispatchThreadID)
     data_out[thread_id.x] = sum;
 }
 
-[shader("compute")][numthreads(1, 1, 1)]
 void computeShadowMain(uint3 thread_id : SV_DispatchThreadID)
 {
     float4 input_value = data_in[thread_id.x];
@@ -28,7 +26,6 @@ void computeShadowMain(uint3 thread_id : SV_DispatchThreadID)
     data_out[thread_id.x] = float4(intensity, intensity, intensity, transmittance);
 }
 
-[shader("compute")][numthreads(1, 1, 1)]
 void computeRayStepsMain(uint3 thread_id : SV_DispatchThreadID)
 {
     float4 input_value = data_in[thread_id.x];
@@ -44,11 +41,15 @@ void computeRayStepsMain(uint3 thread_id : SV_DispatchThreadID)
     data_out[thread_id.x] = float4(float(steps.count), float(advanced), steps.step_size, last_offset);
 }
 
-[shader("compute")][numthreads(1, 1, 1)]
 void computeShadowCountMain(uint3 thread_id : SV_DispatchThreadID)
 {
     uint count = flow_shadow_step_count(constants.shadow_num_steps);
     float transmittance = 1.f;
     for (uint index = 0u; index < count; index++) transmittance *= 0.99f;
     data_out[thread_id.x] = float4(float(count), transmittance, 0.f, 0.f);
+}
+
+void computeColormapTexelMain(uint3 thread_id : SV_DispatchThreadID)
+{
+    data_out[thread_id.x] = flow_quantize_colormap_texel(data_in[thread_id.x]);
 }

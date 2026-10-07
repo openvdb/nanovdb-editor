@@ -60,7 +60,7 @@ TEST(ColorRamp, InsertionPreservesCurveAndEnforcesCapacityWhileRemovalKeepsOneSt
     EXPECT_FALSE(removeColorRampPoint(points, 0));
 }
 
-class ColorRampRenderTest : public ::testing::Test
+class ColorRampRenderTest : public ::testing::TestWithParam<bool>
 {
 protected:
     struct Layout
@@ -81,6 +81,7 @@ protected:
     {
         ImGui::CreateContext();
         auto& io = ImGui::GetIO();
+        io.ConfigMacOSXBehaviors = GetParam();
         io.IniFilename = nullptr;
         io.DisplaySize = ImVec2(640, 480);
         io.DeltaTime = 1.f / 60.f;
@@ -132,12 +133,13 @@ protected:
     void typeAt(const ImVec2& position, const char* text)
     {
         auto& io = ImGui::GetIO();
-        io.AddKeyEvent(ImGuiMod_Ctrl, true);
+        const auto shortcut = io.ConfigMacOSXBehaviors ? ImGuiMod_Super : ImGuiMod_Ctrl;
+        io.AddKeyEvent(shortcut, true);
         click(position);
         io.AddKeyEvent(ImGuiKey_A, true);
         frame();
         io.AddKeyEvent(ImGuiKey_A, false);
-        io.AddKeyEvent(ImGuiMod_Ctrl, false);
+        io.AddKeyEvent(shortcut, false);
         io.AddInputCharactersUTF8(text);
         frame();
         io.AddKeyEvent(ImGuiKey_Enter, true);
@@ -153,7 +155,7 @@ protected:
     size_t capacity = 8;
 };
 
-TEST_F(ColorRampRenderTest, RenderingPreservesUnsortedDuplicateSlotsAndHdrValues)
+TEST_P(ColorRampRenderTest, RenderingPreservesUnsortedDuplicateSlotsAndHdrValues)
 {
     points.push_back({ 0.f, { 0.f, 3.f, 0.f, 4.f } });
     const auto original = points;
@@ -168,7 +170,7 @@ TEST_F(ColorRampRenderTest, RenderingPreservesUnsortedDuplicateSlotsAndHdrValues
     }
 }
 
-TEST_F(ColorRampRenderTest, DraggingMovesTheSelectedSlotWithoutReorderingItsColor)
+TEST_P(ColorRampRenderTest, DraggingMovesTheSelectedSlotWithoutReorderingItsColor)
 {
     points.push_back({ 0.f, { 0.f, 3.f, 0.f, 4.f } });
     const auto layout = frame();
@@ -190,7 +192,7 @@ TEST_F(ColorRampRenderTest, DraggingMovesTheSelectedSlotWithoutReorderingItsColo
     frame();
 }
 
-TEST_F(ColorRampRenderTest, AddAndRemoveButtonsRespectCapacityAndMinimum)
+TEST_P(ColorRampRenderTest, AddAndRemoveButtonsRespectCapacityAndMinimum)
 {
     capacity = 3;
     auto layout = frame();
@@ -212,7 +214,7 @@ TEST_F(ColorRampRenderTest, AddAndRemoveButtonsRespectCapacityAndMinimum)
     EXPECT_EQ(points.size(), 1u);
 }
 
-TEST_F(ColorRampRenderTest, ColorInputsEditRgbAndAlphaAboveOneWithoutChangingOtherStops)
+TEST_P(ColorRampRenderTest, ColorInputsEditRgbAndAlphaAboveOneWithoutChangingOtherStops)
 {
     const auto untouched = points[1];
     auto layout = frame();
@@ -227,5 +229,7 @@ TEST_F(ColorRampRenderTest, ColorInputsEditRgbAndAlphaAboveOneWithoutChangingOth
     EXPECT_EQ(points[1].color, untouched.color);
     EXPECT_FLOAT_EQ(points[1].position, untouched.position);
 }
+
+INSTANTIATE_TEST_SUITE_P(KeyboardBehaviors, ColorRampRenderTest, ::testing::Bool());
 
 } // namespace

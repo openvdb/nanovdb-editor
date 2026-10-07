@@ -25,9 +25,6 @@
 #include <limits>
 #include <vector>
 
-struct ImGuiContext;
-thread_local ImGuiContext* ImGuiTLS = nullptr;
-
 extern "C" void pnanovdb_imgui_set_system_clipboard(const char*)
 {
 }
