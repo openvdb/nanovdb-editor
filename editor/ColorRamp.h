@@ -27,6 +27,6 @@ struct ColorRampPoint
 std::array<float, 4> sampleColorRamp(const std::vector<ColorRampPoint>& points, float position);
 bool addColorRampPoint(std::vector<ColorRampPoint>& points, size_t capacity, float position);
 bool removeColorRampPoint(std::vector<ColorRampPoint>& points, size_t index);
-bool renderColorRamp(const char* label, std::vector<ColorRampPoint>& points, size_t capacity);
+bool renderColorRamp(const char* label, std::vector<ColorRampPoint>& points, size_t capacity, const char* tooltip = nullptr);
 
 } // namespace pnanovdb_editor

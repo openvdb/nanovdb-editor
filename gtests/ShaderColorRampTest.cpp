@@ -3,14 +3,17 @@
 
 #include <gtest/gtest.h>
 
+#include "ConsoleTestSupport.h"
 #include "editor/ShaderParams.h"
 #include "nanovdb_editor/putil/Shader.hpp"
 
 #include <imgui_internal.h>
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <limits>
 
 namespace
@@ -95,6 +98,8 @@ protected:
 
     std::string frame(bool group = false)
     {
+        const auto log_path = directory / "ui.log";
+        std::filesystem::remove(log_path);
         ImGui::NewFrame();
         ImGui::SetNextWindowPos(ImVec2(0, 0));
         ImGui::SetNextWindowSize(ImVec2(500, 460));
@@ -107,7 +112,7 @@ protected:
         color_input_id = ImGui::GetID("##X");
         ImGui::PopID();
         ImGui::PopID();
-        ImGui::LogToBuffer();
+        ImGui::LogToFile(0, log_path.string().c_str());
         if (group)
         {
             params.renderGroup(group_path);
@@ -116,11 +121,11 @@ protected:
         {
             params.render(shader);
         }
-        const std::string text = ImGui::GetCurrentContext()->LogBuffer.c_str();
         ImGui::LogFinish();
         ImGui::End();
         ImGui::Render();
-        return text;
+        std::ifstream log(log_path);
+        return { std::istreambuf_iterator<char>(log), std::istreambuf_iterator<char>() };
     }
 
     void editColor(const char* value)
@@ -149,18 +154,174 @@ protected:
     ImGuiID color_input_id = 0;
 };
 
-TEST_F(ShaderColorRampTest, ValidRampRendersFirstWithoutChangingHdrValues)
+TEST_F(ShaderColorRampTest, ValidRampKeepsCountFieldOrderWithoutChangingHdrValues)
 {
     const auto before = bytes();
     for (int i = 0; i < 3; ++i)
     {
         const auto text = frame();
-        EXPECT_LT(text.find("Fixture ramp"), text.find("gain"));
+        EXPECT_LT(text.find("gain"), text.find("Fixture ramp"));
         EXPECT_EQ(text.find("stop_count"), std::string::npos);
         EXPECT_EQ(text.find("stop_positions"), std::string::npos);
         EXPECT_EQ(text.find("stop_red"), std::string::npos);
         EXPECT_EQ(before, bytes());
     }
+}
+
+TEST_F(ShaderColorRampTest, GroupAllocatesOmittedInactiveColorBeforeShaderRuns)
+{
+    hints["ShaderParams"].erase("stop_unused");
+    reload();
+    group_path = (directory / "group").string();
+    std::ofstream(group_path + ".json") << nlohmann::json{ { "ShaderParams", { shader } } }.dump();
+    ASSERT_TRUE(params.loadGroup(group_path, true));
+    const auto text = frame(true);
+    EXPECT_NE(text.find("Fixture ramp"), std::string::npos);
+    EXPECT_EQ(text.find("stop_count"), std::string::npos);
+    const auto fields = params.snapshot(shader);
+    const auto unused =
+        std::find_if(fields.begin(), fields.end(), [](const auto& field) { return field.name == "stop_unused"; });
+    ASSERT_NE(unused, fields.end());
+    ASSERT_NE(params.getValue(*unused), nullptr);
+    EXPECT_EQ(values<float>("stop_unused"), (std::vector<float>{ 0.f, 0.f, 0.f, 0.f }));
+}
+
+TEST_F(ShaderColorRampTest, BoundFieldsBeforeCountDoNotRenderTwice)
+{
+    const auto fields = compiled["ShaderParams"];
+    compiled["ShaderParams"] = nlohmann::ordered_json::object();
+    for (const char* name : { "stop_red", "gain", "stop_blue", "stop_unused", "stop_positions", "stop_count" })
+    {
+        compiled["ShaderParams"][name] = fields[name];
+    }
+    reload();
+    const auto before = bytes();
+    const auto text = frame();
+    EXPECT_LT(text.find("gain"), text.find("Fixture ramp"));
+    EXPECT_EQ(text.find("stop_red"), std::string::npos);
+    EXPECT_EQ(text.find("stop_positions"), std::string::npos);
+    EXPECT_EQ(text.find("stop_count"), std::string::npos);
+    EXPECT_EQ(before, bytes());
+}
+
+TEST_F(ShaderColorRampTest, GroupUsesLaterAuthoredDefaultsForOmittedBoundFields)
+{
+    hints["ShaderParams"].erase("stop_unused");
+    reload();
+    const auto later_shader = (directory / "later.slang").string();
+    const auto later_compiled = pnanovdb_shader::getCompiledShaderParamsFilePath(later_shader.c_str());
+    std::ofstream(later_shader) << "// Test reflection fixture\n";
+    std::ofstream(later_compiled) << nlohmann::json{
+        { "ShaderParams", { { "stop_unused", { { "type", "float" }, { "elementCount", 4 } } } } }
+    }.dump();
+    std::ofstream(later_shader + ".json") << nlohmann::json{
+        { "ShaderParams", { { "stop_unused", { { "value", { 3.f, 4.f, 5.f, 6.f } }, { "step", 0.f } } } } }
+    }.dump();
+    group_path = (directory / "group").string();
+    std::ofstream(group_path + ".json") << nlohmann::json{ { "ShaderParams", { shader, later_shader } } }.dump();
+    const bool loaded = params.loadGroup(group_path, true);
+    std::filesystem::remove(later_compiled);
+    ASSERT_TRUE(loaded);
+    EXPECT_NE(frame(true).find("Fixture ramp"), std::string::npos);
+    const auto later = params.snapshot(later_shader);
+    ASSERT_EQ(later.size(), 1u);
+    const auto current = params.snapshot(shader);
+    const auto unused =
+        std::find_if(current.begin(), current.end(), [](const auto& field) { return field.name == "stop_unused"; });
+    ASSERT_NE(unused, current.end());
+    ASSERT_NE(params.getValue(*unused), nullptr);
+    EXPECT_EQ(values<float>("stop_unused"), (std::vector<float>{ 3.f, 4.f, 5.f, 6.f }));
+    EXPECT_EQ(unused->pool_index, later.front().pool_index);
+}
+
+TEST_F(ShaderColorRampTest, ConsoleWarningsDoNotRepeatAcrossGroupAndShaderViews)
+{
+    for (auto& hint : hints["ShaderParams"])
+    {
+        hint["step"] = 0.f;
+    }
+    reload();
+    bytes();
+    const auto first_shader = shader;
+    const auto second_shader = (directory / "second.slang").string();
+    const auto second_compiled = pnanovdb_shader::getCompiledShaderParamsFilePath(second_shader.c_str());
+    auto second_layout = compiled;
+    auto second_hints = hints;
+    second_layout["ShaderParams"].erase("stop_count");
+    second_layout["ShaderParams"]["other_count"] = { { "type", "uint" }, { "elementCount", 1 } };
+    second_hints["ShaderParams"].erase("stop_count");
+    second_hints["ShaderParams"]["other_count"] = hints["ShaderParams"]["stop_count"];
+    second_hints["ShaderParams"]["other_count"]["label"] = "Second ramp";
+    std::ofstream(second_shader) << "// Test reflection fixture\n";
+    std::ofstream(second_compiled) << second_layout.dump();
+    std::ofstream(second_shader + ".json") << second_hints.dump();
+    const bool loaded = params.load(second_shader, true);
+    std::filesystem::remove(second_compiled);
+    ASSERT_TRUE(loaded);
+    group_path = (directory / "two_shader_group").string();
+    std::ofstream(group_path + ".json") << nlohmann::json{ { "ShaderParams", { first_shader, second_shader } } }.dump();
+    ASSERT_TRUE(params.loadGroup(group_path, true));
+    const auto pool_index = [&](const std::string& shader_name, const char* name)
+    {
+        for (const auto& field : params.snapshot(shader_name))
+        {
+            if (field.name == name)
+            {
+                return field.pool_index;
+            }
+        }
+        return SIZE_MAX;
+    };
+    ASSERT_NE(pool_index(first_shader, "stop_positions"), SIZE_MAX);
+    ASSERT_NE(pool_index(first_shader, "stop_red"), SIZE_MAX);
+    ASSERT_EQ(pool_index(first_shader, "stop_positions"), pool_index(second_shader, "stop_positions"));
+    ASSERT_EQ(pool_index(first_shader, "stop_red"), pool_index(second_shader, "stop_red"));
+    pnanovdb_editor::test::clearConsoleWarnings();
+    shader = second_shader;
+    for (int repeat = 0; repeat < 3; ++repeat)
+    {
+        const auto grouped = frame(true);
+        EXPECT_NE(grouped.find("Color ramp 'other_count' unavailable:"), std::string::npos);
+        const auto single = frame();
+        EXPECT_NE(single.find("Second ramp"), std::string::npos);
+        EXPECT_EQ(single.find("unavailable"), std::string::npos);
+    }
+    const auto warnings = pnanovdb_editor::test::consoleWarnings();
+    ASSERT_EQ(warnings.size(), 1u);
+    EXPECT_NE(warnings.front().find("Color ramp 'other_count'"), std::string::npos);
+}
+
+TEST_F(ShaderColorRampTest, ConsoleWarningsReportEachReasonOnceUntilJsonReload)
+{
+    const auto valid = bytes();
+    auto invalid_count = valid;
+    const uint32_t zero = 0;
+    std::memcpy(invalid_count.data() + sizeof(float), &zero, sizeof(zero));
+    auto nonfinite = valid;
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    std::memcpy(nonfinite.data() + nonfinite.size() - sizeof(float), &nan, sizeof(nan));
+    const auto show = [&](std::vector<char> data)
+    {
+        pnanovdb_compute_array_t array{ data.data(), 1, data.size(), nullptr };
+        params.set_compute_array_for_shader(shader, &array);
+        return frame();
+    };
+    pnanovdb_editor::test::clearConsoleWarnings();
+    for (int repeat = 0; repeat < 3; ++repeat)
+    {
+        EXPECT_NE(show(invalid_count).find("The count must be between"), std::string::npos);
+        EXPECT_NE(show(valid).find("Fixture ramp"), std::string::npos);
+    }
+    ASSERT_EQ(pnanovdb_editor::test::consoleWarnings().size(), 1u);
+    EXPECT_NE(show(nonfinite).find("including inactive slots"), std::string::npos);
+    EXPECT_NE(show(invalid_count).find("The count must be between"), std::string::npos);
+    const auto warnings = pnanovdb_editor::test::consoleWarnings();
+    ASSERT_EQ(warnings.size(), 2u);
+    EXPECT_NE(warnings.front().find("The count must be between"), std::string::npos);
+    EXPECT_NE(warnings.back().find("including inactive slots"), std::string::npos);
+    reload();
+    EXPECT_NE(show(invalid_count).find("The count must be between"), std::string::npos);
+    EXPECT_EQ(pnanovdb_editor::test::consoleWarnings().size(), 3u);
 }
 
 TEST_F(ShaderColorRampTest, AddAndRemoveWriteCountPositionsAndColorsTogether)
@@ -197,6 +358,7 @@ TEST_F(ShaderColorRampTest, InvalidMetadataAndRuntimeCountsFallBackToRawControls
         { { "colors", "stop_red" } },
         { { "label", 2 } },
         { { "tooltip", false } },
+        { { "widget", "colourRamp" } },
         { { "value", 0 } },
         { { "value", 4 } },
     };
@@ -207,6 +369,7 @@ TEST_F(ShaderColorRampTest, InvalidMetadataAndRuntimeCountsFallBackToRawControls
         reload();
         const auto before = bytes();
         const auto text = frame();
+        EXPECT_NE(text.find("Color ramp 'stop_count' unavailable:"), std::string::npos) << patch.dump();
         EXPECT_EQ(text.find("Fixture ramp"), std::string::npos) << patch.dump();
         EXPECT_NE(text.find("stop_count"), std::string::npos) << patch.dump();
         EXPECT_NE(text.find("stop_red"), std::string::npos) << patch.dump();
@@ -228,8 +391,41 @@ TEST_F(ShaderColorRampTest, WrongReflectedTypesAndHiddenBindingsFallBack)
     reload();
     const auto text = frame();
     EXPECT_EQ(text.find("Fixture ramp"), std::string::npos);
-    EXPECT_EQ(text.find("stop_red"), std::string::npos);
+    const auto hidden_field = text.find("stop_red");
+    ASSERT_NE(text.find("Color field 'stop_red'"), std::string::npos);
+    EXPECT_EQ(text.find("stop_red", hidden_field + std::strlen("stop_red")), std::string::npos);
     EXPECT_NE(text.find("stop_count"), std::string::npos);
+}
+
+TEST_F(ShaderColorRampTest, HiddenCountReportsOnceAndRecoversAfterReload)
+{
+    hints["ShaderParams"]["stop_count"]["hidden"] = true;
+    pnanovdb_editor::test::clearConsoleWarnings();
+    reload();
+    group_path = (directory / "hidden_count_group").string();
+    std::ofstream(group_path + ".json") << nlohmann::json{ { "ShaderParams", { shader } } }.dump();
+    ASSERT_TRUE(params.loadGroup(group_path, true));
+    const auto before = bytes();
+    for (int repeat = 0; repeat < 3; ++repeat)
+    {
+        for (bool group : { false, true })
+        {
+            const auto text = frame(group);
+            EXPECT_EQ(text.find("Fixture ramp"), std::string::npos);
+            EXPECT_EQ(text.find("stop_count"), std::string::npos);
+            EXPECT_NE(text.find("stop_red"), std::string::npos);
+            EXPECT_EQ(before, bytes());
+        }
+    }
+    const auto warnings = pnanovdb_editor::test::consoleWarnings();
+    ASSERT_EQ(warnings.size(), 1u);
+    EXPECT_NE(warnings.front().find("The count field must be visible."), std::string::npos);
+    hints["ShaderParams"]["stop_count"]["hidden"] = false;
+    reload();
+    ASSERT_TRUE(params.loadGroup(group_path, true));
+    EXPECT_NE(frame().find("Fixture ramp"), std::string::npos);
+    EXPECT_NE(frame(true).find("Fixture ramp"), std::string::npos);
+    EXPECT_EQ(pnanovdb_editor::test::consoleWarnings().size(), 1u);
 }
 
 TEST_F(ShaderColorRampTest, NonfiniteDataFallsBackWithoutChangingPoolBytes)
@@ -241,6 +437,28 @@ TEST_F(ShaderColorRampTest, NonfiniteDataFallsBackWithoutChangingPoolBytes)
     params.set_compute_array_for_shader(shader, &array);
     EXPECT_EQ(frame().find("Fixture ramp"), std::string::npos);
     EXPECT_EQ(data, bytes());
+}
+
+TEST_F(ShaderColorRampTest, NonfiniteInactiveColorReportsTheReasonAndRecovers)
+{
+    auto data = bytes();
+    const auto valid = data;
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    std::memcpy(data.data() + data.size() - sizeof(float), &nan, sizeof(nan));
+    pnanovdb_compute_array_t array{ data.data(), 1, data.size(), nullptr };
+    params.set_compute_array_for_shader(shader, &array);
+    for (int i = 0; i < 3; ++i)
+    {
+        const auto text = frame();
+        EXPECT_EQ(text.find("Fixture ramp"), std::string::npos);
+        EXPECT_NE(text.find("including inactive slots"), std::string::npos);
+        EXPECT_EQ(data, bytes());
+    }
+    data = valid;
+    array.data = data.data();
+    params.set_compute_array_for_shader(shader, &array);
+    EXPECT_NE(frame().find("Fixture ramp"), std::string::npos);
+    EXPECT_EQ(frame().find("unavailable"), std::string::npos);
 }
 
 TEST_F(ShaderColorRampTest, GroupReloadUsesCurrentMetadata)

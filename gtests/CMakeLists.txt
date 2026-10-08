@@ -72,12 +72,14 @@ target_link_libraries(ColorRampTest PRIVATE imgui)
 ConfigureTest(ShaderColorRampTest
   ShaderColorRampTest.cpp
   ImGuiTestSupport.cpp
+  ConsoleTestSupport.cpp
   ../editor/ColorRamp.cpp
-  ../editor/Console.cpp
   ../editor/ParamWidget.cpp
   ../editor/ShaderParams.cpp
 )
 target_link_libraries(ShaderColorRampTest PRIVATE ImGuiColorTextEdit imgui)
+ConfigureTest(ShaderColorRampPackingTest ShaderColorRampPackingTest.cpp GpuTestSupport.cpp)
+target_compile_definitions(ShaderColorRampPackingTest PRIVATE PNANOVDB_TEST_SHADER_CACHE="${COMPILED_SHADERS_DIR}")
 ConfigureTest(MapPinTest MapPinTest.cpp EditorTestSupport.cpp)
 ConfigureTest(ShaderParamsReadOnlyTest ShaderParamsReadOnlyTest.cpp EditorTestSupport.cpp)
 ConfigureTest(ShaderNameSwapResetsParamsTest ShaderNameSwapResetsParamsTest.cpp EditorTestSupport.cpp)

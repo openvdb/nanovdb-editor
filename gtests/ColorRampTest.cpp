@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <tuple>
 
 namespace
 {
@@ -62,31 +63,39 @@ TEST(ColorRamp, InsertionPreservesCurveAndEnforcesCapacityWhileRemovalKeepsOneSt
     EXPECT_FALSE(removeColorRampPoint(points, 0));
 }
 
-class ColorRampRenderTest : public ::testing::TestWithParam<bool>
+class ColorRampRenderTest : public ::testing::TestWithParam<std::tuple<bool, float, bool>>
 {
 protected:
     struct Layout
     {
         ImVec2 origin;
-        ImRect bounds;
-        float bar_y;
-        float bar_width;
-        float color_y;
-        float color_component_width;
-        float add_width;
-        float frame_height;
-        float inner_spacing;
+        ImRect bar;
         bool changed;
+        ImVec2 expected_text_size;
     };
 
     void SetUp() override
     {
         ImGui::CreateContext();
         auto& io = ImGui::GetIO();
-        io.ConfigMacOSXBehaviors = GetParam();
+        io.ConfigMacOSXBehaviors = std::get<0>(GetParam());
         io.IniFilename = nullptr;
-        io.DisplaySize = ImVec2(640, 480);
+        io.DisplaySize = ImVec2(1600, 1400);
         io.DeltaTime = 1.f / 60.f;
+        io.FontGlobalScale = std::get<1>(GetParam());
+        ImFontConfig font;
+        if (std::get<2>(GetParam()))
+        {
+            font.SizePixels = 17.f;
+            auto& style = ImGui::GetStyle();
+            style.FramePadding = ImVec2(6.f, 5.f);
+            style.ItemSpacing = ImVec2(11.f, 7.f);
+            style.ItemInnerSpacing = ImVec2(9.f, 6.f);
+            style.WindowPadding = ImVec2(13.f, 10.f);
+            style.ColorButtonPosition = ImGuiDir_Left;
+        }
+        io.Fonts->AddFontDefault(&font);
+        ImGui::GetStyle().ScaleAllSizes(io.FontGlobalScale);
         unsigned char* pixels;
         int width, height;
         io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
@@ -97,51 +106,71 @@ protected:
         ImGui::DestroyContext();
     }
 
-    Layout frame()
+    Layout frame(const char* expected_text = nullptr)
     {
         ImGui::NewFrame();
         ImGui::SetNextWindowPos(ImVec2(0, 0));
-        ImGui::SetNextWindowSize(ImVec2(288, 400));
+        const float font_size = ImGui::GetFontSize();
+        ImGui::SetNextWindowSize(ImVec2(28.f * font_size, 36.f * font_size));
         ImGui::Begin("Controls", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings);
         const auto origin = ImGui::GetCursorScreenPos();
-        const float width = ImGui::GetContentRegionAvail().x;
-        const float frame_height = ImGui::GetFrameHeight();
-        const auto& style = ImGui::GetStyle();
         const float bar_y = origin.y + ImGui::GetTextLineHeightWithSpacing();
-        const float color_y = bar_y + 38.f + style.ItemSpacing.y + 2.f * (frame_height + style.ItemSpacing.y);
-        const float item_width = width - ImGui::CalcTextSize("Position").x - style.ItemInnerSpacing.x;
-        const float component_width = (item_width - frame_height - 4.f * style.ItemInnerSpacing.x) / 4.f;
-        const float add_width = ImGui::CalcTextSize("Add stop").x + 2.f * style.FramePadding.x;
-        const bool changed = renderColorRamp("Ramp", points, capacity);
-        const ImRect bounds = ImGui::GetCurrentContext()->LastItemData.Rect;
-        const Layout layout{ origin, bounds, bar_y, width - 12.f, color_y, component_width, add_width,
-                             frame_height, style.ItemInnerSpacing.x, changed };
+        ImGui::PushID("Ramp");
+        add_id = ImGui::GetID("Add stop");
+        remove_id = ImGui::GetID("Remove stop");
+        ImGui::PushID("Color");
+        color_button_id = ImGui::GetID("##ColorButton");
+        const char* components[] = { "##X", "##Y", "##Z", "##W" };
+        for (size_t i = 0; i < color_input_ids.size(); ++i)
+        {
+            color_input_ids[i] = ImGui::GetID(components[i]);
+        }
+        ImGui::PopID();
+        ImGui::PopID();
+        const bool changed = renderColorRamp("Ramp", points, capacity, author_hint);
+        const auto& vertices = ImGui::GetWindowDrawList()->VtxBuffer;
+        ImRect bar(origin, origin);
+        for (int i = 0; i + 3 < vertices.Size; ++i)
+        {
+            const auto& a = vertices[i].pos;
+            const auto& b = vertices[i + 1].pos;
+            const auto& c = vertices[i + 2].pos;
+            const auto& d = vertices[i + 3].pos;
+            if (std::abs(a.y - bar_y) > 0.01f || std::abs(b.y - bar_y) > 0.01f || b.x <= a.x || c.x != b.x ||
+                d.x != a.x || c.y != d.y || c.y <= a.y)
+            {
+                continue;
+            }
+            const float height = c.y - a.y;
+            if (height > bar.GetHeight())
+            {
+                bar = ImRect(a, c);
+            }
+            else if (height == bar.GetHeight())
+            {
+                bar.Add(a);
+                bar.Add(c);
+            }
+        }
+        EXPECT_GT(bar.GetHeight(), 0.f);
+        const Layout layout{ origin, bar, changed, expected_text ? ImGui::CalcTextSize(expected_text) : ImVec2() };
         ImGui::End();
         ImGui::Render();
         return layout;
     }
 
-    void click(const ImVec2& position)
+    void activate(ImGuiID id)
     {
-        auto& io = ImGui::GetIO();
-        io.AddMousePosEvent(position.x, position.y);
-        frame();
-        io.AddMouseButtonEvent(0, true);
-        frame();
-        io.AddMouseButtonEvent(0, false);
+        ImGui::ActivateItemByID(id);
         frame();
     }
 
-    void typeAt(const ImVec2& position, const char* text)
+    void typeAt(ImGuiID id, const char* text)
     {
         auto& io = ImGui::GetIO();
-        const auto shortcut = io.ConfigMacOSXBehaviors ? ImGuiMod_Super : ImGuiMod_Ctrl;
-        io.AddKeyEvent(shortcut, true);
-        click(position);
-        io.AddKeyEvent(ImGuiKey_A, true);
+        ImGui::ActivateItemByID(id);
+        ImGui::GetCurrentContext()->NavNextActivateFlags = ImGuiActivateFlags_PreferInput;
         frame();
-        io.AddKeyEvent(ImGuiKey_A, false);
-        io.AddKeyEvent(shortcut, false);
         io.AddInputCharactersUTF8(text);
         frame();
         io.AddKeyEvent(ImGuiKey_Enter, true);
@@ -150,11 +179,17 @@ protected:
         frame();
     }
 
+    ImGuiID add_id = 0;
+    ImGuiID remove_id = 0;
+    ImGuiID color_button_id = 0;
+    std::array<ImGuiID, 4> color_input_ids{};
+
     std::vector<ColorRampPoint> points{
         { 0.f, { 2.f, 0.f, 0.f, 2.f } },
         { 1.f, { 0.f, 0.f, 4.f, 6.f } },
     };
     size_t capacity = 8;
+    const char* author_hint = nullptr;
 };
 
 TEST_P(ColorRampRenderTest, RenderingPreservesUnsortedDuplicateSlotsAndHdrValues)
@@ -192,15 +227,14 @@ TEST_P(ColorRampRenderTest, PreviewClampsInterpolatedHdrRgbaAndPreservesItWhenAd
             const auto& left = vertices[i];
             const auto& right = vertices[i + 1];
             const auto& bottom = vertices[i + 2];
-            if (std::abs(left.pos.y - layout.bar_y) > 0.01f ||
-                std::abs(right.pos.y - layout.bar_y) > 0.01f ||
-                std::abs(bottom.pos.y - layout.bar_y - 24.f) > 0.01f || right.pos.x <= left.pos.x)
+            if (std::abs(left.pos.y - layout.bar.Min.y) > 0.01f || std::abs(right.pos.y - layout.bar.Min.y) > 0.01f ||
+                std::abs(bottom.pos.y - layout.bar.Max.y) > 0.01f || right.pos.x <= left.pos.x)
             {
                 continue;
             }
             for (size_t sample = 0; sample < positions.size(); ++sample)
             {
-                const float x = layout.origin.x + 6.f + layout.bar_width * positions[sample];
+                const float x = layout.bar.Min.x + layout.bar.GetWidth() * positions[sample];
                 if (x < left.pos.x || x > right.pos.x)
                 {
                     continue;
@@ -242,17 +276,17 @@ TEST_P(ColorRampRenderTest, DraggingMovesTheSelectedSlotWithoutReorderingItsColo
     points.push_back({ 0.f, { 0.f, 3.f, 0.f, 4.f } });
     const auto layout = frame();
     auto& io = ImGui::GetIO();
-    io.AddMousePosEvent(layout.origin.x + 6.f, layout.bar_y + 30.f);
+    io.AddMousePosEvent(layout.bar.Min.x, layout.bar.GetCenter().y);
     frame();
     io.AddMouseButtonEvent(0, true);
     frame();
-    io.AddMousePosEvent(layout.origin.x + 6.f + layout.bar_width * 0.5f, layout.bar_y + 30.f);
+    io.AddMousePosEvent(layout.bar.GetCenter().x, layout.bar.GetCenter().y);
     EXPECT_TRUE(frame().changed);
-    EXPECT_FLOAT_EQ(points[2].position, 0.5f);
+    EXPECT_NEAR(points[2].position, 0.5f, 1.f / layout.bar.GetWidth());
     EXPECT_EQ(points[2].color, (std::array<float, 4>{ 0.f, 3.f, 0.f, 4.f }));
     EXPECT_FLOAT_EQ(points[0].position, 0.f);
     EXPECT_FLOAT_EQ(points[1].position, 1.f);
-    io.AddMousePosEvent(layout.origin.x + layout.bar_width * 2.f, layout.bar_y + 30.f);
+    io.AddMousePosEvent(layout.bar.Min.x + layout.bar.GetWidth() * 2.f, layout.bar.GetCenter().y);
     frame();
     EXPECT_FLOAT_EQ(points[2].position, 1.f);
     io.AddMouseButtonEvent(0, false);
@@ -262,41 +296,91 @@ TEST_P(ColorRampRenderTest, DraggingMovesTheSelectedSlotWithoutReorderingItsColo
 TEST_P(ColorRampRenderTest, AddAndRemoveButtonsRespectCapacityAndMinimum)
 {
     capacity = 3;
-    auto layout = frame();
-    const ImVec2 add(layout.origin.x + layout.add_width * 0.5f, layout.bounds.Max.y - layout.frame_height * 0.5f);
-    click(add);
+    frame();
+    activate(add_id);
     ASSERT_EQ(points.size(), 3u);
     EXPECT_FLOAT_EQ(points[2].position, 0.5f);
     EXPECT_EQ(points[2].color, (std::array<float, 4>{ 1.f, 0.f, 2.f, 4.f }));
-    click(add);
+    activate(add_id);
     EXPECT_EQ(points.size(), 3u);
-    const ImVec2 remove(layout.origin.x + layout.add_width + 30.f, add.y);
-    click(remove);
+    activate(remove_id);
     ASSERT_EQ(points.size(), 2u);
     EXPECT_FLOAT_EQ(points[0].position, 0.f);
     EXPECT_FLOAT_EQ(points[1].position, 1.f);
-    click(remove);
+    activate(remove_id);
     ASSERT_EQ(points.size(), 1u);
-    click(remove);
+    activate(remove_id);
     EXPECT_EQ(points.size(), 1u);
 }
 
 TEST_P(ColorRampRenderTest, ColorInputsEditRgbAndAlphaAboveOneWithoutChangingOtherStops)
 {
     const auto untouched = points[1];
-    auto layout = frame();
-    typeAt(ImVec2(layout.origin.x + layout.color_component_width * 0.5f,
-                  layout.color_y + layout.frame_height * 0.5f), "3.5");
+    frame();
+    typeAt(color_input_ids[0], "3.5");
     EXPECT_FLOAT_EQ(points[0].color[0], 3.5f);
-    layout = frame();
-    typeAt(ImVec2(layout.origin.x + 3.f * (layout.color_component_width + layout.inner_spacing) +
-                      layout.color_component_width * 0.5f,
-                  layout.color_y + layout.frame_height * 0.5f), "5.5");
+    typeAt(color_input_ids[3], "5.5");
     EXPECT_FLOAT_EQ(points[0].color[3], 5.5f);
     EXPECT_EQ(points[1].color, untouched.color);
     EXPECT_FLOAT_EQ(points[1].position, untouched.position);
 }
 
-INSTANTIATE_TEST_SUITE_P(KeyboardBehaviors, ColorRampRenderTest, ::testing::Bool());
+TEST_P(ColorRampRenderTest, HdrPreviewDoesNotOpenABoundedPicker)
+{
+    frame();
+    const auto before = points[0].color;
+    activate(color_button_id);
+    EXPECT_TRUE(ImGui::GetCurrentContext()->OpenPopupStack.empty());
+    EXPECT_EQ(points[0].color, before);
+}
+
+TEST_P(ColorRampRenderTest, AuthorHintDoesNotReplaceColorEditingGuidance)
+{
+    author_hint = "Density selects a ramp position.";
+    const auto layout = frame();
+    const auto hover = [&](const ImVec2& position, const char* expected)
+    {
+        ImGui::GetIO().AddMousePosEvent(position.x, position.y);
+        frame();
+        const auto hovered = frame(expected);
+        ImGuiWindow* tooltip = nullptr;
+        for (auto* window : ImGui::GetCurrentContext()->Windows)
+        {
+            if ((window->Flags & ImGuiWindowFlags_Tooltip) && window->Active && !window->Hidden)
+            {
+                ASSERT_EQ(tooltip, nullptr);
+                tooltip = window;
+            }
+        }
+        ASSERT_NE(tooltip, nullptr);
+        EXPECT_NEAR(tooltip->ContentSize.x, hovered.expected_text_size.x, 1.f);
+        EXPECT_NEAR(tooltip->ContentSize.y, hovered.expected_text_size.y, 1.f);
+    };
+    for (auto id : { color_input_ids[0], color_button_id })
+    {
+        activate(id);
+        auto* context = ImGui::GetCurrentContext();
+        ASSERT_EQ(context->NavId, id);
+        auto bounds = context->NavWindow->NavRectRel[context->NavLayer];
+        bounds.Translate(context->NavWindow->Pos);
+        hover(bounds.GetCenter(),
+              "Drag or type HDR RGBA values, including values above one.\nThe swatch does not open a picker.");
+    }
+    hover(layout.bar.GetCenter(), author_hint);
+}
+
+TEST_P(ColorRampRenderTest, PreviewAndMarkerInsetsScaleWithFontAndStyle)
+{
+    const auto before = frame();
+    ImGui::GetIO().FontGlobalScale *= 2.f;
+    ImGui::GetStyle().ScaleAllSizes(2.f);
+    const auto after = frame();
+    EXPECT_FLOAT_EQ(after.bar.GetHeight(), 2.f * before.bar.GetHeight());
+    EXPECT_FLOAT_EQ(after.bar.Min.x - after.origin.x, 2.f * (before.bar.Min.x - before.origin.x));
+}
+
+INSTANTIATE_TEST_SUITE_P(KeyboardScaleAndStyle,
+                         ColorRampRenderTest,
+                         ::testing::Combine(::testing::Bool(), ::testing::Values(1.f, 2.f), ::testing::Bool()));
 
 } // namespace

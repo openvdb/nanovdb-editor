@@ -28,6 +28,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <set>
 #include <mutex>
 #include <cstring>
 #include <optional>
@@ -64,6 +65,7 @@ struct ShaderParam
     bool is_hidden = false; // do not show in UI
     bool is_native_bool = false; // stored as pnanovdb_bool_t / uint32_t bool
     std::optional<ShaderColorRamp> color_ramp;
+    std::string color_ramp_error;
     nlohmann::json pending_value; // store value to apply when pool array is allocated
     nlohmann::json default_value; // JSON-declared default; persisted for resetToDefaults
 
@@ -230,6 +232,7 @@ private:
     // When JSON isn't loaded yet, we stash a copy of the raw constant buffer bytes
     // keyed by shader name and apply them once params are loaded.
     std::map<std::string, std::vector<char>> pending_arrays_data_; // <shader_name, raw bytes>
+    std::map<std::pair<std::string, std::string>, std::set<std::string>> color_ramp_warnings_;
 
     void* getValue(ShaderParam& shader_param);
     void createDefaultScalarNParam(const std::string& name,
@@ -242,6 +245,7 @@ private:
     void addToBoolParam(const std::string& name, const nlohmann::json& value, std::vector<ShaderParam>& params);
 
     void processPendingArrays(const std::string& shader_name);
+    void reportColorRampError(const std::string& shader_name, const std::string& name, const std::string& error);
 
     struct RenderableParamSnapshot
     {
@@ -260,6 +264,7 @@ private:
         bool is_hidden = false;
         bool is_native_bool = false;
         std::optional<ShaderColorRamp> color_ramp;
+        std::string color_ramp_error;
     };
 
     void buildRenderSnapshots(const std::string& shader_name,

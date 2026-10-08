@@ -144,7 +144,7 @@ float newStopPosition(const std::vector<ColorRampPoint>& points)
 void drawRamp(const ImVec2& minimum, const ImVec2& maximum, const std::vector<ColorRampPoint>& points)
 {
     auto* draw = ImGui::GetWindowDrawList();
-    constexpr float tile = 8.f;
+    const float tile = (maximum.y - minimum.y) / 3.f;
     for (int row = 0; minimum.y + row * tile < maximum.y; ++row)
     {
         for (int column = 0; minimum.x + column * tile < maximum.x; ++column)
@@ -169,33 +169,44 @@ void drawRamp(const ImVec2& minimum, const ImVec2& maximum, const std::vector<Co
         draw->AddRectFilledMultiColor(ImVec2(minimum.x + start * width, minimum.y),
                                      ImVec2(minimum.x + end * width, maximum.y), left, right, right, left);
     }
-    draw->AddRect(minimum, maximum, ImGui::GetColorU32(ImGuiCol_Border));
+    draw->AddRect(minimum, maximum, ImGui::GetColorU32(ImGuiCol_Border), 0.f, 0, ImGui::GetFrameHeight() / 20.f);
 }
 
 } // namespace
 
-bool renderColorRamp(const char* label, std::vector<ColorRampPoint>& points, size_t capacity)
+bool renderColorRamp(const char* label, std::vector<ColorRampPoint>& points, size_t capacity, const char* tooltip)
 {
     if (points.empty())
     {
         return false;
     }
     bool changed = false;
+    const auto show_hint = [&]()
+    {
+        if (tooltip && *tooltip && ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("%s", tooltip);
+        }
+    };
     ImGui::PushID(label);
     ImGui::BeginGroup();
     ImGui::TextUnformatted(label, std::strstr(label, "##"));
+    show_hint();
     auto* state = ImGui::GetStateStorage();
     const ImGuiID selected_id = ImGui::GetID("selected");
     const ImGuiID drag_start_id = ImGui::GetID("drag_start");
     int selected = std::clamp(state->GetInt(selected_id), 0, static_cast<int>(points.size()) - 1);
-    constexpr float marker_radius = 6.f;
-    constexpr float bar_height = 24.f;
+    const float bar_height = ImGui::GetFrameHeight() * 1.25f;
+    const float marker_radius = bar_height * 0.25f;
+    const float marker_gap = ImGui::GetStyle().ItemInnerSpacing.y * 0.25f;
+    const float marker_border = ImGui::GetFrameHeight() / 20.f;
     const ImVec2 origin = ImGui::GetCursorScreenPos();
     const float width = std::max(ImGui::GetContentRegionAvail().x, 2.f * marker_radius + 1.f);
     const ImVec2 bar_min(origin.x + marker_radius, origin.y);
     const ImVec2 bar_max(origin.x + width - marker_radius, origin.y + bar_height);
     const float bar_width = bar_max.x - bar_min.x;
-    ImGui::InvisibleButton("stops", ImVec2(width, bar_height + 2.f * marker_radius + 2.f));
+    ImGui::InvisibleButton("stops", ImVec2(width, bar_height + 2.f * marker_radius + 2.f * marker_gap));
+    show_hint();
     if (ImGui::IsItemActivated())
     {
         float distance = std::numeric_limits<float>::max();
@@ -226,12 +237,12 @@ bool renderColorRamp(const char* label, std::vector<ColorRampPoint>& points, siz
     for (size_t i = 0; i < points.size(); ++i)
     {
         const float x = bar_min.x + clampForDisplay(points[i].position) * bar_width;
-        const ImVec2 a(x, bar_max.y + 1.f);
-        const ImVec2 b(x - marker_radius, bar_max.y + 2.f * marker_radius + 1.f);
+        const ImVec2 a(x, bar_max.y + marker_gap);
+        const ImVec2 b(x - marker_radius, bar_max.y + 2.f * marker_radius + marker_gap);
         const ImVec2 c(x + marker_radius, b.y);
         draw->AddTriangleFilled(a, b, c, displayColor({ points[i].color[0], points[i].color[1], points[i].color[2], 1.f }));
         draw->AddTriangle(a, b, c, ImGui::GetColorU32(static_cast<int>(i) == selected ? ImGuiCol_Text : ImGuiCol_Border),
-                          static_cast<int>(i) == selected ? 2.f : 1.f);
+                          marker_border * (static_cast<int>(i) == selected ? 2.f : 1.f));
     }
     if (ImGui::ArrowButton("previous", ImGuiDir_Left))
     {
@@ -248,8 +259,12 @@ bool renderColorRamp(const char* label, std::vector<ColorRampPoint>& points, siz
                                         ImGui::GetStyle().ItemInnerSpacing.x));
     changed |= ImGui::SliderFloat("Position", &points[selected].position, 0.f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     changed |= ImGui::ColorEdit4("Color", points[selected].color.data(),
-                                ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_DisplayRGB |
-                                    ImGuiColorEditFlags_AlphaBar);
+                                 ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_DisplayRGB |
+                                     ImGuiColorEditFlags_NoPicker | ImGuiColorEditFlags_NoOptions);
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip("Drag or type HDR RGBA values, including values above one.\nThe swatch does not open a picker.");
+    }
     ImGui::PopItemWidth();
     ImGui::BeginDisabled(points.size() >= capacity);
     if (ImGui::Button("Add stop") && addColorRampPoint(points, capacity, newStopPosition(points)))

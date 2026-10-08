@@ -121,17 +121,29 @@ std::optional<nlohmann::ordered_json> loadShaderParamsJson(const std::string& sh
     return loadAndParseJsonFile(shader_base_name);
 }
 
-static std::optional<ShaderColorRamp> parseColorRamp(const nlohmann::json& value)
+static std::optional<ShaderColorRamp> parseColorRamp(const nlohmann::json& value, std::string& error)
 {
-    if (!value.contains("widget") || value["widget"] != "colorRamp")
+    if (!value.contains("widget"))
     {
+        if (value.contains("positions") || value.contains("colors"))
+        {
+            error = "Set 'widget' to 'colorRamp'.";
+        }
+        return std::nullopt;
+    }
+    if (value["widget"] != "colorRamp")
+    {
+        error = "The supported widget name is 'colorRamp'.";
         return std::nullopt;
     }
     ShaderColorRamp ramp;
-    if ((value.contains("label") && !value["label"].is_string()) ||
-        (value.contains("tooltip") && !value["tooltip"].is_string()))
+    for (const char* key : { "label", "tooltip" })
     {
-        return std::nullopt;
+        if (value.contains(key) && !value[key].is_string())
+        {
+            error = std::string("'") + key + "' must be text.";
+            return std::nullopt;
+        }
     }
     ramp.label = value.value("label", "Color ramp");
     ramp.tooltip = value.value("tooltip", "");
@@ -140,17 +152,20 @@ static std::optional<ShaderColorRamp> parseColorRamp(const nlohmann::json& value
     {
         if (!value.contains(key) || !value[key].is_array() || value[key].empty())
         {
+            error = std::string("'") + key + "' must be a nonempty array of field names.";
             return false;
         }
         for (const auto& entry : value[key])
         {
             if (!entry.is_string() || entry.get_ref<const std::string&>().empty())
             {
+                error = std::string("'") + key + "' must contain nonempty field names.";
                 return false;
             }
             const auto name = entry.get<std::string>();
             if (!names.insert(name).second)
             {
+                error = "Field '" + name + "' is bound more than once.";
                 return false;
             }
             output.push_back(name);
@@ -295,6 +310,17 @@ bool ShaderParams::load(const std::string& shader_name, bool reload, bool load_g
 
     // inserts and/or clears the existing map
     params_map_[shader_name].clear();
+    for (auto it = color_ramp_warnings_.begin(); it != color_ramp_warnings_.end();)
+    {
+        if (it->first.first == shader_name)
+        {
+            it = color_ramp_warnings_.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
 
     for (auto& [key, value] : shader_params->items())
     {
@@ -338,7 +364,12 @@ bool ShaderParams::load(const std::string& shader_name, bool reload, bool load_g
                 addToScalarNParam(shader_param.name, value, params_map_[shader_name]);
             }
 
-            shader_param.color_ramp = parseColorRamp(value);
+            shader_param.color_ramp = parseColorRamp(value, shader_param.color_ramp_error);
+            if (shader_param.color_ramp && shader_param.is_hidden)
+            {
+                shader_param.color_ramp_error = "The count field must be visible.";
+            }
+            reportColorRampError(shader_name, shader_param.name, shader_param.color_ramp_error);
 
             // Allocate pool array now that pending values are set (for group loading)
             if (load_group)
@@ -378,6 +409,7 @@ bool ShaderParams::loadGroup(const std::string& group_file, bool reload)
     nlohmann::ordered_json groups_json = *groups_json_optional;
 
     auto& json_shader_params = groups_json.at(pnanovdb_shader::SHADER_PARAM_JSON);
+    std::vector<std::string> shader_names;
     for (auto& shader_name_json : json_shader_params)
     {
         if (!shader_name_json.is_string())
@@ -390,6 +422,7 @@ bool ShaderParams::loadGroup(const std::string& group_file, bool reload)
         // load the shader to get its parameters and pool indices
         if (load(shader_name, false, true))
         {
+            shader_names.push_back(shader_name);
             auto* shader_params = get(shader_name);
             if (shader_params)
             {
@@ -400,21 +433,45 @@ bool ShaderParams::loadGroup(const std::string& group_file, bool reload)
                     {
                         getAllocatedPoolArray(param);
                     }
-                    if (param.pool_index != SIZE_MAX)
-                    {
-                        // Keep ramp metadata when shaders share a parameter pool.
-                        const auto existing = group_params_.find(param.pool_index);
-                        if (existing == group_params_.end() || (!existing->second.second.color_ramp && param.color_ramp))
-                        {
-                            group_params_[param.pool_index] = std::make_pair(shader_name, param);
-                        }
-                    }
                 }
             }
         }
         else
         {
             return false;
+        }
+    }
+
+    // Load all authored defaults before allocating omitted ramp fields.
+    for (const auto& shader_name : shader_names)
+    {
+        auto& shader_params = params_map_.at(shader_name);
+        std::set<std::string> bound_fields;
+        for (const auto& param : shader_params)
+        {
+            if (param.color_ramp)
+            {
+                bound_fields.insert(param.name);
+                bound_fields.insert(param.color_ramp->positions.begin(), param.color_ramp->positions.end());
+                bound_fields.insert(param.color_ramp->colors.begin(), param.color_ramp->colors.end());
+            }
+        }
+        for (auto& param : shader_params)
+        {
+            if (param.pool_index == SIZE_MAX && bound_fields.count(param.name))
+            {
+                param.pool_index = findEquivalentParamPoolIndex(param);
+                getAllocatedPoolArray(param);
+            }
+            if (param.pool_index != SIZE_MAX)
+            {
+                // Keep ramp metadata when shaders share a parameter pool.
+                const auto existing = group_params_.find(param.pool_index);
+                if (existing == group_params_.end() || (!existing->second.second.color_ramp && param.color_ramp))
+                {
+                    group_params_[param.pool_index] = std::make_pair(shader_name, param);
+                }
+            }
         }
     }
 
@@ -1165,7 +1222,23 @@ void ShaderParams::buildRenderSnapshots(const std::string& shader_name,
         snap.is_hidden = shader_param.is_hidden;
         snap.is_native_bool = shader_param.is_native_bool;
         snap.color_ramp = shader_param.color_ramp;
+        snap.color_ramp_error = shader_param.color_ramp_error;
         out.push_back(std::move(snap));
+    }
+}
+
+void ShaderParams::reportColorRampError(const std::string& shader_name, const std::string& name, const std::string& error)
+{
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    const auto key = std::make_pair(shader_name, name);
+    if (error.empty())
+    {
+        return;
+    }
+    if (color_ramp_warnings_[key].insert(error).second)
+    {
+        Console::getInstance().addLog(Console::LogLevel::Warning, "Color ramp '%s' in '%s' unavailable: %s",
+                                      name.c_str(), shader_name.c_str(), error.c_str());
     }
 }
 
@@ -1189,13 +1262,28 @@ void ShaderParams::renderSnapshotsAndWriteBack(std::vector<RenderableParamSnapsh
     };
     std::vector<bool> consumed(snapshots.size(), false);
     std::vector<std::vector<size_t>> ramp_edits;
+    struct RampBinding
+    {
+        std::vector<size_t> bound;
+        std::vector<std::pair<size_t, size_t>> positions;
+        std::vector<size_t> colors;
+        std::vector<ColorRampPoint> points;
+    };
+    std::map<size_t, RampBinding> ramps;
+    std::vector<std::string> errors(snapshots.size());
     for (size_t count_index = 0; count_index < snapshots.size(); ++count_index)
     {
         auto& count = snapshots[count_index];
-        if (!count.color_ramp || consumed[count_index] || count.type != ImGuiDataType_U32 ||
-            count.size != sizeof(uint32_t) || count.num_elements != 1 || count.value.size() != sizeof(uint32_t) ||
-            count.is_bool || count.is_native_bool)
+        auto& error = errors[count_index];
+        error = count.color_ramp_error;
+        if (!count.color_ramp)
         {
+            continue;
+        }
+        if (consumed[count_index] || count.type != ImGuiDataType_U32 || count.size != sizeof(uint32_t) ||
+            count.num_elements != 1 || count.value.size() != sizeof(uint32_t) || count.is_bool || count.is_native_bool)
+        {
+            error = "The count field must be a scalar uint without isBool.";
             continue;
         }
         const auto& metadata = *count.color_ramp;
@@ -1235,6 +1323,7 @@ void ShaderParams::renderSnapshotsAndWriteBack(std::vector<RenderableParamSnapsh
             const size_t index = find_field(name);
             if (index == SIZE_MAX)
             {
+                error = "Position field '" + name + "' must be a visible 32-bit float field bound only to this ramp.";
                 valid = false;
                 break;
             }
@@ -1249,6 +1338,7 @@ void ShaderParams::renderSnapshotsAndWriteBack(std::vector<RenderableParamSnapsh
             const size_t index = find_field(name);
             if (index == SIZE_MAX || snapshots[index].num_elements != 4)
             {
+                error = "Color field '" + name + "' must be a visible float4 field bound only to this ramp.";
                 valid = false;
                 break;
             }
@@ -1257,8 +1347,18 @@ void ShaderParams::renderSnapshotsAndWriteBack(std::vector<RenderableParamSnapsh
         }
         uint32_t point_count;
         std::memcpy(&point_count, count.value.data(), sizeof(point_count));
-        if (!valid || positions.size() != colors.size() || point_count == 0 || point_count > colors.size())
+        if (!valid)
         {
+            continue;
+        }
+        if (positions.size() != colors.size())
+        {
+            error = "The position component count must equal the number of color fields.";
+            continue;
+        }
+        if (point_count == 0 || point_count > colors.size())
+        {
+            error = "The count must be between 1 and " + std::to_string(colors.size()) + ".";
             continue;
         }
         std::vector<ColorRampPoint> points;
@@ -1276,39 +1376,55 @@ void ShaderParams::renderSnapshotsAndWriteBack(std::vector<RenderableParamSnapsh
         }
         if (!valid)
         {
+            error = "All stop positions and RGBA values must be finite, including inactive slots.";
             continue;
         }
         for (const size_t index : bound)
         {
             consumed[index] = true;
         }
-        const std::string label = metadata.label + "###" + count.shader_name + "/" + count.name;
-        if (renderColorRamp(label.c_str(), points, colors.size()) && !points.empty() &&
-            points.size() <= colors.size() && std::all_of(points.begin(), points.end(), finite_point))
-        {
-            point_count = static_cast<uint32_t>(points.size());
-            std::memcpy(count.value.data(), &point_count, sizeof(point_count));
-            for (size_t i = 0; i < points.size(); ++i)
-            {
-                const auto [index, element] = positions[i];
-                std::memcpy(snapshots[index].value.data() + element * sizeof(float), &points[i].position, sizeof(float));
-                std::memcpy(snapshots[colors[i]].value.data(), points[i].color.data(), sizeof(float) * 4);
-            }
-            ramp_edits.push_back(std::move(bound));
-        }
-        if (!metadata.tooltip.empty() && ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip("%s", metadata.tooltip.c_str());
-        }
+        ramps.emplace(
+            count_index, RampBinding{ std::move(bound), std::move(positions), std::move(colors), std::move(points) });
     }
 
     for (size_t i = 0; i < snapshots.size(); ++i)
     {
+        auto& snap = snapshots[i];
+        if (snap.color_ramp || !errors[i].empty())
+        {
+            reportColorRampError(snap.shader_name, snap.name, errors[i]);
+        }
+        const auto ramp = ramps.find(i);
+        if (ramp != ramps.end())
+        {
+            auto& count = snap;
+            auto& [bound, positions, colors, points] = ramp->second;
+            const auto& metadata = *count.color_ramp;
+            const std::string label = metadata.label + "###" + count.shader_name + "/" + count.name;
+            if (renderColorRamp(label.c_str(), points, colors.size(), metadata.tooltip.c_str()) && !points.empty() &&
+                points.size() <= colors.size() && std::all_of(points.begin(), points.end(), finite_point))
+            {
+                const uint32_t point_count = static_cast<uint32_t>(points.size());
+                std::memcpy(count.value.data(), &point_count, sizeof(point_count));
+                for (size_t slot = 0; slot < points.size(); ++slot)
+                {
+                    const auto [index, element] = positions[slot];
+                    std::memcpy(
+                        snapshots[index].value.data() + element * sizeof(float), &points[slot].position, sizeof(float));
+                    std::memcpy(snapshots[colors[slot]].value.data(), points[slot].color.data(), sizeof(float) * 4);
+                }
+                ramp_edits.push_back(std::move(bound));
+            }
+            continue;
+        }
         if (consumed[i])
         {
             continue;
         }
-        RenderableParamSnapshot& snap = snapshots[i];
+        if (!errors[i].empty())
+        {
+            ImGui::TextWrapped("Color ramp '%s' unavailable: %s", snap.name.c_str(), errors[i].c_str());
+        }
         ParamWidgetSpec ui_spec;
         ui_spec.display_name = snap.name;
         ui_spec.label = snap.name + "##" + snap.shader_name;

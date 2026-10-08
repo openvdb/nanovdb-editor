@@ -124,21 +124,35 @@ A scalar `uint` count field can combine several parameters into a color ramp:
 }
 ```
 
-The shader must declare the matching fields: a `uint` count, 32-bit float position
-fields, and one `float4` RGBA field per stop slot. `positions` lists fields whose
-components supply the stop positions; their total component count must equal
-`colors.length`. The first `count` slots are active and may be unsorted. To match
-the preview and inserted stop colors, the shader must interpolate RGBA linearly
-by position, use the later slot at duplicate positions, and hold the endpoint
-colors outside the stop range.
+Declare the corresponding shader buffer in this order:
 
-The widget edits the existing shader buffer without changing field names or
-layout. It replaces the bound scalar controls only when all fields are present
-and visible, `count` is between 1 and `colors.length`, and every slot's position
-and color values are finite, including inactive slots. Invalid bindings retain
-ordinary controls. The ramp supports stop selection, dragging, adding, removing,
-and HDR color and alpha editing. Its editable position range is zero through
-one. Optional `label` and `tooltip` strings customize the widget text.
+```slang
+struct shader_params_t
+{
+    float4 cold;
+    float4 hot;
+    float2 positions;
+    uint count;
+};
+ConstantBuffer<shader_params_t> shader_params;
+```
+
+The editor packs fields in declaration order without alignment padding and
+omits `_pad` fields. The layout above matches the default Vulkan settings;
+GPU offsets must match the packed offsets. JSON key order has no effect.
+
+`positions` must supply one 32-bit float component per `float4` color slot.
+The first `count` slots are active, with `count` between 1 and `colors.length`.
+All bound fields must be visible and all slots finite, including inactive slots.
+Invalid bindings show ordinary controls with a diagnostic.
+
+Slots may be unsorted. Match the preview by interpolating RGBA linearly,
+using the later slot at duplicate positions and holding endpoint colors outside
+the range.
+
+Edit positions within [0, 1] and HDR RGBA values numerically; the swatch does not
+open a picker.
+Optional `label` and `tooltip` customize the text.
 
 To display a group of shader parameters from different shaders define a json file with various shader paths:
 ```json
