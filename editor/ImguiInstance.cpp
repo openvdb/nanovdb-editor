@@ -347,6 +347,7 @@ void update(pnanovdb_imgui_instance_t* instance)
 
         const char* profile_name = ptr->render_settings->ui_profile_name;
         bool profile_changed = (ptr->current_profile_name != profile_name);
+        const bool preserve_camera = profile_changed && ptr->loaded_ini_once;
         if (profile_changed)
         {
             ptr->update_ini_filename_for_profile(profile_name);
@@ -358,6 +359,10 @@ void update(pnanovdb_imgui_instance_t* instance)
 
         if (!ptr->loaded_ini_once)
         {
+            const auto camera_state = ptr->render_settings->camera_state;
+            const auto camera_config = ptr->render_settings->camera_config;
+            const auto is_y_up = ptr->render_settings->is_y_up;
+            const auto is_upside_down = ptr->render_settings->is_upside_down;
             bool isViewerProfile = ptr->is_viewer();
             if (isViewerProfile)
             {
@@ -390,16 +395,19 @@ void update(pnanovdb_imgui_instance_t* instance)
                 copyPersistentFields(*ptr->render_settings, it->second);
             }
 
-            // Apply loaded camera state from INI
-            if (ptr->editor_scene)
+            if (preserve_camera)
+            {
+                // A layout change keeps the live viewport camera.
+                ptr->render_settings->camera_state = camera_state;
+                ptr->render_settings->camera_config = camera_config;
+                ptr->render_settings->is_y_up = is_y_up;
+                ptr->render_settings->is_upside_down = is_upside_down;
+            }
+            else if (ptr->editor_scene)
             {
                 if (isViewerProfile)
                 {
                     ptr->editor_scene->initialize_for_startup(true);
-                    auto* settings = ptr->render_settings;
-                    settings->is_projection_rh = settings->camera_config.is_projection_rh;
-                    settings->is_orthographic = settings->camera_config.is_orthographic;
-                    settings->is_reverse_z = settings->camera_config.is_reverse_z;
                 }
                 else
                 {
@@ -412,6 +420,13 @@ void update(pnanovdb_imgui_instance_t* instance)
                         ptr->render_settings->sync_camera = PNANOVDB_TRUE;
                     }
                 }
+            }
+            if (preserve_camera || isViewerProfile)
+            {
+                auto* settings = ptr->render_settings;
+                settings->is_projection_rh = settings->camera_config.is_projection_rh;
+                settings->is_orthographic = settings->camera_config.is_orthographic;
+                settings->is_reverse_z = settings->camera_config.is_reverse_z;
             }
         }
     }

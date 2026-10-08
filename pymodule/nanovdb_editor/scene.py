@@ -388,9 +388,13 @@ class Scene:
 
         Schema updates through this editor from other Python threads wait for
         this context to exit. Do not reload the schema inside the context.
-        Calls that wait for the viewer, including scene load/save, fail while
-        parameters are mapped on the calling thread. Shader changes, buffer
-        registration, and streaming updates do not wait for the viewer.
+        Exit this context before ``stop()``, ``reset()``, ``start()``, ``show()``,
+        ``shutdown()``, or ``close()``. The native API rejects lifecycle changes
+        and viewer waits while parameters are mapped. Void calls log an error
+        and do not execute; ``shutdown()`` and ``close()`` return ``False`` and
+        retain the editor. Scene load/save also fail with an active viewer.
+        Before startup, scene load can queue a file for later loading. Shader
+        changes, buffer registration, and streaming updates do not wait for the viewer.
         """
         from ._params import MappedParams
 

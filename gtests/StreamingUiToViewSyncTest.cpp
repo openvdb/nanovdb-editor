@@ -10,6 +10,7 @@
 #include <nanovdb_editor/putil/Editor.h>
 
 #include "editor/Editor.h"
+#include "editor/EditorScene.h"
 #include "editor/EditorSceneManager.h"
 #include "editor/ShaderParams.h"
 #include "EditorTestSupport.h"
@@ -133,6 +134,28 @@ TEST(StreamingUiToViewSync, PoolMutationPropagatesToObjectBufferEachFrame)
 
     EXPECT_EQ(editor.impl->nanovdb_array, initial_render_array)
         << "adding a later object must not steal the active render view";
+
+    ASSERT_TRUE(worker->render_thread_tasks.run_blocking(
+        [&]()
+        {
+            auto* view = editor.impl->editor_scene;
+            view->set_properties_selection(pnanovdb_editor::ViewType::NanoVDBs, second_name_token, scene_token);
+            const auto selection = view->get_properties_selection();
+            const auto render_selection = view->get_render_view_selection();
+            pnanovdb_compute_array_t source{ sphere_grid.data(), 4u, sphere_grid.bufferSize() / 4u };
+            EXPECT_TRUE(editor.update_nanovdb_buffer(&editor, scene_token, name_token, &source));
+            EXPECT_EQ(view->get_properties_selection().name_token, selection.name_token);
+            EXPECT_EQ(view->get_properties_selection().scene_token, selection.scene_token);
+            EXPECT_EQ(view->get_render_view_selection().name_token, render_selection.name_token);
+            EXPECT_EQ(view->get_render_view_selection().scene_token, render_selection.scene_token);
+            return PNANOVDB_TRUE;
+        }));
+    ASSERT_TRUE(worker->render_thread_tasks.run_blocking(
+        [&]()
+        {
+            EXPECT_EQ(editor.impl->editor_scene->get_properties_selection().name_token, second_name_token);
+            return PNANOVDB_TRUE;
+        }));
 
     std::array<uint8_t, 64> baseline{};
     ASSERT_EQ(pnanovdb_editor_test::snapshot_object_shader_params(

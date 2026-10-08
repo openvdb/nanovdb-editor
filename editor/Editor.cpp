@@ -199,6 +199,21 @@ static std::vector<std::shared_ptr<EditorWorker>>& pipeline_params_map_workers(p
     return s_pipeline_params_map_workers[editor->impl];
 }
 
+static bool release_pipeline_params_map(pnanovdb_editor_t* editor)
+{
+    auto& workers = pipeline_params_map_workers(editor);
+    if (workers.empty())
+        return false;
+    std::shared_ptr<EditorWorker> worker = std::move(workers.back());
+    workers.pop_back();
+    if (worker)
+    {
+        worker->pipeline_params_mutex.unlock();
+        worker->pipeline_params_dirty.store(true);
+    }
+    return true;
+}
+
 static bool caller_has_mapped_params(pnanovdb_editor_t* editor)
 {
     const auto it = s_pipeline_params_map_workers.find(editor ? editor->impl : nullptr);
@@ -210,7 +225,8 @@ static bool reject_mapped_wait(pnanovdb_editor_t* editor)
     if (!caller_has_mapped_params(editor))
         return false;
     Console::getInstance().addLog(
-        Console::LogLevel::Error, "Cannot wait for the editor while parameters are mapped on this thread");
+        Console::LogLevel::Error,
+        "Cannot change editor lifecycle or wait for the editor while parameters are mapped on this thread");
     return true;
 }
 
@@ -1016,11 +1032,6 @@ static void run_show_loop(pnanovdb_editor_t* editor,
                         item.nanovdb_array, shader_name, background_image, view, projection, image_width, image_height,
                         imgui_user_instance, editor->impl->editor_scene, editor->impl->scene_manager, composite,
                         item.scene_token, item.name_token, item.source_revision, item.nanovdb_owner);
-                    if (result == ShaderDispatchResult::CompilationFailed)
-                    {
-                        cleanup_background();
-                        break;
-                    }
                     if (result == ShaderDispatchResult::Success)
                     {
                         rendered = true;
@@ -1346,9 +1357,9 @@ pnanovdb_camera_t* get_camera(pnanovdb_editor_t* editor, pnanovdb_editor_token_t
 
 pnanovdb_bool_t load_scene(pnanovdb_editor_t* editor, const char* filepath, pnanovdb_bool_t overwrite)
 {
-    if (reject_mapped_wait(editor))
-        return PNANOVDB_FALSE;
     if (!editor || !editor->impl || !filepath || filepath[0] == '\0')
+        return PNANOVDB_FALSE;
+    if ((get_worker(editor) || editor->impl->editor_scene) && reject_mapped_wait(editor))
         return PNANOVDB_FALSE;
 
     std::string validation_error;
@@ -1482,8 +1493,10 @@ pnanovdb_bool_t update_nanovdb_buffer(pnanovdb_editor_t* editor,
                           [=]()
                           {
                               if (editor->impl->editor_scene)
+                              {
                                   editor->impl->editor_scene->sync_shader_params_from_editor();
-                              sync_added_object(editor, scene, name);
+                                  editor->impl->editor_scene->refresh_object_from_scene_manager(scene, name);
+                              }
                           });
     return PNANOVDB_TRUE;
 }
@@ -2229,7 +2242,11 @@ void unmap_params(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pna
 
     if (shader_changed && frame.key.kind == ParamMapKind::Shader)
     {
-        sync_added_object(editor, scene, name, true);
+        post_to_render_thread(editor, [=]()
+        {
+            if (editor->impl->editor_scene)
+                editor->impl->editor_scene->refresh_object_from_scene_manager(scene, name);
+        });
     }
     if (frame.worker)
     {
@@ -2303,6 +2320,8 @@ pnanovdb_pipeline_params_t* map_pipeline_params(pnanovdb_editor_t* editor,
                                                      if (obj)
                                                          result = &obj->pipeline.stages[stage].params;
                                                  });
+        if (result)
+            pipeline_params_map_workers(editor).push_back(nullptr);
         return result;
     }
 
@@ -2389,15 +2408,7 @@ void unmap_pipeline_params(pnanovdb_editor_t* editor,
     }
 
     // Unlock mutex only if this thread owns a successful map lock for this editor.
-    auto& workers = pipeline_params_map_workers(editor);
-    if (!workers.empty())
-    {
-        std::shared_ptr<EditorWorker> worker = workers.back();
-        workers.pop_back();
-        worker->pipeline_params_mutex.unlock();
-        worker->pipeline_params_dirty.store(true);
-    }
-    else
+    if (!release_pipeline_params_map(editor))
     {
         Console::getInstance().addLog(
             Console::LogLevel::Debug, "unmap_pipeline_params: no matching successful map on this thread; unlock skipped");
@@ -2418,17 +2429,12 @@ public:
         if (m_worker)
             m_worker->pipeline_params_dirty.store(true);
     }
-    bool retain_for_unmap(pnanovdb_editor_t* editor)
+    void retain_for_unmap(pnanovdb_editor_t* editor)
     {
-        if (!m_lock.owns_lock())
-            return false;
-
-        // Resolve the thread-local entry while RAII still owns the mutex. The
-        // vector push may allocate and throw; in that case m_lock's destructor
-        // must remain responsible for releasing the mutex.
+        // Record the map before releasing the lock so allocation failure cannot leak it.
         pipeline_params_map_workers(editor).push_back(m_worker);
-        (void)m_lock.release();
-        return true;
+        if (m_lock.owns_lock())
+            (void)m_lock.release();
     }
 
 private:
@@ -2802,14 +2808,7 @@ void unmap_process_step_params(pnanovdb_editor_t* editor,
                                                      obj->pipeline.process_step(step_index).configured = true;
                                                  });
     }
-    auto& workers = pipeline_params_map_workers(editor);
-    if (!workers.empty())
-    {
-        std::shared_ptr<EditorWorker> worker = workers.back();
-        workers.pop_back();
-        worker->pipeline_params_mutex.unlock();
-        worker->pipeline_params_dirty.store(true);
-    }
+    release_pipeline_params_map(editor);
 }
 
 void mark_pipeline_dirty(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)

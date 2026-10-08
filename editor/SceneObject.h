@@ -433,7 +433,8 @@ enum class SceneObjectSourceKind
 */
 struct PNANOVDB_SCENE_MANAGER_EXPORT_CXX SceneObject
 {
-    uint64_t lifetime_id = 0; ///< Unique identity for this object's current lifetime
+    uint64_t lifetime_id = 0; ///< Changes when the object or its source buffer is replaced.
+    uint64_t registration_id = 0; ///< Stays valid through source buffer updates.
     SceneObjectType type = SceneObjectType::Uninitialized; ///< Type of scene object
     pnanovdb_editor_token_t* scene_token; ///< Scene identifier token
     pnanovdb_editor_token_t* name_token; ///< Object name token

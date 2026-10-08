@@ -626,6 +626,12 @@ private:
         m_lifetime_to_key[obj.lifetime_id] = key;
     }
 
+    void begin_object_registration(SceneObject& obj, uint64_t key)
+    {
+        begin_object_lifetime(obj, key);
+        obj.registration_id = obj.lifetime_id;
+    }
+
     void forget_object_lifetime(const SceneObject& obj)
     {
         if (obj.lifetime_id != 0)
@@ -648,7 +654,7 @@ private:
                                      SceneObjectType type)
     {
         SceneObject& obj = m_objects[key];
-        begin_object_lifetime(obj, key);
+        begin_object_registration(obj, key);
         obj.reset_source();
         obj.type = type;
         obj.scene_token = scene;

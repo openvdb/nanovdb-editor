@@ -96,6 +96,12 @@ enum class SyncDirection
     UiToView,
 };
 
+#if defined(_WIN32)
+#    define PNANOVDB_EDITOR_EXPORT_CXX __declspec(dllexport)
+#else
+#    define PNANOVDB_EDITOR_EXPORT_CXX __attribute__((visibility("default")))
+#endif
+
 // This class handles scene management and synchronization between the editor and the UI
 class EditorScene
 {
@@ -124,6 +130,9 @@ public:
     void sync_shader_params_from_editor();
     void sync_views_from_scene_manager(uint64_t selected_scene_id = 0, uint64_t selected_name_id = 0);
     void sync_object_from_scene_manager(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
+    void refresh_object_from_scene_manager(pnanovdb_editor_token_t* scene,
+                                           pnanovdb_editor_token_t* name,
+                                           bool force_material_sync = false);
 
     // Push the active editor camera into the current scene's viewport view + UI
     void apply_editor_camera_to_viewport();
@@ -199,17 +208,17 @@ public:
     // Scene selection management
     void clear_selection();
 
-    void set_properties_selection(ViewType type,
+    PNANOVDB_EDITOR_EXPORT_CXX void set_properties_selection(ViewType type,
                                   pnanovdb_editor_token_t* name_token,
                                   pnanovdb_editor_token_t* scene_token = nullptr);
-    SceneSelection get_properties_selection() const;
+    PNANOVDB_EDITOR_EXPORT_CXX SceneSelection get_properties_selection() const;
 
     void focus_added_object_in_properties(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token);
 
     void set_render_view(ViewType type,
                          pnanovdb_editor_token_t* name_token,
                          pnanovdb_editor_token_t* scene_token = nullptr);
-    SceneSelection get_render_view_selection() const;
+    PNANOVDB_EDITOR_EXPORT_CXX SceneSelection get_render_view_selection() const;
 
     // Camera state management
     void save_camera_state(pnanovdb_editor_token_t* name_token, const pnanovdb_camera_state_t& state);
@@ -329,7 +338,7 @@ public:
             map_variant);
     }
 
-    void select_render_view(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
+    PNANOVDB_EDITOR_EXPORT_CXX void select_render_view(pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name);
     bool load_nanovdb_file(pnanovdb_editor_token_t* scene,
                            const char* filepath,
                            pnanovdb_pipeline_type_t render_pipeline = pnanovdb_pipeline_type_nanovdb_render,
@@ -430,8 +439,7 @@ private:
                             void** view_params_out = nullptr);
     void sync_current_view_state(SyncDirection sync_direction);
     void clear_editor_view_state();
-    void load_view_into_editor_and_ui(SceneObject* scene_obj);
-    void sync_restored_object_view_state(pnanovdb_editor_token_t* scene_token, pnanovdb_editor_token_t* name_token);
+    void load_view_into_editor_and_ui(SceneObject* scene_obj, bool sync_material = true);
     bool handle_pending_view_changes();
 
     // Sync editor's camera from current scene's viewport camera
@@ -484,12 +492,6 @@ private:
     SceneShaderParams m_nanovdb_params;
     SceneShaderParams m_gaussian_params;
 };
-
-#if defined(_WIN32)
-#    define PNANOVDB_EDITOR_EXPORT_CXX __declspec(dllexport)
-#else
-#    define PNANOVDB_EDITOR_EXPORT_CXX __attribute__((visibility("default")))
-#endif
 
 PNANOVDB_EDITOR_EXPORT_CXX void snapshot_object_shader_params_readonly(EditorSceneManager& scene_manager,
                                                                        pnanovdb_editor_token_t* scene_token,

@@ -29,6 +29,7 @@
 #include <string>
 #include <atomic>
 #include <map>
+#include <set>
 #include <mutex>
 #include <memory>
 #include <deque>
@@ -141,6 +142,8 @@ struct Instance
     pnanovdb_imgui_settings_render_t* render_settings;
     pnanovdb_compiler_settings_t compiler_settings;
     std::mutex compiler_settings_mutex;
+    std::mutex shader_reload_mutex;
+    std::set<std::string> shader_reload_requests;
 
     pnanovdb_uint64_t last_timestamp = 0llu;
 

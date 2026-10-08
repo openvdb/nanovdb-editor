@@ -1490,7 +1490,6 @@ void showFileDialogs(imgui_instance_user::Instance* ptr)
                 const std::string shader_name = pnanovdb_shader::getShaderName(path.c_str());
                 pnanovdb_editor::Console::getInstance().addLog("Setting shader '%s'", shader_name.c_str());
                 ptr->editor_scene->set_selected_object_shader_name(shader_name);
-                ptr->pending.update_shader = true;
             }
             ImGuiFileDialog::Instance()->Close();
         }

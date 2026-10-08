@@ -182,7 +182,9 @@ typedef struct pnanovdb_editor_t
     // Map pnanovdb_editor_shader_t to replace a NanoVDB shader and its complete parameter buffer on unmap.
     // Repeated shader maps on one thread share one buffer. Other threads stage independent complete updates.
     // The last changed map to unmap wins. Shader and shader-name maps cannot overlap for the same object.
-    // Calls that wait for the render thread fail while parameters are mapped on the calling thread.
+    // Unmap before start, show, stop, shutdown, reset, or calls that wait for the render thread.
+    // Rejected void calls log an error. Rejected shutdown keeps the implementation alive.
+    // Before startup, load_scene can queue a scene file while parameters are mapped.
     // It is the server's job to deal with binary layout compatbility, converting to client layout as needed
     void*(PNANOVDB_ABI* map_params)(pnanovdb_editor_t* editor,
                                     pnanovdb_editor_token_t* scene,

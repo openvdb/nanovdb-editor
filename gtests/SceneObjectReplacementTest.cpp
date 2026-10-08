@@ -495,11 +495,13 @@ TEST(SceneObjectReplacementTest, FailedStagedGaussianFileReplacementRestoresOldO
 
     ASSERT_TRUE(manager.add_nanovdb(&scene, &name, &original, nullptr, nullptr));
     uint64_t old_lifetime = 0;
+    uint64_t old_registration = 0;
     manager.with_object(&scene, &name,
                         [&](SceneObject* obj)
                         {
                             ASSERT_NE(obj, nullptr);
                             old_lifetime = obj->lifetime_id;
+                            old_registration = obj->registration_id;
                             obj->resources.source_filepath = "old.nvdb";
                         });
 
@@ -526,6 +528,7 @@ TEST(SceneObjectReplacementTest, FailedStagedGaussianFileReplacementRestoresOldO
                             EXPECT_EQ(obj->resources.nanovdb_array, &original);
                             EXPECT_EQ(obj->resources.source_filepath, "old.nvdb");
                             EXPECT_EQ(obj->lifetime_id, old_lifetime);
+                            EXPECT_EQ(obj->registration_id, old_registration);
                         });
 }
 
@@ -539,36 +542,44 @@ TEST(SceneObjectReplacementTest, SuccessfulStagedGaussianFileReplacementCommitsR
     pnanovdb_compute_t compute{};
 
     ASSERT_TRUE(manager.add_nanovdb(&scene, &name, &original, nullptr, nullptr));
+    uint64_t previous_registration = 0;
     manager.with_object(&scene, &name,
-                        [](SceneObject* obj)
+                        [&](SceneObject* obj)
                         {
                             ASSERT_NE(obj, nullptr);
                             obj->visible = false;
+                            previous_registration = obj->registration_id;
                         });
-    uint64_t reserved_lifetime = 0;
-    ASSERT_TRUE(manager.reserve_load_target(&scene, &name, &reserved_lifetime, true));
-    ASSERT_TRUE(manager.stage_file_object_replacement(
-        &scene, &name, reserved_lifetime, &compute, pnanovdb_pipeline_type_voxelbvh_build, pnanovdb_pipeline_type_noop));
-    manager.with_object(&scene, &name,
-                        [&](SceneObject* obj)
-                        {
-                            ASSERT_NE(obj, nullptr);
-                            obj->resources.source_filepath = "replacement.ply";
-                            obj->pipeline.process().output.set_array(k_stage_output_nanovdb, &result, {});
-                            obj->resolve_resources();
-                        });
+    for (int replacement = 0; replacement < 2; ++replacement)
+    {
+        uint64_t reserved_lifetime = 0;
+        ASSERT_TRUE(manager.reserve_load_target(&scene, &name, &reserved_lifetime, true));
+        ASSERT_TRUE(manager.stage_file_object_replacement(
+            &scene, &name, reserved_lifetime, &compute, pnanovdb_pipeline_type_voxelbvh_build, pnanovdb_pipeline_type_noop));
+        manager.with_object(&scene, &name,
+                            [&](SceneObject* obj)
+                            {
+                                ASSERT_NE(obj, nullptr);
+                                obj->resources.source_filepath = "replacement.ply";
+                                obj->pipeline.process().output.set_array(k_stage_output_nanovdb, &result, {});
+                                obj->resolve_resources();
+                            });
 
-    ASSERT_TRUE(manager.finish_file_object_replacement(reserved_lifetime, true));
-    manager.with_object(&scene, &name,
-                        [&](SceneObject* obj)
-                        {
-                            ASSERT_NE(obj, nullptr);
-                            EXPECT_EQ(obj->type, SceneObjectType::Array);
-                            EXPECT_EQ(obj->resources.converted_nanovdb, &result);
-                            EXPECT_EQ(obj->resources.source_filepath, "replacement.ply");
-                            EXPECT_NE(obj->lifetime_id, reserved_lifetime);
-                            EXPECT_FALSE(obj->visible);
-                        });
+        ASSERT_TRUE(manager.finish_file_object_replacement(reserved_lifetime, true));
+        manager.with_object(&scene, &name,
+                            [&](SceneObject* obj)
+                            {
+                                ASSERT_NE(obj, nullptr);
+                                EXPECT_EQ(obj->type, SceneObjectType::Array);
+                                EXPECT_EQ(obj->resources.converted_nanovdb, &result);
+                                EXPECT_EQ(obj->resources.source_filepath, "replacement.ply");
+                                EXPECT_NE(obj->lifetime_id, reserved_lifetime);
+                                EXPECT_NE(obj->registration_id, 0u);
+                                EXPECT_NE(obj->registration_id, previous_registration);
+                                previous_registration = obj->registration_id;
+                                EXPECT_FALSE(obj->visible);
+                            });
+    }
 }
 
 TEST(SceneObjectReplacementTest, RemovingStagedCandidateClearsRetainedBackup)

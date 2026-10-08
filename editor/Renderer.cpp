@@ -15,6 +15,9 @@
 #include "ImguiInstance.h"
 #include "Console.h"
 
+#include <filesystem>
+#include <set>
+
 namespace pnanovdb_editor
 {
 void Renderer::init(const RendererConfig& config)
@@ -189,15 +192,34 @@ ShaderDispatchResult Renderer::dispatch_nanovdb_shader(pnanovdb_compute_array_t*
         return ShaderDispatchResult::NoData;
     }
 
-    if (imgui_instance->pending.update_shader)
+    if (imgui_instance->pending.update_shader.exchange(false))
     {
-        imgui_instance->pending.update_shader = false;
         if (!imgui_instance->editor_shader_name.empty())
         {
             editor_scene->set_selected_object_shader_name(imgui_instance->editor_shader_name);
             imgui_instance->editor_shader_name.clear();
         }
         clear_shader_contexts();
+    }
+    std::set<std::string> reload_requests;
+    {
+        std::lock_guard<std::mutex> lock(imgui_instance->shader_reload_mutex);
+        reload_requests.swap(imgui_instance->shader_reload_requests);
+    }
+    if (!reload_requests.empty())
+    {
+        for (auto it = m_shader_contexts.begin(); it != m_shader_contexts.end();)
+        {
+            if (reload_requests.count(std::filesystem::path(it->first).filename().generic_string()))
+            {
+                m_config.compute->destroy_shader_context(m_config.compute, m_config.device_queue, it->second);
+                it = m_shader_contexts.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
     }
     auto cached = m_shader_contexts.find(shader_name);
     if (cached == m_shader_contexts.end())
@@ -208,7 +230,6 @@ ShaderDispatchResult Renderer::dispatch_nanovdb_shader(pnanovdb_compute_array_t*
                                           &imgui_instance->compiler_settings) == PNANOVDB_FALSE)
         {
             m_config.compute->destroy_shader_context(m_config.compute, m_config.device_queue, context);
-            m_shader_contexts.emplace(shader_name, nullptr);
             return ShaderDispatchResult::CompilationFailed;
         }
         cached = m_shader_contexts.emplace(shader_name, context).first;
@@ -218,14 +239,10 @@ ShaderDispatchResult Renderer::dispatch_nanovdb_shader(pnanovdb_compute_array_t*
             const auto selection = editor_scene->get_render_view_selection();
             if (selection.is_valid())
             {
-                editor_scene->sync_object_from_scene_manager(selection.scene_token, selection.name_token);
+                // Compilation reloads the UI pool even when object buffers stay unchanged.
+                editor_scene->refresh_object_from_scene_manager(selection.scene_token, selection.name_token, true);
             }
         }
-    }
-
-    if (!cached->second)
-    {
-        return ShaderDispatchResult::Skipped;
     }
 
     // Setup editor/camera parameters

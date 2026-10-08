@@ -8,6 +8,8 @@
 
 #include <array>
 #include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <future>
 
 namespace
@@ -46,8 +48,15 @@ protected:
     void TearDown() override
     {
         worker->render_thread_tasks.close();
-        editor.impl->editor_worker.reset();
-        pnanovdb_editor_free(&editor);
+        if (editor.impl)
+        {
+            editor.impl->editor_worker.reset();
+            pnanovdb_editor_free(&editor);
+        }
+        else
+        {
+            pnanovdb_free_library(editor.module);
+        }
         compute.destroy_array(array);
         pnanovdb_compute_free(&compute);
         pnanovdb_compiler_free(&compiler);
@@ -61,6 +70,23 @@ protected:
         worker->render_thread_tasks.close();
         EXPECT_EQ(result, std::future_status::ready);
         caller.get();
+    }
+
+    void expect_shutdown_preserves_pipeline_map(bool process_step)
+    {
+        editor.impl->editor_worker.reset();
+        auto* params = process_step ? editor.map_process_step_params(&editor, scene, name, 0) :
+                                     editor.map_pipeline_params(&editor, scene, name, pnanovdb_pipeline_stage_render);
+        ASSERT_NE(params, nullptr);
+        auto* impl = editor.impl;
+        editor.shutdown(&editor);
+        ASSERT_EQ(editor.impl, impl);
+        if (process_step)
+            editor.unmap_process_step_params(&editor, scene, name, 0);
+        else
+            editor.unmap_pipeline_params(&editor, scene, name, pnanovdb_pipeline_stage_render);
+        editor.shutdown(&editor);
+        EXPECT_EQ(editor.impl, nullptr);
     }
 };
 
@@ -96,6 +122,39 @@ TEST_F(StreamingApiTest, SaveWhileSceneControlsAreMappedFailsWithoutWaiting)
             EXPECT_FALSE(editor.save_scene(&editor, "mapped-scene-must-not-save.json"));
             editor.unmap_params(&editor, scene, nullptr);
         });
+}
+
+TEST_F(StreamingApiTest, LoadBeforeStartupWhileSceneControlsAreMappedIsDeferred)
+{
+    editor.impl->editor_worker.reset();
+    ASSERT_EQ(editor.impl->editor_scene, nullptr);
+    const auto path = std::filesystem::temp_directory_path() / "pnanovdb_streaming_api_deferred_scene.json";
+    {
+        std::ofstream file(path);
+        file << R"({"version":1,"objects":[],"scenes":[{"name":"deferred_scene"}]})";
+    }
+    ASSERT_TRUE(editor.load_scene(&editor, path.string().c_str(), PNANOVDB_FALSE));
+    EXPECT_EQ(editor.impl->pending_scene_path, path.string());
+    EXPECT_FALSE(editor.impl->pending_scene_overwrite);
+    editor.impl->pending_scene_path.clear();
+
+    const auto* type = editor.get_custom_scene_params_data_type(&editor, scene);
+    ASSERT_NE(editor.map_params(&editor, scene, nullptr, type), nullptr);
+    EXPECT_TRUE(editor.load_scene(&editor, path.string().c_str(), PNANOVDB_TRUE));
+    EXPECT_EQ(editor.impl->pending_scene_path, path.string());
+    EXPECT_TRUE(editor.impl->pending_scene_overwrite);
+    editor.unmap_params(&editor, scene, nullptr);
+    std::filesystem::remove(path);
+}
+
+TEST_F(StreamingApiTest, ShutdownWithPipelineParamsMappedBeforeStartupIsDeferred)
+{
+    expect_shutdown_preserves_pipeline_map(false);
+}
+
+TEST_F(StreamingApiTest, ShutdownWithProcessStepParamsMappedBeforeStartupIsDeferred)
+{
+    expect_shutdown_preserves_pipeline_map(true);
 }
 
 TEST_F(StreamingApiTest, ShaderMapWhileSceneControlsAreMappedDoesNotWaitForRender)

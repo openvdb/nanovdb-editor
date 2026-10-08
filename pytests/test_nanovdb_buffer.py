@@ -452,6 +452,67 @@ def native_shader_defaults(app, shader):
     return shader_state(app)
 
 
+def test_mixed_shader_parameters_match_native_packing(app, tmp_path):
+    source = """
+struct shader_params_t {
+    half2 small;
+    float3 direction;
+    uint _pad;
+    double weight;
+    int64_t count;
+    uint2 indices;
+    bool enabled;
+    float tail;
+};
+ConstantBuffer<shader_params_t> shader_params;
+RWTexture2D<float4> texture_out;
+[shader("compute")][numthreads(1, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID) {
+    float value = float(shader_params.small.x) + shader_params.direction.y
+        + float(shader_params.weight) + float(shader_params.count)
+        + float(shader_params.indices.x) + float(shader_params.enabled)
+        + shader_params.tail;
+    texture_out[id.xy] = float4(value, 0, 0, 1);
+}
+"""
+    defaults = {
+        "small": [0.5, -2.0],
+        "direction": [0.25, 1.0, -3.0],
+        "_pad": 2**32 - 1,
+        "weight": 0.625,
+        "count": -(2**40),
+        "indices": [3, 2**31],
+        "enabled": True,
+        "tail": -0.125,
+    }
+    overrides = {
+        "small": [-0.25, 4.0],
+        "direction": [-2.0, 0.5, 8.0],
+        "count": 2**40 + 1,
+        "enabled": False,
+        "tail": 0.875,
+    }
+    shaders = []
+    for suffix, values in [("defaults", defaults), ("overrides", {**defaults, **overrides})]:
+        shader = tmp_path / f"mixed_{tmp_path.name}_{suffix}.slang"
+        shader.write_text(source)
+        hints = {name: {"value": value} for name, value in reversed(list(values.items()))}
+        shader.with_suffix(".slang.json").write_text(json.dumps({"ShaderParams": hints}))
+        shaders.append(shader)
+
+    scene = app.scene("smoke")
+    with scene.nanovdb_from_buffer(raw_empty_grid()):
+        pass
+    native = native_shader_defaults(app, shaders[0])
+    scene.set_shader("nanovdb", shaders[0])
+    assert shader_state(app) == native
+
+    expected = native_shader_defaults(app, shaders[1])[1]
+    assert expected != native[1]
+    scene.set_shader("nanovdb", shaders[0], parameters=overrides)
+    assert shader_state(app) == (native[0], expected)
+
+
 @pytest.mark.parametrize("field_type, hint, format_code, expected", [
     ("float", {"value": [0.625]}, "f", (0.625,)),
     ("float", {"value": []}, "f", (0,)),

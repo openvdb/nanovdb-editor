@@ -780,7 +780,6 @@ static void showActionBar(Instance* ptr,
                 if (editor_scene)
                     editor_scene->set_selected_object_shader_name(new_shader);
                 shader_name = new_shader;
-                ptr->pending.update_shader = true;
             }
             ImGui::SameLine();
             if (ImGui::Button(browse_id))

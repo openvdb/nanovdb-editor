@@ -46,7 +46,7 @@ struct ShaderState
     std::shared_ptr<pnanovdb_compute_array_t> array_owner;
     pnanovdb_editor_token_t* scene = nullptr;
     pnanovdb_editor_token_t* name = nullptr;
-    uint64_t lifetime_id = 0;
+    uint64_t registration_id = 0;
 };
 
 // Keeps the params alive and holds its data_mutex for the whole map window,
@@ -348,7 +348,7 @@ pnanovdb_editor_shader_t* begin_shader_map(pnanovdb_editor_t* editor,
                         if (!obj || obj->type != SceneObjectType::NanoVDB)
                             return;
                         mapped->value.shader_name = obj->shader_name();
-                        mapped->lifetime_id = obj->lifetime_id;
+                        mapped->registration_id = obj->registration_id;
                         const auto* array = obj->params.shader_params_array;
                         if (array && array->data)
                         {
@@ -435,7 +435,7 @@ bool release_param_map(pnanovdb_editor_t* editor, const ParamMapKey& key)
                                       [&](SceneObject* obj)
                                       {
                                           if (!obj || obj->type != SceneObjectType::NanoVDB ||
-                                              obj->lifetime_id != mapped.lifetime_id)
+                                              obj->registration_id != mapped.registration_id)
                                               return;
                                           obj->shader_name() = mapped.value.shader_name;
                                           obj->params.shader_params_array = mapped.array_owner.get();

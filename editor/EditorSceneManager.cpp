@@ -1432,7 +1432,7 @@ bool EditorSceneManager::finish_file_object_replacement(
     if (success)
     {
         preserve_replaced_gaussian_owner(backup_it->second, old_gaussian_owner_out);
-        begin_object_lifetime(object_it->second, object_it->first);
+        begin_object_registration(object_it->second, object_it->first);
         m_file_replacement_backups.erase(backup_it);
         return true;
     }

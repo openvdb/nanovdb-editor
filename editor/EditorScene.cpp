@@ -340,11 +340,9 @@ void EditorScene::sync_current_view_state(SyncDirection sync_direction)
     // Now process with the copied data (no longer holding mutex)
     if (obj_shader_params || !obj_shader_name.empty())
     {
-        // Check if shader name changed and trigger recompilation if needed
         if (!obj_shader_name.empty() && m_editor->impl->shader_name != obj_shader_name)
         {
             m_editor->impl->shader_name = obj_shader_name;
-            m_imgui_instance->pending.update_shader = true;
         }
 
         copy_shader_params(render_method, obj_shader_params, obj_shader_name, sync_direction);
@@ -440,7 +438,7 @@ void EditorScene::copy_shader_params(pnanovdb_pipeline_render_method_t render_me
     }
 }
 
-void EditorScene::load_view_into_editor_and_ui(SceneObject* scene_obj)
+void EditorScene::load_view_into_editor_and_ui(SceneObject* scene_obj, bool sync_material)
 {
     if (!scene_obj)
     {
@@ -472,15 +470,14 @@ void EditorScene::load_view_into_editor_and_ui(SceneObject* scene_obj)
         m_editor->impl->shader_params_data_type = m_raster_shader_params_data_type;
     }
 
-    // Update the shader name if it differs from current, and trigger shader recompilation
     if (!obj_shader_name.empty() && m_editor->impl->shader_name != obj_shader_name)
     {
         m_editor->impl->shader_name = obj_shader_name;
-        m_imgui_instance->pending.update_shader = true;
     }
 
     // Use render method for shader param copying (determines param struct layout)
-    copy_shader_params(render_method, obj_shader_params, obj_shader_name, SyncDirection::EditorToUI);
+    if (sync_material)
+        copy_shader_params(render_method, obj_shader_params, obj_shader_name, SyncDirection::EditorToUI);
 
     // Note: Camera sync is NOT done here - camera is per-scene, not per-view
     // Camera syncing happens when:
@@ -489,8 +486,9 @@ void EditorScene::load_view_into_editor_and_ui(SceneObject* scene_obj)
     //   3. When user moves viewport (sync_scene_camera_from_editor in render loop)
 }
 
-void EditorScene::sync_restored_object_view_state(pnanovdb_editor_token_t* scene_token,
-                                                  pnanovdb_editor_token_t* name_token)
+void EditorScene::refresh_object_from_scene_manager(pnanovdb_editor_token_t* scene_token,
+                                                    pnanovdb_editor_token_t* name_token,
+                                                    bool force_material_sync)
 {
     if (!scene_token || !name_token)
     {
@@ -548,7 +546,10 @@ void EditorScene::sync_restored_object_view_state(pnanovdb_editor_token_t* scene
                                                active_scene->id == scene_token->id;
             if (is_active_render_view)
             {
-                load_view_into_editor_and_ui(restored_obj);
+                const char* shader = pipeline_get_shader(restored_obj);
+                const bool material_changed = m_editor->impl->shader_params != restored_obj->shader_params() ||
+                                              (shader && m_editor->impl->shader_name != shader);
+                load_view_into_editor_and_ui(restored_obj, force_material_sync || material_changed);
             }
         });
 }
@@ -654,10 +655,8 @@ void EditorScene::sync_selected_view_with_current()
     // Create the expected new selection to compare against
     SceneSelection new_selection{ new_view_type, view_token, current_scene_token };
 
-    // Check if both properties selection AND render view are already set to this exact selection
-    // (including scene_token and type) AND the epoch hasn't changed. Only skip update if both
-    // match completely and content hasn't changed (epoch check ensures new content triggers update).
-    if (m_view_selection == new_selection && m_render_view_selection == new_selection &&
+    // Keep Properties selection when the active render view has not changed.
+    if (!has_pending_request && m_render_view_selection == new_selection &&
         m_last_synced_epoch == current_epoch)
     {
         return;
@@ -3498,7 +3497,7 @@ void EditorScene::apply_object_restore(pnanovdb_editor_token_t* scene_token,
                 m_editor, scene_token, name_token, obj["visible"].get<bool>() ? PNANOVDB_TRUE : PNANOVDB_FALSE);
         }
 
-        sync_restored_object_view_state(scene_token, name_token);
+        refresh_object_from_scene_manager(scene_token, name_token);
         m_editor->mark_pipeline_dirty(m_editor, scene_token, name_token);
     }
     catch (const nlohmann::json::exception& e)
