@@ -105,6 +105,41 @@ Supported types: `bool`, `int`, `uint`, `int64`, `uint64`, `float` and its vecto
 Variables with `_pad` in the name are not shown in the UI.
 Those parameters can be interactively changed with generated UI in the editor's Params tab.
 
+A scalar `uint` count field can combine several parameters into a color ramp:
+
+```json
+{
+    "ShaderParams": {
+        "count": {
+            "value": 2,
+            "widget": "colorRamp",
+            "label": "Color ramp",
+            "positions": ["positions"],
+            "colors": ["cold", "hot"]
+        },
+        "positions": {"value": [0.0, 1.0]},
+        "cold": {"value": [0.1, 0.2, 1.0, 0.8]},
+        "hot": {"value": [1.0, 0.2, 0.0, 0.8]}
+    }
+}
+```
+
+The shader must declare the matching fields: a `uint` count, 32-bit float position
+fields, and one `float4` RGBA field per stop slot. `positions` lists fields whose
+components supply the stop positions; their total component count must equal
+`colors.length`. The first `count` slots are active and may be unsorted. To match
+the preview and inserted stop colors, the shader must interpolate RGBA linearly
+by position, use the later slot at duplicate positions, and hold the endpoint
+colors outside the stop range.
+
+The widget edits the existing shader buffer without changing field names or
+layout. It replaces the bound scalar controls only when all fields are present
+and visible, `count` is between 1 and `colors.length`, and every slot's position
+and color values are finite, including inactive slots. Invalid bindings retain
+ordinary controls. The ramp supports stop selection, dragging, adding, removing,
+and HDR color and alpha editing. Its editable position range is zero through
+one. Optional `label` and `tooltip` strings customize the widget text.
+
 To display a group of shader parameters from different shaders define a json file with various shader paths:
 ```json
 {

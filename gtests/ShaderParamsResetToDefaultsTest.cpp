@@ -6,6 +6,7 @@
 #include <nanovdb_editor/putil/Compiler.h>
 #include <nanovdb_editor/putil/Compute.h>
 #include <nanovdb_editor/putil/Editor.h>
+#include <nanovdb_editor/putil/Raster.h>
 
 #include "editor/Editor.h" // pnanovdb_editor_impl_t
 #include "editor/EditorSceneManager.h"
@@ -15,6 +16,7 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <vector>
 
 namespace
@@ -266,4 +268,60 @@ TEST_F(ShaderParamsResetToDefaultsTest, ResetRejectsInvalidShaderName)
     EXPECT_FALSE(scene_manager.reset_shader_params_to_defaults(&compute, nullptr));
     EXPECT_FALSE(scene_manager.reset_shader_params_to_defaults(&compute, ""));
     EXPECT_FALSE(scene_manager.reset_shader_params_to_defaults(&compute, "editor/does_not_exist.slang"));
+}
+
+TEST_F(ShaderParamsResetToDefaultsTest, RasterGroupKeepsDefaultsFromLaterShader)
+{
+    const auto source_root = std::filesystem::path(__FILE__).parent_path().parent_path();
+    std::ifstream group_file(source_root / "raster/shaders/raster2d_group.json");
+    ASSERT_TRUE(group_file.is_open());
+    nlohmann::json group;
+    group_file >> group;
+    for (const auto& shader : group.at("ShaderParams"))
+    {
+        const auto path = source_root / "raster/shaders" / std::filesystem::path(shader.get<std::string>()).filename();
+        ASSERT_TRUE(compileToCache(path.string().c_str()));
+    }
+
+    auto& manager = *editor.impl->scene_manager;
+    auto& params = manager.shader_params;
+    const char* shader = pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_gaussian_splat);
+    const char* group_name = pnanovdb_pipeline_get_shader_group(pnanovdb_pipeline_type_gaussian_splat);
+    const auto load_group = [&]()
+    {
+        auto* array = manager.create_initialized_shader_params(
+            &compute, shader, group_name, sizeof(pnanovdb_raster_shader_params_t),
+            PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_raster_shader_params_t));
+        ASSERT_NE(array, nullptr);
+        compute.destroy_array(array);
+    };
+    load_group();
+    const auto expect_defaults = [&]()
+    {
+        pnanovdb_raster_shader_params_t values{};
+        ASSERT_GT(params.copy_params_to_buffer(shader, &values, sizeof(values)), 0u);
+        EXPECT_FLOAT_EQ(values.eps2d, 0.3f);
+        EXPECT_FLOAT_EQ(values.min_radius_2d, 0.f);
+        EXPECT_EQ(values.tile_size, 16u);
+        EXPECT_EQ(values.sh_degree_override, -1);
+        EXPECT_EQ(values.sh_stride_rgbrgbrgb_override, 0u);
+    };
+    expect_defaults();
+
+    pnanovdb_raster_shader_params_t edited = default_shader_params;
+    edited.eps2d = 4.f;
+    auto* array = compute.create_array(sizeof(edited), 1u, &edited);
+    ASSERT_NE(array, nullptr);
+    params.set_compute_array_for_shader(shader, array);
+    compute.destroy_array(array);
+    for (int i = 0; i < 2; ++i)
+    {
+        load_group();
+        pnanovdb_raster_shader_params_t values{};
+        ASSERT_GT(params.copy_params_to_buffer(shader, &values, sizeof(values)), 0u);
+        EXPECT_FLOAT_EQ(values.eps2d, edited.eps2d);
+    }
+
+    ASSERT_TRUE(manager.reset_group_params_to_defaults(&compute, group_name));
+    expect_defaults();
 }

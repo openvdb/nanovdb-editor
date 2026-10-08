@@ -11,6 +11,7 @@
 
 #include "ShaderParams.h"
 #include "ParamWidget.h"
+#include "ColorRamp.h"
 
 #include "Console.h"
 
@@ -20,6 +21,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <set>
+#include <cmath>
 
 namespace pnanovdb_editor
 {
@@ -117,6 +119,49 @@ std::optional<nlohmann::ordered_json> loadShaderParamsJson(const std::string& sh
         return std::nullopt;
     }
     return loadAndParseJsonFile(shader_base_name);
+}
+
+static std::optional<ShaderColorRamp> parseColorRamp(const nlohmann::json& value)
+{
+    if (!value.contains("widget") || value["widget"] != "colorRamp")
+    {
+        return std::nullopt;
+    }
+    ShaderColorRamp ramp;
+    if ((value.contains("label") && !value["label"].is_string()) ||
+        (value.contains("tooltip") && !value["tooltip"].is_string()))
+    {
+        return std::nullopt;
+    }
+    ramp.label = value.value("label", "Color ramp");
+    ramp.tooltip = value.value("tooltip", "");
+    std::set<std::string> names;
+    auto read_names = [&](const char* key, std::vector<std::string>& output)
+    {
+        if (!value.contains(key) || !value[key].is_array() || value[key].empty())
+        {
+            return false;
+        }
+        for (const auto& entry : value[key])
+        {
+            if (!entry.is_string() || entry.get_ref<const std::string&>().empty())
+            {
+                return false;
+            }
+            const auto name = entry.get<std::string>();
+            if (!names.insert(name).second)
+            {
+                return false;
+            }
+            output.push_back(name);
+        }
+        return true;
+    };
+    if (!read_names("positions", ramp.positions) || !read_names("colors", ramp.colors))
+    {
+        return std::nullopt;
+    }
+    return ramp;
 }
 
 ShaderParams::~ShaderParams()
@@ -293,6 +338,8 @@ bool ShaderParams::load(const std::string& shader_name, bool reload, bool load_g
                 addToScalarNParam(shader_param.name, value, params_map_[shader_name]);
             }
 
+            shader_param.color_ramp = parseColorRamp(value);
+
             // Allocate pool array now that pending values are set (for group loading)
             if (load_group)
             {
@@ -348,10 +395,16 @@ bool ShaderParams::loadGroup(const std::string& group_file, bool reload)
             {
                 for (auto& param : *shader_params)
                 {
+                    // Unauthored fields must not replace defaults from later shaders.
+                    if (param.pool_index == SIZE_MAX && !param.pending_value.is_null())
+                    {
+                        getAllocatedPoolArray(param);
+                    }
                     if (param.pool_index != SIZE_MAX)
                     {
-                        // only add if this pool index isn't already represented
-                        if (group_params_.find(param.pool_index) == group_params_.end())
+                        // Keep ramp metadata when shaders share a parameter pool.
+                        const auto existing = group_params_.find(param.pool_index);
+                        if (existing == group_params_.end() || (!existing->second.second.color_ramp && param.color_ramp))
                         {
                             group_params_[param.pool_index] = std::make_pair(shader_name, param);
                         }
@@ -1050,12 +1103,24 @@ void ShaderParams::renderGroup(const std::string& group_file_path)
         }
 
         // render unique parameters by pool index (avoids duplicates)
+        std::set<size_t> rendered_pools;
         for (auto& [pool_index, shader_param_pair] : group_params_)
         {
-            std::vector<ShaderParam> single{ shader_param_pair.second };
+            auto* shader_params = get(shader_param_pair.first);
+            if (!shader_params)
+            {
+                continue;
+            }
+            auto current =
+                std::find_if(shader_params->begin(), shader_params->end(),
+                             [&](const ShaderParam& field) { return field.name == shader_param_pair.second.name; });
+            if (current == shader_params->end() || !getAllocatedPoolArray(*current) ||
+                !rendered_pools.insert(current->pool_index).second)
+            {
+                continue;
+            }
+            std::vector<ShaderParam> single{ *current };
             buildRenderSnapshots(shader_param_pair.first, single, snapshots);
-            // Propagate any lazy pool allocation back to the stored group param.
-            shader_param_pair.second = single.front();
         }
     }
 
@@ -1099,6 +1164,7 @@ void ShaderParams::buildRenderSnapshots(const std::string& shader_name,
         snap.is_bool = shader_param.is_bool;
         snap.is_hidden = shader_param.is_hidden;
         snap.is_native_bool = shader_param.is_native_bool;
+        snap.color_ramp = shader_param.color_ramp;
         out.push_back(std::move(snap));
     }
 }
@@ -1116,8 +1182,133 @@ void ShaderParams::renderSnapshotsAndWriteBack(std::vector<RenderableParamSnapsh
         originals[i] = snapshots[i].value;
     }
 
-    for (RenderableParamSnapshot& snap : snapshots)
+    auto finite_point = [](const ColorRampPoint& point)
     {
+        return std::isfinite(point.position) &&
+               std::all_of(point.color.begin(), point.color.end(), [](float value) { return std::isfinite(value); });
+    };
+    std::vector<bool> consumed(snapshots.size(), false);
+    std::vector<std::vector<size_t>> ramp_edits;
+    for (size_t count_index = 0; count_index < snapshots.size(); ++count_index)
+    {
+        auto& count = snapshots[count_index];
+        if (!count.color_ramp || consumed[count_index] || count.type != ImGuiDataType_U32 ||
+            count.size != sizeof(uint32_t) || count.num_elements != 1 || count.value.size() != sizeof(uint32_t) ||
+            count.is_bool || count.is_native_bool)
+        {
+            continue;
+        }
+        const auto& metadata = *count.color_ramp;
+        std::vector<size_t> bound{ count_index };
+        std::vector<std::pair<size_t, size_t>> positions;
+        std::vector<size_t> colors;
+        auto find_field = [&](const std::string& name) -> size_t
+        {
+            std::lock_guard<std::recursive_mutex> lock(m_mutex);
+            auto shader = params_map_.find(count.shader_name);
+            if (shader == params_map_.end())
+            {
+                return SIZE_MAX;
+            }
+            auto field = std::find_if(shader->second.begin(), shader->second.end(),
+                                      [&](const ShaderParam& param) { return param.name == name; });
+            if (field == shader->second.end() || field->is_hidden)
+            {
+                return SIZE_MAX;
+            }
+            for (size_t i = 0; i < snapshots.size(); ++i)
+            {
+                const auto& snap = snapshots[i];
+                if (snap.name == name && snap.pool_index == field->pool_index && !consumed[i] &&
+                    snap.type == ImGuiDataType_Float && snap.size == sizeof(float) && !snap.is_bool &&
+                    snap.num_elements > 0 && snap.value.size() == sizeof(float) * snap.num_elements &&
+                    std::find(bound.begin(), bound.end(), i) == bound.end())
+                {
+                    return i;
+                }
+            }
+            return SIZE_MAX;
+        };
+        bool valid = true;
+        for (const auto& name : metadata.positions)
+        {
+            const size_t index = find_field(name);
+            if (index == SIZE_MAX)
+            {
+                valid = false;
+                break;
+            }
+            bound.push_back(index);
+            for (size_t element = 0; element < snapshots[index].num_elements; ++element)
+            {
+                positions.emplace_back(index, element);
+            }
+        }
+        for (const auto& name : metadata.colors)
+        {
+            const size_t index = find_field(name);
+            if (index == SIZE_MAX || snapshots[index].num_elements != 4)
+            {
+                valid = false;
+                break;
+            }
+            bound.push_back(index);
+            colors.push_back(index);
+        }
+        uint32_t point_count;
+        std::memcpy(&point_count, count.value.data(), sizeof(point_count));
+        if (!valid || positions.size() != colors.size() || point_count == 0 || point_count > colors.size())
+        {
+            continue;
+        }
+        std::vector<ColorRampPoint> points;
+        for (size_t i = 0; i < colors.size(); ++i)
+        {
+            ColorRampPoint point;
+            const auto [index, element] = positions[i];
+            std::memcpy(&point.position, snapshots[index].value.data() + element * sizeof(float), sizeof(float));
+            std::memcpy(point.color.data(), snapshots[colors[i]].value.data(), sizeof(float) * 4);
+            valid &= finite_point(point);
+            if (i < point_count)
+            {
+                points.push_back(point);
+            }
+        }
+        if (!valid)
+        {
+            continue;
+        }
+        for (const size_t index : bound)
+        {
+            consumed[index] = true;
+        }
+        const std::string label = metadata.label + "###" + count.shader_name + "/" + count.name;
+        if (renderColorRamp(label.c_str(), points, colors.size()) && !points.empty() &&
+            points.size() <= colors.size() && std::all_of(points.begin(), points.end(), finite_point))
+        {
+            point_count = static_cast<uint32_t>(points.size());
+            std::memcpy(count.value.data(), &point_count, sizeof(point_count));
+            for (size_t i = 0; i < points.size(); ++i)
+            {
+                const auto [index, element] = positions[i];
+                std::memcpy(snapshots[index].value.data() + element * sizeof(float), &points[i].position, sizeof(float));
+                std::memcpy(snapshots[colors[i]].value.data(), points[i].color.data(), sizeof(float) * 4);
+            }
+            ramp_edits.push_back(std::move(bound));
+        }
+        if (!metadata.tooltip.empty() && ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("%s", metadata.tooltip.c_str());
+        }
+    }
+
+    for (size_t i = 0; i < snapshots.size(); ++i)
+    {
+        if (consumed[i])
+        {
+            continue;
+        }
+        RenderableParamSnapshot& snap = snapshots[i];
         ParamWidgetSpec ui_spec;
         ui_spec.display_name = snap.name;
         ui_spec.label = snap.name + "##" + snap.shader_name;
@@ -1137,8 +1328,44 @@ void ShaderParams::renderSnapshotsAndWriteBack(std::vector<RenderableParamSnapsh
 
     // Write any edited bytes back into the pool under the lock.
     std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    for (const auto& bound : ramp_edits)
+    {
+        // Reject the whole edit if a reload or another writer changed a bound field.
+        const bool current = std::all_of(
+            bound.begin(), bound.end(),
+            [&](size_t index)
+            {
+                const auto& snap = snapshots[index];
+                auto shader = params_map_.find(snapshots[bound.front()].shader_name);
+                if (shader == params_map_.end() || snap.pool_index >= shader_params_pool_.size() ||
+                    shader_params_pool_[snap.pool_index] != originals[index])
+                {
+                    return false;
+                }
+                return std::any_of(shader->second.begin(), shader->second.end(),
+                                   [&](const ShaderParam& field)
+                                   {
+                                       return field.name == snap.name && field.pool_index == snap.pool_index &&
+                                              field.type == snap.type && field.size == snap.size &&
+                                              field.num_elements == snap.num_elements && !field.is_hidden &&
+                                              field.color_ramp == snap.color_ramp;
+                                   });
+            });
+        if (current)
+        {
+            for (const size_t index : bound)
+            {
+                const auto& snap = snapshots[index];
+                std::memcpy(shader_params_pool_[snap.pool_index].data(), snap.value.data(), snap.value.size());
+            }
+        }
+    }
     for (size_t i = 0; i < snapshots.size(); ++i)
     {
+        if (consumed[i])
+        {
+            continue;
+        }
         const RenderableParamSnapshot& snap = snapshots[i];
         if (snap.pool_index >= shader_params_pool_.size())
         {
