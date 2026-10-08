@@ -63,6 +63,23 @@ so edit the leftmost stops to tint it. The filtered lookup blends nearby stops;
 a color change at the hot end alone will not affect cold smoke. Live buffer
 updates preserve ramp edits, just like other material parameters.
 
+Reuse the same object name for each frame. Set the shader on the first frame;
+later calls update the buffer and preserve its material and pipelines:
+
+```python
+with scene.nanovdb_from_buffer(first_frame, name="smoke", shader="editor/flow_smoke.slang"):
+    pass
+for frame in frames:
+    with scene.nanovdb_from_buffer(frame, name="smoke"):
+        pass
+```
+
+The editor and returned `Grid` keep separate CPU copies. The lower-level
+`Editor.add_nanovdb_2()` accepts a borrowed compute-array descriptor and copies
+its buffer once. Both paths create missing objects and update existing
+in-memory NanoVDB objects. Set compatible shader and pipeline settings when
+changing the grid representation.
+
 For constant smoke, set two points at zero and one with the same RGBA. To use
 authored fire colors, supply both smoke and temperature grids with the authored
 colormap. Fuel and burn are not required by this rendering path.

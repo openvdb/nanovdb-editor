@@ -160,6 +160,8 @@ typedef struct pnanovdb_editor_t
     // Token-based API for scene object management
     pnanovdb_camera_t*(PNANOVDB_ABI* get_camera)(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene);
     pnanovdb_editor_token_t*(PNANOVDB_ABI* get_token)(const char* name);
+    // Copy the source buffer. Keep the material and pipelines of an existing in-memory NanoVDB object.
+    // Use add_nanovdb_3 to replace its material and pipeline configuration explicitly.
     void(PNANOVDB_ABI* add_nanovdb_2)(pnanovdb_editor_t* editor,
                                       pnanovdb_editor_token_t* scene,
                                       pnanovdb_editor_token_t* name,
@@ -313,13 +315,6 @@ typedef struct pnanovdb_editor_t
                                             pnanovdb_pipeline_type_t process_pipeline,
                                             pnanovdb_pipeline_type_t render_pipeline);
 
-    // Copy a new source buffer into an existing in-memory NanoVDB object. Keep its material and pipelines.
-    // Returns false for a missing or incompatible object. The caller retains ownership of array.
-    pnanovdb_bool_t(PNANOVDB_ABI* update_nanovdb_buffer)(pnanovdb_editor_t* editor,
-                                                         pnanovdb_editor_token_t* scene,
-                                                         pnanovdb_editor_token_t* name,
-                                                         pnanovdb_compute_array_t* array);
-
 } pnanovdb_editor_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_editor_t
@@ -374,7 +369,6 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(save_scene, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_pipeline_type, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_camera_2, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_gaussian_data_4, 0, 0)
-PNANOVDB_REFLECT_FUNCTION_POINTER(update_nanovdb_buffer, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE

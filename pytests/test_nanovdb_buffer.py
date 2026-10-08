@@ -94,9 +94,11 @@ def test_custom_shader_values_and_replacement(app):
     with scene.nanovdb_from_buffer(raw_empty_grid(), shader="editor/editor.slang",
                                    shader_parameters={"alpha_scale": 0.25}):
         pass
+    assert struct.unpack_from("=f", shader_state(app)[1])[0] == 0.25
     with scene.nanovdb_from_buffer(raw_empty_grid(), shader="editor/editor.slang",
                                    shader_parameters={"alpha_scale": 0.75}):
         pass
+    assert struct.unpack_from("=f", shader_state(app)[1])[0] == 0.75
     scene.set_shader("nanovdb", "editor/editor.slang", parameters={"narrow_band_only": False})
     for params in ({"unknown_field": 1}, {"alpha_scale": "wrong"}, {"slice_plane": [1, 2]},
                    {"narrow_band_only": -1}, {"narrow_band_only": 1.0}, {"alpha_scale": True}):
@@ -636,29 +638,31 @@ void main(uint3 id : SV_DispatchThreadID) { texture_out[id.xy] = shader_params.v
 
 
 @pytest.mark.parametrize("wrap", [bytes, bytearray, memoryview, lambda data: np.frombuffer(data, dtype=np.uint32)])
-def test_streaming_update_uses_borrowed_input(app, monkeypatch, wrap):
+def test_repeated_buffer_add_preserves_material_and_pipelines(app, wrap):
+    scene = app.scene("streaming")
+    with scene.nanovdb_from_buffer(raw_empty_grid(), shader="editor/wireframe.slang",
+                                   shader_parameters={"highlight_bbox": 1}):
+        pass
+    scene.set_pipeline("nanovdb", nve.PipelineStage.PROCESS, "voxelbvh")
+    expected_material = shader_state(app, "streaming")
+    source = raw_empty_grid()
+    source[40:45] = b"frame"
+    expected_buffer = bytes(source)
+    with scene.nanovdb_from_buffer(wrap(source)) as grid:
+        source[:] = b"\0" * len(source)
+        assert grid.to_numpy().tobytes() == expected_buffer
+    assert shader_state(app, "streaming") == expected_material
+    assert scene.get_pipeline("nanovdb", nve.PipelineStage.PROCESS).type_id == "voxelbvh_build"
+    assert scene.get_render_pipeline("nanovdb").type_id == "nanovdb_render"
+
+
+def test_remove_and_add_buffer_restores_default_material(app):
     scene = app.scene("streaming")
     with scene.nanovdb_from_buffer(raw_empty_grid()):
         pass
-    supplied = wrap(raw_empty_grid())
-    expected_pointer = np.frombuffer(supplied, dtype=np.uint32).ctypes.data
-    native_update = app.editor.update_nanovdb_buffer
-    observed = []
-
-    def update(scene_token, name_token, array):
-        observed.append(array.data)
-        native_update(scene_token, name_token, array)
-
-    monkeypatch.setattr(app.editor, "update_nanovdb_buffer", update)
-    assert scene.update_nanovdb_from_buffer(supplied) is None
-    assert observed == [expected_pointer]
-
-
-def test_streaming_update_requires_existing_object(app):
-    with pytest.raises(nve.PipelineError, match="missing"):
-        app.scene("streaming").update_nanovdb_from_buffer(raw_empty_grid())
-
-
-def test_streaming_update_validates_buffer(app):
-    with pytest.raises(nve.InvalidArgumentError, match="truncated"):
-        app.scene("streaming").update_nanovdb_from_buffer(b"NanoVDB1")
+    defaults = shader_state(app, "streaming")
+    scene.set_shader("nanovdb", "editor/wireframe.slang", parameters={"highlight_bbox": 1})
+    scene.remove("nanovdb")
+    with scene.nanovdb_from_buffer(raw_empty_grid()):
+        pass
+    assert shader_state(app, "streaming") == defaults

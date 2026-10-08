@@ -143,7 +143,7 @@ TEST(StreamingUiToViewSync, PoolMutationPropagatesToObjectBufferEachFrame)
             const auto selection = view->get_properties_selection();
             const auto render_selection = view->get_render_view_selection();
             pnanovdb_compute_array_t source{ sphere_grid.data(), 4u, sphere_grid.bufferSize() / 4u };
-            EXPECT_TRUE(editor.update_nanovdb_buffer(&editor, scene_token, name_token, &source));
+            editor.add_nanovdb_2(&editor, scene_token, name_token, &source);
             EXPECT_EQ(view->get_properties_selection().name_token, selection.name_token);
             EXPECT_EQ(view->get_properties_selection().scene_token, selection.scene_token);
             EXPECT_EQ(view->get_render_view_selection().name_token, render_selection.name_token);
@@ -236,10 +236,7 @@ TEST(StreamingUiToViewSync, PoolMutationPropagatesToObjectBufferEachFrame)
             }
             // Streaming synchronizes the material before the queued view refresh.
             pnanovdb_compute_array_t source{ sphere_grid.data(), 4u, sphere_grid.bufferSize() / 4u };
-            if (!editor.update_nanovdb_buffer(&editor, scene_token, name_token, &source))
-            {
-                return PNANOVDB_FALSE;
-            }
+            editor.add_nanovdb_2(&editor, scene_token, name_token, &source);
             float alpha = 0.f;
             pnanovdb_editor_test::snapshot_object_shader_params(
                 &editor, scene_token, name_token, &alpha, sizeof(alpha));
@@ -260,7 +257,8 @@ TEST(StreamingUiToViewSync, PoolMutationPropagatesToObjectBufferEachFrame)
             if (!stamp_ui_pool())
                 return PNANOVDB_FALSE;
             // Replace before the next frame copies the UI edit into the object.
-            return editor.update_nanovdb_buffer(&editor, scene_token, name_token, replacement_array);
+            editor.add_nanovdb_2(&editor, scene_token, name_token, replacement_array);
+            return PNANOVDB_TRUE;
         }));
     compute.destroy_array(replacement_array);
     EXPECT_EQ(synchronized_alpha(), kSentinel) << "Buffer replacement must preserve material edits from the UI";

@@ -972,10 +972,10 @@ bool EditorSceneManager::add_nanovdb_impl(pnanovdb_editor_token_t* scene,
     return true;
 }
 
-bool EditorSceneManager::update_nanovdb_buffer(pnanovdb_editor_token_t* scene,
-                                            pnanovdb_editor_token_t* name,
-                                            pnanovdb_compute_array_t* array,
-                                            const pnanovdb_compute_t* compute)
+EditorSceneManager::NanoVDBAddResult EditorSceneManager::add_nanovdb(pnanovdb_editor_token_t* scene,
+                                                                    pnanovdb_editor_token_t* name,
+                                                                    pnanovdb_compute_array_t* array,
+                                                                    const pnanovdb_compute_t* compute)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     const uint64_t key = make_key(scene, name);
@@ -1001,10 +1001,15 @@ bool EditorSceneManager::update_nanovdb_buffer(pnanovdb_editor_token_t* scene,
         obj.pipeline.active_process_step = 0;
         obj.mark_process_dirty();
         obj.resolve_resources();
-        return true;
+        return NanoVDBAddResult::Updated;
     }
 
-    return false;
+    const char* shader = pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_nanovdb_render);
+    auto* params = create_isolated_shader_params(compute, shader, nullptr, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
+    return add_nanovdb_impl(scene, name, array, params, compute, EditorToken::getInstance().getToken(shader),
+                            pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_nanovdb_render, false, nullptr) ?
+               NanoVDBAddResult::Registered :
+               NanoVDBAddResult::Failed;
 }
 
 bool EditorSceneManager::add_gaussian_data(pnanovdb_editor_token_t* scene,

@@ -198,11 +198,18 @@ public:
                      pnanovdb_pipeline_type_t render_pipeline,
                      std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_gaussian_owner_out = nullptr);
 
-    // Update an in-memory grid and keep its material and pipelines. Take ownership only on success.
-    bool update_nanovdb_buffer(pnanovdb_editor_token_t* scene,
-                               pnanovdb_editor_token_t* name,
-                               pnanovdb_compute_array_t* array,
-                               const pnanovdb_compute_t* compute);
+    enum class NanoVDBAddResult
+    {
+        Failed,
+        Registered,
+        Updated
+    };
+
+    // Keep the material and pipelines of an existing in-memory grid. Always take ownership of array.
+    NanoVDBAddResult add_nanovdb(pnanovdb_editor_token_t* scene,
+                                 pnanovdb_editor_token_t* name,
+                                 pnanovdb_compute_array_t* array,
+                                 const pnanovdb_compute_t* compute);
 
     bool reserve_load_target(pnanovdb_editor_token_t* scene,
                              pnanovdb_editor_token_t* name,

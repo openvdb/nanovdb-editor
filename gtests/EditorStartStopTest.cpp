@@ -202,8 +202,7 @@ TEST_P(EditorClientInterfaceTest, UiProfilesHeadlessStreaming)
     ASSERT_EQ(editor.get_pipeline(&editor, scene_token, object_token, pnanovdb_pipeline_stage_render),
               pnanovdb_pipeline_type_noop);
     editor.start(&editor, device, &cfg);
-    ASSERT_TRUE(pnanovdb_editor::pnanovdb_get_editor()->update_nanovdb_buffer(
-        &editor, scene_token, object_token, nanovdb_array));
+    editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
     ASSERT_TRUE(editor.impl->editor_worker->render_thread_tasks.run_blocking([]() { return PNANOVDB_TRUE; }));
     compute.destroy_array(nanovdb_array);
     nanovdb_array = nullptr;
@@ -462,7 +461,7 @@ TEST_F(EditorStreamingTest, RepeatedSelectedBufferUpdatesKeepParameterAllocation
         live_param_arrays = 0;
         for (int frame = 0; frame < 128; ++frame)
         {
-            EXPECT_TRUE(editor.update_nanovdb_buffer(&editor, scene_token, object_token, nanovdb_array));
+            editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
         }
         const int growth = live_param_arrays.load();
         compute.create_array = tracked_create_array;

@@ -5,6 +5,7 @@
 #include "editor/EditorSceneManager.h"
 
 #include <gtest/gtest.h>
+#include <nanovdb/tools/CreateNanoGrid.h>
 
 #include <array>
 #include <chrono>
@@ -90,13 +91,32 @@ protected:
     }
 };
 
-TEST_F(StreamingApiTest, AddBatchDoesNotWaitForRenderFrames)
+TEST_F(StreamingApiTest, RepeatedAddBatchDoesNotWaitForRenderFrames)
 {
     expect_without_render_frame(
         [&]()
         {
             for (int i = 0; i < 100; ++i)
                 editor.add_nanovdb_2(&editor, scene, name, array);
+        });
+}
+
+TEST_F(StreamingApiTest, AddNewObjectBatchDoesNotWaitForRenderFrames)
+{
+    expect_without_render_frame(
+        [&]()
+        {
+            for (int i = 0; i < 100; ++i)
+            {
+                auto* added_name = editor.get_token(("grid_" + std::to_string(i)).c_str());
+                editor.add_nanovdb_2(&editor, scene, added_name, array);
+                editor.impl->scene_manager->with_object(scene, added_name,
+                                                        [](pnanovdb_editor::SceneObject* obj)
+                                                        {
+                                                            ASSERT_NE(obj, nullptr);
+                                                            EXPECT_NE(obj->nanovdb_array(), nullptr);
+                                                        });
+            }
         });
 }
 
@@ -108,6 +128,7 @@ TEST_F(StreamingApiTest, AddWhileSceneControlsAreMappedDoesNotWaitForRender)
             const auto* type = editor.get_custom_scene_params_data_type(&editor, scene);
             ASSERT_NE(editor.map_params(&editor, scene, nullptr, type), nullptr);
             editor.add_nanovdb_2(&editor, scene, name, array);
+            editor.add_nanovdb_2(&editor, scene, editor.get_token("new_grid"), array);
             editor.unmap_params(&editor, scene, nullptr);
         });
 }
@@ -173,21 +194,25 @@ TEST_F(StreamingApiTest, ShaderMapWhileSceneControlsAreMappedDoesNotWaitForRende
         });
 }
 
-TEST_F(StreamingApiTest, StreamingUpdateCopiesSourceAndKeepsMaterialAndPipelines)
+TEST_F(StreamingApiTest, RepeatedAddCopiesSourceAndKeepsMaterialAndPipelines)
 {
     auto* shader = editor.get_token("editor/flow_smoke.slang");
     void* material = nullptr;
+    uint64_t registration = 0;
+    uint64_t lifetime = 0;
     editor.impl->scene_manager->with_object(scene, name,
                                             [&](pnanovdb_editor::SceneObject* obj)
                                             {
                                                 obj->shader_name() = shader;
                                                 material = obj->shader_params();
+                                                registration = obj->registration_id;
+                                                lifetime = obj->lifetime_id;
                                                 obj->pipeline.process().type = pnanovdb_pipeline_type_voxelbvh_build;
                                                 obj->pipeline.process().configured = true;
                                                 obj->visible = false;
                                             });
     static_cast<unsigned char*>(array->data)[0] = 42;
-    EXPECT_TRUE(editor.update_nanovdb_buffer(&editor, scene, name, array));
+    editor.add_nanovdb_2(&editor, scene, name, array);
     static_cast<unsigned char*>(array->data)[0] = 0;
     editor.impl->scene_manager->with_object(
         scene, name,
@@ -196,15 +221,115 @@ TEST_F(StreamingApiTest, StreamingUpdateCopiesSourceAndKeepsMaterialAndPipelines
             ASSERT_NE(obj, nullptr);
             EXPECT_EQ(obj->shader_name(), shader);
             EXPECT_EQ(obj->shader_params(), material);
+            EXPECT_EQ(obj->registration_id, registration);
+            EXPECT_NE(obj->lifetime_id, lifetime);
             EXPECT_EQ(obj->pipeline.process().type, pnanovdb_pipeline_type_voxelbvh_build);
             EXPECT_FALSE(obj->visible);
             ASSERT_NE(obj->nanovdb_array(), nullptr);
             EXPECT_EQ(static_cast<unsigned char*>(obj->nanovdb_array()->data)[0], 42);
         });
-    EXPECT_FALSE(editor.update_nanovdb_buffer(&editor, scene, editor.get_token("missing"), array));
 }
 
-TEST_F(StreamingApiTest, OrdinaryRegistrationResetsMaterialAndHonorsConfiguredPipelines)
+TEST_F(StreamingApiTest, RepeatedAddPreservesMaterialAcrossGridTypesUntilExplicitReplacement)
+{
+    nanovdb::tools::build::Grid<float> float_grid(0.f);
+    float_grid.getAccessor().setValue(nanovdb::Coord(0), 1.f);
+    auto float_handle = nanovdb::tools::createNanoGrid(float_grid);
+    pnanovdb_compute_array_t float_array{ float_handle.data(), 1u, float_handle.bufferSize() };
+    editor.add_nanovdb_2(&editor, scene, name, &float_array);
+
+    auto* shader = editor.get_token("editor/flow_smoke.slang");
+    void* material = nullptr;
+    editor.impl->scene_manager->with_object(scene, name,
+                                            [&](pnanovdb_editor::SceneObject* obj)
+                                            {
+                                                obj->shader_name() = shader;
+                                                material = obj->shader_params();
+                                            });
+
+    nanovdb::tools::build::Grid<nanovdb::math::Rgba8> rgba_grid(nanovdb::math::Rgba8(uint8_t(0)));
+    rgba_grid.getAccessor().setValue(nanovdb::Coord(0), nanovdb::math::Rgba8(uint8_t(255)));
+    auto rgba_handle = nanovdb::tools::createNanoGrid(rgba_grid);
+    ASSERT_EQ(float_handle.gridType(), nanovdb::GridType::Float);
+    ASSERT_EQ(rgba_handle.gridType(), nanovdb::GridType::RGBA8);
+    pnanovdb_compute_array_t rgba_array{ rgba_handle.data(), 1u, rgba_handle.bufferSize() };
+    editor.add_nanovdb_2(&editor, scene, name, &rgba_array);
+    editor.impl->scene_manager->with_object(scene, name,
+                                            [&](pnanovdb_editor::SceneObject* obj)
+                                            {
+                                                EXPECT_EQ(obj->shader_name(), shader);
+                                                EXPECT_EQ(obj->shader_params(), material);
+                                            });
+
+    editor.add_nanovdb_3(&editor, scene, name, &rgba_array, pnanovdb_pipeline_type_noop,
+                         pnanovdb_pipeline_type_nanovdb_render);
+    editor.impl->scene_manager->with_object(scene, name,
+                                            [&](pnanovdb_editor::SceneObject* obj)
+                                            {
+                                                EXPECT_STREQ(obj->shader_name()->str, "editor/editor.slang");
+                                            });
+}
+
+TEST_F(StreamingApiTest, AddRegistersNewObjectsAndReplacesFileSourcesAndOtherTypes)
+{
+    using pnanovdb_editor::EditorSceneManager;
+    using pnanovdb_editor::SceneObject;
+    using pnanovdb_editor::SceneObjectType;
+    auto* manager = editor.impl->scene_manager;
+    auto* added_name = editor.get_token("new_grid");
+    EXPECT_EQ(manager->add_nanovdb(scene, added_name, compute.duplicate_array(array), &compute),
+              EditorSceneManager::NanoVDBAddResult::Registered);
+
+    for (const auto type : { SceneObjectType::NanoVDB, SceneObjectType::GaussianData, SceneObjectType::Array,
+                             SceneObjectType::Uninitialized })
+    {
+        uint64_t registration = 0;
+        uint64_t lifetime = 0;
+        manager->with_object(scene, name,
+                             [&](SceneObject* obj)
+                             {
+                                 obj->type = type;
+                                 obj->resources.source_filepath = type == SceneObjectType::NanoVDB ? "old.nvdb" : "";
+                                 obj->shader_name() = editor.get_token("editor/flow_smoke.slang");
+                                 registration = obj->registration_id;
+                                 lifetime = obj->lifetime_id;
+                             });
+        EXPECT_EQ(manager->add_nanovdb(scene, name, compute.duplicate_array(array), &compute),
+                  EditorSceneManager::NanoVDBAddResult::Registered);
+        manager->with_object(scene, name,
+                             [&](SceneObject* obj)
+                             {
+                                 ASSERT_NE(obj, nullptr);
+                                 EXPECT_EQ(obj->type, SceneObjectType::NanoVDB);
+                                 EXPECT_TRUE(obj->resources.source_filepath.empty());
+                                 EXPECT_STREQ(obj->shader_name()->str, "editor/editor.slang");
+                                 EXPECT_NE(obj->registration_id, registration);
+                                 EXPECT_NE(obj->lifetime_id, lifetime);
+                                 EXPECT_NE(obj->shader_params(), nullptr);
+                                 EXPECT_NE(obj->nanovdb_array(), nullptr);
+                             });
+    }
+}
+
+TEST_F(StreamingApiTest, AddPreservesExistingCamera)
+{
+    auto* camera_name = editor.get_token("camera");
+    pnanovdb_camera_view_t camera{};
+    ASSERT_TRUE(editor.impl->scene_manager->add_camera(scene, camera_name, &camera));
+    const auto lifetime = editor.impl->scene_manager->object_lifetime(scene, camera_name);
+    EXPECT_EQ(editor.impl->scene_manager->add_nanovdb(scene, camera_name, compute.duplicate_array(array), &compute),
+              pnanovdb_editor::EditorSceneManager::NanoVDBAddResult::Failed);
+    editor.impl->scene_manager->with_object(scene, camera_name,
+                                            [&](pnanovdb_editor::SceneObject* obj)
+                                            {
+                                                ASSERT_NE(obj, nullptr);
+                                                EXPECT_EQ(obj->type, pnanovdb_editor::SceneObjectType::Camera);
+                                                EXPECT_EQ(obj->lifetime_id, lifetime);
+                                                EXPECT_NE(obj->resources.camera_view, nullptr);
+                                            });
+}
+
+TEST_F(StreamingApiTest, RepeatedAddKeepsMaterialUnlessPipelinesAreExplicit)
 {
     expect_without_render_frame(
         [&]()
@@ -231,25 +356,14 @@ TEST_F(StreamingApiTest, OrdinaryRegistrationResetsMaterialAndHonorsConfiguredPi
                     [&](pnanovdb_editor::SceneObject* obj)
                     {
                         ASSERT_NE(obj, nullptr);
-                        EXPECT_STREQ(obj->shader_name()->str, "editor/editor.slang");
+                        EXPECT_STREQ(obj->shader_name()->str, explicit_pipelines ?
+                                                                "editor/editor.slang" : "editor/flow_smoke.slang");
                         EXPECT_EQ(obj->pipeline.process().type, explicit_pipelines ?
                                                                     pnanovdb_pipeline_type_noop :
                                                                     pnanovdb_pipeline_type_voxelbvh_build);
                         EXPECT_FALSE(obj->visible);
                     });
             }
-        });
-}
-
-TEST_F(StreamingApiTest, StreamingWhileSceneControlsAreMappedDoesNotWaitForRender)
-{
-    expect_without_render_frame(
-        [&]()
-        {
-            const auto* type = editor.get_custom_scene_params_data_type(&editor, scene);
-            ASSERT_NE(editor.map_params(&editor, scene, nullptr, type), nullptr);
-            EXPECT_TRUE(editor.update_nanovdb_buffer(&editor, scene, name, array));
-            editor.unmap_params(&editor, scene, nullptr);
         });
 }
 

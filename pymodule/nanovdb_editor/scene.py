@@ -336,7 +336,12 @@ class Scene:
             raise
 
     def add_grid(self, grid, name: str) -> Grid:
-        """Register an existing :class:`Grid` (or raw array) under ``name``."""
+        """Register a :class:`Grid` (or raw array) under ``name``.
+
+        Reusing an in-memory NanoVDB object's name updates its source and keeps
+        its material and pipelines. Set compatible shader and pipeline settings
+        when changing the grid representation.
+        """
         if isinstance(grid, Array):
             array = grid.raw
         else:
@@ -506,13 +511,14 @@ class Scene:
         header and declared size are checked; callers must supply valid tree
         data. The selected shader determines how additional grids are used.
 
-        The editor keeps its own copy. The source and returned Grid can be
-        released after this call. Reusing ``name`` replaces its source, shader,
-        and material values, while preserving visibility and configured pipelines.
-        Use ``update_nanovdb_from_buffer`` to keep material and pipeline settings
-        while streaming. The viewer synchronizes asynchronously.
+        The editor and returned Grid keep separate copies. Both the source and
+        returned Grid can be released after this call. Reusing an in-memory
+        NanoVDB object's ``name`` updates its source and preserves material,
+        visibility, and pipelines. The viewer synchronizes asynchronously.
         Passing ``shader`` explicitly applies new material settings;
         ``shader_parameters`` maps reflected shader field names to values.
+        Set compatible shader and pipeline settings when changing the grid
+        representation.
         If the material update fails, the registered buffer remains with its
         current material and the error is raised.
         """
@@ -553,19 +559,6 @@ class Scene:
                 raise InvalidArgumentError("Invalid or truncated NanoVDB grid size")
             offset += grid_size
         return view
-
-    def update_nanovdb_from_buffer(self, data, name: str = "nanovdb") -> None:
-        """Copy a streamed frame into an existing in-memory NanoVDB object.
-
-        Keep its shader, material values, and pipeline settings. Create the
-        object first with ``nanovdb_from_buffer``. This makes one CPU copy and
-        returns after registration; the viewer synchronizes asynchronously.
-        The source buffer can be released or changed after this call returns.
-        """
-        view = self._nanovdb_buffer_view(data)
-        source = np.frombuffer(view, dtype=np.uint32)
-        array = pnanovdb_ComputeArray(source.ctypes.data, source.dtype.itemsize, source.size)
-        self._editor.update_nanovdb_buffer(self._token, self._editor.get_token(name), array)
 
     def set_shader(self, name: str, shader: str, *, parameters: Optional[dict] = None) -> None:
         """Compile and assign a shader, with per-object parameter overrides.

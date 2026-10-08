@@ -449,8 +449,15 @@ TEST_F(ShaderNameSwapResetsParamsTest, WholeShaderMapCannotOverwriteReplacementO
         std::memcpy(mapped->shader_params, alt_defaults.data(), alt_defaults.size());
 
         if (remove_first)
+        {
             ASSERT_TRUE(editor.impl->scene_manager->remove(scene_token, name_token));
-        editor.add_nanovdb_2(&editor, scene_token, name_token, owned_array);
+            editor.add_nanovdb_2(&editor, scene_token, name_token, owned_array);
+        }
+        else
+        {
+            editor.add_nanovdb_3(&editor, scene_token, name_token, owned_array, pnanovdb_pipeline_type_noop,
+                                 pnanovdb_pipeline_type_nanovdb_render);
+        }
         const auto replacement = snapshotMaterial();
         editor.unmap_params(&editor, scene_token, name_token);
         EXPECT_EQ(snapshotMaterial(), replacement);
@@ -458,7 +465,7 @@ TEST_F(ShaderNameSwapResetsParamsTest, WholeShaderMapCannotOverwriteReplacementO
     }
 }
 
-TEST_F(ShaderNameSwapResetsParamsTest, WholeShaderMapSurvivesStreamingUpdates)
+TEST_F(ShaderNameSwapResetsParamsTest, WholeShaderMapSurvivesRepeatedAdds)
 {
     for (bool change_shader : { false, true })
     {
@@ -476,7 +483,7 @@ TEST_F(ShaderNameSwapResetsParamsTest, WholeShaderMapSurvivesStreamingUpdates)
             [&]()
             {
                 for (int frame = 0; frame < 3; ++frame)
-                    EXPECT_TRUE(editor.update_nanovdb_buffer(&editor, scene_token, name_token, owned_array));
+                    editor.add_nanovdb_2(&editor, scene_token, name_token, owned_array);
             });
         streamer.join();
         editor.impl->scene_manager->with_object_lifetime(
@@ -490,7 +497,7 @@ TEST_F(ShaderNameSwapResetsParamsTest, WholeShaderMapSurvivesStreamingUpdates)
     }
 }
 
-TEST_F(ShaderNameSwapResetsParamsTest, RawBufferUpdatePreservesShaderStateAndOwnsCopy)
+TEST_F(ShaderNameSwapResetsParamsTest, RepeatedAddPreservesShaderStateAndOwnsCopy)
 {
     ASSERT_TRUE(pnanovdb_editor_test::map_shader_defaults(editor, compute, scene_token, name_token, alt_shader()));
     auto expected = snapshotObjectBuffer();
@@ -512,7 +519,7 @@ TEST_F(ShaderNameSwapResetsParamsTest, RawBufferUpdatePreservesShaderStateAndOwn
     const std::array<uint8_t, 16> bytes{ 1, 3, 5, 7, 9, 11, 13, 15 };
     auto* replacement = compute.create_array(sizeof(uint8_t), bytes.size(), bytes.data());
     ASSERT_NE(replacement, nullptr);
-    ASSERT_TRUE(editor.update_nanovdb_buffer(&editor, scene_token, name_token, replacement));
+    editor.add_nanovdb_2(&editor, scene_token, name_token, replacement);
     std::memset(replacement->data, 0, bytes.size());
     compute.destroy_array(replacement);
 

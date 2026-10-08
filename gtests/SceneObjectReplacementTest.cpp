@@ -85,7 +85,7 @@ TEST(SceneObjectReplacementTest, SourceResetClearsAliasesAndKeepsPipelineConfigu
     EXPECT_EQ(obj.pipeline.process().params.size, 4u);
 }
 
-TEST(SceneObjectReplacementTest, RawBufferUpdateInvalidatesDerivedDataAndOldLoadReservations)
+TEST(SceneObjectReplacementTest, RepeatedAddInvalidatesDerivedDataAndOldLoadReservations)
 {
     EditorSceneManager manager;
     pnanovdb_compute_t compute{};
@@ -101,6 +101,7 @@ TEST(SceneObjectReplacementTest, RawBufferUpdateInvalidatesDerivedDataAndOldLoad
     uint64_t old_lifetime = 0;
     ASSERT_TRUE(manager.reserve_load_target(&scene, &name, &old_lifetime, true));
     uint64_t old_revision = 0;
+    uint64_t old_registration = 0;
     manager.with_object(&scene, &name,
                         [&](SceneObject* obj)
                         {
@@ -113,10 +114,12 @@ TEST(SceneObjectReplacementTest, RawBufferUpdateInvalidatesDerivedDataAndOldLoad
                                 k_stage_output_nanovdb, &processed,
                                 std::shared_ptr<pnanovdb_compute_array_t>(&processed, count_retained_array_destroy));
                             old_revision = obj->pipeline.process().revision;
+                            old_registration = obj->registration_id;
                             obj->resolve_resources();
                         });
 
-    ASSERT_TRUE(manager.update_nanovdb_buffer(&scene, &name, &replacement, &compute));
+    ASSERT_EQ(manager.add_nanovdb(&scene, &name, &replacement, &compute),
+              EditorSceneManager::NanoVDBAddResult::Updated);
     EXPECT_EQ(g_retained_array_destroy_count, 2);
     EXPECT_FALSE(manager.commit_reserved_nanovdb(&scene, &name, old_lifetime, &late, nullptr, &compute, nullptr,
                                                  pnanovdb_pipeline_type_noop, pnanovdb_pipeline_type_nanovdb_render));
@@ -125,6 +128,7 @@ TEST(SceneObjectReplacementTest, RawBufferUpdateInvalidatesDerivedDataAndOldLoad
                         {
                             ASSERT_NE(obj, nullptr);
                             EXPECT_NE(obj->lifetime_id, old_lifetime);
+                            EXPECT_EQ(obj->registration_id, old_registration);
                             EXPECT_EQ(obj->nanovdb_array(), &replacement);
                             EXPECT_EQ(obj->converted_nanovdb(), nullptr);
                             EXPECT_TRUE(obj->pipeline.load().configured);

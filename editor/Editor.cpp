@@ -1464,41 +1464,24 @@ void add_nanovdb_2(pnanovdb_editor_t* editor,
                                               token_to_string_log(name));
                 return;
             }
-            const char* shader = pnanovdb_pipeline_get_shader_name(pnanovdb_pipeline_type_nanovdb_render);
-            auto* params = EditorSceneManager::create_isolated_shader_params(
-                compute, shader, nullptr, PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE);
-            editor->impl->scene_manager->add_nanovdb(scene, name, array, params, compute, get_token(shader));
-            sync_added_object(editor, scene, name, defer_sync);
+            const auto result = editor->impl->scene_manager->add_nanovdb(scene, name, array, compute);
+            if (result == EditorSceneManager::NanoVDBAddResult::Updated)
+            {
+                post_to_render_thread(editor,
+                                      [=]()
+                                      {
+                                          if (editor->impl->editor_scene)
+                                          {
+                                              editor->impl->editor_scene->sync_shader_params_from_editor();
+                                              editor->impl->editor_scene->refresh_object_from_scene_manager(scene, name);
+                                          }
+                                      });
+            }
+            else if (result == EditorSceneManager::NanoVDBAddResult::Registered)
+            {
+                sync_added_object(editor, scene, name, defer_sync);
+            }
         });
-}
-
-pnanovdb_bool_t update_nanovdb_buffer(pnanovdb_editor_t* editor,
-                                      pnanovdb_editor_token_t* scene,
-                                      pnanovdb_editor_token_t* name,
-                                      pnanovdb_compute_array_t* array_in)
-{
-    if (!editor || !editor->impl || !scene || !name || !array_in)
-        return PNANOVDB_FALSE;
-
-    const auto* compute = editor->impl->compute;
-    auto* array = compute->duplicate_array(array_in);
-    if (!array)
-        return PNANOVDB_FALSE;
-    if (!editor->impl->scene_manager->update_nanovdb_buffer(scene, name, array, compute))
-    {
-        compute->destroy_array(array);
-        return PNANOVDB_FALSE;
-    }
-    post_to_render_thread(editor,
-                          [=]()
-                          {
-                              if (editor->impl->editor_scene)
-                              {
-                                  editor->impl->editor_scene->sync_shader_params_from_editor();
-                                  editor->impl->editor_scene->refresh_object_from_scene_manager(scene, name);
-                              }
-                          });
-    return PNANOVDB_TRUE;
 }
 
 static pnanovdb_editor_gaussian_data_desc_t duplicate_gaussian_desc(const pnanovdb_compute_t* compute,
@@ -3056,7 +3039,6 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
     editor.add_nanovdb_3 = add_nanovdb_3;
     editor.add_gaussian_data_3 = add_gaussian_data_3;
     editor.add_gaussian_data_4 = add_gaussian_data_4;
-    editor.update_nanovdb_buffer = update_nanovdb_buffer;
     editor.set_visible = set_visible;
     editor.get_visible = get_visible;
     editor.add_named_array = add_named_array;

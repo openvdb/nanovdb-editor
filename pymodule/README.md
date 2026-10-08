@@ -101,19 +101,19 @@ size checks do not replace validation of the tree data by the producer.
 The buffer is registered before the optional material update. If that update
 fails, the object keeps the registered buffer and its current material.
 
-`nanovdb_from_buffer` registers a new object. Reusing a name replaces its source
-and selects the default volume shader and material unless shader options are
-supplied. Explicitly configured pipelines are retained, as with ordinary grid
-registration. Its returned `Grid` owns a separate copy and can be closed
-immediately after registration.
+`nanovdb_from_buffer` creates a missing object. Reusing an in-memory NanoVDB
+object's name updates its source and preserves its material and pipelines.
+Explicit shader options apply new material settings. Set compatible shader and
+pipeline settings when changing the grid representation. Its returned `Grid`
+owns a separate copy and can be closed immediately after registration.
 Use `register=False` to create an owned grid without adding it to the scene.
 
 For live simulation, create the object and set its material once, then call
-`scene.update_nanovdb_from_buffer(payload, name="smoke")` for later frames. This
-method requires an existing volume and preserves its material and pipelines.
-It copies the supplied buffer once into editor-owned memory and returns no
-`Grid`. The renderer uses the latest buffer on its next frame; submissions do
-not wait for a frame or accumulate queued copies.
+`scene.nanovdb_from_buffer(payload, name="smoke")` for later frames and close
+each returned `Grid`. The lower-level `Editor.add_nanovdb_2()` accepts a borrowed
+compute-array descriptor and makes only the editor-owned copy. The renderer
+uses the latest buffer on its next frame; submissions do not wait for a frame
+or accumulate queued copies.
 
 `scene.set_shader(name, path, parameters={...})` compiles a custom shader and
 sets per-object values by reflected field name. Unspecified values use the
