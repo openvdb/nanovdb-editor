@@ -249,8 +249,10 @@ bool CustomSceneParams::loadFromJsonString(const std::string& json_string,
     constexpr size_t kDefaultStringLength = 256;
 
     size_t next_offset = 0;
-    for (auto& [field_name, field_json] : scene_params->items())
+    for (auto& item : scene_params->items())
     {
+        const std::string& field_name = item.key();
+        auto& field_json = item.value();
         if (!field_json.is_object())
         {
             if (error_message)
@@ -272,6 +274,89 @@ bool CustomSceneParams::loadFromJsonString(const std::string& json_string,
 
         Field field;
         field.name = field_name;
+        const auto read_string = [&](const char* key, std::string& value)
+        {
+            auto it = field_json.find(key);
+            if (it == field_json.end())
+            {
+                return true;
+            }
+            if (!it->is_string())
+            {
+                if (error_message)
+                {
+                    *error_message = "field '" + field_name + "' has invalid '" + key + "'; expected string";
+                }
+                return false;
+            }
+            value = it->get<std::string>();
+            return true;
+        };
+        const auto read_bool = [&](const char* key, bool& value)
+        {
+            auto it = field_json.find(key);
+            if (it == field_json.end())
+            {
+                return true;
+            }
+            if (!it->is_boolean())
+            {
+                if (error_message)
+                {
+                    *error_message = "field '" + field_name + "' has invalid '" + key + "'; expected bool";
+                }
+                return false;
+            }
+            value = it->get<bool>();
+            return true;
+        };
+        std::string widget;
+        field.active_label = field_name;
+        if (!read_string("widget", widget) ||
+            !read_string("activeLabel", field.active_label) || !read_string("tooltip", field.tooltip) ||
+            !read_bool("readOnly", field.is_read_only) || !read_bool("sameLine", field.same_line))
+        {
+            return false;
+        }
+        if (field_json.contains("widget"))
+        {
+            if (widget == "button")
+            {
+                field.widget = Widget::Button;
+            }
+            else if (widget == "toggleButton")
+            {
+                field.widget = Widget::ToggleButton;
+            }
+            else
+            {
+                if (error_message)
+                {
+                    *error_message = "field '" + field_name + "' has unsupported 'widget': " + widget;
+                }
+                return false;
+            }
+            const auto count = field_json.find("elementCount");
+            const auto value = field_json.find("value");
+            if ((parsed_type_name != "bool" && parsed_type_name != "bool32") ||
+                (count != field_json.end() && (!count->is_number_integer() || *count != 1)) ||
+                (value != field_json.end() && !value->is_boolean()))
+            {
+                if (error_message)
+                {
+                    *error_message = "field '" + field_name + "' button widgets require a scalar bool";
+                }
+                return false;
+            }
+        }
+        if (field_json.contains("activeLabel") && field.widget != Widget::ToggleButton)
+        {
+            if (error_message)
+            {
+                *error_message = "field '" + field_name + "' requires 'toggleButton' for 'activeLabel'";
+            }
+            return false;
+        }
         field.is_hidden = field_json.value("hidden", false);
 
         if (parsed_type_name == "string")
@@ -288,32 +373,10 @@ bool CustomSceneParams::loadFromJsonString(const std::string& json_string,
             }
 
             bool commit_on_enter = false;
-            if (field_json.contains("commitOnEnter"))
-            {
-                const auto& flag_json = field_json["commitOnEnter"];
-                if (!flag_json.is_boolean())
-                {
-                    if (error_message)
-                    {
-                        *error_message = "field '" + field_name + "' has invalid 'commitOnEnter'; expected bool";
-                    }
-                    return false;
-                }
-                commit_on_enter = flag_json.get<bool>();
-            }
             std::string submit_counter_field;
-            if (field_json.contains("submitCounterField"))
+            if (!read_bool("commitOnEnter", commit_on_enter) || !read_string("submitCounterField", submit_counter_field))
             {
-                const auto& counter_json = field_json["submitCounterField"];
-                if (!counter_json.is_string())
-                {
-                    if (error_message)
-                    {
-                        *error_message = "field '" + field_name + "' has invalid 'submitCounterField'; expected string";
-                    }
-                    return false;
-                }
-                submit_counter_field = counter_json.get<std::string>();
+                return false;
             }
 
             size_t length = kDefaultStringLength;

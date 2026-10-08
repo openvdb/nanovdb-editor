@@ -252,3 +252,45 @@ TEST(NanoVDBEditor, CustomSceneParamsRejectsStringWithNumericOptions)
     EXPECT_FALSE(params.loadFromJsonString(json, "rejectTest", &error_message));
     EXPECT_NE(error_message.find("not supported"), std::string::npos);
 }
+
+TEST(NanoVDBEditor, CustomSceneParamsRejectsInvalidReadOnly)
+{
+    pnanovdb_editor::CustomSceneParams params;
+    std::string error_message;
+    EXPECT_FALSE(params.loadFromJsonString(R"json({"SceneParams": {
+        "Frame": {"type": "uint", "readOnly": "true"}
+    }})json", "controls", &error_message));
+    EXPECT_NE(error_message.find("invalid 'readOnly'"), std::string::npos);
+}
+
+TEST(NanoVDBEditor, CustomSceneParamsRejectsInvalidPlaybackWidgets)
+{
+    const char* invalid_fields[] = {
+        R"({"type":"bool","widget":true})",
+        R"({"type":"bool","widget":"unknown"})",
+        R"({"type":"bool","widget":""})",
+        R"({"type":"bool","activeLabel":"Stop"})",
+        R"({"type":"bool","widget":"button","activeLabel":"Stop"})",
+        R"({"type":"bool","widget":"toggleButton","activeLabel":true})",
+        R"({"type":"bool","widget":"button","sameLine":"true"})",
+        R"({"type":"bool","widget":"button","tooltip":false})",
+        R"({"type":"float","widget":"button"})",
+        R"({"type":"int","isBool":true,"widget":"toggleButton"})",
+        R"({"type":"string","widget":"button"})",
+        R"({"type":"bool","widget":"button","elementCount":2})",
+        R"({"type":"bool","widget":"button","elementCount":0})",
+        R"({"type":"bool","widget":"button","elementCount":1.0})",
+        R"({"type":"bool","widget":"button","elementCount":"1"})",
+        R"({"type":"bool","widget":"button","value":[false]})",
+        R"({"type":"bool","widget":"toggleButton","value":1})",
+    };
+    pnanovdb_editor::CustomSceneParams params;
+    for (const char* field : invalid_fields)
+    {
+        SCOPED_TRACE(field);
+        std::string error;
+        EXPECT_FALSE(params.loadFromJsonString(
+            std::string("{\"SceneParams\":{\"Control\":") + field + "}}", "playback", &error));
+        EXPECT_NE(error.find("field 'Control'"), std::string::npos) << error;
+    }
+}

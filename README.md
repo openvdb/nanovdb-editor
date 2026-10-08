@@ -287,7 +287,7 @@ struct shader_params_t
 };
 ```
 
-The editor uses one JSON schema for both shader-backed parameters and editor-only custom scene parameters. Shader-backed parameters live under the top-level key `ShaderParams`; custom scene parameters live under `SceneParams`. The two payloads have an identical field schema and are routed by their top-level key.
+Shader-backed parameters live under the top-level JSON key `ShaderParams`; editor-only custom scene parameters live under `SceneParams`. Both support the numeric field options below. `SceneParams` also supports the control options described below.
 
 Shader-backed parameters can define UI defaults and bounds in a JSON file:
 ```json
@@ -303,7 +303,7 @@ Shader-backed parameters can define UI defaults and bounds in a JSON file:
 }
 ```
 
-Editor-only custom scene parameters use the same field schema under the top-level `SceneParams` key, but each field must also declare `type` because there is no shader reflection to infer it:
+Each field under `SceneParams` must declare `type` because there is no shader reflection to infer it:
 ```json
 {
     "SceneParams": {
@@ -328,7 +328,7 @@ Editor-only custom scene parameters use the same field schema under the top-leve
 }
 ```
 
-Formal schema (applies under either `ShaderParams` or `SceneParams`):
+Field schema (applies under either key unless restricted below):
 - `ShaderParams` / `SceneParams`: object whose keys are field names mapped to field-definition objects. Under `ShaderParams` only, the value may instead be an array of shader paths to define a group file.
 - `value`: scalar or array initial value shown in the UI. For `type: "string"` it must be a JSON string.
 - `type`: required for custom scene params; ignored for shader-backed params because the type comes from shader reflection.
@@ -346,6 +346,28 @@ Arrays are represented by using an array `value` or explicit `elementCount`; com
 `type: "string"` maps to a fixed-capacity `char[length]` in the reflected data type. The widget writes directly into the buffer on every keystroke, and `map_params` clients always observe the current widget contents. Clients that need to throttle per-string-change work (e.g. a text encoder) should debounce on their side.
 Variables with `_pad` in the name are not shown in the UI.
 Shader-backed parameters are shown in the object properties/shader parameter UI. Custom scene params are editor-only, loaded per scene through `set_custom_scene_params(editor, scene, json_token, error_buf, error_buf_size)` where `json_token->str` contains the JSON payload; on failure the function returns `PNANOVDB_FALSE` and writes a human-readable message into `error_buf`. Custom scene params are rendered in the dedicated `Params` window. They do not currently change object `map_shader_params` output.
+
+Custom scene parameters also support these UI options under `SceneParams` only:
+
+- `widget`: `"button"` or `"toggleButton"`. Both require scalar `bool` or `bool32` storage, a boolean `value` if supplied, and `elementCount` omitted or set to the integer `1`. Omit `widget` for the default control.
+- `activeLabel`: optional string for a toggle button's active state; defaults to the field name. Active toggles use the active button color and keep their identity when the label changes.
+- `readOnly`: optional boolean, default `false`; disables UI edits while leaving the mapped value writable by the application.
+- `sameLine`: optional boolean, default `false`; places the control after the preceding visible custom field on the same row. The first visible field starts its own row.
+- `tooltip`: optional string shown on hover, including for read-only controls.
+
+For example, load this payload through the existing custom scene parameter API:
+
+```json
+{
+    "SceneParams": {
+        "Play": {"type": "bool", "widget": "toggleButton", "activeLabel": "Stop"},
+        "Step": {"type": "bool", "widget": "button", "sameLine": true, "tooltip": "Advance one frame"},
+        "Frame": {"type": "uint", "value": 0, "readOnly": true}
+    }
+}
+```
+
+A button sets its value to `true` when clicked and leaves it set until the application consumes the request and resets it to `false`. A toggle button changes its value on each click. Read and update these values through the existing `map_params` / `unmap_params` API with a null shader name (`None` in Python). No playback loop runs inside the widgets.
 
 To display a group of shader parameters from different shaders, define a group JSON file with shader paths:
 ```json

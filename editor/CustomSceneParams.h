@@ -28,9 +28,20 @@ namespace pnanovdb_editor
 class CustomSceneParams
 {
 public:
+    enum class Widget
+    {
+        Default,
+        Button,
+        ToggleButton,
+    };
+
     struct Field
     {
         std::string name;
+        Widget widget = Widget::Default;
+        std::string active_label;
+        std::string tooltip;
+        bool same_line = false;
         std::string type_name;
         ImGuiDataType imgui_type = ImGuiDataType_Float;
         pnanovdb_uint32_t reflect_type = PNANOVDB_REFLECT_TYPE_FLOAT;
@@ -43,6 +54,7 @@ public:
         bool is_slider = false;
         bool is_bool = false;
         bool is_hidden = false;
+        bool is_read_only = false;
         bool is_native_bool = false;
         bool is_string = false;
         bool commit_on_enter = false;
