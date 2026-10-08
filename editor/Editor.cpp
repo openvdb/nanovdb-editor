@@ -24,7 +24,6 @@
 #include "ShaderCompileUtils.h"
 #include "EditorScene.h"
 #include "SceneSerializer.h"
-#include "ParamWidget.h"
 #include "ImguiInstance.h"
 #include "RenderSettingsConfig.h"
 
@@ -38,11 +37,9 @@
 
 #include <algorithm>
 #include <cstdio>
-#include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <map>
-#include <limits>
 #include <mutex>
 
 // signal handling
@@ -2161,6 +2158,10 @@ void* map_params(pnanovdb_editor_t* editor,
             Console::getInstance().addLog(Console::LogLevel::Debug, "map_params: Found shader-name mapping");
         }
     }
+    else if (pnanovdb_reflect_layout_compare(PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_t), data_type))
+    {
+        result = begin_shader_map(editor, scene, name, &key);
+    }
     else
     {
         result = begin_shader_params_map(editor, scene, name, data_type, &key);
@@ -2219,15 +2220,21 @@ void unmap_params(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pna
         return;
     }
 
-    const bool shader_name_changed = release_param_map(editor, frame.key);
-    if (shader_name_changed && editor->impl->scene_manager && editor->impl->compute)
+    const bool shader_changed = release_param_map(editor, frame.key);
+    if (shader_changed && frame.key.kind == ParamMapKind::ShaderName && editor->impl->scene_manager &&
+        editor->impl->compute)
     {
         editor->impl->scene_manager->refresh_params_for_object(editor->impl->compute, scene, name);
     }
 
+    if (shader_changed && frame.key.kind == ParamMapKind::Shader)
+    {
+        sync_added_object(editor, scene, name, true);
+    }
     if (frame.worker)
     {
-        if (frame.key.kind != ParamMapKind::CustomSceneParams)
+        if (frame.key.kind != ParamMapKind::CustomSceneParams &&
+            (frame.key.kind != ParamMapKind::Shader || shader_changed))
         {
             frame.worker->params_dirty.store(true);
         }
@@ -3011,118 +3018,6 @@ pnanovdb_compute_array_t* get_named_array(pnanovdb_editor_t* editor,
     return result;
 }
 
-pnanovdb_bool_t set_shader(pnanovdb_editor_t* editor,
-                           pnanovdb_editor_token_t* scene,
-                           pnanovdb_editor_token_t* name,
-                           const char* shader_name,
-                           const char* parameters_json,
-                           char* error_buf,
-                           pnanovdb_uint64_t error_buf_size)
-{
-    const auto fail = [=](const char* message)
-    {
-        if (error_buf && error_buf_size)
-            std::snprintf(error_buf, size_t(error_buf_size), "%s", message);
-        return PNANOVDB_FALSE;
-    };
-    if (!editor || !editor->impl || !scene || !name || !shader_name || !*shader_name)
-        return fail("Editor, scene, object, and shader are required");
-
-    if (caller_has_mapped_params(editor))
-        return fail("Cannot set a shader while parameters are mapped on this thread");
-
-    try
-    {
-        const auto values = nlohmann::json::parse(parameters_json ? parameters_json : "{}");
-        if (!values.is_object())
-            return fail("Shader parameters must be a JSON object");
-        ShaderParams reflected;
-        if (!reflected.load(shader_name, false))
-            return fail("Shader reflection is unavailable; compile the shader first");
-        const auto fields = reflected.snapshot(shader_name);
-        auto stored_values = values;
-        for (auto it = values.begin(); it != values.end(); ++it)
-        {
-            const auto field = std::find_if(
-                fields.begin(), fields.end(), [&](const ShaderParam& param) { return param.name == it.key(); });
-            if (field == fields.end())
-                return fail(("Unknown shader parameter: " + it.key()).c_str());
-            const auto scalar_valid = [&](const nlohmann::json& value)
-            {
-                if (value.is_boolean())
-                    return field->is_bool || field->type == ImGuiDataType_Bool;
-                return value.is_number();
-            };
-            const auto& value = it.value();
-            if (field->num_elements == 1 ? !scalar_valid(value) :
-                                           (!value.is_array() || value.size() != field->num_elements ||
-                                            !std::all_of(value.begin(), value.end(), scalar_valid)))
-                return fail(("Invalid shader parameter: " + it.key()).c_str());
-            if (field->type == ImGuiDataType_Float && field->size == sizeof(uint16_t))
-            {
-                // Scene serialization stores half values as bits; the API accepts numbers.
-                const auto encode_half = [](nlohmann::json& number)
-                {
-                    const double value = number.get<double>();
-                    if (!std::isfinite(value) || std::abs(value) > std::numeric_limits<float>::max())
-                        return false;
-                    const uint16_t bits = float_to_half_bits(static_cast<float>(value));
-                    if (!std::isfinite(half_bits_to_float(bits)))
-                        return false;
-                    number = bits;
-                    return true;
-                };
-                auto& stored = stored_values[it.key()];
-                if (field->num_elements == 1 ? !encode_half(stored) :
-                                               !std::all_of(stored.begin(), stored.end(), encode_half))
-                    return fail(("Invalid shader parameter: " + it.key()).c_str());
-            }
-        }
-        std::vector<unsigned char> bytes;
-        if (!json_to_shader_params(reflected, shader_name, stored_values, bytes, true))
-        {
-            if (!values.empty() || !fields.empty())
-                return fail("Cannot create shader parameters");
-            bytes.resize(PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE, 0);
-        }
-        const auto* compute = editor->impl->compute;
-        auto* array = compute->create_array(1u, bytes.size(), bytes.data());
-        if (!array)
-            return fail("Cannot allocate shader parameters");
-        auto owner = std::shared_ptr<pnanovdb_compute_array_t>(
-            array, [compute](pnanovdb_compute_array_t* ptr) { compute->destroy_array(ptr); });
-        auto* shader_token = get_token(shader_name);
-        const auto layout = EditorSceneManager::load_shader_params_layout(shader_name);
-        const auto apply = [=]() -> pnanovdb_bool_t
-        {
-            bool found = false;
-            editor->impl->scene_manager->with_object(scene, name,
-                                                     [&](SceneObject* obj)
-                                                     {
-                                                         if (!obj || obj->type != SceneObjectType::NanoVDB)
-                                                             return;
-                                                         obj->shader_name() = shader_token;
-                                                         obj->params.shader_params_array = array;
-                                                         obj->params.shader_params_array_owner = owner;
-                                                         obj->params.shader_params_layout = layout;
-                                                         obj->shader_params() = array->data;
-                                                         obj->shader_params_data_type() = nullptr;
-                                                         found = true;
-                                                     });
-            if (found)
-                sync_added_object(editor, scene, name);
-            return found ? PNANOVDB_TRUE : PNANOVDB_FALSE;
-        };
-        if (!(get_worker(editor) ? run_on_render_thread(editor, apply) : apply()))
-            return fail("NanoVDB object does not exist");
-        return PNANOVDB_TRUE;
-    }
-    catch (const std::exception& error)
-    {
-        return fail(error.what());
-    }
-}
-
 PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
 {
     static pnanovdb_editor_t editor = { PNANOVDB_REFLECT_INTERFACE_INIT(pnanovdb_editor_t) };
@@ -3162,7 +3057,6 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
     editor.add_nanovdb_3 = add_nanovdb_3;
     editor.add_gaussian_data_3 = add_gaussian_data_3;
     editor.add_gaussian_data_4 = add_gaussian_data_4;
-    editor.set_shader = set_shader;
     editor.update_nanovdb_buffer = update_nanovdb_buffer;
     editor.set_visible = set_visible;
     editor.get_visible = get_visible;

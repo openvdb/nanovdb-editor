@@ -11,11 +11,14 @@
 #include "editor/EditorScene.h"
 #include "editor/EditorSceneManager.h"
 #include "editor/ImguiInstance.h"
+#include "ShaderMappingTestSupport.h"
 
 #include <imgui_internal.h>
 
 #include <nanovdb/tools/CreatePrimitives.h>
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstddef>
@@ -525,12 +528,24 @@ TEST_F(EditorMaterialRenderTest, MixedShadersKeepObjectValuesAcrossFramesAndRelo
     auto* second = editor.get_token("wireframe");
     editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
     editor.add_nanovdb_2(&editor, scene_token, second, nanovdb_array);
-    char error[1024]{};
-    ASSERT_TRUE(editor.set_shader(&editor, scene_token, object_token, "editor/flow_smoke.slang",
-                                  R"({"attenuation":7.75,"step_size_scale":4,"shadow_num_steps":1})", error, sizeof(error)))
-        << error;
-    ASSERT_TRUE(editor.set_shader(&editor, scene_token, second, "editor/wireframe.slang",
-                                  R"({"highlight_bbox":1})", error, sizeof(error))) << error;
+    ASSERT_TRUE(pnanovdb_editor_test::map_shader_defaults(
+        editor, compute, scene_token, object_token, "editor/flow_smoke.slang", [](pnanovdb_uint8_t* params)
+        {
+            const std::array<float, 2> values{ 7.75f, 4.f };
+            std::memcpy(params, values.data(), sizeof(values));
+            const auto layout = pnanovdb_editor::EditorSceneManager::load_shader_params_layout("editor/flow_smoke.slang");
+            const auto shadow = std::find_if(layout.begin(), layout.end(),
+                [](const pnanovdb_editor::ShaderParamLayout& field) { return field.name == "shadow_num_steps"; });
+            ASSERT_NE(shadow, layout.end());
+            const uint32_t steps = 1u;
+            std::memcpy(params + shadow->offset, &steps, sizeof(steps));
+        }));
+    ASSERT_TRUE(pnanovdb_editor_test::map_shader_defaults(
+        editor, compute, scene_token, second, "editor/wireframe.slang", [](pnanovdb_uint8_t* params)
+        {
+            const uint32_t highlight = 1u;
+            std::memcpy(params, &highlight, sizeof(highlight));
+        }));
     auto& manager = *editor.impl->scene_manager;
     manager.with_object(scene_token, object_token,
                          [](pnanovdb_editor::SceneObject* obj) { tracked_array_a = obj->nanovdb_array(); });
@@ -561,9 +576,8 @@ TEST_F(EditorMaterialRenderTest, MixedShadersKeepObjectValuesAcrossFramesAndRelo
 TEST_F(EditorMaterialRenderTest, SourceRevisionInvalidatesAnUnchangedArrayAddress)
 {
     editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
-    char error[1024]{};
-    ASSERT_TRUE(editor.set_shader(&editor, scene_token, object_token, "editor/wireframe.slang",
-                                  "{}", error, sizeof(error))) << error;
+    ASSERT_TRUE(pnanovdb_editor_test::map_shader_defaults(
+        editor, compute, scene_token, object_token, "editor/wireframe.slang"));
     editor.impl->scene_manager->with_object(scene_token, object_token,
         [](pnanovdb_editor::SceneObject* obj) { tracked_array_a = obj->nanovdb_array(); });
     editor.start(&editor, device, &cfg);

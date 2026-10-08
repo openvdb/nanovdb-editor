@@ -8,18 +8,17 @@
 #include <nanovdb_editor/putil/Compiler.h>
 #include <nanovdb_editor/putil/Compute.h>
 #include <nanovdb_editor/putil/Editor.h>
-#include <nanovdb_editor/putil/Shader.hpp>
 
 #include "editor/Editor.h" // pnanovdb_editor_impl_t
 #include "editor/EditorSceneManager.h"
 #include "EditorTestSupport.h"
+#include "ShaderMappingTestSupport.h"
 
 #include <array>
-#include <chrono>
-#include <fstream>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <thread>
 #include <vector>
 
 namespace
@@ -54,22 +53,6 @@ protected:
     // Captured "ground truth" bytes for each shader's JSON-default buffer.
     std::vector<char> editor_defaults;
     std::vector<char> alt_defaults;
-    std::vector<std::filesystem::path> fixture_files;
-
-    std::string compileFixtureShader(const char* source)
-    {
-        const auto id = std::chrono::steady_clock::now().time_since_epoch().count();
-        const auto path = std::filesystem::temp_directory_path() / ("set_shader_" + std::to_string(id) + ".slang");
-        std::ofstream(path) << source;
-        fixture_files.push_back(path);
-        fixture_files.push_back(pnanovdb_shader::getCompiledShaderParamsFilePath(path.string().c_str()));
-        pnanovdb_compiler_settings_t settings{};
-        pnanovdb_compiler_settings_init(&settings);
-        settings.compile_target = PNANOVDB_COMPILE_TARGET_VULKAN;
-        std::strcpy(settings.entry_point_name, "main");
-        EXPECT_TRUE(compiler.compile_shader_from_file(compiler_inst, path.string().c_str(), &settings, nullptr));
-        return path.string();
-    }
 
     // Maps an editor-visible shader name (e.g. "editor/foo.slang") to its on-disk
     // source under editor/shaders/ and compiles it so the JSON cache is warm.
@@ -182,10 +165,36 @@ protected:
         }
         pnanovdb_compute_free(&compute);
         pnanovdb_compiler_free(&compiler);
-        for (const auto& path : fixture_files)
+    }
+
+    struct MaterialSnapshot
+    {
+        pnanovdb_editor_token_t* shader_name = nullptr;
+        std::shared_ptr<pnanovdb_compute_array_t> owner;
+        std::vector<pnanovdb_editor::ShaderParamLayout> layout;
+        std::vector<char> bytes;
+
+        bool operator==(const MaterialSnapshot& other) const
         {
-            std::filesystem::remove(path);
+            return shader_name == other.shader_name && owner == other.owner && layout == other.layout &&
+                   bytes == other.bytes;
         }
+    };
+
+    MaterialSnapshot snapshotMaterial()
+    {
+        MaterialSnapshot result;
+        editor.impl->scene_manager->with_object(scene_token, name_token,
+            [&](pnanovdb_editor::SceneObject* obj)
+            {
+                ASSERT_NE(obj, nullptr);
+                result.shader_name = obj->shader_name();
+                result.owner = obj->params.shader_params_array_owner;
+                result.layout = obj->params.shader_params_layout;
+                result.bytes.resize(kBufSize);
+                std::memcpy(result.bytes.data(), obj->shader_params(), result.bytes.size());
+            });
+        return result;
     }
 
     std::vector<char> snapshotObjectBuffer()
@@ -266,41 +275,188 @@ TEST_F(ShaderNameSwapResetsParamsTest, ReassigningSameShaderNamePreservesUserByt
         << "Same-shader-name unmap must not clobber the object's existing buffer";
 }
 
-TEST_F(ShaderNameSwapResetsParamsTest, SetShaderAppliesObjectValuesOverDefaults)
+TEST_F(ShaderNameSwapResetsParamsTest, WholeShaderMapAppliesSameShaderValuesOverDefaults)
 {
-    char error[256]{};
-    ASSERT_TRUE(editor.set_shader(&editor, scene_token, name_token, default_editor_shader(),
-                                  "{\"alpha_scale\":0.75}", error, sizeof(error))) << error;
-    const auto actual = snapshotObjectBuffer();
-    auto expected = editor_defaults;
     const float alpha = 0.75f;
+    ASSERT_TRUE(pnanovdb_editor_test::map_shader_defaults(
+        editor, compute, scene_token, name_token, default_editor_shader(),
+        [&](pnanovdb_uint8_t* params) { std::memcpy(params, &alpha, sizeof(alpha)); }));
+    auto expected = editor_defaults;
     std::memcpy(expected.data(), &alpha, sizeof(alpha));
-    EXPECT_EQ(actual, expected);
+    EXPECT_EQ(snapshotObjectBuffer(), expected);
 
-    ASSERT_TRUE(editor.set_shader(&editor, scene_token, name_token, alt_shader(), "{}", error, sizeof(error))) << error;
+    ASSERT_TRUE(pnanovdb_editor_test::map_shader_defaults(editor, compute, scene_token, name_token, alt_shader()));
     EXPECT_EQ(snapshotObjectBuffer(), alt_defaults);
 }
 
-TEST_F(ShaderNameSwapResetsParamsTest, SetShaderRejectsInvalidValuesWithoutMutation)
+TEST_F(ShaderNameSwapResetsParamsTest, WholeShaderMapCommitsOnlyOnOutermostUnmap)
 {
-    char error[256]{};
-    for (const char* json : { "{\"unknown\":1}", "{\"alpha_scale\":\"bad\"}", "{\"slice_plane\":[1,2]}",
-                              "{\"narrow_band_only\":-1}", "{\"alpha_scale\":1e100}" })
+    const auto original = snapshotMaterial();
+    worker->params_dirty.store(false);
+    const auto* type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_t);
+    auto* mapped = static_cast<pnanovdb_editor_shader_t*>(editor.map_params(&editor, scene_token, name_token, type));
+    ASSERT_NE(mapped, nullptr);
+    EXPECT_EQ(mapped->shader_name, original.shader_name);
+    EXPECT_EQ(std::memcmp(mapped->shader_params, original.bytes.data(), original.bytes.size()), 0);
+    auto* nested = static_cast<pnanovdb_editor_shader_t*>(editor.map_params(&editor, scene_token, name_token, type));
+    ASSERT_EQ(nested, mapped);
+
+    auto expected = alt_defaults;
+    const float alpha = 0.375f;
+    std::memcpy(expected.data(), &alpha, sizeof(alpha));
+    mapped->shader_name = editor.get_token(alt_shader());
+    std::memcpy(mapped->shader_params, expected.data(), expected.size());
+    EXPECT_EQ(snapshotMaterial(), original);
+    editor.unmap_params(&editor, scene_token, name_token);
+    EXPECT_EQ(snapshotMaterial(), original);
+    EXPECT_FALSE(worker->params_dirty.load());
+    editor.unmap_params(&editor, scene_token, name_token);
+
+    const auto actual = snapshotMaterial();
+    EXPECT_EQ(actual.shader_name, editor.get_token(alt_shader()));
+    EXPECT_EQ(actual.bytes, expected);
+    EXPECT_EQ(actual.layout, pnanovdb_editor::EditorSceneManager::load_shader_params_layout(alt_shader()));
+    EXPECT_NE(actual.owner, original.owner);
+    EXPECT_TRUE(worker->params_dirty.load());
+}
+
+TEST_F(ShaderNameSwapResetsParamsTest, ConcurrentWholeShaderMapsKeepIndependentMaterialsWithoutWorker)
+{
+    editor.impl->editor_worker.reset();
+    worker.reset();
+    const auto* type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_t);
+    auto* first = static_cast<pnanovdb_editor_shader_t*>(editor.map_params(&editor, scene_token, name_token, type));
+    ASSERT_NE(first, nullptr);
+    auto* nested = editor.map_params(&editor, scene_token, name_token, type);
+    EXPECT_EQ(nested, first);
+
+    auto expected = editor_defaults;
+    const float alpha = 0.25f;
+    std::memcpy(expected.data(), &alpha, sizeof(alpha));
+    std::memcpy(first->shader_params, expected.data(), expected.size());
+    const auto* name_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t);
+    std::thread writer(
+        [&]()
+        {
+            EXPECT_EQ(editor.map_params(&editor, scene_token, name_token, name_type), nullptr);
+            auto* second =
+                static_cast<pnanovdb_editor_shader_t*>(editor.map_params(&editor, scene_token, name_token, type));
+            ASSERT_NE(second, nullptr);
+            EXPECT_NE(second, first);
+            second->shader_name = editor.get_token(alt_shader());
+            std::memcpy(second->shader_params, alt_defaults.data(), alt_defaults.size());
+            editor.unmap_params(&editor, scene_token, name_token);
+            EXPECT_EQ(editor.map_params(&editor, scene_token, name_token, name_type), nullptr);
+        });
+    writer.join();
+
+    EXPECT_EQ(snapshotMaterial().shader_name, editor.get_token(alt_shader()));
+    EXPECT_EQ(snapshotObjectBuffer(), alt_defaults);
+    EXPECT_EQ(std::memcmp(first->shader_params, expected.data(), expected.size()), 0);
+    first->shader_name = editor.get_token(default_editor_shader());
+    if (nested)
     {
-        EXPECT_FALSE(
-            editor.set_shader(&editor, scene_token, name_token, default_editor_shader(), json, error, sizeof(error)))
-            << json;
-        EXPECT_NE(error[0], '\0');
-        EXPECT_EQ(snapshotObjectBuffer(), editor_defaults);
+        editor.unmap_params(&editor, scene_token, name_token);
+        EXPECT_EQ(snapshotObjectBuffer(), alt_defaults);
     }
-    EXPECT_FALSE(editor.set_shader(
-        &editor, scene_token, editor.get_token("missing"), default_editor_shader(), "{}", error, sizeof(error)));
+    editor.unmap_params(&editor, scene_token, name_token);
+    EXPECT_EQ(snapshotMaterial().shader_name, editor.get_token(default_editor_shader()));
+    EXPECT_EQ(snapshotObjectBuffer(), expected);
+    ASSERT_NE(editor.map_params(&editor, scene_token, name_token, name_type), nullptr);
+    editor.unmap_params(&editor, scene_token, name_token);
+}
+
+TEST_F(ShaderNameSwapResetsParamsTest, UnchangedAndRevertedWholeShaderMapsPreserveMaterial)
+{
+    const auto original = snapshotMaterial();
+    const auto* type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_t);
+    for (bool revert_edit : { false, true })
+    {
+        worker->params_dirty.store(false);
+        auto* mapped = static_cast<pnanovdb_editor_shader_t*>(editor.map_params(&editor, scene_token, name_token, type));
+        ASSERT_NE(mapped, nullptr);
+        if (revert_edit)
+        {
+            mapped->shader_name = editor.get_token(alt_shader());
+            std::memcpy(mapped->shader_params, alt_defaults.data(), alt_defaults.size());
+            EXPECT_EQ(snapshotMaterial(), original);
+            mapped->shader_name = original.shader_name;
+            std::memcpy(mapped->shader_params, original.bytes.data(), original.bytes.size());
+        }
+        editor.unmap_params(&editor, scene_token, name_token);
+        EXPECT_EQ(snapshotMaterial(), original);
+        EXPECT_FALSE(worker->params_dirty.load());
+    }
+}
+
+TEST_F(ShaderNameSwapResetsParamsTest, UnchangedWholeShaderMapPreservesAnotherThreadCommit)
+{
+    editor.impl->editor_worker.reset();
+    worker.reset();
+    const auto* type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_t);
+    ASSERT_NE(editor.map_params(&editor, scene_token, name_token, type), nullptr);
+    std::thread writer(
+        [&]()
+        {
+            EXPECT_TRUE(pnanovdb_editor_test::map_shader_defaults(editor, compute, scene_token, name_token, alt_shader()));
+        });
+    writer.join();
+
+    const auto committed = snapshotMaterial();
+    EXPECT_EQ(committed.shader_name, editor.get_token(alt_shader()));
+    EXPECT_EQ(committed.bytes, alt_defaults);
+    editor.unmap_params(&editor, scene_token, name_token);
+    EXPECT_EQ(snapshotMaterial(), committed);
+}
+
+TEST_F(ShaderNameSwapResetsParamsTest, WholeShaderMapAndShaderNameMapCannotOverlap)
+{
+    const auto original = snapshotMaterial();
+    const auto* material_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_t);
+    const auto* name_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t);
+    for (bool material_first : { false, true })
+    {
+        const auto* first_type = material_first ? material_type : name_type;
+        const auto* second_type = material_first ? name_type : material_type;
+        ASSERT_NE(editor.map_params(&editor, scene_token, name_token, first_type), nullptr);
+        EXPECT_EQ(editor.map_params(&editor, scene_token, name_token, second_type), nullptr);
+        editor.unmap_params(&editor, scene_token, name_token);
+        ASSERT_NE(editor.map_params(&editor, scene_token, name_token, second_type), nullptr);
+        editor.unmap_params(&editor, scene_token, name_token);
+        EXPECT_EQ(snapshotMaterial(), original);
+    }
+}
+
+TEST_F(ShaderNameSwapResetsParamsTest, MissingWholeShaderMapPreservesMaterial)
+{
+    const auto original = snapshotMaterial();
+    const auto* type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_t);
+    EXPECT_EQ(editor.map_params(&editor, scene_token, editor.get_token("missing"), type), nullptr);
+    EXPECT_EQ(snapshotMaterial(), original);
+    ASSERT_NE(editor.map_params(&editor, scene_token, name_token, type), nullptr);
+    editor.unmap_params(&editor, scene_token, name_token);
+    EXPECT_EQ(snapshotMaterial(), original);
+}
+
+TEST_F(ShaderNameSwapResetsParamsTest, WholeShaderMapCannotOverwriteReplacementObject)
+{
+    const auto* type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_t);
+    auto* mapped = static_cast<pnanovdb_editor_shader_t*>(editor.map_params(&editor, scene_token, name_token, type));
+    ASSERT_NE(mapped, nullptr);
+    mapped->shader_name = editor.get_token(alt_shader());
+    std::memcpy(mapped->shader_params, alt_defaults.data(), alt_defaults.size());
+
+    ASSERT_TRUE(editor.impl->scene_manager->remove(scene_token, name_token));
+    editor.add_nanovdb_2(&editor, scene_token, name_token, owned_array);
+    const auto replacement = snapshotMaterial();
+    editor.unmap_params(&editor, scene_token, name_token);
+    EXPECT_EQ(snapshotMaterial(), replacement);
+    EXPECT_EQ(replacement.shader_name, editor.get_token(default_editor_shader()));
 }
 
 TEST_F(ShaderNameSwapResetsParamsTest, RawBufferUpdatePreservesShaderStateAndOwnsCopy)
 {
-    char error[256]{};
-    ASSERT_TRUE(editor.set_shader(&editor, scene_token, name_token, alt_shader(), "{}", error, sizeof(error))) << error;
+    ASSERT_TRUE(pnanovdb_editor_test::map_shader_defaults(editor, compute, scene_token, name_token, alt_shader()));
     auto expected = snapshotObjectBuffer();
     const float edited_value = 0.375f;
     std::memcpy(expected.data(), &edited_value, sizeof(edited_value));
@@ -339,56 +495,4 @@ TEST_F(ShaderNameSwapResetsParamsTest, RawBufferUpdatePreservesShaderStateAndOwn
             EXPECT_EQ(obj->pipeline.load().output.get_array_owner(pnanovdb_editor::k_stage_output_nanovdb),
                       obj->resources.nanovdb_array_owner);
         });
-}
-
-
-TEST_F(ShaderNameSwapResetsParamsTest, SetShaderAcceptsParameterlessReflection)
-{
-    const auto shader = compileFixtureShader(R"(
-RWTexture2D<float4> texture_out;
-[shader("compute")][numthreads(1, 1, 1)]
-void main(uint3 id : SV_DispatchThreadID) { texture_out[id.xy] = float4(0, 1, 0, 0); }
-)");
-    char error[256]{};
-    ASSERT_TRUE(editor.set_shader(&editor, scene_token, name_token, shader.c_str(), "{}", error, sizeof(error))) << error;
-    const auto expected = snapshotObjectBuffer();
-    EXPECT_TRUE(std::all_of(expected.begin(), expected.end(), [](char value) { return value == 0; }));
-    EXPECT_FALSE(editor.set_shader(&editor, scene_token, name_token, shader.c_str(),
-                                   "{\"unknown\":1}", error, sizeof(error)));
-    EXPECT_NE(std::string(error).find("Unknown shader parameter"), std::string::npos);
-    EXPECT_EQ(snapshotObjectBuffer(), expected);
-    const auto missing_shader = shader + ".missing";
-    EXPECT_FALSE(editor.set_shader(&editor, scene_token, name_token, missing_shader.c_str(), "{}", error, sizeof(error)));
-    EXPECT_NE(std::string(error).find("reflection is unavailable"), std::string::npos);
-    EXPECT_EQ(snapshotObjectBuffer(), expected);
-}
-
-TEST_F(ShaderNameSwapResetsParamsTest, SetShaderEncodesNumericHalfScalarsAndVectors)
-{
-    const auto shader = compileFixtureShader(R"(
-struct shader_params_t { half value; half3 vector; };
-ConstantBuffer<shader_params_t> shader_params;
-RWTexture2D<float4> texture_out;
-[shader("compute")][numthreads(1, 1, 1)]
-void main(uint3 id : SV_DispatchThreadID) { texture_out[id.xy] = float4(shader_params.value, shader_params.vector); }
-)");
-    char error[256]{};
-    for (const char* value : { "1", "0.5" })
-    {
-        const auto json = std::string("{\"value\":") + value + ",\"vector\":[-2,0.5,65504]}";
-        ASSERT_TRUE(editor.set_shader(&editor, scene_token, name_token, shader.c_str(),
-                                      json.c_str(), error, sizeof(error))) << error;
-        const auto actual = snapshotObjectBuffer();
-        std::array<uint16_t, 4> bits{};
-        std::memcpy(bits.data(), actual.data(), sizeof(bits));
-        const uint16_t scalar = std::strcmp(value, "1") == 0 ? 0x3c00 : 0x3800;
-        EXPECT_EQ(bits, (std::array<uint16_t, 4>{ scalar, 0xc000, 0x3800, 0x7bff }));
-    }
-    const auto expected = snapshotObjectBuffer();
-    for (const char* json : { "{\"value\":1e10}", "{\"vector\":[1,1e10,2]}", "{\"value\":false}" })
-    {
-        EXPECT_FALSE(editor.set_shader(&editor, scene_token, name_token, shader.c_str(), json, error, sizeof(error)));
-        EXPECT_NE(std::string(error).find("Invalid shader parameter"), std::string::npos);
-        EXPECT_EQ(snapshotObjectBuffer(), expected);
-    }
 }

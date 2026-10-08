@@ -149,8 +149,7 @@ keys and can contain spaces. The mapping is valid only inside the context;
 returned values are copies. Use `dict(controls)` to copy all values at once.
 The context locks UI access, so
 keep it short and do simulation work after it exits. Grid registration and live
-buffer updates can run inside the context, but `set_shader` fails with a mapped
-parameter error because it requires the render thread. Do not call editor
+buffer updates and `set_shader` can run inside the context. Do not call editor
 lifecycle methods, save or load scenes, or reload the schema inside a mapped
 context. Schema updates from other Python
 threads wait for the context to exit. Direct native calls are outside this

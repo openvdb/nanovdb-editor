@@ -388,9 +388,9 @@ class Scene:
 
         Schema updates through this editor from other Python threads wait for
         this context to exit. Do not reload the schema inside the context.
-        Calls that wait for the viewer, including ``set_shader`` and scene
-        load/save, fail while parameters are mapped on the calling thread.
-        Buffer registration and streaming updates do not wait for the viewer.
+        Calls that wait for the viewer, including scene load/save, fail while
+        parameters are mapped on the calling thread. Shader changes, buffer
+        registration, and streaming updates do not wait for the viewer.
         """
         from ._params import MappedParams
 

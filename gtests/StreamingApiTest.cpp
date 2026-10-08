@@ -98,16 +98,18 @@ TEST_F(StreamingApiTest, SaveWhileSceneControlsAreMappedFailsWithoutWaiting)
         });
 }
 
-TEST_F(StreamingApiTest, ShaderChangeWhileSceneControlsAreMappedReportsError)
+TEST_F(StreamingApiTest, ShaderMapWhileSceneControlsAreMappedDoesNotWaitForRender)
 {
     expect_without_render_frame(
         [&]()
         {
             const auto* type = editor.get_custom_scene_params_data_type(&editor, scene);
             ASSERT_NE(editor.map_params(&editor, scene, nullptr, type), nullptr);
-            char error[256]{};
-            EXPECT_FALSE(editor.set_shader(&editor, scene, name, "editor/editor.slang", "{}", error, sizeof(error)));
-            EXPECT_NE(std::string(error).find("mapped"), std::string::npos);
+            auto* shader = static_cast<pnanovdb_editor_shader_t*>(editor.map_params(
+                &editor, scene, name, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_t)));
+            ASSERT_NE(shader, nullptr);
+            shader->shader_params[0] ^= 1u;
+            editor.unmap_params(&editor, scene, name);
             editor.unmap_params(&editor, scene, nullptr);
         });
 }
@@ -192,7 +194,7 @@ TEST_F(StreamingApiTest, StreamingWhileSceneControlsAreMappedDoesNotWaitForRende
         });
 }
 
-TEST_F(StreamingApiTest, PipelineMapRejectsBlockingCalls)
+TEST_F(StreamingApiTest, PipelineMapAllowsShaderMapWithoutBlocking)
 {
     expect_without_render_frame(
         [&]()
@@ -200,9 +202,11 @@ TEST_F(StreamingApiTest, PipelineMapRejectsBlockingCalls)
             auto* params = editor.map_pipeline_params(&editor, scene, name, pnanovdb_pipeline_stage_render);
             ASSERT_NE(params, nullptr);
             EXPECT_FALSE(editor.save_scene(&editor, "mapped-pipeline-must-not-save.json"));
-            char error[256]{};
-            EXPECT_FALSE(editor.set_shader(&editor, scene, name, "editor/editor.slang", "{}", error, sizeof(error)));
-            EXPECT_NE(std::string(error).find("mapped"), std::string::npos);
+            auto* shader = static_cast<pnanovdb_editor_shader_t*>(editor.map_params(
+                &editor, scene, name, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_t)));
+            ASSERT_NE(shader, nullptr);
+            shader->shader_params[0] ^= 1u;
+            editor.unmap_params(&editor, scene, name);
             editor.unmap_pipeline_params(&editor, scene, name, pnanovdb_pipeline_stage_render);
         });
 }

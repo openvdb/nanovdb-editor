@@ -360,20 +360,20 @@ void EditorScene::clear_editor_view_state()
     m_editor->impl->shader_params_data_type = nullptr;
 }
 
-void EditorScene::copy_editor_shader_params_to_ui(SceneShaderParams* params)
+void EditorScene::copy_shader_params_to_ui(SceneShaderParams* params, const void* source)
 {
-    if (!params || !m_editor->impl->shader_params)
+    if (!params || !source)
     {
         return;
     }
 
     if (!params->current_array)
     {
-        params->current_array = m_compute->create_array(params->size, 1u, m_editor->impl->shader_params);
+        params->current_array = m_compute->create_array(params->size, 1u, source);
     }
     else
     {
-        std::memcpy(params->current_array->data, m_editor->impl->shader_params, params->size);
+        std::memcpy(params->current_array->data, source, params->size);
     }
     m_scene_manager.shader_params.set_compute_array_for_shader(params->shader_name, params->current_array);
 }
@@ -427,7 +427,7 @@ void EditorScene::copy_shader_params(pnanovdb_pipeline_render_method_t render_me
         }
         else if (sync_direction == SyncDirection::EditorToUI)
         {
-            copy_editor_shader_params_to_ui(params);
+            copy_shader_params_to_ui(params, view_params);
         }
         else if (sync_direction == SyncDirection::UiToView)
         {

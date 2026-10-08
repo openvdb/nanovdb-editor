@@ -21,6 +21,7 @@ from ctypes import (
     c_float,
     byref,
     create_string_buffer,
+    memmove,
     pointer,
     sizeof,
 )
@@ -613,13 +614,6 @@ class pnanovdb_Editor(Structure):
             ),
         ),
         (
-            "set_shader",
-            CFUNCTYPE(
-                pnanovdb_bool_t, c_void_p, POINTER(EditorToken), POINTER(EditorToken),
-                c_char_p, c_char_p, POINTER(c_char), c_uint64,
-            ),
-        ),
-        (
             "update_nanovdb_buffer",
             CFUNCTYPE(pnanovdb_bool_t, c_void_p, POINTER(EditorToken), POINTER(EditorToken),
                       POINTER(pnanovdb_ComputeArray)),
@@ -1029,16 +1023,20 @@ class Editor:
         if parameters is not None and not isinstance(parameters, dict):
             raise InvalidArgumentError("parameters must be a dictionary")
         try:
-            params_json = json.dumps(parameters or {}, allow_nan=False).encode("utf-8")
+            values = json.loads(json.dumps(parameters or {}, allow_nan=False))
         except (TypeError, ValueError) as exc:
             raise InvalidArgumentError("parameters must contain finite JSON values") from exc
         if not self._compiler.compile_shader(shader):
             raise PipelineError(f"Failed to compile shader {shader}: {self._compiler.get_diagnostics()}")
-        error = create_string_buffer(1024)
-        if not self._editor.contents.set_shader(
-            self._editor, scene, name, shader.encode("utf-8"), params_json, error, len(error)
-        ):
-            raise PipelineError(error.value.decode("utf-8", errors="replace") or "Failed to set shader")
+        from ._shader import Shader, SHADER_TYPE, pack_shader_parameters
+
+        parameter_bytes = pack_shader_parameters(self._compiler, shader, values)
+        staged = Shader(shader_name=self.get_token(shader))
+        staged.shader_params[:] = parameter_bytes
+        with self.params(scene, name, byref(SHADER_TYPE)) as address:
+            if not address:
+                raise PipelineError("Cannot map shader: NanoVDB object does not exist or allocation failed")
+            memmove(address, byref(staged), sizeof(staged))
 
     def add_gaussian_data_2(self, scene, name, desc):
         """Add Gaussian data to scene with token-based API."""
@@ -1091,8 +1089,8 @@ class Editor:
     def params(self, scene, name, data_type):
         """Context manager over a scene object's mapped parameters.
 
-        Yields whatever :meth:`map_params` returns for ``data_type`` and always
-        calls :meth:`unmap_params` on exit, flushing any writes.
+        Yields whatever :meth:`map_params` returns for ``data_type``. Successful
+        mappings call :meth:`unmap_params` on exit, flushing any writes.
 
         Example::
 
@@ -1103,7 +1101,8 @@ class Editor:
         try:
             yield mapped
         finally:
-            self.unmap_params(scene, name)
+            if mapped:
+                self.unmap_params(scene, name)
 
     @staticmethod
     def _resolve_pipeline_type(pipeline) -> int:
@@ -1157,10 +1156,10 @@ class Editor:
     def map_pipeline_params(self, scene, name, stage: int):
         """Map a stage's pipeline parameters for read/write access.
 
-        Returns a ``POINTER(pnanovdb_PipelineParams)`` (may be null). You MUST
-        call :meth:`unmap_pipeline_params` for the same stage afterwards, even
-        when the returned pointer is null; :meth:`pipeline_params` wraps both in
-        a context manager and should be preferred.
+        Returns a ``POINTER(pnanovdb_PipelineParams)`` (may be null). Call
+        :meth:`unmap_pipeline_params` for the same stage after a successful map.
+        Prefer :meth:`pipeline_params`, which pairs the map with an automatic
+        unmap.
         """
         map_func = self._editor.contents.map_pipeline_params
         return map_func(self._editor, scene, name, c_uint32(int(stage)))
@@ -1174,9 +1173,9 @@ class Editor:
     def pipeline_params(self, scene, name, stage: int):
         """Context manager yielding a stage's ``pnanovdb_pipeline_params_t``.
 
-        Yields the mapped ``pnanovdb_PipelineParams`` (or ``None`` when the stage
-        exposes no parameters) and always calls ``unmap_pipeline_params`` on exit,
-        which flushes writes and marks the stage dirty.
+        Yields the mapped ``pnanovdb_PipelineParams`` or ``None`` if mapping fails.
+        Successful mappings call ``unmap_pipeline_params`` on exit, flushing
+        writes and marking the stage dirty.
 
         Example::
 
@@ -1189,7 +1188,8 @@ class Editor:
         try:
             yield params_ptr.contents if params_ptr else None
         finally:
-            self.unmap_pipeline_params(scene, name, stage)
+            if params_ptr:
+                self.unmap_pipeline_params(scene, name, stage)
 
     # ------------------------------------------------------------------
     # Multi-step process chains
@@ -1264,9 +1264,9 @@ class Editor:
     def process_step_params(self, scene, name, step_index: int):
         """Context manager yielding a process step's ``pnanovdb_pipeline_params_t``.
 
-        Yields the mapped ``pnanovdb_PipelineParams`` (or ``None`` when the step
-        exposes no parameters) and always calls ``unmap_process_step_params`` on
-        exit, which flushes writes and marks the step dirty.
+        Yields the mapped ``pnanovdb_PipelineParams`` or ``None`` if mapping fails.
+        Successful mappings call ``unmap_process_step_params`` on exit, flushing
+        writes and marking the step dirty.
 
         Example::
 
@@ -1278,7 +1278,8 @@ class Editor:
         try:
             yield params_ptr.contents if params_ptr else None
         finally:
-            self.unmap_process_step_params(scene, name, step_index)
+            if params_ptr:
+                self.unmap_process_step_params(scene, name, step_index)
 
     def set_custom_scene_params(self, scene, json_string) -> None:
         """Attach scene-level custom UI params described by a JSON payload.

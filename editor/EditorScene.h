@@ -100,7 +100,7 @@ enum class SyncDirection
 class EditorScene
 {
 private:
-    void copy_editor_shader_params_to_ui(SceneShaderParams* params);
+    void copy_shader_params_to_ui(SceneShaderParams* params, const void* source);
     void copy_shader_params_from_ui_to_view(SceneShaderParams* params, void* view_params);
     void copy_ui_shader_params_from_to_editor(SceneShaderParams* params);
 

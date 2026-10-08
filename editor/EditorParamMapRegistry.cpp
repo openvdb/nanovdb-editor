@@ -4,10 +4,13 @@
 #include "EditorParamMapRegistry.h"
 
 #include "CustomSceneParams.h"
+#include "Console.h"
 #include "Editor.h"
 #include "EditorSceneManager.h"
 
 #include <cstdint>
+#include <cstring>
+#include <exception>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -36,6 +39,16 @@ struct ShaderNameState
     pnanovdb_editor_token_t* prev_shader_name = nullptr;
 };
 
+struct ShaderState
+{
+    pnanovdb_editor_shader_t value = {};
+    pnanovdb_editor_shader_t previous = {};
+    std::shared_ptr<pnanovdb_compute_array_t> array_owner;
+    pnanovdb_editor_token_t* scene = nullptr;
+    pnanovdb_editor_token_t* name = nullptr;
+    uint64_t lifetime_id = 0;
+};
+
 // Keeps the params alive and holds its data_mutex for the whole map window,
 // since CustomSceneParams::render() reads the data from the UI thread.
 struct CustomSceneParamsState
@@ -45,7 +58,8 @@ struct CustomSceneParamsState
 };
 
 // monostate is the default on first acquire, before init_if_first replaces it
-using ParamMapState = std::variant<std::monostate, ShaderParamsState, ShaderNameState, CustomSceneParamsState>;
+using ParamMapState =
+    std::variant<std::monostate, ShaderParamsState, ShaderNameState, std::unique_ptr<ShaderState>, CustomSceneParamsState>;
 
 } // namespace
 
@@ -58,14 +72,39 @@ public:
     template <typename InitFn>
     ParamMapState& acquire(const ParamMapKey& key, InitFn&& init_if_first)
     {
+        return *try_acquire(key,
+                            [&](ParamMapState& state)
+                            {
+                                init_if_first(state);
+                                return true;
+                            });
+    }
+
+    template <typename InitFn>
+    ParamMapState* try_acquire(const ParamMapKey& key,
+                               InitFn&& init_if_first,
+                               const ParamMapKey* conflicting_key = nullptr)
+    {
         std::lock_guard<std::mutex> lock(m_mutex);
-        Entry& e = m_entries[key];
-        if (e.ref_count == 0)
+        if (conflicting_key)
         {
-            init_if_first(e.state);
+            for (const auto& [active_key, entry] : m_entries)
+            {
+                if (active_key.kind == conflicting_key->kind && active_key.id == conflicting_key->id &&
+                    entry.ref_count != 0)
+                {
+                    return nullptr;
+                }
+            }
+        }
+        Entry& e = m_entries[key];
+        if (e.ref_count == 0 && !init_if_first(e.state))
+        {
+            m_entries.erase(key);
+            return nullptr;
         }
         ++e.ref_count;
-        return e.state;
+        return &e.state;
     }
 
     template <typename TeardownFn>
@@ -263,16 +302,93 @@ pnanovdb_editor_shader_name_t* begin_shader_name_map(pnanovdb_editor_t* editor,
     }
 
     const ParamMapKey key{ ParamMapKind::ShaderName, object_key };
-    ParamMapState& state = registry->acquire(key,
-                                             [&](ParamMapState& s)
-                                             {
-                                                 ShaderNameState payload;
-                                                 payload.prev_shader_name = storage->value.shader_name;
-                                                 payload.storage = std::move(storage);
-                                                 s = std::move(payload);
-                                             });
+    const ParamMapKey conflicting_key{ ParamMapKind::Shader, object_key };
+    ParamMapState* state = registry->try_acquire(
+        key,
+        [&](ParamMapState& s)
+        {
+            ShaderNameState payload;
+            payload.prev_shader_name = storage->value.shader_name;
+            payload.storage = std::move(storage);
+            s = std::move(payload);
+            return true;
+        },
+        &conflicting_key);
+    if (!state)
+        return nullptr;
     *out_key = key;
-    return &std::get<ShaderNameState>(state).storage->value;
+    return &std::get<ShaderNameState>(*state).storage->value;
+}
+
+pnanovdb_editor_shader_t* begin_shader_map(pnanovdb_editor_t* editor,
+                                           pnanovdb_editor_token_t* scene,
+                                           pnanovdb_editor_token_t* name,
+                                           ParamMapKey* out_key)
+{
+    ParamMapRegistry* registry = registry_for(editor);
+    if (!registry || !editor->impl->scene_manager || !editor->impl->compute || !scene || !name || !out_key)
+    {
+        return nullptr;
+    }
+
+    const ParamMapKey key{ ParamMapKind::Shader, EditorSceneManager::make_key(scene, name), std::this_thread::get_id() };
+    const ParamMapKey conflicting_key{ ParamMapKind::ShaderName, key.id };
+    ParamMapState* state = registry->try_acquire(
+        key,
+        [&](ParamMapState& target)
+        {
+            try
+            {
+                auto mapped = std::make_unique<ShaderState>();
+                bool found = false;
+                editor->impl->scene_manager->with_object(
+                    scene, name,
+                    [&](SceneObject* obj)
+                    {
+                        if (!obj || obj->type != SceneObjectType::NanoVDB)
+                            return;
+                        mapped->value.shader_name = obj->shader_name();
+                        mapped->lifetime_id = obj->lifetime_id;
+                        const auto* array = obj->params.shader_params_array;
+                        if (array && array->data)
+                        {
+                            const size_t capacity = sizeof(mapped->value.shader_params);
+                            const size_t count =
+                                array->element_size && array->element_count > capacity / array->element_size ?
+                                    capacity :
+                                    array->element_size * array->element_count;
+                            std::memcpy(mapped->value.shader_params, array->data, count);
+                        }
+                        found = true;
+                    });
+                if (!found)
+                    return false;
+
+                const auto* compute = editor->impl->compute;
+                auto* array = compute->create_array(1u, sizeof(mapped->value.shader_params), nullptr);
+                if (!array)
+                    return false;
+                mapped->array_owner = std::shared_ptr<pnanovdb_compute_array_t>(
+                    array, [compute](pnanovdb_compute_array_t* value) { compute->destroy_array(value); });
+                if (!array->data)
+                    return false;
+                mapped->previous = mapped->value;
+                mapped->scene = scene;
+                mapped->name = name;
+                target = std::move(mapped);
+                return true;
+            }
+            catch (const std::exception& error)
+            {
+                Console::getInstance().addLog(Console::LogLevel::Error, "Cannot map shader: %s", error.what());
+                return false;
+            }
+        },
+        &conflicting_key);
+    if (!state)
+        return nullptr;
+    *out_key = key;
+    return &std::get<std::unique_ptr<ShaderState>>(*state)->value;
 }
 
 bool release_param_map(pnanovdb_editor_t* editor, const ParamMapKey& key)
@@ -282,7 +398,7 @@ bool release_param_map(pnanovdb_editor_t* editor, const ParamMapKey& key)
     {
         return false;
     }
-    bool shader_name_changed = false;
+    bool shader_changed = false;
     registry->release(key,
                       [&](ParamMapState& s)
                       {
@@ -296,11 +412,48 @@ bool release_param_map(pnanovdb_editor_t* editor, const ParamMapKey& key)
                               // shader-name map window: compare the snapshot against the current value.
                               if (p->storage && !tokens_equal(p->prev_shader_name, p->storage->value.shader_name))
                               {
-                                  shader_name_changed = true;
+                                  shader_changed = true;
+                              }
+                          }
+                          else if (auto* p = std::get_if<std::unique_ptr<ShaderState>>(&s))
+                          {
+                              const auto& mapped = **p;
+                              if (tokens_equal(mapped.previous.shader_name, mapped.value.shader_name) &&
+                                  std::memcmp(mapped.previous.shader_params, mapped.value.shader_params,
+                                              sizeof(mapped.value.shader_params)) == 0)
+                              {
+                                  return;
+                              }
+                              try
+                              {
+                                  auto layout = EditorSceneManager::load_shader_params_layout(
+                                      mapped.value.shader_name ? mapped.value.shader_name->str : nullptr);
+                                  std::memcpy(mapped.array_owner->data, mapped.value.shader_params,
+                                              sizeof(mapped.value.shader_params));
+                                  editor->impl->scene_manager->with_object(
+                                      mapped.scene, mapped.name,
+                                      [&](SceneObject* obj)
+                                      {
+                                          if (!obj || obj->type != SceneObjectType::NanoVDB ||
+                                              obj->lifetime_id != mapped.lifetime_id)
+                                              return;
+                                          obj->shader_name() = mapped.value.shader_name;
+                                          obj->params.shader_params_array = mapped.array_owner.get();
+                                          obj->params.shader_params_array_owner = mapped.array_owner;
+                                          obj->params.shader_params_layout = std::move(layout);
+                                          obj->shader_params() = mapped.array_owner->data;
+                                          obj->shader_params_data_type() = nullptr;
+                                          shader_changed = true;
+                                      });
+                              }
+                              catch (const std::exception& error)
+                              {
+                                  Console::getInstance().addLog(
+                                      Console::LogLevel::Error, "Cannot unmap shader: %s", error.what());
                               }
                           }
                       });
-    return shader_name_changed;
+    return shader_changed;
 }
 
 void param_map_stack_push(pnanovdb_editor_t* editor, ParamMapFrame frame)
