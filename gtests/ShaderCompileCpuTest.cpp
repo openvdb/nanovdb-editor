@@ -86,6 +86,7 @@ TEST(NanoVDBEditor, ShaderCompilesViaCpuCompiler)
 
     if (!slangLlvmAvailable)
     {
+        pnanovdb_compiler_free(&compiler);
         GTEST_SKIP() << "Slang LLVM not found at: " << slangLlvmPath;
     }
 
@@ -101,11 +102,12 @@ TEST(NanoVDBEditor, ShaderCompilesViaCpuCompiler)
         pnanovdb_compiler_instance_t* compiler_inst = compiler.create_instance();
         ASSERT_NE(compiler_inst, nullptr);
 
+        pnanovdb_bool_t shader_updated = PNANOVDB_FALSE;
         pnanovdb_bool_t result =
-            compiler.compile_shader_from_file(compiler_inst, shader_path.c_str(), &compile_settings, nullptr);
+            compiler.compile_shader_from_file(compiler_inst, shader_path.c_str(), &compile_settings, &shader_updated);
         compiler.destroy_instance(compiler_inst);
-
-        ASSERT_NE(result, PNANOVDB_FALSE) << "Compilation of CPU shader failed: " << shader_path;
+        EXPECT_NE(result, PNANOVDB_FALSE) << "Compilation of CPU shader failed: " << shader_path;
+        EXPECT_EQ(shader_updated, PNANOVDB_TRUE);
     }
 
     pnanovdb_compiler_free(&compiler);

@@ -11,6 +11,7 @@
 #include <imgui_internal.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -160,6 +161,46 @@ TEST_F(ShaderColorRampTest, ValidRampKeepsCountFieldOrderWithoutChangingHdrValue
         EXPECT_EQ(text.find("stop_red"), std::string::npos);
         EXPECT_EQ(before, bytes());
     }
+}
+
+TEST_F(ShaderColorRampTest, ShortNumericDefaultsZeroFillWithoutOverwritingOutput)
+{
+    const auto check = [&](const char* type, auto one, auto two)
+    {
+        using Value = decltype(one);
+        for (bool empty : { true, false })
+        {
+            SCOPED_TRACE(type);
+            SCOPED_TRACE(empty);
+            compiled = { { "ShaderParams", { { "vector", { { "type", type }, { "elementCount", 3 } } } } } };
+            hints = { { "ShaderParams",
+                        { { "vector", { { "value", empty ? nlohmann::ordered_json::array() :
+                                                           nlohmann::ordered_json{ 1, 2 } } } } } } };
+            reload();
+
+            const std::array<Value, 3> expected{ empty ? Value(0) : one, empty ? Value(0) : two, Value(0) };
+            for (bool defaults : { false, true })
+            {
+                SCOPED_TRACE(defaults);
+                std::vector<char> output(sizeof(expected) + 2, 0x7f);
+                const size_t written = defaults ?
+                    params.copy_default_params_to_buffer(shader, output.data() + 1, sizeof(expected)) :
+                    params.copy_params_to_buffer(shader, output.data() + 1, sizeof(expected));
+                ASSERT_EQ(written, sizeof(expected));
+                EXPECT_EQ(std::memcmp(output.data() + 1, expected.data(), sizeof(expected)), 0);
+                EXPECT_EQ(output.front(), 0x7f);
+                EXPECT_EQ(output.back(), 0x7f);
+            }
+        }
+    };
+
+    check("int", int32_t(1), int32_t(2));
+    check("uint", uint32_t(1), uint32_t(2));
+    check("int64", int64_t(1), int64_t(2));
+    check("uint64", uint64_t(1), uint64_t(2));
+    check("float16", uint16_t(0x3c00), uint16_t(0x4000));
+    check("float", 1.0f, 2.0f);
+    check("double", 1.0, 2.0);
 }
 
 TEST_F(ShaderColorRampTest, GroupAllocatesOmittedInactiveColorBeforeShaderRuns)

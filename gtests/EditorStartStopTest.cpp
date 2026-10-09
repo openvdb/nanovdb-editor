@@ -29,6 +29,50 @@
 #include <thread>
 #include <tuple>
 
+namespace
+{
+using CreateArrayFn = decltype(pnanovdb_compute_t::create_array);
+using DestroyArrayFn = decltype(pnanovdb_compute_t::destroy_array);
+CreateArrayFn tracked_create_array = nullptr;
+DestroyArrayFn tracked_destroy_array = nullptr;
+std::atomic<int> live_param_arrays{0};
+
+pnanovdb_compute_array_t* count_param_array_create(size_t size,
+                                                   pnanovdb_uint64_t count,
+                                                   const void* data)
+{
+    auto* array = tracked_create_array(size, count, data);
+    if (array && size * count == PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE)
+        ++live_param_arrays;
+    return array;
+}
+
+void count_param_array_destroy(pnanovdb_compute_array_t* array)
+{
+    if (array && array->element_size * array->element_count == PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE)
+        --live_param_arrays;
+    tracked_destroy_array(array);
+}
+
+void start_tracking_param_arrays(pnanovdb_compute_t& compute)
+{
+    tracked_create_array = compute.create_array;
+    tracked_destroy_array = compute.destroy_array;
+    live_param_arrays = 0;
+    compute.create_array = count_param_array_create;
+    compute.destroy_array = count_param_array_destroy;
+}
+
+void stop_tracking_param_arrays(pnanovdb_compute_t& compute)
+{
+    if (tracked_create_array)
+    {
+        compute.create_array = tracked_create_array;
+        compute.destroy_array = tracked_destroy_array;
+    }
+}
+}
+
 class EditorStreamingTest : public ::testing::Test
 {
 protected:
@@ -73,6 +117,7 @@ protected:
         if (editor.module)
         {
             editor.stop(&editor);
+            stop_tracking_param_arrays(compute);
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             pnanovdb_editor_free(&editor);
         }
@@ -90,6 +135,9 @@ protected:
         }
         if (compute.module)
         {
+            // Array owners can retain the hooked destroy callback until teardown.
+            tracked_create_array = nullptr;
+            tracked_destroy_array = nullptr;
             pnanovdb_compute_free(&compute);
         }
         if (compiler.module)
@@ -100,12 +148,25 @@ protected:
 
     pnanovdb_bool_t run_on_render_thread(std::function<pnanovdb_bool_t()> task)
     {
-        return editor.impl->editor_worker->render_thread_tasks.run_blocking([&]()
+        auto worker = editor.impl->editor_worker;
+        if (!worker)
+            return PNANOVDB_FALSE;
+        auto queued_task = worker->render_thread_tasks.enqueue_blocking([&, task = std::move(task)]()
         {
             // The test and editor DLL keep separate ImGui context pointers.
             ImGui::SetCurrentContext(editor.impl->editor_scene->get_imgui_instance()->context);
             return task();
         });
+        if (!queued_task)
+            return PNANOVDB_FALSE;
+        std::unique_lock<std::mutex> lock(queued_task->mutex);
+        if (!queued_task->cv.wait_for(lock, std::chrono::seconds(120), [&]() { return queued_task->done; }))
+        {
+            lock.unlock();
+            editor.stop(&editor);
+            return PNANOVDB_FALSE;
+        }
+        return queued_task->result;
     }
 
     bool wait_for_ui(std::function<bool()> predicate, std::chrono::seconds timeout = std::chrono::seconds(10))
@@ -420,32 +481,6 @@ TEST(NanoVDBEditor, WorkerRestartUsesFreshTaskQueueState)
         << "restarted worker's queue must accept and run work independent of the closed one";
 }
 
-namespace
-{
-using CreateArrayFn = decltype(pnanovdb_compute_t::create_array);
-using DestroyArrayFn = decltype(pnanovdb_compute_t::destroy_array);
-CreateArrayFn tracked_create_array = nullptr;
-DestroyArrayFn tracked_destroy_array = nullptr;
-std::atomic<int> live_param_arrays{0};
-
-pnanovdb_compute_array_t* count_param_array_create(size_t size,
-                                                   pnanovdb_uint64_t count,
-                                                   const void* data)
-{
-    auto* array = tracked_create_array(size, count, data);
-    if (array && size * count == PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE)
-        ++live_param_arrays;
-    return array;
-}
-
-void count_param_array_destroy(pnanovdb_compute_array_t* array)
-{
-    if (array && array->element_size * array->element_count == PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE)
-        --live_param_arrays;
-    tracked_destroy_array(array);
-}
-}
-
 TEST_F(EditorStreamingTest, RepeatedSelectedBufferUpdatesKeepParameterAllocationsBounded)
 {
     editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
@@ -459,19 +494,58 @@ TEST_F(EditorStreamingTest, RepeatedSelectedBufferUpdatesKeepParameterAllocation
         const auto selected = editor.impl->editor_scene->get_render_view_selection();
         EXPECT_EQ(selected.scene_token, scene_token);
         EXPECT_EQ(selected.name_token, object_token);
-        tracked_create_array = compute.create_array;
-        tracked_destroy_array = compute.destroy_array;
-        compute.create_array = count_param_array_create;
-        compute.destroy_array = count_param_array_destroy;
-        live_param_arrays = 0;
+        start_tracking_param_arrays(compute);
         for (int frame = 0; frame < 128; ++frame)
         {
             editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
         }
         const int growth = live_param_arrays.load();
-        compute.create_array = tracked_create_array;
-        compute.destroy_array = tracked_destroy_array;
+        stop_tracking_param_arrays(compute);
         EXPECT_LE(growth, 1) << "Selected stream updates retain old UI parameter arrays";
+        return PNANOVDB_TRUE;
+    }));
+}
+
+TEST_F(EditorStreamingTest, RepeatedUiParameterSyncKeepsAllocationsBounded)
+{
+    cfg.streaming = PNANOVDB_FALSE;
+    editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
+    ASSERT_TRUE(pnanovdb_editor_test::map_shader_defaults(
+        editor, compute, scene_token, object_token, "editor/wireframe.slang"));
+    ASSERT_TRUE(start_editor());
+    auto worker = editor.impl->editor_worker;
+    ASSERT_NE(worker, nullptr);
+    ASSERT_TRUE(wait_for_ui([&]()
+    {
+        return editor.impl->shader_params && editor.impl->shader_name == "editor/wireframe.slang" &&
+               !worker->params_dirty.load();
+    }, std::chrono::seconds(120)));
+    ASSERT_TRUE(run_on_render_thread([&]()
+    {
+        start_tracking_param_arrays(compute);
+        return PNANOVDB_TRUE;
+    }));
+    for (pnanovdb_uint32_t update = 0; update < 128; ++update)
+    {
+        ASSERT_TRUE(run_on_render_thread([&, update]()
+        {
+            *static_cast<pnanovdb_uint32_t*>(editor.impl->shader_params) = update % 2;
+            worker->params_dirty.store(true);
+            return PNANOVDB_TRUE;
+        }));
+        ASSERT_TRUE(wait_for_ui([&]() { return !worker->params_dirty.load(); }, std::chrono::seconds(120)));
+    }
+    ASSERT_TRUE(run_on_render_thread([&]()
+    {
+        EXPECT_LE(live_param_arrays.load(), 1) << "UI synchronization retains old parameter buffers";
+        auto* snapshot = editor.impl->scene_manager->shader_params.get_compute_array_for_shader(
+            editor.impl->shader_name, &compute);
+        EXPECT_NE(snapshot, nullptr);
+        if (snapshot)
+        {
+            EXPECT_EQ(*static_cast<const pnanovdb_uint32_t*>(snapshot->data), 1u);
+            compute.destroy_array(snapshot);
+        }
         return PNANOVDB_TRUE;
     }));
 }
