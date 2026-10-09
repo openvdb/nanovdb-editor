@@ -182,8 +182,8 @@ bool SlangCompiler::compileFile(const char* sourceFile,
     inFile.close();
 
     const char* out;
-    std::filesystem::path fsPath(sourceFile);
-    if (!compile(settings, fsPath.filename().string().c_str(), code.c_str(), numIncludePaths, includePaths) && !shader_)
+    std::filesystem::path fsPath = std::filesystem::absolute(sourceFile);
+    if (!compile(settings, fsPath.string().c_str(), code.c_str(), numIncludePaths, includePaths) && !shader_)
     {
         SLANG_COMPILER_LOG("Error: Slang shader compilation of '%s' failed\n", variableName);
         return false;
@@ -252,7 +252,24 @@ bool SlangCompiler::compile(const pnanovdb_compiler_settings_t* settings,
     TargetDesc targetDesc;
 
     std::filesystem::path tempDir;
-    std::filesystem::path originalPath;
+    std::error_code pathError;
+    std::filesystem::path originalPath = std::filesystem::current_path(pathError);
+    if (pathError && settings->compile_target == PNANOVDB_COMPILE_TARGET_CPU)
+    {
+        SLANG_COMPILER_LOG("Error: Cannot get the working directory: %s\n", pathError.message().c_str());
+        return false;
+    }
+    std::string originalPathString = originalPath.string();
+    std::vector<const char*> searchPaths;
+    // Search the caller's working directory before configured include paths.
+    if (!pathError)
+    {
+        searchPaths.push_back(originalPathString.c_str());
+    }
+    for (size_t i = 0; i < numIncludePaths; i++)
+    {
+        searchPaths.push_back(includePaths[i]);
+    }
     std::string dumpPrefix;
 
 #ifdef ASM_DEBUG_OUTPUT
@@ -264,8 +281,7 @@ bool SlangCompiler::compile(const pnanovdb_compiler_settings_t* settings,
 
         // Create a temporary directory for intermediates and make it the current working directory
         tempDir = createTempDirectory(shader_->computeShader.timestamp);
-        dumpPrefix = std::string(codeFileName) + "_";
-        originalPath = std::filesystem::current_path();
+        dumpPrefix = std::filesystem::path(codeFileName).filename().string() + "_";
         std::filesystem::current_path(tempDir);
     }
     else if (settings->hlsl_output)
@@ -286,8 +302,8 @@ bool SlangCompiler::compile(const pnanovdb_compiler_settings_t* settings,
 
     sessionDesc.targets = &targetDesc;
     sessionDesc.targetCount = 1;
-    sessionDesc.searchPaths = includePaths;
-    sessionDesc.searchPathCount = numIncludePaths;
+    sessionDesc.searchPaths = searchPaths.data();
+    sessionDesc.searchPathCount = searchPaths.size();
     sessionDesc.defaultMatrixLayoutMode =
         settings->is_row_major ? SLANG_MATRIX_LAYOUT_ROW_MAJOR : SLANG_MATRIX_LAYOUT_COLUMN_MAJOR;
 
@@ -579,12 +595,14 @@ ShaderDataPtr compileShader(SlangCompiler& compiler,
                             const pnanovdb_compiler_settings_t* settings)
 {
     std::string code = source->source == nullptr ? "" : source->source;
+    std::string shaderPath = source->source_filename == nullptr ? "" : source->source_filename;
     if (source->source_filename != nullptr)
     {
-        std::string shaderPath = pnanovdb_shader::getShaderFilePath(source->source_filename);
-        std::ifstream inFile(shaderPath);
+        const std::string resolvedShaderPath = pnanovdb_shader::getShaderFilePath(source->source_filename);
+        std::ifstream inFile(resolvedShaderPath);
         if (inFile)
         {
+            shaderPath = std::filesystem::absolute(resolvedShaderPath).string();
             code = std::string((std::istreambuf_iterator<char>(inFile)), std::istreambuf_iterator<char>());
             inFile.close();
 
@@ -631,9 +649,8 @@ ShaderDataPtr compileShader(SlangCompiler& compiler,
         }
     }
 
-    std::filesystem::path fsPath(source->source_filename);
-    const bool result = compiler.compile(
-        settings, fsPath.filename().string().c_str(), code.c_str(), includePaths.size(), includePaths.data());
+    const bool result =
+        compiler.compile(settings, shaderPath.c_str(), code.c_str(), includePaths.size(), includePaths.data());
 
     for (auto& includePath : includePaths)
     {
