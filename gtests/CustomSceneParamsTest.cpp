@@ -341,3 +341,42 @@ TEST(NanoVDBEditor, CustomSceneParamsRejectsInvalidReadOnlyField)
         EXPECT_NE(error.find("readOnlyField"), std::string::npos) << error;
     }
 }
+
+TEST(NanoVDBEditor, CustomSceneParamsReadOnlyKeepsMappedValues)
+{
+    pnanovdb_editor::CustomSceneParams params;
+    std::string error_message;
+    ASSERT_TRUE(params.loadFromJsonString(R"json({"SceneParams": {
+        "Play": {"type": "bool", "value": true, "group": "Settings"},
+        "Frame": {"type": "uint", "value": 12, "readOnly": true, "group": "Settings"}
+    }})json", "controls", &error_message)) << error_message;
+    const auto* data_type = params.dataType();
+    ASSERT_NE(data_type, nullptr);
+    ASSERT_EQ(data_type->child_reflect_data_count, 2u);
+    const auto& frame = data_type->child_reflect_datas[1];
+    auto* frame_value = reinterpret_cast<pnanovdb_uint32_t*>(static_cast<char*>(params.data()) + frame.data_offset);
+    EXPECT_EQ(*frame_value, 12u);
+    *frame_value = 13u;
+    EXPECT_EQ(*frame_value, 13u);
+}
+
+TEST(NanoVDBEditor, CustomSceneParamsVisibility)
+{
+    pnanovdb_editor::CustomSceneParams params;
+    EXPECT_FALSE(params.hasVisibleFields());
+    ASSERT_TRUE(params.loadFromJsonString(R"json({"SceneParams": {
+        "Play": {"type": "bool", "group": "Simulation"},
+        "Counter": {"type": "uint", "hidden": true}
+    }})json"));
+    EXPECT_TRUE(params.hasVisibleFields());
+
+    ASSERT_TRUE(params.loadFromJsonString(R"json({"SceneParams": {
+        "Frame": {"type": "uint", "readOnly": true}
+    }})json"));
+    EXPECT_TRUE(params.hasVisibleFields());
+
+    ASSERT_TRUE(params.loadFromJsonString(R"json({"SceneParams": {
+        "Counter": {"type": "uint", "hidden": true}
+    }})json"));
+    EXPECT_FALSE(params.hasVisibleFields());
+}

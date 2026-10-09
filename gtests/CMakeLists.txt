@@ -57,8 +57,11 @@ ConfigureTest(PipelineShaderCompileTest PipelineShaderCompileTest.cpp)
 ConfigureTest(ComputeDispatchTest ComputeDispatchTest.cpp)
 ConfigureTest(ShaderCompileCpuTest ShaderCompileCpuTest.cpp)
 ConfigureTest(FileFormatTest FileFormatTest.cpp)
-ConfigureTest(EditorStartStopTest EditorStartStopTest.cpp)
+ConfigureTest(EditorStartStopTest EditorStartStopTest.cpp ../editor/Console.cpp)
+target_include_directories(EditorStartStopTest PRIVATE ${FileWatch_SOURCE_DIR})
+target_link_libraries(EditorStartStopTest PRIVATE ImGuiColorTextEdit)
 ConfigureTest(RenderThreadTaskQueueTest RenderThreadTaskQueueTest.cpp)
+ConfigureTest(StreamingApiTest StreamingApiTest.cpp)
 ConfigureTest(EditorRapidAddRemoveTest EditorRapidAddRemoveTest.cpp GpuTestSupport.cpp)
 ConfigureTest(EditorHeadlessNonStreamingTest EditorHeadlessNonStreamingTest.cpp)
 ConfigureTest(EditorViewportCameraSyncTest
@@ -69,23 +72,19 @@ ConfigureTest(EditorSlangCompileSpeedTest EditorSlangCompileSpeedTest.cpp)
 ConfigureTest(CustomSceneParamsTest
   CustomSceneParamsTest.cpp
   CustomSceneParamsRenderTest.cpp
-  ImGuiTestSupport.cpp
   ../editor/CustomSceneParams.cpp
   ../editor/CustomSceneParamsRender.cpp
   ../editor/ParamWidget.cpp
 )
-target_link_libraries(CustomSceneParamsTest PRIVATE imgui)
-ConfigureTest(ColorRampTest ColorRampTest.cpp ImGuiTestSupport.cpp ../editor/ColorRamp.cpp)
-target_link_libraries(ColorRampTest PRIVATE imgui)
+ConfigureTest(ColorRampTest ColorRampTest.cpp ../editor/ColorRamp.cpp)
 ConfigureTest(ShaderColorRampTest
   ShaderColorRampTest.cpp
-  ImGuiTestSupport.cpp
   ConsoleTestSupport.cpp
   ../editor/ColorRamp.cpp
   ../editor/ParamWidget.cpp
   ../editor/ShaderParams.cpp
 )
-target_link_libraries(ShaderColorRampTest PRIVATE ImGuiColorTextEdit imgui)
+target_link_libraries(ShaderColorRampTest PRIVATE ImGuiColorTextEdit)
 ConfigureTest(ShaderColorRampPackingTest ShaderColorRampPackingTest.cpp GpuTestSupport.cpp)
 target_compile_definitions(ShaderColorRampPackingTest PRIVATE PNANOVDB_TEST_SHADER_CACHE="${COMPILED_SHADERS_DIR}")
 ConfigureTest(MapPinTest MapPinTest.cpp EditorTestSupport.cpp)
@@ -122,7 +121,12 @@ get_target_property(_scene_serializer_test_libs SceneSerializerTest LINK_LIBRARI
 list(REMOVE_ITEM _scene_serializer_test_libs pnanovdbeditor)
 set_target_properties(SceneSerializerTest PROPERTIES LINK_LIBRARIES "${_scene_serializer_test_libs}")
 target_compile_definitions(SceneSerializerTest PRIVATE pnanovdbeditor_EXPORTS)
-target_link_libraries(SceneSerializerTest PRIVATE ImGuiColorTextEdit imgui)
+target_link_libraries(SceneSerializerTest PRIVATE ImGuiColorTextEdit)
+
+foreach(test_target ColorRampTest CustomSceneParamsTest ShaderColorRampTest EditorStartStopTest SceneSerializerTest)
+  target_sources(${test_target} PRIVATE ImGuiTestSupport.cpp)
+  target_link_libraries(${test_target} PRIVATE imgui)
+endforeach()
 
 # CPU-only concurrency tests - run locally with: ctest -L threadsafety
 set_tests_properties(RenderThreadTaskQueueTest ShaderParamsConcurrencyTest PROPERTIES LABELS "threadsafety")

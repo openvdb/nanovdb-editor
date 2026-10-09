@@ -1,0 +1,240 @@
+{
+    "ShaderParams": {
+        "attenuation": {
+            "value": 0.05,
+            "min": 0,
+            "max": 10,
+            "step": 0.01
+        },
+        "step_size_scale": {
+            "value": 0.75,
+            "min": 0.01,
+            "max": 4,
+            "step": 0.05
+        },
+        "color_scale": {
+            "value": 2.5,
+            "min": 0,
+            "max": 20,
+            "step": 0.1
+        },
+        "fallback_temperature": {
+            "value": 0,
+            "min": 0,
+            "max": 1,
+            "step": 0.01
+        },
+        "colormap_min": {
+            "value": 0,
+            "min": 0,
+            "max": 1,
+            "step": 0.01
+        },
+        "colormap_max": {
+            "value": 1,
+            "min": 0,
+            "max": 1,
+            "step": 0.01
+        },
+        "colormap_resolution": {
+            "value": 32,
+            "min": 1,
+            "max": 256,
+            "step": 1
+        },
+        "point_count": {
+            "widget": "colorRamp",
+            "label": "Color ramp",
+            "positions": [
+                "point_positions0",
+                "point_positions1"
+            ],
+            "colors": [
+                "point_color0",
+                "point_color1",
+                "point_color2",
+                "point_color3",
+                "point_color4",
+                "point_color5",
+                "point_color6",
+                "point_color7"
+            ],
+            "tooltip": "Temperature maps left to right. Cold smoke samples near the left end. Alpha controls density; RGB supports HDR values.",
+            "value": 6,
+            "min": 1,
+            "max": 8,
+            "step": 1
+        },
+        "point_positions0": {
+            "value": [
+                0,
+                0.05,
+                0.15,
+                0.6
+            ],
+            "min": 0,
+            "max": 1,
+            "step": 0.01
+        },
+        "point_positions1": {
+            "value": [
+                0.85,
+                1,
+                1,
+                1
+            ],
+            "min": 0,
+            "max": 1,
+            "step": 0.01
+        },
+        "point_color0": {
+            "value": [
+                0.9,
+                0.9,
+                0.9,
+                0.004902
+            ],
+            "min": 0,
+            "max": 10,
+            "step": 0.01
+        },
+        "point_color1": {
+            "value": [
+                0.9,
+                0.9,
+                0.9,
+                0.904902
+            ],
+            "min": 0,
+            "max": 10,
+            "step": 0.01
+        },
+        "point_color2": {
+            "value": [
+                0.9,
+                0.9,
+                0.9,
+                0.904902
+            ],
+            "min": 0,
+            "max": 10,
+            "step": 0.01
+        },
+        "point_color3": {
+            "value": [
+                0.9,
+                0.9,
+                0.9,
+                0.904902
+            ],
+            "min": 0,
+            "max": 10,
+            "step": 0.01
+        },
+        "point_color4": {
+            "value": [
+                0.9,
+                0.9,
+                0.9,
+                0.904902
+            ],
+            "min": 0,
+            "max": 10,
+            "step": 0.01
+        },
+        "point_color5": {
+            "value": [
+                0.9,
+                0.9,
+                0.9,
+                0.904902
+            ],
+            "min": 0,
+            "max": 10,
+            "step": 0.01
+        },
+        "point_color6": {
+            "value": [
+                0.9,
+                0.9,
+                0.9,
+                0.904902
+            ],
+            "min": 0,
+            "max": 10,
+            "step": 0.01
+        },
+        "point_color7": {
+            "value": [
+                0.9,
+                0.9,
+                0.9,
+                0.904902
+            ],
+            "min": 0,
+            "max": 10,
+            "step": 0.01
+        },
+        "shadow_direction": {
+            "value": [
+                1,
+                1,
+                1
+            ],
+            "min": -1,
+            "max": 1,
+            "step": 0.01
+        },
+        "shadow_factor": {
+            "value": 1,
+            "min": 0,
+            "max": 1,
+            "step": 0.01
+        },
+        "shadow_attenuation": {
+            "value": 0.045,
+            "min": 0,
+            "max": 10,
+            "step": 0.01
+        },
+        "shadow_step_size_scale": {
+            "value": 0.75,
+            "min": 0.01,
+            "max": 4,
+            "step": 0.05
+        },
+        "shadow_step_offset_scale": {
+            "value": 1,
+            "min": 0,
+            "max": 4,
+            "step": 0.05
+        },
+        "shadow_min_intensity": {
+            "value": 0.125,
+            "min": 0,
+            "max": 1,
+            "step": 0.01
+        },
+        "shadow_num_steps": {
+            "value": 16,
+            "min": 0,
+            "max": 128,
+            "step": 1
+        },
+        "shadow_cell_size_scale": {
+            "value": 2,
+            "min": 1,
+            "max": 8,
+            "step": 1
+        },
+        "shadow_colormap_range": {
+            "value": [
+                0,
+                1
+            ],
+            "min": 0,
+            "max": 1,
+            "step": 0.01
+        }
+    }
+}

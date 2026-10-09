@@ -14,6 +14,7 @@
 #include "EditorToken.h"
 #include "nanovdb_editor/putil/Shader.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <fstream>
 #include <filesystem>
@@ -634,6 +635,13 @@ void CustomSceneParams::rebuildDescriptorViews()
     m_data_type.child_reflect_datas = m_reflect_fields.empty() ? nullptr : m_reflect_fields.data();
     m_data_type.child_reflect_data_count = m_reflect_fields.size();
     m_data_type.default_value = nullptr;
+}
+
+bool CustomSceneParams::hasVisibleFields() const
+{
+    std::lock_guard<std::mutex> lock(m_data_mutex);
+    return std::any_of(m_fields.begin(), m_fields.end(),
+                       [](const Field& field) { return !field.is_hidden; });
 }
 
 } // namespace pnanovdb_editor

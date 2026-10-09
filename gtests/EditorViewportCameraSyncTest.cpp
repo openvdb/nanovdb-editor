@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <gtest/gtest.h>
+#include <cstring>
 
 #include "editor/EditorToken.h"
 #include "editor/SceneView.h"
+#include "imgui/ImguiWindow.h"
 
 namespace pnanovdb_editor
 {
@@ -63,6 +65,26 @@ TEST(NanoVDBEditor, SceneViewPreservesViewportCameraContextOnReAdd)
         EXPECT_EQ(synced_context.camera_state.get(), original_context.camera_state.get());
         EXPECT_EQ(synced_context.camera_view->states, synced_context.camera_state.get());
     }
+}
+
+TEST(NanoVDBEditor, ViewerStartupKeepsOnlyRegisteredScenes)
+{
+    pnanovdb_imgui_settings_render_t settings{};
+    std::strcpy(settings.ui_profile_name, "viewer");
+    SceneView scene_view;
+    scene_view.set_render_settings(&settings);
+    EXPECT_EQ(scene_view.get_or_create_scene(nullptr), nullptr);
+    EXPECT_FALSE(scene_view.has_scenes());
+
+    auto* scene_token = EditorToken::getInstance().getToken("flow-stage");
+    ASSERT_NE(scene_view.get_or_create_scene(scene_token), nullptr);
+    scene_view.set_current_scene(scene_token);
+    scene_view.initialize_for_startup(true);
+
+    const auto scenes = scene_view.get_all_scene_tokens();
+    ASSERT_EQ(scenes.size(), 1u);
+    EXPECT_EQ(scenes.front(), scene_token);
+    EXPECT_EQ(scene_view.get_current_scene_token(), scene_token);
 }
 
 } // namespace

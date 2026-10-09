@@ -29,6 +29,7 @@ void SceneObject::reset_source()
     resources.source_filepath.clear();
 
     params.shader_params_array = nullptr;
+    params.shader_params_layout.clear();
     params.shader_params = nullptr;
     params.shader_params_data_type = nullptr;
 
@@ -418,6 +419,7 @@ void SceneObject::restore_process_run_snapshot()
     ensure_shader_name_storage().value = snap.shader_name_value;
     params.shader_params_array = snap.shader_params_array;
     params.shader_params_array_owner = std::move(snap.shader_params_array_owner);
+    params.shader_params_layout = std::move(snap.shader_params_layout);
     shader_params() = snap.shader_params;
     shader_params_data_type() = snap.shader_params_data_type;
     resolve_resources();
@@ -449,6 +451,7 @@ void SceneObject::invalidate_process_from(int from)
     }
     snap.shader_params_array = params.shader_params_array;
     snap.shader_params_array_owner = params.shader_params_array_owner;
+    snap.shader_params_layout = params.shader_params_layout;
     snap.shader_params = shader_params();
     snap.shader_params_data_type = shader_params_data_type();
     snap.step_outputs.reserve(count - (size_t)from);

@@ -77,7 +77,7 @@ public:
     SceneView();
     ~SceneView() = default;
 
-    // Create the interactive default scene outside the viewer profile.
+    // Create the default scene for the full editor profile.
     void initialize_for_startup(bool is_viewer_profile);
     SceneViewData* get_or_create_scene(pnanovdb_editor_token_t* scene_token, bool create_default_camera = true);
 

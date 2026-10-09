@@ -14,6 +14,7 @@
 #include "EditorImport.h"
 #include "ShaderParams.h"
 #include "imgui/ImguiWindow.h"
+#include "imgui/UiProfile.h"
 
 #include "nanovdb_editor/putil/Editor.h"
 #include "nanovdb_editor/putil/Raster.h"
@@ -28,6 +29,7 @@
 #include <string>
 #include <atomic>
 #include <map>
+#include <set>
 #include <mutex>
 #include <memory>
 #include <deque>
@@ -127,6 +129,7 @@ struct UniformState
 
 struct Instance
 {
+    ImGuiContext* context = nullptr;
     PendingState pending;
     WindowState window;
 
@@ -139,6 +142,8 @@ struct Instance
     pnanovdb_imgui_settings_render_t* render_settings;
     pnanovdb_compiler_settings_t compiler_settings;
     std::mutex compiler_settings_mutex;
+    std::mutex shader_reload_mutex;
+    std::set<std::string> shader_reload_requests;
 
     pnanovdb_uint64_t last_timestamp = 0llu;
 
@@ -183,9 +188,14 @@ struct Instance
 
     void update_ini_filename_for_profile(const char* profile_name);
 
+    const pnanovdb_imgui::UiProfile& profile() const
+    {
+        return pnanovdb_imgui::ui_profile(render_settings->ui_profile_name);
+    }
+
     bool is_viewer() const
     {
-        return strcmp(render_settings->ui_profile_name, s_viewer_profile_name) == 0;
+        return profile().layout == pnanovdb_imgui::UiLayout::Viewer;
     }
 
     pnanovdb_shader::run_shader_func_t run_shader = [this](const char* shaderName,

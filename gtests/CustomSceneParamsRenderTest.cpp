@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 
 #include "editor/CustomSceneParams.h"
+#include "ImGuiTestSupport.h"
 
 #include <imgui_internal.h>
 
@@ -29,14 +30,7 @@ protected:
 
     void SetUp() override
     {
-        ImGui::CreateContext();
-        auto& io = ImGui::GetIO();
-        io.IniFilename = nullptr;
-        io.DisplaySize = ImVec2(640, 480);
-        io.DeltaTime = 1.f / 60.f;
-        unsigned char* pixels;
-        int width, height;
-        io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+        pnanovdb_editor_test::create_imgui_context();
     }
 
     void TearDown() override

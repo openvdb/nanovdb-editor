@@ -104,6 +104,22 @@ PNANOVDB_REFLECT_POINTER(pnanovdb_editor_token_t, shader_name, 0, 0)
 PNANOVDB_REFLECT_END(0)
 #undef PNANOVDB_REFLECT_TYPE
 
+typedef pnanovdb_uint8_t pnanovdb_editor_shader_params_t[PNANOVDB_COMPUTE_CONSTANT_BUFFER_MAX_SIZE];
+PNANOVDB_REFLECT_BUILTIN_IMPL(PNANOVDB_REFLECT_TYPE_UNKNOWN, pnanovdb_editor_shader_params_t)
+
+typedef struct pnanovdb_editor_shader_t
+{
+    pnanovdb_editor_token_t* shader_name;
+    pnanovdb_editor_shader_params_t shader_params;
+} pnanovdb_editor_shader_t;
+
+#define PNANOVDB_REFLECT_TYPE pnanovdb_editor_shader_t
+PNANOVDB_REFLECT_BEGIN()
+PNANOVDB_REFLECT_POINTER(pnanovdb_editor_token_t, shader_name, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_editor_shader_params_t, shader_params, 0, 0)
+PNANOVDB_REFLECT_END(0)
+#undef PNANOVDB_REFLECT_TYPE
+
 struct pnanovdb_editor_impl_t;
 typedef struct pnanovdb_editor_impl_t pnanovdb_editor_impl_t;
 typedef struct pnanovdb_editor_t
@@ -144,6 +160,8 @@ typedef struct pnanovdb_editor_t
     // Token-based API for scene object management
     pnanovdb_camera_t*(PNANOVDB_ABI* get_camera)(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene);
     pnanovdb_editor_token_t*(PNANOVDB_ABI* get_token)(const char* name);
+    // Copy the source buffer. Keep the material and pipelines of an existing in-memory NanoVDB object.
+    // Use add_nanovdb_3 to replace its material and pipeline configuration explicitly.
     void(PNANOVDB_ABI* add_nanovdb_2)(pnanovdb_editor_t* editor,
                                       pnanovdb_editor_token_t* scene,
                                       pnanovdb_editor_token_t* name,
@@ -163,6 +181,12 @@ typedef struct pnanovdb_editor_t
 
     // For any scene object, client can attempt to map parameters of a given type for read/write
     // Pass name=nullptr to map scene-level custom params using get_custom_scene_params_data_type()
+    // Map pnanovdb_editor_shader_t to replace a NanoVDB shader and its complete parameter buffer on unmap.
+    // Repeated shader maps on one thread share one buffer. Other threads stage independent complete updates.
+    // The last changed map to unmap wins. Shader and shader-name maps cannot overlap for the same object.
+    // Unmap before start, show, stop, shutdown, reset, or calls that wait for the render thread.
+    // Rejected void calls log an error. Rejected shutdown keeps the implementation alive.
+    // Before startup, load_scene can queue a scene file while parameters are mapped.
     // It is the server's job to deal with binary layout compatbility, converting to client layout as needed
     void*(PNANOVDB_ABI* map_params)(pnanovdb_editor_t* editor,
                                     pnanovdb_editor_token_t* scene,

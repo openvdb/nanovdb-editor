@@ -89,3 +89,109 @@ class TestCustomSceneParams:
 
         assert self.editor.reload_custom_scene_params_if_changed(scene) is True
         assert self.editor.reload_custom_scene_params_if_changed(scene) is False
+
+
+@pytest.fixture
+def custom_scene():
+    with nve.create_default(device=False) as session:
+        scene = session.scene("controls")
+        scene.set_custom_params({"SceneParams": {
+            "Play": {"type": "bool", "value": True, "group": "Settings"},
+            "Frame": {"type": "uint", "value": 12, "readOnly": True},
+            "Time (s)": {"type": "float", "value": 0.5},
+            "Light direction": {"type": "float", "value": [1.0, 2.0, 3.0]},
+            "Stage": {"type": "string", "value": "smoke", "length": 16},
+        }})
+        yield scene
+
+
+def test_scene_control_mapping_round_trip(custom_scene):
+    with custom_scene.custom_params() as params:
+        assert dict(params) == {
+            "Play": True, "Frame": 12, "Time (s)": 0.5,
+            "Light direction": (1.0, 2.0, 3.0), "Stage": "smoke",
+        }
+        params["Play"] = False
+        params["Frame"] = 13
+        params["Time (s)"] = 0.75
+        params["Light direction"] = (3.0, 2.0, 1.0)
+        params["Stage"] = "plume"
+    with custom_scene.custom_params() as params:
+        assert params["Play"] is False
+        assert params["Frame"] == 13
+        assert params["Time (s)"] == 0.75
+        assert params["Light direction"] == (3.0, 2.0, 1.0)
+        assert params["Stage"] == "plume"
+
+
+def test_scene_controls_release_after_exception(custom_scene):
+    with pytest.raises(RuntimeError, match="application error"):
+        with custom_scene.custom_params() as params:
+            params["Frame"] = 99
+            raise RuntimeError("application error")
+    with pytest.raises(RuntimeError, match="inside their context"):
+        _ = params["Frame"]
+    with pytest.raises(RuntimeError, match="inside their context"):
+        params["Frame"] = 0
+    with custom_scene.custom_params() as reopened:
+        assert reopened["Frame"] == 99
+
+
+@pytest.mark.parametrize("key,value,error", [
+    ("Play", 1, TypeError),
+    ("Frame", -1, ValueError),
+    ("Frame", 2**32, ValueError),
+    ("Frame", 1.5, TypeError),
+    ("Time (s)", float("nan"), ValueError),
+    ("Time (s)", 1e100, ValueError),
+    ("Light direction", [1.0, 2.0], ValueError),
+    ("Light direction", [1.0, float("inf"), 3.0], ValueError),
+    ("Stage", "x" * 16, ValueError),
+    ("Stage", "null\0byte", TypeError),
+    ("missing", 0, KeyError),
+])
+def test_scene_controls_reject_invalid_values(custom_scene, key, value, error):
+    with custom_scene.custom_params() as params:
+        before = dict(params)
+        with pytest.raises(error):
+            params[key] = value
+        assert dict(params) == before
+
+
+def test_empty_scene_controls_raise():
+    with nve.create_default(device=False) as session:
+        with pytest.raises(nve.PipelineError, match="no custom parameters"):
+            with session.scene("empty").custom_params():
+                pass
+
+
+def test_schema_reload_waits_for_mapped_context(custom_scene):
+    import threading
+
+    started = threading.Event()
+    reloaded = threading.Event()
+    errors = []
+
+    def reload_schema():
+        started.set()
+        try:
+            custom_scene.set_custom_params({"SceneParams": {
+                "New field": {"type": "uint64", "value": 2**40},
+            }})
+        except Exception as error:
+            errors.append(error)
+        finally:
+            reloaded.set()
+
+    with custom_scene.custom_params() as params:
+        thread = threading.Thread(target=reload_schema)
+        thread.start()
+        assert started.wait(5)
+        blocked = not reloaded.wait(0.1)
+        assert params["Frame"] == 12
+    thread.join(5)
+    assert not thread.is_alive()
+    assert not errors
+    assert blocked, "Schema replacement must wait for the mapped context"
+    with custom_scene.custom_params() as params:
+        assert dict(params) == {"New field": 2**40}

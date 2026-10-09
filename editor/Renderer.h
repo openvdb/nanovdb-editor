@@ -17,8 +17,10 @@
 #include "nanovdb_editor/putil/Compute.h"
 #include "../imgui/UploadBuffer.h"
 
-#include <string>
+#include <map>
+#include <memory>
 #include <mutex>
+#include <string>
 
 namespace imgui_instance_user
 {
@@ -96,7 +98,8 @@ public:
                         pnanovdb_compute_buffer_transient_t* editor_params_buffer,
                         pnanovdb_compute_buffer_transient_t* shader_params_buffer,
                         pnanovdb_compute_buffer_t** nanovdb_buffer,
-                        pnanovdb_compute_array_t** uploaded_nanovdb_array);
+                        pnanovdb_compute_array_t** uploaded_nanovdb_array,
+                        uint64_t source_revision = 0);
 
     /*!
         \brief Render Gaussian splatting data
@@ -169,9 +172,13 @@ public:
                                                  EditorSceneManager* scene_manager,
                                                  uint32_t composite = 0,
                                                  pnanovdb_editor_token_t* params_scene_token = nullptr,
-                                                 pnanovdb_editor_token_t* params_name_token = nullptr);
+                                                 pnanovdb_editor_token_t* params_name_token = nullptr,
+                                                 uint64_t source_revision = 0,
+                                                 std::shared_ptr<pnanovdb_compute_array_t> source_owner = {});
 
 private:
+    void clear_shader_contexts();
+
     // Internal structure for camera/editor parameters (mirrored from shader)
     struct EditorParams
     {
@@ -189,13 +196,13 @@ private:
     RendererConfig m_config;
 
     // Shader state
-    pnanovdb_shader_context_t* m_shader_context = nullptr;
-    std::string m_active_shader_name;
+    std::map<std::string, pnanovdb_shader_context_t*> m_shader_contexts;
     pnanovdb_compute_buffer_t* m_nanovdb_buffer = nullptr;
     pnanovdb_compute_array_t* m_uploaded_nanovdb_array = nullptr;
+    std::shared_ptr<pnanovdb_compute_array_t> m_uploaded_nanovdb_owner;
+    uint64_t m_uploaded_nanovdb_revision = 0;
     pnanovdb_compute_upload_buffer_t m_compute_upload_buffer;
     pnanovdb_compute_upload_buffer_t m_shader_params_upload_buffer;
-    bool m_dispatch_shader = true;
 };
 
 } // namespace pnanovdb_editor

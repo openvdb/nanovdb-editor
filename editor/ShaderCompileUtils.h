@@ -73,8 +73,17 @@ inline ShaderCallback get_shader_recompile_callback(imgui_instance_user::Instanc
             {
                 instance->pending.update_generated = true;
             }
-            // Always trigger shader update when a shader is recompiled
-            instance->pending.update_shader = true;
+            if (ok)
+            {
+                std::lock_guard<std::mutex> reload_lock(instance->shader_reload_mutex);
+                // The compiler cache identifies shaders by filename.
+                instance->shader_reload_requests.insert(std::filesystem::path(path).filename().generic_string());
+            }
+            else
+            {
+                // Include files can fail entry-point compilation but still change dependent shaders.
+                instance->pending.update_shader = true;
+            }
         }
 
         if (!sharedCompilerInstance)

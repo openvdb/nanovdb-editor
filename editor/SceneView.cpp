@@ -59,7 +59,9 @@ SceneView::SceneView()
 
 void SceneView::initialize_for_startup(bool is_viewer_profile)
 {
-    if (!is_viewer_profile)
+    if (!is_viewer_profile &&
+        (!m_imgui_settings ||
+         pnanovdb_imgui::ui_profile(m_imgui_settings->ui_profile_name).layout == pnanovdb_imgui::UiLayout::Editor))
     {
         pnanovdb_editor_token_t* default_scene = EditorToken::getInstance().getToken(DEFAULT_SCENE_NAME);
         get_or_create_scene(default_scene);
@@ -82,9 +84,8 @@ SceneViewData* SceneView::get_or_create_scene(pnanovdb_editor_token_t* scene_tok
 {
     if (!scene_token)
     {
-        // When in viewer profile, do not auto-create a default scene
-        if (m_imgui_settings && m_imgui_settings->ui_profile_name &&
-            strcmp(m_imgui_settings->ui_profile_name, imgui_instance_user::s_viewer_profile_name) == 0)
+        if (m_imgui_settings &&
+            pnanovdb_imgui::ui_profile(m_imgui_settings->ui_profile_name).layout != pnanovdb_imgui::UiLayout::Editor)
         {
             return nullptr;
         }

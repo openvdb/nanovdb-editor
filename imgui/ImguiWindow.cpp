@@ -11,6 +11,7 @@
 
 
 #include "ImguiWindowGlfw.h"
+#include "UiProfile.h"
 
 #include <vector>
 #include <thread>
@@ -104,6 +105,7 @@ struct Window
     pnanovdb_uint32_t width_encode_resize = 0;
     pnanovdb_uint32_t height_encode_resize = 0;
     pnanovdb_int32_t resolved_port = -2;
+    std::string window_title;
 
     pnanovdb_camera_t camera = {};
 
@@ -475,6 +477,7 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
                 ptr->encoder = nullptr;
                 return PNANOVDB_FALSE;
             }
+            pnanovdb_server_set_title(ptr->server, pnanovdb_imgui::ui_profile(user_settings->ui_profile_name).title);
             if (log_print)
             {
                 log_print(PNANOVDB_COMPUTE_LOG_LEVEL_INFO, "Running on server %s:%d", user_settings->server_address,
@@ -668,6 +671,17 @@ pnanovdb_bool_t update(const pnanovdb_compute_t* compute,
     {
         pnanovdb_uint64_t flushed_frame = 0llu;
         ptr->device_interface.flush(compute_queue, &flushed_frame, nullptr, nullptr);
+    }
+
+    const char* title = pnanovdb_imgui::ui_profile(user_settings->ui_profile_name).title;
+    if (ptr->window_title != title)
+    {
+        windowGlfwSetTitle(ptr->window_glfw, title);
+        ptr->window_title = title;
+        if (ptr->server)
+        {
+            pnanovdb_server_set_title(ptr->server, title);
+        }
     }
 
     // present frame

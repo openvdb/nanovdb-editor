@@ -16,6 +16,7 @@
 #include <stddef.h>
 #include <memory>
 #include <string>
+#include <thread>
 
 namespace pnanovdb_editor
 {
@@ -27,6 +28,7 @@ enum class ParamMapKind : uint8_t
 {
     ShaderParams, // regular obj->shader_params() pointer + shader_params_array_owner pinned
     ShaderName, // shader-name pinned for the map window
+    Shader, // staged shader name and parameter buffer
     CustomSceneParams, // custom-scene-params pinned + data_lock acquired
 };
 
@@ -34,6 +36,7 @@ struct ParamMapKey
 {
     ParamMapKind kind;
     uint64_t id; // Object key for shader data, parameter address for custom data.
+    std::thread::id thread_id{}; // Whole-shader staging is private to each thread.
 
     bool operator<(const ParamMapKey& other) const noexcept
     {
@@ -41,7 +44,11 @@ struct ParamMapKey
         {
             return static_cast<uint8_t>(kind) < static_cast<uint8_t>(other.kind);
         }
-        return id < other.id;
+        if (id != other.id)
+        {
+            return id < other.id;
+        }
+        return thread_id < other.thread_id;
     }
 };
 
@@ -72,6 +79,11 @@ pnanovdb_editor_shader_name_t* begin_shader_name_map(pnanovdb_editor_t* editor,
                                                      pnanovdb_editor_token_t* scene,
                                                      pnanovdb_editor_token_t* name,
                                                      ParamMapKey* out_key);
+
+pnanovdb_editor_shader_t* begin_shader_map(pnanovdb_editor_t* editor,
+                                           pnanovdb_editor_token_t* scene,
+                                           pnanovdb_editor_token_t* name,
+                                           ParamMapKey* out_key);
 
 void* begin_shader_params_map(pnanovdb_editor_t* editor,
                               pnanovdb_editor_token_t* scene,

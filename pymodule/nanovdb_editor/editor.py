@@ -2,8 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
+import json
 
 from contextlib import contextmanager
+from threading import RLock
 from typing import TYPE_CHECKING, Optional
 from ctypes import (
     Structure,
@@ -19,6 +21,7 @@ from ctypes import (
     c_float,
     byref,
     create_string_buffer,
+    memmove,
     pointer,
     sizeof,
 )
@@ -678,6 +681,7 @@ class Editor:
         # Custom scene params hot-reload bookkeeping, keyed by scene token id:
         #   _custom_params_files: {scene_id: (abs_path, last_mtime)}
         self._custom_params_files = {}
+        self._custom_params_lock = RLock()
 
     def _get_or_default_config(
         self,
@@ -983,21 +987,49 @@ class Editor:
         get_camera_func = self._editor.contents.get_camera
         return get_camera_func(self._editor, scene)
 
-    def get_camera_2(self, scene):
+    def get_camera_2(self, scene, *, default=False):
         """Get a copy of the camera for a given scene.
 
         Returns a fresh Camera value (safe to keep and to call concurrently), or
-        None if the scene has not been seen yet.
+        None if the scene has not been seen yet. With ``default=True``, return
+        the native default camera when the scene has no stored camera.
         """
         camera = Camera()
         get_camera_2_func = self._editor.contents.get_camera_2
         found = get_camera_2_func(self._editor, scene, byref(camera))
-        return camera if found else None
+        return camera if found or default else None
 
     def add_nanovdb_2(self, scene, name, array):
-        """Add NanoVDB data to scene with token-based API."""
+        """Copy NanoVDB data into a new or existing scene object.
+
+        Existing in-memory NanoVDB objects keep their material and pipelines.
+        The caller retains ownership of ``array``.
+        """
         add_nanovdb_2_func = self._editor.contents.add_nanovdb_2
         add_nanovdb_2_func(self._editor, scene, name, pointer(array))
+
+    def set_shader(self, scene, name, shader, *, parameters=None) -> None:
+        """Compile and assign a scene object's shader and JSON parameter values."""
+        shader = os.fspath(shader)
+        if not isinstance(shader, str) or not shader or "\0" in shader:
+            raise InvalidArgumentError("shader must be a nonempty path without null bytes")
+        if parameters is not None and not isinstance(parameters, dict):
+            raise InvalidArgumentError("parameters must be a dictionary")
+        try:
+            values = json.loads(json.dumps(parameters or {}, allow_nan=False))
+        except (TypeError, ValueError) as exc:
+            raise InvalidArgumentError("parameters must contain finite JSON values") from exc
+        if not self._compiler.compile_shader(shader):
+            raise PipelineError(f"Failed to compile shader {shader}: {self._compiler.get_diagnostics()}")
+        from ._shader import Shader, SHADER_TYPE, pack_shader_parameters
+
+        parameter_bytes = pack_shader_parameters(self._compiler, shader, values)
+        staged = Shader(shader_name=self.get_token(shader))
+        staged.shader_params[:] = parameter_bytes
+        with self.params(scene, name, byref(SHADER_TYPE)) as address:
+            if not address:
+                raise PipelineError("Cannot map shader: NanoVDB object does not exist or allocation failed")
+            memmove(address, byref(staged), sizeof(staged))
 
     def add_gaussian_data_2(self, scene, name, desc):
         """Add Gaussian data to scene with token-based API."""
@@ -1248,9 +1280,9 @@ class Editor:
         The JSON must contain an object-valued ``"SceneParams"`` entry; see
         ``CustomSceneParams`` on the C++ side for the supported field schema
         (``type``, ``value``, ``min``, ``max``, ``elementCount``, ...).
-        Success replaces all values with the JSON defaults. Unmap the scene's
-        custom parameters before replacing its schema; active custom maps
-        reject replacement.
+        Success replaces all values with the JSON defaults. Reloads wait for
+        ``Scene.custom_params()`` contexts on other Python threads. A remaining
+        native custom-parameter map rejects replacement.
 
         Args:
             scene: Scene token (from ``get_token``).
@@ -1268,13 +1300,14 @@ class Editor:
         # catches C++ exceptions at the ABI boundary).
         json_token = self.get_token(json_string)
         error_buf = create_string_buffer(1024)
-        ok = self._editor.contents.set_custom_scene_params(
-            self._editor,
-            scene,
-            json_token,
-            error_buf,
-            c_uint64(sizeof(error_buf)),
-        )
+        with self._custom_params_lock:
+            ok = self._editor.contents.set_custom_scene_params(
+                self._editor,
+                scene,
+                json_token,
+                error_buf,
+                c_uint64(sizeof(error_buf)),
+            )
         if not ok:
             message = error_buf.value.decode("utf-8", "replace") or "set_custom_scene_params failed"
             raise PipelineError(message)

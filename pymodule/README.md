@@ -75,6 +75,100 @@ with scene.nanovdb_from_mesh(indices=indices, positions=positions, register=Fals
 See [PIPELINES.md](PIPELINES.md) for the available pipelines, options, and a
 guide to exposing (pythonizing) more of them.
 
+### CPU NanoVDB buffers
+
+Pass raw, uncompressed grid bytes directly from a simulation. The buffer is
+copied into editor-owned memory, so the source can be released after the call:
+
+```py
+with nve.create_default() as app:
+    scene = app.scene("smoke")
+    with scene.nanovdb_from_buffer(
+        smoke_bytes + temperature_bytes,
+        name="smoke",
+        shader="editor/flow_smoke.slang",
+        shader_parameters={"attenuation": 0.05},
+    ):
+        app.show()
+```
+
+`bytes`, `bytearray`, contiguous `memoryview`, and contiguous NumPy arrays are
+accepted. Supply raw NanoVDB grids, without a compressed `.nvdb` file header.
+Concatenated grids are kept in order; the shader defines their interpretation.
+The Flow shader reads smoke first and optional temperature second. Header and
+size checks do not replace validation of the tree data by the producer.
+
+The buffer is registered before the optional material update. If that update
+fails, the object keeps the registered buffer and its current material.
+
+`nanovdb_from_buffer` creates a missing object. Reusing an in-memory NanoVDB
+object's name updates its source and preserves its material and pipelines.
+Explicit shader options apply new material settings. Set compatible shader and
+pipeline settings when changing the grid representation. Its returned `Grid`
+owns a separate copy and can be closed immediately after registration.
+Use `register=False` to create an owned grid without adding it to the scene.
+
+For live simulation, set the material on the first frame, then omit shader options
+and close each returned `Grid`; see the [Flow streaming example](../docs/flow-smoke.md).
+The lower-level `Editor.add_nanovdb_2()` accepts a borrowed
+compute-array descriptor and makes only the editor-owned copy. The renderer
+uses the latest buffer on its next frame; submissions do not wait for a frame
+or accumulate queued copies.
+
+`scene.set_shader(name, path, parameters={...})` compiles a custom shader and
+sets per-object values by reflected field name. Unspecified values use the
+shader's JSON defaults. Invalid fields and values raise an error without
+changing an existing shader assignment.
+
+### Application controls
+
+Named scenes and replaceable scene objects follow the same ownership pattern as
+[fVDB's visualization API](https://github.com/openvdb/fvdb-core/tree/main/fvdb/viz).
+Use custom scene parameters to connect application logic to editor controls:
+
+```py
+scene.set_custom_params({"SceneParams": {
+    "Play": {"type": "bool", "value": True,
+             "widget": "toggleButton", "activeLabel": "Stop"},
+    "Restart": {"type": "bool", "value": False,
+                "widget": "button", "sameLine": True, "tooltip": "Reload the simulation"},
+    "Frame": {"type": "uint", "value": 0, "readOnly": True},
+}})
+
+with scene.custom_params() as controls:
+    playing = controls["Play"]
+    restart = controls["Restart"]
+    controls["Restart"] = False
+    controls["Frame"] = frame_number
+# Advance the application after releasing the mapped controls.
+```
+
+The mapping reads current UI values and writes application values. It supports
+scalar numbers, booleans, strings, and numeric tuples. Field names are dictionary
+keys and can contain spaces. The mapping is valid only inside the context;
+returned values are copies. Use `dict(controls)` to copy all values at once.
+The context locks UI access, so
+keep it short and do simulation work after it exits. Grid registration and live
+buffer updates and `set_shader` can run inside the context. Do not call editor
+lifecycle methods, save or load scenes, or reload the schema inside a mapped
+context. Schema updates from other Python
+threads wait for the context to exit. Direct native calls are outside this
+Python lock.
+
+Scalar boolean fields support `widget="button"` and `widget="toggleButton"`.
+A button latches its value to true; the application reads and clears it to
+acknowledge the action. Multiple clicks before that clear represent one pending
+action. A toggle button flips its value and uses `activeLabel`, if supplied,
+when true. `sameLine: true` places a field beside the preceding visible field;
+`tooltip` supplies hover text. Without `widget`, fields keep their usual controls.
+
+`readOnly` disables UI edits, while Python can still publish status. With
+`ui_profile="nvflow"`, the title is "NanoVDB Editor - NvFlow" and the layout is
+the same as `ui_profile="viewer"` (fVDB). Custom scene controls appear in
+**Params**. Shader material controls,
+including color ramps, appear in **Properties**. Controls define state only: the application must poll and implement
+actions such as play or restart. No callbacks execute on the render thread.
+
 ### Shader Parameters
 Shaders can have defined struct with shader parameters which are intended to be shown in the editor's UI:
 ```hlsl

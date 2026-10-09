@@ -15,6 +15,9 @@
 #include "ImguiInstance.h"
 #include "Console.h"
 
+#include <filesystem>
+#include <set>
+
 namespace pnanovdb_editor
 {
 void Renderer::init(const RendererConfig& config)
@@ -38,6 +41,16 @@ void Renderer::init(const RendererConfig& config)
     }
 }
 
+void Renderer::clear_shader_contexts()
+{
+    for (const auto& [name, context] : m_shader_contexts)
+    {
+        if (context)
+            m_config.compute->destroy_shader_context(m_config.compute, m_config.device_queue, context);
+    }
+    m_shader_contexts.clear();
+}
+
 void Renderer::cleanup()
 {
     if (!m_initialized)
@@ -52,14 +65,7 @@ void Renderer::cleanup()
 
     if (compute_interface && compute_context)
     {
-        // Destroy shader context
-        if (m_shader_context)
-        {
-            m_config.compute->destroy_shader(
-                compute_interface, &m_config.compute->shader_interface, compute_context, m_shader_context);
-            m_shader_context = nullptr;
-            m_active_shader_name.clear();
-        }
+        clear_shader_contexts();
 
         // Destroy upload buffers
         pnanovdb_compute_upload_buffer_destroy(compute_context, &m_compute_upload_buffer);
@@ -73,7 +79,9 @@ void Renderer::cleanup()
         }
     }
 
+    m_uploaded_nanovdb_owner.reset();
     m_uploaded_nanovdb_array = nullptr;
+    m_uploaded_nanovdb_revision = 0;
     m_initialized = false;
 }
 
@@ -87,7 +95,8 @@ bool Renderer::render_nanovdb(pnanovdb_compute_array_t* nanovdb_array,
                               pnanovdb_compute_buffer_transient_t* editor_params_buffer,
                               pnanovdb_compute_buffer_transient_t* shader_params_buffer,
                               pnanovdb_compute_buffer_t** nanovdb_buffer,
-                              pnanovdb_compute_array_t** uploaded_nanovdb_array)
+                              pnanovdb_compute_array_t** uploaded_nanovdb_array,
+                              uint64_t source_revision)
 {
     if (!m_initialized || !nanovdb_array || !shader_context || !background_image)
     {
@@ -105,7 +114,8 @@ bool Renderer::render_nanovdb(pnanovdb_compute_array_t* nanovdb_array,
     }
 
     // Check if we need to update the NanoVDB buffer
-    if (nanovdb_array != *uploaded_nanovdb_array && *nanovdb_buffer)
+    if ((nanovdb_array != *uploaded_nanovdb_array || source_revision != m_uploaded_nanovdb_revision) &&
+        *nanovdb_buffer)
     {
         compute_interface->destroy_buffer(compute_context, *nanovdb_buffer);
         *nanovdb_buffer = nullptr;
@@ -124,6 +134,7 @@ bool Renderer::render_nanovdb(pnanovdb_compute_array_t* nanovdb_array,
     if (*nanovdb_buffer)
     {
         *uploaded_nanovdb_array = nanovdb_array;
+        m_uploaded_nanovdb_revision = source_revision;
     }
 
     return true;
@@ -162,7 +173,9 @@ ShaderDispatchResult Renderer::dispatch_nanovdb_shader(pnanovdb_compute_array_t*
                                                        EditorSceneManager* scene_manager,
                                                        uint32_t composite,
                                                        pnanovdb_editor_token_t* params_scene_token,
-                                                       pnanovdb_editor_token_t* params_name_token)
+                                                       pnanovdb_editor_token_t* params_name_token,
+                                                       uint64_t source_revision,
+                                                       std::shared_ptr<pnanovdb_compute_array_t> source_owner)
 {
     if (!m_initialized || !nanovdb_array || !background_image || !shader_name)
     {
@@ -179,57 +192,57 @@ ShaderDispatchResult Renderer::dispatch_nanovdb_shader(pnanovdb_compute_array_t*
         return ShaderDispatchResult::NoData;
     }
 
-    // Handle shader updates/compilation, also (re)compile when the requested per-object shader changes
-    const bool shader_changed = (m_active_shader_name != shader_name);
-    const bool needs_shader_compile = imgui_instance->pending.update_shader || shader_changed || !m_shader_context;
-    if (needs_shader_compile)
+    if (imgui_instance->pending.update_shader.exchange(false))
     {
-        std::lock_guard<std::mutex> lock(imgui_instance->compiler_settings_mutex);
-
-        if (imgui_instance->pending.update_shader)
+        if (!imgui_instance->editor_shader_name.empty())
         {
-            imgui_instance->pending.update_shader = false;
-
-            // Sync shader name from Code Editor to the selected scene object
-            if (!imgui_instance->editor_shader_name.empty())
-            {
-                imgui_instance->editor_scene->set_selected_object_shader_name(imgui_instance->editor_shader_name);
-                imgui_instance->editor_shader_name.clear();
-            }
+            editor_scene->set_selected_object_shader_name(imgui_instance->editor_shader_name);
+            imgui_instance->editor_shader_name.clear();
         }
-
-        // Destroy old shader context and create new one
-        m_config.compute->destroy_shader_context(m_config.compute, m_config.device_queue, m_shader_context);
-        m_shader_context = m_config.compute->create_shader_context(shader_name);
-
-        if (m_config.compute->init_shader(m_config.compute, m_config.device_queue, m_shader_context,
-                                          &imgui_instance->compiler_settings) == PNANOVDB_FALSE)
+        clear_shader_contexts();
+    }
+    std::set<std::string> reload_requests;
+    {
+        std::lock_guard<std::mutex> lock(imgui_instance->shader_reload_mutex);
+        reload_requests.swap(imgui_instance->shader_reload_requests);
+    }
+    if (!reload_requests.empty())
+    {
+        for (auto it = m_shader_contexts.begin(); it != m_shader_contexts.end();)
         {
-            // Compilation failed
-            m_dispatch_shader = false;
-            m_active_shader_name.clear();
-            return ShaderDispatchResult::CompilationFailed;
-        }
-        else
-        {
-            // Shader compiled successfully - reload params
-            editor_scene->reload_shader_params_for_current_view();
-
-            // Refresh params for all views using this shader
-            if (scene_manager)
+            if (reload_requests.count(std::filesystem::path(it->first).filename().generic_string()))
             {
-                scene_manager->refresh_params_for_shader(m_config.compute, shader_name);
+                m_config.compute->destroy_shader_context(m_config.compute, m_config.device_queue, it->second);
+                it = m_shader_contexts.erase(it);
             }
-
-            m_dispatch_shader = true;
-            m_active_shader_name = shader_name;
+            else
+            {
+                ++it;
+            }
         }
     }
-
-    // Skip dispatch if compilation failed previously
-    if (!m_dispatch_shader)
+    auto cached = m_shader_contexts.find(shader_name);
+    if (cached == m_shader_contexts.end())
     {
-        return ShaderDispatchResult::Skipped;
+        std::lock_guard<std::mutex> lock(imgui_instance->compiler_settings_mutex);
+        auto* context = m_config.compute->create_shader_context(shader_name);
+        if (m_config.compute->init_shader(m_config.compute, m_config.device_queue, context,
+                                          &imgui_instance->compiler_settings) == PNANOVDB_FALSE)
+        {
+            m_config.compute->destroy_shader_context(m_config.compute, m_config.device_queue, context);
+            return ShaderDispatchResult::CompilationFailed;
+        }
+        cached = m_shader_contexts.emplace(shader_name, context).first;
+        if (scene_manager)
+        {
+            scene_manager->refresh_params_for_shader(m_config.compute, shader_name);
+            const auto selection = editor_scene->get_render_view_selection();
+            if (selection.is_valid())
+            {
+                // Compilation reloads the UI pool even when object buffers stay unchanged.
+                editor_scene->refresh_object_from_scene_manager(selection.scene_token, selection.name_token, true);
+            }
+        }
     }
 
     // Setup editor/camera parameters
@@ -265,10 +278,14 @@ ShaderDispatchResult Renderer::dispatch_nanovdb_shader(pnanovdb_compute_array_t*
     auto* shader_upload_transient = pnanovdb_compute_upload_buffer_unmap(compute_context, &m_shader_params_upload_buffer);
 
     // Render NanoVDB
-    bool success =
-        render_nanovdb(nanovdb_array, m_shader_context, background_image, view, projection, image_width, image_height,
-                       upload_transient, shader_upload_transient, &m_nanovdb_buffer, &m_uploaded_nanovdb_array);
+    bool success = render_nanovdb(nanovdb_array, cached->second, background_image, view, projection, image_width,
+                                   image_height, upload_transient, shader_upload_transient, &m_nanovdb_buffer,
+                                   &m_uploaded_nanovdb_array, source_revision);
 
+    if (success)
+    {
+        m_uploaded_nanovdb_owner = std::move(source_owner);
+    }
     return success ? ShaderDispatchResult::Success : ShaderDispatchResult::Skipped;
 }
 

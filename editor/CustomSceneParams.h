@@ -98,6 +98,7 @@ public:
         return m_fields.empty() ? nullptr : &m_data_type;
     }
 
+    bool hasVisibleFields() const;
     void render();
     bool fillDesc(const char* shader_name, pnanovdb_shader_params_desc_t* out_desc) const;
 

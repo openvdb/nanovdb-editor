@@ -86,7 +86,7 @@ pnanovdb_imgui_instance_t* create(void* userdata,
     *((Instance**)userdata) = ptr;
 
     IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
+    ptr->context = ImGui::CreateContext();
 
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -117,7 +117,7 @@ void destroy(pnanovdb_imgui_instance_t* instance)
         pnanovdb_editor::saveIniSettings(ptr);
     }
 
-    ImGui::DestroyContext();
+    ImGui::DestroyContext(ptr->context);
 
     delete ptr;
 }
@@ -347,6 +347,7 @@ void update(pnanovdb_imgui_instance_t* instance)
 
         const char* profile_name = ptr->render_settings->ui_profile_name;
         bool profile_changed = (ptr->current_profile_name != profile_name);
+        const bool preserve_camera = profile_changed && ptr->loaded_ini_once;
         if (profile_changed)
         {
             ptr->update_ini_filename_for_profile(profile_name);
@@ -358,10 +359,20 @@ void update(pnanovdb_imgui_instance_t* instance)
 
         if (!ptr->loaded_ini_once)
         {
+            const auto camera_state = ptr->render_settings->camera_state;
+            const auto camera_config = ptr->render_settings->camera_config;
+            const auto is_y_up = ptr->render_settings->is_y_up;
+            const auto is_upside_down = ptr->render_settings->is_upside_down;
             bool isViewerProfile = ptr->is_viewer();
             if (isViewerProfile)
             {
                 ImGui::LoadIniSettingsFromMemory(viewer_ini.c_str(), viewer_ini.size());
+                // Keep the requested profile when loading the shared viewer layout.
+                for (auto& entry : ptr->saved_render_settings)
+                {
+                    snprintf(entry.second.ui_profile_name, sizeof(entry.second.ui_profile_name), "%s",
+                             ptr->current_profile_name.c_str());
+                }
             }
             else if (io.IniFilename && *io.IniFilename)
             {
@@ -384,17 +395,38 @@ void update(pnanovdb_imgui_instance_t* instance)
                 copyPersistentFields(*ptr->render_settings, it->second);
             }
 
-            // Apply loaded camera state from INI
-            if (ptr->editor_scene)
+            if (preserve_camera)
             {
-                pnanovdb_editor_token_t* name_token =
-                    pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
-                const pnanovdb_camera_state_t* state = ptr->editor_scene->get_saved_camera_state(name_token);
-                if (state)
+                // A layout change keeps the live viewport camera.
+                ptr->render_settings->camera_state = camera_state;
+                ptr->render_settings->camera_config = camera_config;
+                ptr->render_settings->is_y_up = is_y_up;
+                ptr->render_settings->is_upside_down = is_upside_down;
+            }
+            else if (ptr->editor_scene)
+            {
+                if (isViewerProfile)
                 {
-                    ptr->render_settings->camera_state = *state;
-                    ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                    ptr->editor_scene->initialize_for_startup(true);
                 }
+                else
+                {
+                    pnanovdb_editor_token_t* name_token =
+                        pnanovdb_editor::EditorToken::getInstance().getToken(ptr->render_settings_name.c_str());
+                    const pnanovdb_camera_state_t* state = ptr->editor_scene->get_saved_camera_state(name_token);
+                    if (state)
+                    {
+                        ptr->render_settings->camera_state = *state;
+                        ptr->render_settings->sync_camera = PNANOVDB_TRUE;
+                    }
+                }
+            }
+            if (preserve_camera || isViewerProfile)
+            {
+                auto* settings = ptr->render_settings;
+                settings->is_projection_rh = settings->camera_config.is_projection_rh;
+                settings->is_orthographic = settings->camera_config.is_orthographic;
+                settings->is_reverse_z = settings->camera_config.is_reverse_z;
             }
         }
     }
@@ -450,10 +482,10 @@ void Instance::update_ini_filename_for_profile(const char* profile_name)
 
     current_profile_name = profile_name ? profile_name : "";
 
-    bool isViewer = (profile_name && strcmp(profile_name, s_viewer_profile_name) == 0);
-    if (isViewer)
+    const auto layout = pnanovdb_imgui::ui_profile(profile_name).layout;
+    if (layout == pnanovdb_imgui::UiLayout::Viewer)
     {
-        // Viewer profile: load from memory, no file persistence
+        // Embedded profiles do not persist application settings.
         io.IniFilename = nullptr;
         current_ini_filename = "";
     }

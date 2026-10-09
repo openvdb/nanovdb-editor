@@ -337,9 +337,7 @@ jobs:
           Write-Host "Lavapipe installed successfully for x64"
 
       - name: Run GTests
-        run: |
-          cd build/gtests
-          ctest -C Release --output-on-failure --verbose
+        run: ./scripts/ci/run_gtests_windows.ps1
 
   nanovdb-editor-build-and-test-windows-arm:
     name: Build and Test (Windows ARM64)
@@ -472,9 +470,7 @@ jobs:
           Write-Host "Lavapipe installed successfully for ARM64"
 
       - name: Run GTests
-        run: |
-          cd build/gtests
-          ctest -C Release --output-on-failure --verbose
+        run: ./scripts/ci/run_gtests_windows.ps1
 
   nanovdb-editor-build-and-test-linux-arm:
     name: Build and Test (Linux ARM64)

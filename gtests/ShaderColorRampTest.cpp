@@ -5,6 +5,7 @@
 
 #include "ConsoleTestSupport.h"
 #include "editor/ShaderParams.h"
+#include "ImGuiTestSupport.h"
 #include "nanovdb_editor/putil/Shader.hpp"
 
 #include <imgui_internal.h>
@@ -51,14 +52,7 @@ protected:
                       { "stop_blue", { { "value", { 0.0, 0.0, 4.0, 6.0 } } } },
                       { "stop_unused", { { "value", { 0.0, 0.0, 0.0, 0.0 } } } } } } };
         reload();
-        ImGui::CreateContext();
-        auto& io = ImGui::GetIO();
-        io.IniFilename = nullptr;
-        io.DisplaySize = ImVec2(640, 480);
-        io.DeltaTime = 1.f / 60.f;
-        unsigned char* pixels;
-        int width, height;
-        io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+        pnanovdb_editor_test::create_imgui_context();
     }
 
     void TearDown() override

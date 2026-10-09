@@ -90,8 +90,12 @@ public:
         size_t fallback_size,
         const pnanovdb_reflect_data_type_t* fallback_data_type = nullptr);
 
-    // Reinitialize params arrays for all NanoVDB objects using the given shader
-    void refresh_params_for_shader(const pnanovdb_compute_t* compute, const char* shader_name);
+    static std::vector<ShaderParamLayout> load_shader_params_layout(const char* shader_name);
+
+    // Preserve compatible object values when a shader layout changes.
+    bool refresh_params_for_shader(const pnanovdb_compute_t* compute,
+                                   const char* shader_name,
+                                   bool preserve_values = true);
 
     /*!
         \brief Restore the pool of \p shader_name to its JSON-declared defaults
@@ -194,6 +198,19 @@ public:
                      pnanovdb_pipeline_type_t process_pipeline,
                      pnanovdb_pipeline_type_t render_pipeline,
                      std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_gaussian_owner_out = nullptr);
+
+    enum class NanoVDBAddResult
+    {
+        Failed,
+        Registered,
+        Updated
+    };
+
+    // Keep the material and pipelines of an existing in-memory grid. Always take ownership of array.
+    NanoVDBAddResult add_nanovdb(pnanovdb_editor_token_t* scene,
+                                 pnanovdb_editor_token_t* name,
+                                 pnanovdb_compute_array_t* array,
+                                 const pnanovdb_compute_t* compute);
 
     bool reserve_load_target(pnanovdb_editor_token_t* scene,
                              pnanovdb_editor_token_t* name,
@@ -620,6 +637,12 @@ private:
         m_lifetime_to_key[obj.lifetime_id] = key;
     }
 
+    void begin_object_registration(SceneObject& obj, uint64_t key)
+    {
+        begin_object_lifetime(obj, key);
+        obj.registration_id = obj.lifetime_id;
+    }
+
     void forget_object_lifetime(const SceneObject& obj)
     {
         if (obj.lifetime_id != 0)
@@ -642,7 +665,7 @@ private:
                                      SceneObjectType type)
     {
         SceneObject& obj = m_objects[key];
-        begin_object_lifetime(obj, key);
+        begin_object_registration(obj, key);
         obj.reset_source();
         obj.type = type;
         obj.scene_token = scene;

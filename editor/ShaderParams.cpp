@@ -301,14 +301,16 @@ bool ShaderParams::load(const std::string& shader_name, bool reload, bool load_g
         return false;
     }
     shader_json_file.close();
-    nlohmann::ordered_json* shader_params = getCompiledShaderParamsObject(shader_json);
-    if (!shader_params)
+    if (!shader_json.is_object())
     {
-        // compiled shader has no parameters defined
+        return false;
+    }
+    nlohmann::ordered_json* shader_params = getCompiledShaderParamsObject(shader_json);
+    if (shader_params && !shader_params->is_null() && !shader_params->is_object())
+    {
         return false;
     }
 
-    // inserts and/or clears the existing map
     params_map_[shader_name].clear();
     for (auto it = color_ramp_warnings_.begin(); it != color_ramp_warnings_.end();)
     {
@@ -320,6 +322,11 @@ bool ShaderParams::load(const std::string& shader_name, bool reload, bool load_g
         {
             ++it;
         }
+    }
+
+    if (!shader_params || shader_params->is_null())
+    {
+        return true;
     }
 
     for (auto& [key, value] : shader_params->items())
@@ -377,13 +384,6 @@ bool ShaderParams::load(const std::string& shader_name, bool reload, bool load_g
                 getAllocatedPoolArray(shader_param);
             }
         }
-    }
-
-    if (params_map_[shader_name].empty())
-    {
-        pnanovdb_editor::Console::getInstance().addLog("No struct %s with parameters found in shader '%s'",
-                                                       pnanovdb_shader::SHADER_PARAM_SLANG, shader_name.c_str());
-        return false;
     }
 
     processPendingArrays(shader_name);
@@ -949,7 +949,8 @@ static std::pair<ImGuiDataType, size_t> getScalarTypeAndSize(const std::string& 
         { "uint", { ImGuiDataType_U32, sizeof(uint32_t) } },
         { "int64", { ImGuiDataType_S64, sizeof(int64_t) } },
         { "uint64", { ImGuiDataType_U64, sizeof(uint64_t) } },
-        { "float16", { ImGuiDataType_Float, sizeof(float) / 2u } },
+        { "float16", { ImGuiDataType_Float, sizeof(uint16_t) } },
+        { "half", { ImGuiDataType_Float, sizeof(uint16_t) } },
         { "float", { ImGuiDataType_Float, sizeof(float) } },
         { "double", { ImGuiDataType_Double, sizeof(double) } }
     };

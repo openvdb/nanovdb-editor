@@ -616,7 +616,16 @@ TEST(NanoVDBEditor, MarkPipelineDirtyKicksScheduler)
     cfg.streaming = PNANOVDB_FALSE;
 
     editor.start(&editor, device, &cfg);
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    const auto worker = editor.impl->editor_worker;
+    ASSERT_NE(worker, nullptr);
+    const auto startup_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(120);
+    while (worker->is_starting.load() && editor.impl->show_active.load() &&
+           std::chrono::steady_clock::now() < startup_deadline)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    ASSERT_FALSE(worker->is_starting.load()) << "Editor startup did not finish";
+    ASSERT_TRUE(editor.impl->show_active.load()) << "Editor stopped during startup";
 
     pnanovdb_editor_token_t* scene = editor.get_token("kick_scene");
     pnanovdb_editor_token_t* name = editor.get_token("kick_object");

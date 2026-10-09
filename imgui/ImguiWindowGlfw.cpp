@@ -39,6 +39,10 @@ void windowGlfwPollEvents(WindowGlfw* ptr)
 {
     // NOP
 }
+void windowGlfwSetTitle(WindowGlfw* ptr, const char* title)
+{
+}
+
 pnanovdb_bool_t windowGlfwShouldClose(WindowGlfw* ptr)
 {
     return PNANOVDB_TRUE;
@@ -124,6 +128,7 @@ struct WindowGlfw
     GLFW_PTR(glfwSetWindowUserPointer);
     GLFW_PTR(glfwSetWindowPos);
     GLFW_PTR(glfwSetWindowSize);
+    GLFW_PTR(glfwSetWindowTitle);
     GLFW_PTR(glfwSetWindowSizeCallback);
     GLFW_PTR(glfwSetKeyCallback);
     GLFW_PTR(glfwSetCharCallback);
@@ -232,6 +237,7 @@ WindowGlfw* createWindowGlfw(Window* window_parent,
     GLFW_PTR_LOAD(glfwSetWindowUserPointer);
     GLFW_PTR_LOAD(glfwSetWindowPos);
     GLFW_PTR_LOAD(glfwSetWindowSize);
+    GLFW_PTR_LOAD(glfwSetWindowTitle);
     GLFW_PTR_LOAD(glfwSetWindowSizeCallback);
     GLFW_PTR_LOAD(glfwSetKeyCallback);
     GLFW_PTR_LOAD(glfwSetCharCallback);
@@ -379,6 +385,14 @@ pnanovdb_bool_t windowGlfwShouldClose(WindowGlfw* ptr)
         return PNANOVDB_TRUE;
     }
     return PNANOVDB_FALSE;
+}
+
+void windowGlfwSetTitle(WindowGlfw* ptr, const char* title)
+{
+    if (ptr && ptr->window && ptr->p_glfwSetWindowTitle)
+    {
+        ptr->p_glfwSetWindowTitle(ptr->window, title);
+    }
 }
 
 void windowGlfwResize(WindowGlfw* ptr, pnanovdb_uint32_t width, pnanovdb_uint32_t height)

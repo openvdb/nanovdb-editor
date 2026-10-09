@@ -41,16 +41,8 @@ class ParamMapRegistry;
 class PipelineRuntime;
 }
 
-// Thread Synchronization Model
-// ----------------------------
-// External Caller                    Render Thread
-// ━━━━━━━━━━━━━                      ━━━━━━━━━━━━━
-// add_xyz()                          show() render loop
-//   └─ on_render_thread(body) ──────► drains render_thread_tasks, runs body:
-//        (marshaled + blocks           ├─ scene_manager (mutex)
-//         until body completes)        └─ scene_views (no mutex, render thread only)
-//
-// When no render loop exists yet, on_render_thread() runs the body inline on the caller.
+// Add and update calls copy source data on the caller thread and defer view synchronization.
+// Operations that wait for the render thread reject calls made while parameters are mapped.
 
 struct pnanovdb_editor_impl_t
 {

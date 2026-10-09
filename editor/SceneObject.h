@@ -92,6 +92,21 @@ struct ShaderNameStorage
     pnanovdb_editor_shader_name_t value = {};
 };
 
+struct ShaderParamLayout
+{
+    std::string name;
+    int type = 0;
+    size_t element_size = 0;
+    size_t element_count = 0;
+    size_t offset = 0;
+
+    bool operator==(const ShaderParamLayout& other) const
+    {
+        return name == other.name && type == other.type && element_size == other.element_size &&
+               element_count == other.element_count && offset == other.offset;
+    }
+};
+
 /*!
     \brief Compile-time known parameters for a scene object
 */
@@ -100,6 +115,7 @@ struct SceneObjectParams
     // GPU-backed shader params storage
     pnanovdb_compute_array_t* shader_params_array = nullptr;
     std::shared_ptr<pnanovdb_compute_array_t> shader_params_array_owner;
+    std::vector<ShaderParamLayout> shader_params_layout;
 
     // Typed params pointer and reflection info
     void* shader_params = nullptr;
@@ -330,6 +346,7 @@ struct ProcessRunSnapshot
     pnanovdb_editor_shader_name_t shader_name_value = {};
     pnanovdb_compute_array_t* shader_params_array = nullptr;
     std::shared_ptr<pnanovdb_compute_array_t> shader_params_array_owner;
+    std::vector<ShaderParamLayout> shader_params_layout;
     void* shader_params = nullptr;
     const pnanovdb_reflect_data_type_t* shader_params_data_type = nullptr;
     std::vector<StageOutput> step_outputs;
@@ -416,7 +433,8 @@ enum class SceneObjectSourceKind
 */
 struct PNANOVDB_SCENE_MANAGER_EXPORT_CXX SceneObject
 {
-    uint64_t lifetime_id = 0; ///< Unique identity for this object's current lifetime
+    uint64_t lifetime_id = 0; ///< Changes when the object or its source buffer is replaced.
+    uint64_t registration_id = 0; ///< Stays valid through source buffer updates.
     SceneObjectType type = SceneObjectType::Uninitialized; ///< Type of scene object
     pnanovdb_editor_token_t* scene_token; ///< Scene identifier token
     pnanovdb_editor_token_t* name_token; ///< Object name token
