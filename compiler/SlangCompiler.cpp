@@ -252,7 +252,24 @@ bool SlangCompiler::compile(const pnanovdb_compiler_settings_t* settings,
     TargetDesc targetDesc;
 
     std::filesystem::path tempDir;
-    std::filesystem::path originalPath;
+    std::error_code pathError;
+    std::filesystem::path originalPath = std::filesystem::current_path(pathError);
+    if (pathError && settings->compile_target == PNANOVDB_COMPILE_TARGET_CPU)
+    {
+        SLANG_COMPILER_LOG("Error: Cannot get the working directory: %s\n", pathError.message().c_str());
+        return false;
+    }
+    std::string originalPathString = originalPath.string();
+    std::vector<const char*> searchPaths;
+    // Search the caller's working directory before configured include paths.
+    if (!pathError)
+    {
+        searchPaths.push_back(originalPathString.c_str());
+    }
+    for (size_t i = 0; i < numIncludePaths; i++)
+    {
+        searchPaths.push_back(includePaths[i]);
+    }
     std::string dumpPrefix;
 
 #ifdef ASM_DEBUG_OUTPUT
@@ -265,7 +282,6 @@ bool SlangCompiler::compile(const pnanovdb_compiler_settings_t* settings,
         // Create a temporary directory for intermediates and make it the current working directory
         tempDir = createTempDirectory(shader_->computeShader.timestamp);
         dumpPrefix = std::filesystem::path(codeFileName).filename().string() + "_";
-        originalPath = std::filesystem::current_path();
         std::filesystem::current_path(tempDir);
     }
     else if (settings->hlsl_output)
@@ -286,8 +302,8 @@ bool SlangCompiler::compile(const pnanovdb_compiler_settings_t* settings,
 
     sessionDesc.targets = &targetDesc;
     sessionDesc.targetCount = 1;
-    sessionDesc.searchPaths = includePaths;
-    sessionDesc.searchPathCount = numIncludePaths;
+    sessionDesc.searchPaths = searchPaths.data();
+    sessionDesc.searchPathCount = searchPaths.size();
     sessionDesc.defaultMatrixLayoutMode =
         settings->is_row_major ? SLANG_MATRIX_LAYOUT_ROW_MAJOR : SLANG_MATRIX_LAYOUT_COLUMN_MAJOR;
 

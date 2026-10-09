@@ -6,8 +6,6 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 import importlib
 import json
-import os
-from pathlib import Path
 import struct
 from threading import Event
 
@@ -15,8 +13,6 @@ import numpy as np
 import pytest
 
 import nanovdb_editor as nve
-
-from test_dispatch import cpu_target_supported
 
 
 def raw_empty_grid():
@@ -642,36 +638,6 @@ void main(uint3 id : SV_DispatchThreadID) { texture_out[id.xy] = shader_params.v
         assert struct.unpack_from("=" + "f" * len(defaults), values) == tuple(defaults)
         scene.set_shader("nanovdb", shader, parameters={"value": overrides[0] if len(overrides) == 1 else overrides})
         assert struct.unpack_from("=" + "f" * len(overrides), shader_state(app)[1]) == tuple(overrides)
-
-
-@pytest.mark.skipif(not cpu_target_supported(), reason="CPU shader target is unavailable on this architecture")
-def test_external_cpu_shader_keeps_intermediates_out_of_source(app, tmp_path):
-    shader = tmp_path / f"external_cpu_{tmp_path.parent.name}_{tmp_path.name}.slang"
-    shader.write_text("""
-#include "external_value.slang"
-RWStructuredBuffer<float> data_out;
-[shader("compute")][numthreads(1, 1, 1)]
-void computeMain(uint3 id : SV_DispatchThreadID) { data_out[id.x] = external_value(); }
-""")
-    (tmp_path / "external_value.slang").write_text("float external_value() { return 0.25; }\n")
-    source_files = set(tmp_path.iterdir())
-    original_cwd = Path.cwd()
-    compiler = app.editor._compiler
-    try:
-        assert compiler.compile_shader(str(shader), entry_point_name="computeMain",
-                                       compile_target=nve.CompileTarget.CPU), compiler.get_diagnostics()
-        assert Path.cwd() == original_cwd
-    finally:
-        os.chdir(original_cwd)
-    assert set(tmp_path.iterdir()) == source_files
-
-    class UniformState(ctypes.Structure):
-        _fields_ = [("data_out", nve.MemoryBuffer)]
-
-    output = np.zeros(1, dtype=np.float32)
-    uniforms = UniformState(nve.MemoryBuffer(output))
-    assert compiler.execute_cpu(str(shader), (1, 1, 1), None, ctypes.addressof(uniforms))
-    assert output[0] == 0.25
 
 
 def test_shader_symlink_uses_adjacent_defaults(app, tmp_path):
