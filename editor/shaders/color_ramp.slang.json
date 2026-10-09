@@ -1,0 +1,17 @@
+{
+    "ShaderParams": {
+        "count": {
+            "value": 2,
+            "widget": "colorRamp",
+            "label": "Demo ramp",
+            "tooltip": "Top: left to right. Bottom: edge to center. Add up to four stops.",
+            "positions": ["positions"],
+            "colors": ["cold", "hot", "third", "fourth"]
+        },
+        "positions": {"value": [0.0, 1.0, 0.0, 0.0]},
+        "cold": {"value": [0.05, 0.15, 1.0, 0.35]},
+        "hot": {"value": [1.0, 0.2, 0.02, 1.0]},
+        "third": {"value": [0.0, 0.0, 0.0, 0.0]},
+        "fourth": {"value": [0.0, 0.0, 0.0, 0.0]}
+    }
+}
