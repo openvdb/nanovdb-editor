@@ -150,21 +150,7 @@ Slots may be unsorted. Match the preview by interpolating RGBA linearly,
 using the later slot at duplicate positions and holding endpoint colors outside
 the range.
 
-Edit positions within [0, 1]. Click the swatch for an HDR picker with adjustable
-RGB and alpha ranges; RGBA number fields accept values outside [0, 1].
 Optional `label` and `tooltip` customize the text.
-
-Try the bundled [demo shader](../editor/shaders/color_ramp.slang) and its
-[JSON bindings](../editor/shaders/color_ramp.slang.json) from a source build:
-
-```sh
-./build/Release/pnanovdbeditorapp --input /path/to/grid.nvdb --shader editor/color_ramp.slang
-```
-
-Select the grid in Scene, then select the item under Render in Properties.
-Drag stops, add up to four, or edit RGBA to update a horizontal gradient and radial
-pattern. Alpha reveals a checkerboard. Any NanoVDB file works; the demo draws
-procedurally and does not sample the grid. Run without a startup `scene.json`.
 
 To display a group of shader parameters from different shaders define a json file with various shader paths:
 ```json
