@@ -449,11 +449,16 @@ void count_param_array_destroy(pnanovdb_compute_array_t* array)
 TEST_F(EditorStreamingTest, RepeatedSelectedBufferUpdatesKeepParameterAllocationsBounded)
 {
     editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
-    editor.start(&editor, device, &cfg);
+    ASSERT_TRUE(pnanovdb_editor_test::map_shader_defaults(
+        editor, compute, scene_token, object_token, "editor/wireframe.slang"));
+    ASSERT_TRUE(start_editor());
     auto worker = editor.impl->editor_worker;
     ASSERT_NE(worker, nullptr);
     ASSERT_TRUE(worker->render_thread_tasks.run_blocking([&]()
     {
+        const auto selected = editor.impl->editor_scene->get_render_view_selection();
+        EXPECT_EQ(selected.scene_token, scene_token);
+        EXPECT_EQ(selected.name_token, object_token);
         tracked_create_array = compute.create_array;
         tracked_destroy_array = compute.destroy_array;
         compute.create_array = count_param_array_create;
