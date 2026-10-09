@@ -2794,7 +2794,7 @@ pnanovdb_bool_t set_custom_scene_params(pnanovdb_editor_t* editor,
     bool loaded = false;
     try
     {
-        loaded = editor->impl->scene_manager->set_custom_scene_params(scene, json, &error_message);
+        loaded = set_custom_scene_params_if_unmapped(editor, scene, json, &error_message);
     }
     catch (const std::exception& e)
     {
@@ -2832,8 +2832,14 @@ const pnanovdb_reflect_data_type_t* get_custom_scene_params_data_type(pnanovdb_e
         return nullptr;
     }
 
-    std::shared_ptr<CustomSceneParams> custom_params = editor->impl->scene_manager->get_custom_scene_params(scene);
-    return custom_params ? custom_params->dataType() : nullptr;
+    try
+    {
+        return editor->impl->scene_manager->get_custom_scene_params_data_type(scene);
+    }
+    catch (...)
+    {
+        return nullptr;
+    }
 }
 
 void select_render_view(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)

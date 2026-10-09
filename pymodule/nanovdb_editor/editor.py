@@ -1245,6 +1245,9 @@ class Editor:
         The JSON must contain an object-valued ``"SceneParams"`` entry; see
         ``CustomSceneParams`` on the C++ side for the supported field schema
         (``type``, ``value``, ``min``, ``max``, ``elementCount``, ...).
+        Success replaces all values with the JSON defaults. Unmap the scene's
+        custom parameters before replacing its schema; active custom maps
+        reject replacement.
 
         Args:
             scene: Scene token (from ``get_token``).
@@ -1291,7 +1294,9 @@ class Editor:
         The returned value is the ``const pnanovdb_reflect_data_type_t*`` used by
         the C API (a Python int address, or ``None`` when no custom params are
         attached). It can be passed straight back into ``map_params`` as the
-        ``data_type`` argument.
+        ``data_type`` argument. The handle remains valid until editor shutdown.
+        Fetch it again after a schema reload to use the current layout; mapping
+        with a handle for an incompatible layout returns ``None``.
         """
         return self._editor.contents.get_custom_scene_params_data_type(self._editor, scene)
 

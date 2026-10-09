@@ -1595,7 +1595,8 @@ void EditorSceneManager::set_params_array(pnanovdb_editor_token_t* scene,
 
 bool EditorSceneManager::set_custom_scene_params(pnanovdb_editor_token_t* scene,
                                                  pnanovdb_editor_token_t* json,
-                                                 std::string* error_message)
+                                                 std::string* error_message,
+                                                 const std::function<bool(const CustomSceneParams*)>& is_mapped)
 {
     if (!scene || !json || !json->str || json->str[0] == '\0')
     {
@@ -1613,6 +1614,15 @@ bool EditorSceneManager::set_custom_scene_params(pnanovdb_editor_token_t* scene,
     }
 
     std::lock_guard<std::mutex> lock(m_mutex);
+    const auto existing = m_scene_custom_params.find(scene->id);
+    if (existing != m_scene_custom_params.end() && is_mapped && is_mapped(existing->second.get()))
+    {
+        if (error_message)
+        {
+            *error_message = "unmap scene parameters before replacing the schema";
+        }
+        return false;
+    }
     m_scene_custom_params[scene->id] = std::move(custom_params);
     return true;
 }
@@ -1630,6 +1640,52 @@ std::shared_ptr<CustomSceneParams> EditorSceneManager::get_custom_scene_params(p
         return nullptr;
     }
     return it->second;
+}
+
+struct EditorSceneManager::CustomSceneParamsType
+{
+    explicit CustomSceneParamsType(const pnanovdb_reflect_data_type_t& source)
+        : type(source), fields(source.child_reflect_datas, source.child_reflect_datas + source.child_reflect_data_count),
+          field_types(source.child_reflect_data_count)
+    {
+        // SceneParams has leaf fields; names are stored in the global token table.
+        for (size_t i = 0; i < fields.size(); ++i)
+        {
+            field_types[i] = *fields[i].data_type;
+            fields[i].data_type = &field_types[i];
+        }
+        type.child_reflect_datas = fields.data();
+    }
+
+    pnanovdb_reflect_data_type_t type;
+    std::vector<pnanovdb_reflect_data_t> fields;
+    std::vector<pnanovdb_reflect_data_type_t> field_types;
+};
+
+const pnanovdb_reflect_data_type_t* EditorSceneManager::get_custom_scene_params_data_type(pnanovdb_editor_token_t* scene)
+{
+    if (!scene)
+    {
+        return nullptr;
+    }
+    std::lock_guard<std::mutex> lock(m_mutex);
+    const auto it = m_scene_custom_params.find(scene->id);
+    if (it == m_scene_custom_params.end() || !it->second->dataType())
+    {
+        return nullptr;
+    }
+    const auto* current_type = it->second->dataType();
+    for (const auto& saved_type : m_custom_scene_param_types)
+    {
+        if (pnanovdb_reflect_layout_compare(&saved_type->type, current_type))
+        {
+            return &saved_type->type;
+        }
+    }
+    auto saved_type = std::make_shared<CustomSceneParamsType>(*current_type);
+    const auto* result = &saved_type->type;
+    m_custom_scene_param_types.push_back(std::move(saved_type));
+    return result;
 }
 
 } // namespace pnanovdb_editor
