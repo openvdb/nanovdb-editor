@@ -1,0 +1,14 @@
+{
+    "ShaderParams": {
+        "count": {
+            "value": 2,
+            "widget": "colorRamp",
+            "label": "Color ramp",
+            "positions": ["positions"],
+            "colors": ["cold", "hot"]
+        },
+        "positions": {"value": [0.0, 1.0]},
+        "cold": {"value": [0.1, 0.2, 1.0, 0.8]},
+        "hot": {"value": [1.0, 0.2, 0.0, 0.8]}
+    }
+}

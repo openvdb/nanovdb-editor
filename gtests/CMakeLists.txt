@@ -75,6 +75,19 @@ ConfigureTest(CustomSceneParamsTest
   ../editor/ParamWidget.cpp
 )
 target_link_libraries(CustomSceneParamsTest PRIVATE imgui)
+ConfigureTest(ColorRampTest ColorRampTest.cpp ImGuiTestSupport.cpp ../editor/ColorRamp.cpp)
+target_link_libraries(ColorRampTest PRIVATE imgui)
+ConfigureTest(ShaderColorRampTest
+  ShaderColorRampTest.cpp
+  ImGuiTestSupport.cpp
+  ConsoleTestSupport.cpp
+  ../editor/ColorRamp.cpp
+  ../editor/ParamWidget.cpp
+  ../editor/ShaderParams.cpp
+)
+target_link_libraries(ShaderColorRampTest PRIVATE ImGuiColorTextEdit imgui)
+ConfigureTest(ShaderColorRampPackingTest ShaderColorRampPackingTest.cpp GpuTestSupport.cpp)
+target_compile_definitions(ShaderColorRampPackingTest PRIVATE PNANOVDB_TEST_SHADER_CACHE="${COMPILED_SHADERS_DIR}")
 ConfigureTest(MapPinTest MapPinTest.cpp EditorTestSupport.cpp)
 ConfigureTest(ShaderParamsReadOnlyTest ShaderParamsReadOnlyTest.cpp EditorTestSupport.cpp)
 ConfigureTest(ShaderNameSwapResetsParamsTest ShaderNameSwapResetsParamsTest.cpp EditorTestSupport.cpp)
@@ -91,6 +104,7 @@ ConfigureTest(SceneObjectProcessChainTest SceneObjectProcessChainTest.cpp)
 ConfigureTest(SceneObjectReplacementTest SceneObjectReplacementTest.cpp)
 ConfigureTest(SceneSerializerTest
   SceneSerializerTest.cpp
+  ../editor/ColorRamp.cpp
   ../editor/Console.cpp
   ../editor/CustomSceneParams.cpp
   ../editor/EditorSceneManager.cpp
@@ -108,7 +122,7 @@ get_target_property(_scene_serializer_test_libs SceneSerializerTest LINK_LIBRARI
 list(REMOVE_ITEM _scene_serializer_test_libs pnanovdbeditor)
 set_target_properties(SceneSerializerTest PROPERTIES LINK_LIBRARIES "${_scene_serializer_test_libs}")
 target_compile_definitions(SceneSerializerTest PRIVATE pnanovdbeditor_EXPORTS)
-target_link_libraries(SceneSerializerTest PRIVATE ImGuiColorTextEdit)
+target_link_libraries(SceneSerializerTest PRIVATE ImGuiColorTextEdit imgui)
 
 # CPU-only concurrency tests - run locally with: ctest -L threadsafety
 set_tests_properties(RenderThreadTaskQueueTest ShaderParamsConcurrencyTest PROPERTIES LABELS "threadsafety")
