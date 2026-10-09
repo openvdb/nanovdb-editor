@@ -718,6 +718,8 @@ TEST_F(EditorMaterialRenderTest, FileWatcherReloadsRelativeAndAbsoluteShaderAlia
     ASSERT_TRUE(add_tracked_grid(object_token, "editor/wireframe.slang", tracked_array_a));
     ASSERT_TRUE(add_tracked_grid(absolute_alias, source_shader.string().c_str(), tracked_array_b));
     editor.add_nanovdb_2(&editor, scene_token, unrelated, nanovdb_array);
+    ASSERT_TRUE(pnanovdb_editor_test::map_shader_defaults(
+        editor, compute, scene_token, unrelated, "editor/flow_smoke.slang"));
     ASSERT_TRUE(start_editor());
     ASSERT_TRUE(wait_for_frames(3, 3));
 
@@ -784,9 +786,7 @@ TEST_F(EditorMaterialRenderTest, FailedShaderDoesNotHideOtherObjects)
 {
     auto* second = editor.get_token("valid_material");
     ASSERT_TRUE(add_tracked_grid(object_token, "editor/wireframe.slang", tracked_array_a));
-    editor.add_nanovdb_2(&editor, scene_token, second, nanovdb_array);
-    editor.impl->scene_manager->with_object(scene_token, second,
-        [](pnanovdb_editor::SceneObject* obj) { tracked_array_b = obj->nanovdb_array(); });
+    ASSERT_TRUE(add_tracked_grid(second, "editor/flow_smoke.slang", tracked_array_b));
     rejected_material_compiles = 1000000;
     ASSERT_TRUE(start_editor());
     EXPECT_TRUE(wait_for_frames(0, 3));
