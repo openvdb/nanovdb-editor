@@ -675,17 +675,7 @@ size_t ShaderParams::findEquivalentParamPoolIndex(const ShaderParam& new_param)
 template <typename T>
 void assignValueOnIndex(void* target, const nlohmann::json& source, int index)
 {
-    nlohmann::basic_json json_val;
-    try
-    {
-        json_val = source.at(index);
-    }
-    catch (const nlohmann::json::out_of_range&)
-    {
-        json_val = nlohmann::json(T(0));
-    }
-
-    T val = json_val.get<T>();
+    const T val = static_cast<size_t>(index) < source.size() ? source.at(index).get<T>() : T(0);
     memcpy(static_cast<char*>(target) + index * sizeof(T), &val, sizeof(T));
 }
 
@@ -693,14 +683,7 @@ void assignTypedValueOnIndex(ImGuiDataType type, size_t element_size, void* targ
 {
     if (type == ImGuiDataType_Float && element_size == sizeof(uint16_t))
     {
-        float value = 0.0f;
-        try
-        {
-            value = source.at(index).get<float>();
-        }
-        catch (const nlohmann::json::out_of_range&)
-        {
-        }
+        const float value = static_cast<size_t>(index) < source.size() ? source.at(index).get<float>() : 0.0f;
         const uint16_t bits = float_to_half_bits(value);
         std::memcpy(static_cast<char*>(target) + static_cast<size_t>(index) * element_size, &bits, sizeof(bits));
         return;

@@ -3,7 +3,6 @@
 
 import pytest
 import sys
-import atexit
 import os
 
 
@@ -37,11 +36,12 @@ def cleanup_modules(exit_code=0):
         os._exit(1)
 
 
+@pytest.hookimpl(hookwrapper=True, tryfirst=True)
 def pytest_sessionfinish(session, exitstatus):
-    """Hook called after session finishes - use it to trigger exit"""
-    # Schedule cleanup to happen immediately, preserving pytest's exit status
-    cleanup_modules(exitstatus)
-
-
-# Register cleanup at module exit
-atexit.register(cleanup_modules)
+    outcome = yield
+    if outcome.excinfo is not None:
+        # Let pytest report hook failures and select the exit status.
+        return
+    sys.stdout.flush()
+    sys.stderr.flush()
+    cleanup_modules(session.exitstatus)

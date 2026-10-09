@@ -362,7 +362,14 @@ void EditorScene::copy_editor_shader_params_to_ui(SceneShaderParams* params)
         return;
     }
 
-    params->current_array = m_compute->create_array(params->size, 1u, m_editor->impl->shader_params);
+    if (!params->current_array)
+    {
+        params->current_array = m_compute->create_array(params->size, 1u, m_editor->impl->shader_params);
+    }
+    else
+    {
+        std::memcpy(params->current_array->data, m_editor->impl->shader_params, params->size);
+    }
     m_scene_manager.shader_params.set_compute_array_for_shader(params->shader_name, params->current_array);
 }
 
