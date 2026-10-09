@@ -34,12 +34,35 @@ void CustomSceneParams::render()
             continue;
         }
 
+        bool read_only = field.is_read_only;
+        if (field.read_only_field_index < m_fields.size())
+        {
+            const auto& gate = m_fields[field.read_only_field_index];
+            read_only = read_only ||
+                        *reinterpret_cast<const pnanovdb_bool_t*>(m_data.data() + gate.offset) != PNANOVDB_FALSE;
+        }
+        const bool numeric = !field.is_string && !field.is_bool && !field.is_native_bool;
+        const bool fit_width = field.same_line && rendered_any && field.widget == Widget::Default &&
+                               (field.is_string || numeric);
         if (field.same_line && rendered_any)
         {
             ImGui::SameLine();
         }
-        ImGui::BeginDisabled(field.is_read_only);
-        if (field.is_read_only)
+        if (fit_width)
+        {
+            const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+            const float label_width = ImGui::CalcTextSize(field.name.c_str(), nullptr, true).x + spacing;
+            const size_t components = field.is_string ? 1 : (field.element_count == 16 ? 4 : field.element_count);
+            const float min_width = ImGui::GetFrameHeight() * components + spacing * (components - 1);
+            if (ImGui::GetContentRegionAvail().x < label_width + min_width)
+            {
+                ImGui::NewLine();
+            }
+            ImGui::PushItemWidth(ImMax(1.f, ImMin(ImGui::CalcItemWidth(), ImGui::GetContentRegionAvail().x - label_width)));
+        }
+        ImGui::PushStyleVar(ImGuiStyleVar_DisabledAlpha, numeric ? 1.f : ImGui::GetStyle().DisabledAlpha);
+        ImGui::BeginDisabled(read_only && !field.is_string);
+        if (read_only)
         {
             ImGui::PushItemFlag(ImGuiItemFlags_ReadOnly, true);
         }
@@ -68,13 +91,27 @@ void CustomSceneParams::render()
         else if (field.is_string)
         {
             const std::string label = field.name + "##custom";
-            char* committed = reinterpret_cast<char*>(m_data.data() + field.offset);
-            const ImGuiInputTextFlags flags =
-                field.commit_on_enter ? ImGuiInputTextFlags_EnterReturnsTrue : ImGuiInputTextFlags_None;
-            const bool entered = ImGui::InputText(label.c_str(), committed, field.element_count, flags);
-            if (entered && !field.is_read_only && field.commit_on_enter && !field.submit_counter_field.empty())
+            const ImGuiID id = ImGui::GetID(label.c_str());
+            auto& context = *ImGui::GetCurrentContext();
+            const auto& input_state = context.InputTextState;
+            const bool was_read_only = (input_state.Flags & ImGuiInputTextFlags_ReadOnly) != 0;
+            if (context.ActiveId == id && input_state.ID == id && was_read_only != read_only)
             {
-                // bump the sibling uint32 counter field so clients that poll it observe a change
+                // Discard the edit buffer when access changes. Mapped values remain authoritative.
+                ImGui::ClearActiveID();
+                context.InputTextDeactivatedState.ID = 0;
+            }
+            char* committed = reinterpret_cast<char*>(m_data.data() + field.offset);
+            ImGuiInputTextFlags flags =
+                field.commit_on_enter ? ImGuiInputTextFlags_EnterReturnsTrue : ImGuiInputTextFlags_None;
+            if (read_only)
+            {
+                flags |= ImGuiInputTextFlags_ReadOnly;
+            }
+            const bool entered = ImGui::InputText(label.c_str(), committed, field.element_count, flags);
+            if (entered && !read_only && field.commit_on_enter && !field.submit_counter_field.empty())
+            {
+                // Publish Enter presses through the sibling counter.
                 for (auto& counter_field : m_fields)
                 {
                     if (counter_field.name != field.submit_counter_field)
@@ -112,11 +149,16 @@ void CustomSceneParams::render()
             renderParamWidget(ui_spec);
             ImGui::EndGroup();
         }
-        if (field.is_read_only)
+        if (read_only)
         {
             ImGui::PopItemFlag();
         }
         ImGui::EndDisabled();
+        ImGui::PopStyleVar();
+        if (fit_width)
+        {
+            ImGui::PopItemWidth();
+        }
         rendered_any = true;
         if (!field.tooltip.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
         {

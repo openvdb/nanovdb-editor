@@ -235,13 +235,14 @@ typedef struct pnanovdb_editor_t
                                               pnanovdb_pipeline_stage_t stage);
 
     // Load scene-level UI params from a JSON payload carried in `json->str`.
-    // Returns PNANOVDB_TRUE on success; on failure writes a null-terminated error
-    // into error_buf (pass NULL / 0 to ignore).
+    // Success resets values to the JSON defaults. Active custom parameter maps reject replacement.
+    // Returns PNANOVDB_TRUE on success; failure writes a null-terminated error (NULL / 0 skips it).
     pnanovdb_bool_t(PNANOVDB_ABI* set_custom_scene_params)(pnanovdb_editor_t* editor,
                                                            pnanovdb_editor_token_t* scene,
                                                            pnanovdb_editor_token_t* json,
                                                            char* error_buf,
                                                            pnanovdb_uint64_t error_buf_size);
+    // Valid until editor shutdown. Fetch again after reload to use the current layout.
     const pnanovdb_reflect_data_type_t*(PNANOVDB_ABI* get_custom_scene_params_data_type)(pnanovdb_editor_t* editor,
                                                                                          pnanovdb_editor_token_t* scene);
 

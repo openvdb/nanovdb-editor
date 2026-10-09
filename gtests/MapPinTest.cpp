@@ -8,7 +8,9 @@
 #include <nanovdb_editor/putil/Compute.h>
 #include <nanovdb_editor/putil/Editor.h>
 
+#include "editor/Editor.h"
 #include "editor/EditorParamMapRegistry.h"
+#include "editor/EditorSceneManager.h"
 #include "EditorTestSupport.h"
 
 #include <array>
@@ -322,4 +324,128 @@ TEST_F(MapPinTest, CrossThreadUnmapDoesNotReleaseOtherThreadsPin)
 
     EXPECT_EQ(pnanovdb_editor::shader_name_map_ref_count(&editor, scene_token, name_token), 0u);
     EXPECT_EQ(pnanovdb_editor::param_map_stack_depth(&editor), 0u);
+}
+
+TEST_F(MapPinTest, CustomSceneReloadRejectsActiveMappings)
+{
+    auto* schema = editor.get_token(R"({"SceneParams":{
+        "Play":{"type":"bool32","widget":"toggleButton"},
+        "Step":{"type":"bool32","widget":"button"}
+    }})");
+    char error[256] = {};
+    ASSERT_EQ(editor.set_custom_scene_params(&editor, scene_token, schema, error, sizeof(error)), PNANOVDB_TRUE)
+        << error;
+    const auto* type = editor.get_custom_scene_params_data_type(&editor, scene_token);
+    auto* values = static_cast<pnanovdb_bool_t*>(editor.map_params(&editor, scene_token, nullptr, type));
+    ASSERT_NE(values, nullptr);
+    values[0] = PNANOVDB_TRUE;
+    values[1] = PNANOVDB_TRUE;
+    EXPECT_EQ(editor.map_params(&editor, scene_token, nullptr, type), values);
+    EXPECT_EQ(editor.set_custom_scene_params(&editor, scene_token, schema, error, sizeof(error)), PNANOVDB_FALSE);
+    editor.unmap_params(&editor, scene_token, nullptr);
+
+    auto* other_scene = editor.get_token("independent_custom_scene");
+    EXPECT_EQ(editor.set_custom_scene_params(&editor, other_scene, schema, error, sizeof(error)), PNANOVDB_TRUE);
+    EXPECT_EQ(editor.set_custom_scene_params(&editor, scene_token, schema, error, sizeof(error)), PNANOVDB_FALSE);
+    EXPECT_NE(error[0], '\0');
+    std::thread reload_thread([&]()
+                             {
+                                 EXPECT_EQ(editor.set_custom_scene_params(
+                                               &editor, scene_token, schema, error, sizeof(error)), PNANOVDB_FALSE);
+                             });
+    reload_thread.join();
+    editor.unmap_params(&editor, scene_token, nullptr);
+
+    type = editor.get_custom_scene_params_data_type(&editor, scene_token);
+    values = static_cast<pnanovdb_bool_t*>(editor.map_params(&editor, scene_token, nullptr, type));
+    ASSERT_NE(values, nullptr);
+    EXPECT_EQ(values[0], PNANOVDB_TRUE);
+    EXPECT_EQ(values[1], PNANOVDB_TRUE);
+    editor.unmap_params(&editor, scene_token, nullptr);
+
+    ASSERT_EQ(editor.set_custom_scene_params(&editor, scene_token, schema, error, sizeof(error)), PNANOVDB_TRUE)
+        << error;
+    type = editor.get_custom_scene_params_data_type(&editor, scene_token);
+    values = static_cast<pnanovdb_bool_t*>(editor.map_params(&editor, scene_token, nullptr, type));
+    ASSERT_NE(values, nullptr);
+    EXPECT_EQ(values[0], PNANOVDB_FALSE);
+    EXPECT_EQ(values[1], PNANOVDB_FALSE);
+    editor.unmap_params(&editor, scene_token, nullptr);
+}
+
+TEST_F(MapPinTest, CustomSceneDescriptorReusesUnchangedLayout)
+{
+    auto* schema = editor.get_token(R"({"SceneParams":{"Frame":{"type":"uint","value":1}}})");
+    ASSERT_EQ(editor.set_custom_scene_params(&editor, scene_token, schema, nullptr, 0), PNANOVDB_TRUE);
+    const auto* initial_type = editor.get_custom_scene_params_data_type(&editor, scene_token);
+    ASSERT_NE(initial_type, nullptr);
+
+    auto* replacement = editor.get_token(R"({"SceneParams":{"Frame":{"type":"uint","value":7,"readOnly":true}}})");
+    ASSERT_EQ(editor.set_custom_scene_params(&editor, scene_token, replacement, nullptr, 0), PNANOVDB_TRUE);
+    EXPECT_EQ(editor.get_custom_scene_params_data_type(&editor, scene_token), initial_type);
+}
+
+TEST_F(MapPinTest, CustomSceneOldDescriptorRemainsSafeAfterLayoutChange)
+{
+    auto* original = editor.get_token(R"({"SceneParams":{
+        "Position":{"type":"float","value":[1,2,3]},
+        "Status":{"type":"string","length":16,"value":"Paused"}
+    }})");
+    ASSERT_EQ(editor.set_custom_scene_params(&editor, scene_token, original, nullptr, 0), PNANOVDB_TRUE);
+    const auto* initial_type = editor.get_custom_scene_params_data_type(&editor, scene_token);
+    ASSERT_NE(initial_type, nullptr);
+
+    auto* replacement = editor.get_token(R"({"SceneParams":{"Frame":{"type":"uint","value":7}}})");
+    ASSERT_EQ(editor.set_custom_scene_params(&editor, scene_token, replacement, nullptr, 0), PNANOVDB_TRUE);
+    ASSERT_EQ(initial_type->child_reflect_data_count, 2u);
+    const auto* fields = initial_type->child_reflect_datas;
+    EXPECT_STREQ(fields[0].name, "Position");
+    EXPECT_EQ(fields[0].data_type->element_size, 3 * sizeof(float));
+    EXPECT_STREQ(fields[1].name, "Status");
+    EXPECT_EQ(fields[1].data_type->element_size, 16u);
+    EXPECT_EQ(editor.map_params(&editor, scene_token, nullptr, initial_type), nullptr);
+    EXPECT_EQ(pnanovdb_editor::param_map_stack_depth(&editor), 0u);
+
+    ASSERT_EQ(editor.set_custom_scene_params(&editor, scene_token, original, nullptr, 0), PNANOVDB_TRUE);
+    EXPECT_EQ(editor.get_custom_scene_params_data_type(&editor, scene_token), initial_type);
+    auto* values = static_cast<float*>(editor.map_params(&editor, scene_token, nullptr, initial_type));
+    ASSERT_NE(values, nullptr);
+    EXPECT_FLOAT_EQ(values[0], 1.f);
+    EXPECT_FLOAT_EQ(values[1], 2.f);
+    EXPECT_FLOAT_EQ(values[2], 3.f);
+    editor.unmap_params(&editor, scene_token, nullptr);
+}
+
+TEST_F(MapPinTest, CustomSceneReloadAfterRenameRejectsActiveMapping)
+{
+    auto* schema = editor.get_token(R"({"SceneParams":{"Frame":{"type":"uint","value":1}}})");
+    ASSERT_EQ(editor.set_custom_scene_params(&editor, scene_token, schema, nullptr, 0), PNANOVDB_TRUE);
+    const auto* type = editor.get_custom_scene_params_data_type(&editor, scene_token);
+    auto* values = static_cast<pnanovdb_uint32_t*>(editor.map_params(&editor, scene_token, nullptr, type));
+    ASSERT_NE(values, nullptr);
+    values[0] = 42;
+    auto* renamed = editor.get_token("renamed_custom_scene");
+    ASSERT_TRUE(editor.impl->scene_manager->rename_scene(scene_token, renamed));
+    EXPECT_EQ(editor.map_params(&editor, renamed, nullptr, type), values);
+    EXPECT_EQ(editor.set_custom_scene_params(&editor, renamed, schema, nullptr, 0), PNANOVDB_FALSE);
+
+    ASSERT_EQ(editor.set_custom_scene_params(&editor, scene_token, schema, nullptr, 0), PNANOVDB_TRUE);
+    auto* reused = static_cast<pnanovdb_uint32_t*>(editor.map_params(&editor, scene_token, nullptr, type));
+    ASSERT_NE(reused, nullptr);
+    EXPECT_NE(reused, values);
+    EXPECT_EQ(reused[0], 1u);
+    reused[0] = 77u;
+    editor.unmap_params(&editor, scene_token, nullptr);
+    editor.unmap_params(&editor, renamed, nullptr);
+    EXPECT_EQ(editor.set_custom_scene_params(&editor, renamed, schema, nullptr, 0), PNANOVDB_FALSE);
+    editor.unmap_params(&editor, scene_token, nullptr);
+    auto* current = static_cast<pnanovdb_uint32_t*>(editor.map_params(&editor, renamed, nullptr, type));
+    ASSERT_NE(current, nullptr);
+    EXPECT_EQ(current[0], 42u);
+    editor.unmap_params(&editor, renamed, nullptr);
+    ASSERT_EQ(editor.set_custom_scene_params(&editor, renamed, schema, nullptr, 0), PNANOVDB_TRUE);
+    current = static_cast<pnanovdb_uint32_t*>(editor.map_params(&editor, scene_token, nullptr, type));
+    ASSERT_NE(current, nullptr);
+    EXPECT_EQ(current[0], 77u);
+    editor.unmap_params(&editor, scene_token, nullptr);
 }

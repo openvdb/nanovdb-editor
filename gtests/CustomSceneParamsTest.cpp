@@ -253,27 +253,34 @@ TEST(NanoVDBEditor, CustomSceneParamsRejectsStringWithNumericOptions)
     EXPECT_NE(error_message.find("not supported"), std::string::npos);
 }
 
-TEST(NanoVDBEditor, CustomSceneParamsRejectsInvalidReadOnly)
+TEST(NanoVDBEditor, CustomSceneParamsIgnoresInvalidUiHints)
 {
-    pnanovdb_editor::CustomSceneParams params;
-    std::string error_message;
-    EXPECT_FALSE(params.loadFromJsonString(R"json({"SceneParams": {
-        "Frame": {"type": "uint", "readOnly": "true"}
-    }})json", "controls", &error_message));
-    EXPECT_NE(error_message.find("invalid 'readOnly'"), std::string::npos);
+    const char* fields[] = {
+        R"({"type":"bool","value":true,"widget":true})",
+        R"({"type":"bool","value":true,"widget":"slider"})",
+        R"({"type":"bool","value":true,"widget":""})",
+        R"({"type":"bool","value":true,"activeLabel":"Stop"})",
+        R"({"type":"bool","value":true,"widget":"button","activeLabel":"Stop"})",
+        R"({"type":"bool","value":true,"widget":"toggleButton","activeLabel":true})",
+        R"({"type":"bool","value":true,"widget":"toggleButton","activeLabel":""})",
+        R"({"type":"bool","value":true,"sameLine":"true"})",
+        R"({"type":"bool","value":true,"tooltip":5})",
+        R"({"type":"bool","value":true,"readOnly":"true"})",
+    };
+    for (const char* field : fields)
+    {
+        SCOPED_TRACE(field);
+        pnanovdb_editor::CustomSceneParams params;
+        std::string error;
+        ASSERT_TRUE(params.loadFromJsonString(
+            std::string("{\"SceneParams\":{\"Control\":") + field + "}}", "hints", &error)) << error;
+        EXPECT_EQ(*static_cast<const pnanovdb_bool_t*>(params.data()), PNANOVDB_TRUE);
+    }
 }
 
 TEST(NanoVDBEditor, CustomSceneParamsRejectsInvalidPlaybackWidgets)
 {
     const char* invalid_fields[] = {
-        R"({"type":"bool","widget":true})",
-        R"({"type":"bool","widget":"unknown"})",
-        R"({"type":"bool","widget":""})",
-        R"({"type":"bool","activeLabel":"Stop"})",
-        R"({"type":"bool","widget":"button","activeLabel":"Stop"})",
-        R"({"type":"bool","widget":"toggleButton","activeLabel":true})",
-        R"({"type":"bool","widget":"button","sameLine":"true"})",
-        R"({"type":"bool","widget":"button","tooltip":false})",
         R"({"type":"float","widget":"button"})",
         R"({"type":"int","isBool":true,"widget":"toggleButton"})",
         R"({"type":"string","widget":"button"})",
@@ -292,5 +299,45 @@ TEST(NanoVDBEditor, CustomSceneParamsRejectsInvalidPlaybackWidgets)
         EXPECT_FALSE(params.loadFromJsonString(
             std::string("{\"SceneParams\":{\"Control\":") + field + "}}", "playback", &error));
         EXPECT_NE(error.find("field 'Control'"), std::string::npos) << error;
+    }
+}
+
+TEST(NanoVDBEditor, CustomSceneParamsResolvesReadOnlyFieldWithoutChangingLayout)
+{
+    pnanovdb_editor::CustomSceneParams params;
+    std::string error;
+    ASSERT_TRUE(params.loadFromJsonString(R"json({"SceneParams": {
+        "Step": {"type":"bool", "widget":"button", "value":true, "readOnlyField":"Play"},
+        "Play": {"type":"bool32", "value":true},
+        "Frame": {"type":"uint", "value":42, "readOnlyField":"Play"}
+    }})json", "dynamic", &error)) << error;
+    const auto* type = params.dataType();
+    ASSERT_NE(type, nullptr);
+    EXPECT_EQ(type->child_reflect_data_count, 3u);
+    EXPECT_EQ(params.dataSize(), 12u);
+    const auto* values = static_cast<const pnanovdb_uint32_t*>(params.data());
+    EXPECT_EQ(values[0], 1u);
+    EXPECT_EQ(values[1], 1u);
+    EXPECT_EQ(values[2], 42u);
+}
+
+TEST(NanoVDBEditor, CustomSceneParamsRejectsInvalidReadOnlyField)
+{
+    const char* fields[] = {
+        R"({"Step":{"type":"bool","readOnlyField":true}})",
+        R"({"Step":{"type":"bool","readOnlyField":""}})",
+        R"({"Step":{"type":"bool","readOnlyField":"Missing"}})",
+        R"({"Step":{"type":"bool","readOnlyField":"Play"},"Play":{"type":"float","isBool":true}})",
+        R"({"Step":{"type":"bool","readOnlyField":"Play"},"Play":{"type":"bool","value":[true,false]}})",
+        R"({"Step":{"type":"bool","readOnlyField":"Play"},"Play":{"type":"string"}})",
+    };
+    for (const char* field : fields)
+    {
+        SCOPED_TRACE(field);
+        pnanovdb_editor::CustomSceneParams params;
+        std::string error;
+        EXPECT_FALSE(params.loadFromJsonString(
+            std::string("{\"SceneParams\":") + field + "}", "dynamic", &error));
+        EXPECT_NE(error.find("readOnlyField"), std::string::npos) << error;
     }
 }

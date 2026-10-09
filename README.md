@@ -350,10 +350,13 @@ Shader-backed parameters are shown in the object properties/shader parameter UI.
 Custom scene parameters also support these UI options under `SceneParams` only:
 
 - `widget`: `"button"` or `"toggleButton"`. Both require scalar `bool` or `bool32` storage, a boolean `value` if supplied, and `elementCount` omitted or set to the integer `1`. Omit `widget` for the default control.
-- `activeLabel`: optional string for a toggle button's active state; defaults to the field name. Active toggles use the active button color and keep their identity when the label changes.
-- `readOnly`: optional boolean, default `false`; disables UI edits while leaving the mapped value writable by the application.
-- `sameLine`: optional boolean, default `false`; places the control after the preceding visible custom field on the same row. The first visible field starts its own row.
+- `activeLabel`: optional string for a toggle button's active state; an absent or empty label uses the field name. Active toggles use the active button color and keep their identity when the label changes.
+- `readOnly`: optional boolean, default `false`; prevents UI edits while leaving the mapped value writable by the application. Read-only text remains selectable and can be copied.
+- `readOnlyField`: optional name of a scalar `bool` or `bool32` field in the same schema. A true mapped value prevents UI edits to this control. Static `readOnly: true` takes precedence. The named field can be hidden. Change the mapped boolean to lock or unlock controls without reloading the schema.
+- `sameLine`: optional boolean, default `false`; places the control after the preceding visible custom field on the same row. The first visible field starts its own row. Inputs shrink to the available width or start a new row when there is too little space.
 - `tooltip`: optional string shown on hover, including for read-only controls.
+
+Unknown widget names and incorrectly typed optional UI hints (`widget`, `activeLabel`, `readOnly`, `sameLine`, `tooltip`) are ignored. Recognized button widgets still require valid scalar boolean storage. An invalid `readOnlyField` reference is an error.
 
 For example, load this payload through the existing custom scene parameter API:
 
@@ -361,13 +364,15 @@ For example, load this payload through the existing custom scene parameter API:
 {
     "SceneParams": {
         "Play": {"type": "bool", "widget": "toggleButton", "activeLabel": "Stop"},
-        "Step": {"type": "bool", "widget": "button", "sameLine": true, "tooltip": "Advance one frame"},
+        "Step": {"type": "bool", "widget": "button", "sameLine": true, "readOnlyField": "Play", "tooltip": "Advance one frame while paused"},
         "Frame": {"type": "uint", "value": 0, "readOnly": true}
     }
 }
 ```
 
-A button sets its value to `true` when clicked and leaves it set until the application consumes the request and resets it to `false`. A toggle button changes its value on each click. Read and update these values through the existing `map_params` / `unmap_params` API with a null shader name (`None` in Python). No playback loop runs inside the widgets.
+A button sets its value to `true` when clicked and leaves it set until the application consumes the request and resets it to `false`. A toggle button changes its value on each click. Read and update these values through the existing `map_params` / `unmap_params` API with a null shader name (`None` in Python). Keep each mapping short: map, copy the requests, clear consumed button latches, and unmap. Run simulation, rendering, I/O, or waits after unmapping; an open mapping holds a lock that the Params window needs. Clicks before a latch is cleared coalesce into one request. No playback loop runs inside the widgets.
+
+Explicitly reloading a schema resets values to their JSON defaults, including pending button requests. Reload is rejected while that scene has an active custom parameter mapping. Data-type handles remain valid until editor shutdown, but an old layout may no longer match the new schema; fetch the current handle after reloading. Use `readOnlyField` for runtime locking so playback values and pending requests stay intact.
 
 To display a group of shader parameters from different shaders, define a group JSON file with shader paths:
 ```json

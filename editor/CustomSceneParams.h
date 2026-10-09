@@ -55,6 +55,8 @@ public:
         bool is_bool = false;
         bool is_hidden = false;
         bool is_read_only = false;
+        std::string read_only_field;
+        size_t read_only_field_index = static_cast<size_t>(-1);
         bool is_native_bool = false;
         bool is_string = false;
         bool commit_on_enter = false;

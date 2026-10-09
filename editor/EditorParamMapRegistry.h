@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <stddef.h>
 #include <memory>
+#include <string>
 
 namespace pnanovdb_editor
 {
@@ -32,7 +33,7 @@ enum class ParamMapKind : uint8_t
 struct ParamMapKey
 {
     ParamMapKind kind;
-    uint64_t id; // object_key (ShaderParams, ShaderName) or scene->id (CustomSceneParams)
+    uint64_t id; // Object key for shader data, parameter address for custom data.
 
     bool operator<(const ParamMapKey& other) const noexcept
     {
@@ -56,6 +57,11 @@ struct ParamMapFrame
 // Owned by pnanovdb_editor_impl_t::param_map_registry; created/destroyed by editor init()/shutdown().
 ParamMapRegistry* create_param_map_registry();
 void destroy_param_map_registry(ParamMapRegistry* registry);
+
+bool set_custom_scene_params_if_unmapped(pnanovdb_editor_t* editor,
+                                         pnanovdb_editor_token_t* scene,
+                                         pnanovdb_editor_token_t* json,
+                                         std::string* error_message);
 
 void* begin_custom_scene_params_map(pnanovdb_editor_t* editor,
                                     pnanovdb_editor_token_t* scene,
