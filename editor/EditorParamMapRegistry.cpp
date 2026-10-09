@@ -57,6 +57,11 @@ struct CustomSceneParamsState
     std::unique_lock<std::mutex> data_lock;
 };
 
+ParamMapKey custom_scene_params_key(const CustomSceneParams* params)
+{
+    return { ParamMapKind::CustomSceneParams, reinterpret_cast<uintptr_t>(params) };
+}
+
 // monostate is the default on first acquire, before init_if_first replaces it
 using ParamMapState =
     std::variant<std::monostate, ShaderParamsState, ShaderNameState, std::unique_ptr<ShaderState>, CustomSceneParamsState>;
@@ -121,6 +126,19 @@ public:
             teardown_if_last(it->second.state);
             m_entries.erase(it);
         }
+    }
+
+    bool replace_custom_scene_params(EditorSceneManager& scenes,
+                                     pnanovdb_editor_token_t* scene,
+                                     pnanovdb_editor_token_t* json,
+                                     std::string* error_message)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return scenes.set_custom_scene_params(scene, json, error_message,
+            [&](const CustomSceneParams* params)
+            {
+                return m_entries.find(custom_scene_params_key(params)) != m_entries.end();
+            });
     }
 
     size_t ref_count(const ParamMapKey& key) const
@@ -243,6 +261,19 @@ void* begin_shader_params_map(pnanovdb_editor_t* editor,
     return result;
 }
 
+bool set_custom_scene_params_if_unmapped(pnanovdb_editor_t* editor,
+                                         pnanovdb_editor_token_t* scene,
+                                         pnanovdb_editor_token_t* json,
+                                         std::string* error_message)
+{
+    ParamMapRegistry* registry = registry_for(editor);
+    if (!registry || !editor->impl->scene_manager || !scene)
+    {
+        return false;
+    }
+    return registry->replace_custom_scene_params(*editor->impl->scene_manager, scene, json, error_message);
+}
+
 void* begin_custom_scene_params_map(pnanovdb_editor_t* editor,
                                     pnanovdb_editor_token_t* scene,
                                     const pnanovdb_reflect_data_type_t* data_type,
@@ -260,7 +291,7 @@ void* begin_custom_scene_params_map(pnanovdb_editor_t* editor,
         return nullptr;
     }
 
-    const ParamMapKey key{ ParamMapKind::CustomSceneParams, scene->id };
+    const ParamMapKey key = custom_scene_params_key(params.get());
     ParamMapState& state = registry->acquire(key,
                                              [&](ParamMapState& s)
                                              {
@@ -270,8 +301,16 @@ void* begin_custom_scene_params_map(pnanovdb_editor_t* editor,
                                                      std::unique_lock<std::mutex>(payload.params->dataMutex());
                                                  s = std::move(payload);
                                              });
+    const auto& mapped_params = std::get<CustomSceneParamsState>(state).params;
+    // Reload can finish between the scene lookup and the map acquisition.
+    if (editor->impl->scene_manager->get_custom_scene_params(scene) != mapped_params ||
+        !pnanovdb_reflect_layout_compare(mapped_params->dataType(), data_type))
+    {
+        release_param_map(editor, key);
+        return nullptr;
+    }
     *out_key = key;
-    return std::get<CustomSceneParamsState>(state).params->data();
+    return mapped_params->data();
 }
 
 pnanovdb_editor_shader_name_t* begin_shader_name_map(pnanovdb_editor_t* editor,

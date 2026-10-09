@@ -80,13 +80,11 @@ nlohmann::ordered_json shader_params_to_json(ShaderParams& shader_params,
 bool json_to_shader_params(ShaderParams& shader_params,
                            const std::string& shader_name,
                            const nlohmann::json& j,
-                           std::vector<unsigned char>& out_bytes,
-                           bool strict = false);
+                           std::vector<unsigned char>& out_bytes);
 
 bool apply_shader_params_json(const std::vector<ShaderParam>& params,
                               const nlohmann::json& j,
-                              std::vector<unsigned char>& bytes,
-                              bool strict = false);
+                              std::vector<unsigned char>& bytes);
 
 bool shader_scalar_serialization_supported(ImGuiDataType type, size_t element_size);
 

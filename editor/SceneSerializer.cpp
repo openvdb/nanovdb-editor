@@ -896,8 +896,7 @@ nlohmann::ordered_json shader_params_to_json(ShaderParams& shader_params,
 bool json_to_shader_params(ShaderParams& shader_params,
                            const std::string& shader_name,
                            const nlohmann::json& j,
-                           std::vector<unsigned char>& out_bytes,
-                           bool strict)
+                           std::vector<unsigned char>& out_bytes)
 {
     if (shader_name.empty() || !j.is_object())
     {
@@ -929,13 +928,12 @@ bool json_to_shader_params(ShaderParams& shader_params,
     out_bytes.assign(buffer_size, 0u);
     shader_params.copy_default_params_to_buffer(shader_name, out_bytes.data(), out_bytes.size());
 
-    return apply_shader_params_json(params, j, out_bytes, strict);
+    return apply_shader_params_json(params, j, out_bytes);
 }
 
 bool apply_shader_params_json(const std::vector<ShaderParam>& params,
                               const nlohmann::json& j,
-                              std::vector<unsigned char>& bytes,
-                              bool strict)
+                              std::vector<unsigned char>& bytes)
 {
     if (!j.is_object())
     {
@@ -970,16 +968,14 @@ bool apply_shader_params_json(const std::vector<ShaderParam>& params,
             }
             if (p.num_elements == 1)
             {
-                if (!write_shader_scalar(p.type, p.size, bytes.data() + offset, *value) && strict)
-                    return false;
+                write_shader_scalar(p.type, p.size, bytes.data() + offset, *value);
             }
             else if (value->is_array())
             {
                 const size_t count = std::min(p.num_elements, value->size());
                 for (size_t e = 0; e < count; ++e)
                 {
-                    if (!write_shader_scalar(p.type, p.size, bytes.data() + offset + e * p.size, (*value)[e]) && strict)
-                        return false;
+                    write_shader_scalar(p.type, p.size, bytes.data() + offset + e * p.size, (*value)[e]);
                 }
             }
         }

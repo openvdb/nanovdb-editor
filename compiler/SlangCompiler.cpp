@@ -182,8 +182,8 @@ bool SlangCompiler::compileFile(const char* sourceFile,
     inFile.close();
 
     const char* out;
-    std::filesystem::path fsPath(sourceFile);
-    if (!compile(settings, fsPath.filename().string().c_str(), code.c_str(), numIncludePaths, includePaths) && !shader_)
+    std::filesystem::path fsPath = std::filesystem::absolute(sourceFile);
+    if (!compile(settings, fsPath.string().c_str(), code.c_str(), numIncludePaths, includePaths) && !shader_)
     {
         SLANG_COMPILER_LOG("Error: Slang shader compilation of '%s' failed\n", variableName);
         return false;
@@ -264,7 +264,7 @@ bool SlangCompiler::compile(const pnanovdb_compiler_settings_t* settings,
 
         // Create a temporary directory for intermediates and make it the current working directory
         tempDir = createTempDirectory(shader_->computeShader.timestamp);
-        dumpPrefix = std::string(codeFileName) + "_";
+        dumpPrefix = std::filesystem::path(codeFileName).filename().string() + "_";
         originalPath = std::filesystem::current_path();
         std::filesystem::current_path(tempDir);
     }
@@ -579,12 +579,14 @@ ShaderDataPtr compileShader(SlangCompiler& compiler,
                             const pnanovdb_compiler_settings_t* settings)
 {
     std::string code = source->source == nullptr ? "" : source->source;
+    std::string shaderPath = source->source_filename == nullptr ? "" : source->source_filename;
     if (source->source_filename != nullptr)
     {
-        std::string shaderPath = pnanovdb_shader::getShaderFilePath(source->source_filename);
-        std::ifstream inFile(shaderPath);
+        const std::string resolvedShaderPath = pnanovdb_shader::getShaderFilePath(source->source_filename);
+        std::ifstream inFile(resolvedShaderPath);
         if (inFile)
         {
+            shaderPath = std::filesystem::absolute(resolvedShaderPath).string();
             code = std::string((std::istreambuf_iterator<char>(inFile)), std::istreambuf_iterator<char>());
             inFile.close();
 
@@ -631,9 +633,8 @@ ShaderDataPtr compileShader(SlangCompiler& compiler,
         }
     }
 
-    std::filesystem::path fsPath(source->source_filename);
-    const bool result = compiler.compile(
-        settings, fsPath.filename().string().c_str(), code.c_str(), includePaths.size(), includePaths.data());
+    const bool result =
+        compiler.compile(settings, shaderPath.c_str(), code.c_str(), includePaths.size(), includePaths.data());
 
     for (auto& includePath : includePaths)
     {

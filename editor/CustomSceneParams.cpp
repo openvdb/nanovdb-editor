@@ -250,8 +250,10 @@ bool CustomSceneParams::loadFromJsonString(const std::string& json_string,
     constexpr size_t kDefaultStringLength = 256;
 
     size_t next_offset = 0;
-    for (auto& [field_name, field_json] : scene_params->items())
+    for (auto& item : scene_params->items())
     {
+        const std::string& field_name = item.key();
+        auto& field_json = item.value();
         if (!field_json.is_object())
         {
             if (error_message)
@@ -273,7 +275,7 @@ bool CustomSceneParams::loadFromJsonString(const std::string& json_string,
 
         Field field;
         field.name = field_name;
-        const auto read_string = [&](const char* key, std::string& value)
+        const auto read_string = [&](const char* key, std::string& value, bool strict = true)
         {
             auto it = field_json.find(key);
             if (it == field_json.end())
@@ -282,6 +284,10 @@ bool CustomSceneParams::loadFromJsonString(const std::string& json_string,
             }
             if (!it->is_string())
             {
+                if (!strict)
+                {
+                    return true;
+                }
                 if (error_message)
                 {
                     *error_message = "field '" + field_name + "' has invalid '" + key + "'; expected string";
@@ -291,7 +297,7 @@ bool CustomSceneParams::loadFromJsonString(const std::string& json_string,
             value = it->get<std::string>();
             return true;
         };
-        const auto read_bool = [&](const char* key, bool& value)
+        const auto read_bool = [&](const char* key, bool& value, bool strict = true)
         {
             auto it = field_json.find(key);
             if (it == field_json.end())
@@ -300,6 +306,10 @@ bool CustomSceneParams::loadFromJsonString(const std::string& json_string,
             }
             if (!it->is_boolean())
             {
+                if (!strict)
+                {
+                    return true;
+                }
                 if (error_message)
                 {
                     *error_message = "field '" + field_name + "' has invalid '" + key + "'; expected bool";
@@ -310,31 +320,37 @@ bool CustomSceneParams::loadFromJsonString(const std::string& json_string,
             return true;
         };
         std::string widget;
-        field.active_label = field_name;
-        if (!read_string("widget", widget) ||
-            !read_string("activeLabel", field.active_label) || !read_string("tooltip", field.tooltip) ||
-            !read_bool("readOnly", field.is_read_only) || !read_bool("sameLine", field.same_line))
+        read_string("widget", widget, false);
+        read_string("activeLabel", field.active_label, false);
+        read_string("tooltip", field.tooltip, false);
+        read_bool("readOnly", field.is_read_only, false);
+        read_bool("sameLine", field.same_line, false);
+        if (field.active_label.empty())
+        {
+            field.active_label = field_name;
+        }
+        if (!read_string("readOnlyField", field.read_only_field))
         {
             return false;
         }
-        if (field_json.contains("widget"))
+        if (field_json.contains("readOnlyField") && field.read_only_field.empty())
         {
-            if (widget == "button")
+            if (error_message)
             {
-                field.widget = Widget::Button;
+                *error_message = "field '" + field_name + "' requires a non-empty 'readOnlyField'";
             }
-            else if (widget == "toggleButton")
-            {
-                field.widget = Widget::ToggleButton;
-            }
-            else
-            {
-                if (error_message)
-                {
-                    *error_message = "field '" + field_name + "' has unsupported 'widget': " + widget;
-                }
-                return false;
-            }
+            return false;
+        }
+        if (widget == "button")
+        {
+            field.widget = Widget::Button;
+        }
+        else if (widget == "toggleButton")
+        {
+            field.widget = Widget::ToggleButton;
+        }
+        if (field.widget != Widget::Default)
+        {
             const auto count = field_json.find("elementCount");
             const auto value = field_json.find("value");
             if ((parsed_type_name != "bool" && parsed_type_name != "bool32") ||
@@ -347,14 +363,6 @@ bool CustomSceneParams::loadFromJsonString(const std::string& json_string,
                 }
                 return false;
             }
-        }
-        if (field_json.contains("activeLabel") && field.widget != Widget::ToggleButton)
-        {
-            if (error_message)
-            {
-                *error_message = "field '" + field_name + "' requires 'toggleButton' for 'activeLabel'";
-            }
-            return false;
         }
         field.is_hidden = field_json.value("hidden", false);
 
@@ -500,6 +508,25 @@ bool CustomSceneParams::loadFromJsonString(const std::string& json_string,
 
         field_value_jsons.push_back(field_json.contains("value") ? &field_json["value"] : nullptr);
         m_fields.push_back(std::move(field));
+    }
+
+    for (auto& field : m_fields)
+    {
+        if (field.read_only_field.empty())
+        {
+            continue;
+        }
+        auto control = std::find_if(m_fields.begin(), m_fields.end(),
+                                    [&](const Field& candidate) { return candidate.name == field.read_only_field; });
+        if (control == m_fields.end() || !control->is_native_bool || control->element_count != 1)
+        {
+            if (error_message)
+            {
+                *error_message = "field '" + field.name + "' requires 'readOnlyField' to name a scalar bool field";
+            }
+            return false;
+        }
+        field.read_only_field_index = static_cast<size_t>(control - m_fields.begin());
     }
 
     m_data.assign(next_offset, 0);

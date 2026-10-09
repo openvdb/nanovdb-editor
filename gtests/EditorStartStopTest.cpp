@@ -98,6 +98,36 @@ protected:
         }
     }
 
+    pnanovdb_bool_t run_on_render_thread(std::function<pnanovdb_bool_t()> task)
+    {
+        return editor.impl->editor_worker->render_thread_tasks.run_blocking([&]()
+        {
+            // The test and editor DLL keep separate ImGui context pointers.
+            ImGui::SetCurrentContext(editor.impl->editor_scene->get_imgui_instance()->context);
+            return task();
+        });
+    }
+
+    bool wait_for_ui(std::function<bool()> predicate, std::chrono::seconds timeout = std::chrono::seconds(10))
+    {
+        const auto deadline = std::chrono::steady_clock::now() + timeout;
+        while (std::chrono::steady_clock::now() < deadline)
+        {
+            if (run_on_render_thread([&]() { return predicate() ? PNANOVDB_TRUE : PNANOVDB_FALSE; }))
+                return true;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return false;
+    }
+
+    bool start_editor()
+    {
+        editor.start(&editor, device, &cfg);
+        // Cold software-renderer startup must finish before functional timeouts start.
+        return wait_for_ui([&]() { return editor.impl->editor_scene->get_imgui_instance()->loaded_ini_once; },
+                           std::chrono::seconds(120));
+    }
+
     pnanovdb_compiler_t compiler = {};
     pnanovdb_compute_t compute = {};
     pnanovdb_editor_t editor = {};
@@ -114,23 +144,15 @@ TEST_F(EditorStreamingTest, ProfileSwitchPreservesLiveCamera)
     cfg.ui_profile_name = "viewer";
     editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
     editor.set_pipeline(&editor, scene_token, object_token, pnanovdb_pipeline_stage_render, pnanovdb_pipeline_type_noop);
-    editor.start(&editor, device, &cfg);
+    ASSERT_TRUE(start_editor());
     auto worker = editor.impl->editor_worker;
     auto wait_for_profile = [&](const char* profile)
     {
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-        while (std::chrono::steady_clock::now() < deadline)
+        return wait_for_ui([&]()
         {
-            if (worker->render_thread_tasks.run_blocking([&]()
-            {
-                auto* instance = editor.impl->editor_scene->get_imgui_instance();
-                return instance->loaded_ini_once && instance->current_profile_name == profile ?
-                    PNANOVDB_TRUE : PNANOVDB_FALSE;
-            }))
-                return true;
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-        return false;
+            auto* instance = editor.impl->editor_scene->get_imgui_instance();
+            return instance->loaded_ini_once && instance->current_profile_name == profile;
+        });
     };
     ASSERT_TRUE(wait_for_profile("viewer"));
     for (const char* profile : { "nvflow", "default", "viewer" })
@@ -224,28 +246,6 @@ TEST_P(EditorClientInterfaceTest, UiProfilesHeadlessStreaming)
         EXPECT_EQ(editor.set_process_step, nullptr);
     }
 
-    auto worker = editor.impl->editor_worker;
-    auto run_on_render_thread = [&](std::function<pnanovdb_bool_t()> task)
-    {
-        return worker->render_thread_tasks.run_blocking([&]()
-        {
-            // The test and editor DLL keep separate ImGui context pointers.
-            ImGui::SetCurrentContext(editor.impl->editor_scene->get_imgui_instance()->context);
-            return task();
-        });
-    };
-    auto wait_for_ui = [&](std::function<bool()> predicate)
-    {
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-        while (std::chrono::steady_clock::now() < deadline)
-        {
-            if (run_on_render_thread(
-                    [&]() { return predicate() ? PNANOVDB_TRUE : PNANOVDB_FALSE; }))
-                return true;
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-        return false;
-    };
     auto params_are_docked = [&]()
     {
         const auto* properties = ImGui::FindWindowByName("Properties");
@@ -600,6 +600,18 @@ protected:
         return false;
     }
 
+    bool add_tracked_grid(pnanovdb_editor_token_t* name,
+                          const char* shader,
+                          pnanovdb_compute_array_t*& source)
+    {
+        editor.add_nanovdb_2(&editor, scene_token, name, nanovdb_array);
+        if (!pnanovdb_editor_test::map_shader_defaults(editor, compute, scene_token, name, shader))
+            return false;
+        editor.impl->scene_manager->with_object(scene_token, name,
+            [&](pnanovdb_editor::SceneObject* obj) { source = obj->nanovdb_array(); });
+        return true;
+    }
+
     bool tracking = false;
 };
 }
@@ -643,7 +655,7 @@ TEST_F(EditorMaterialRenderTest, MixedShadersKeepObjectValuesAcrossFramesAndRelo
                          [](pnanovdb_editor::SceneObject* obj) { tracked_array_a = obj->nanovdb_array(); });
     manager.with_object(scene_token, second,
                          [](pnanovdb_editor::SceneObject* obj) { tracked_array_b = obj->nanovdb_array(); });
-    editor.start(&editor, device, &cfg);
+    ASSERT_TRUE(start_editor());
     ASSERT_TRUE(wait_for_frames(3, 3));
     expect_material_values();
     const int compile_count = compiled_materials.load();
@@ -685,8 +697,12 @@ TEST_F(EditorMaterialRenderTest, MixedShadersKeepObjectValuesAcrossFramesAndRelo
 
 TEST_F(EditorMaterialRenderTest, FileWatcherReloadsRelativeAndAbsoluteShaderAliases)
 {
-    const auto linked_shader = std::filesystem::absolute(pnanovdb_shader::getCurrentDirectory()) /
-                               "shaders" / "editor" / "wireframe.slang";
+    auto linked_shader = std::filesystem::absolute(pnanovdb_shader::getCurrentDirectory()) /
+                         "shaders" / "editor" / "wireframe.slang";
+    if (!std::filesystem::exists(linked_shader))
+    {
+        linked_shader = std::filesystem::absolute(pnanovdb_shader::getShaderDir()) / "editor" / "wireframe.slang";
+    }
     ASSERT_TRUE(std::filesystem::exists(linked_shader));
 #if !defined(_WIN32)
     ASSERT_TRUE(std::filesystem::is_symlink(linked_shader.parent_path()));
@@ -694,18 +710,10 @@ TEST_F(EditorMaterialRenderTest, FileWatcherReloadsRelativeAndAbsoluteShaderAlia
     const auto source_shader = std::filesystem::canonical(linked_shader);
     auto* absolute_alias = editor.get_token("absolute_shader_alias");
     auto* unrelated = editor.get_token("unrelated_shader");
-    editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
-    editor.add_nanovdb_2(&editor, scene_token, absolute_alias, nanovdb_array);
+    ASSERT_TRUE(add_tracked_grid(object_token, "editor/wireframe.slang", tracked_array_a));
+    ASSERT_TRUE(add_tracked_grid(absolute_alias, source_shader.string().c_str(), tracked_array_b));
     editor.add_nanovdb_2(&editor, scene_token, unrelated, nanovdb_array);
-    ASSERT_TRUE(pnanovdb_editor_test::map_shader_defaults(
-        editor, compute, scene_token, object_token, "editor/wireframe.slang"));
-    ASSERT_TRUE(pnanovdb_editor_test::map_shader_defaults(
-        editor, compute, scene_token, absolute_alias, source_shader.string().c_str()));
-    editor.impl->scene_manager->with_object(scene_token, object_token,
-        [](pnanovdb_editor::SceneObject* obj) { tracked_array_a = obj->nanovdb_array(); });
-    editor.impl->scene_manager->with_object(scene_token, absolute_alias,
-        [](pnanovdb_editor::SceneObject* obj) { tracked_array_b = obj->nanovdb_array(); });
-    editor.start(&editor, device, &cfg);
+    ASSERT_TRUE(start_editor());
     ASSERT_TRUE(wait_for_frames(3, 3));
 
     auto notifying_compiler = compiler;
@@ -731,12 +739,8 @@ TEST_F(EditorMaterialRenderTest, FileWatcherReloadsRelativeAndAbsoluteShaderAlia
 
 TEST_F(EditorMaterialRenderTest, CachedFramesContinueWhileCompilerSettingsAreLocked)
 {
-    editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
-    ASSERT_TRUE(pnanovdb_editor_test::map_shader_defaults(
-        editor, compute, scene_token, object_token, "editor/wireframe.slang"));
-    editor.impl->scene_manager->with_object(scene_token, object_token,
-        [](pnanovdb_editor::SceneObject* obj) { tracked_array_a = obj->nanovdb_array(); });
-    editor.start(&editor, device, &cfg);
+    ASSERT_TRUE(add_tracked_grid(object_token, "editor/wireframe.slang", tracked_array_a));
+    ASSERT_TRUE(start_editor());
     ASSERT_TRUE(wait_for_frames(3));
     auto* instance = editor.impl->editor_scene->get_imgui_instance();
     auto worker = editor.impl->editor_worker;
@@ -758,13 +762,9 @@ TEST_F(EditorMaterialRenderTest, CachedFramesContinueWhileCompilerSettingsAreLoc
 
 TEST_F(EditorMaterialRenderTest, FailedShaderInitializationRetriesOnLaterFrame)
 {
-    editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
-    ASSERT_TRUE(pnanovdb_editor_test::map_shader_defaults(
-        editor, compute, scene_token, object_token, "editor/wireframe.slang"));
-    editor.impl->scene_manager->with_object(scene_token, object_token,
-        [](pnanovdb_editor::SceneObject* obj) { tracked_array_a = obj->nanovdb_array(); });
+    ASSERT_TRUE(add_tracked_grid(object_token, "editor/wireframe.slang", tracked_array_a));
     rejected_material_compiles = 1;
-    editor.start(&editor, device, &cfg);
+    ASSERT_TRUE(start_editor());
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while (retry_shader_compiles < 2 && std::chrono::steady_clock::now() < deadline)
     {
@@ -778,16 +778,12 @@ TEST_F(EditorMaterialRenderTest, FailedShaderInitializationRetriesOnLaterFrame)
 TEST_F(EditorMaterialRenderTest, FailedShaderDoesNotHideOtherObjects)
 {
     auto* second = editor.get_token("valid_material");
-    editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
+    ASSERT_TRUE(add_tracked_grid(object_token, "editor/wireframe.slang", tracked_array_a));
     editor.add_nanovdb_2(&editor, scene_token, second, nanovdb_array);
-    ASSERT_TRUE(pnanovdb_editor_test::map_shader_defaults(
-        editor, compute, scene_token, object_token, "editor/wireframe.slang"));
-    editor.impl->scene_manager->with_object(scene_token, object_token,
-        [](pnanovdb_editor::SceneObject* obj) { tracked_array_a = obj->nanovdb_array(); });
     editor.impl->scene_manager->with_object(scene_token, second,
         [](pnanovdb_editor::SceneObject* obj) { tracked_array_b = obj->nanovdb_array(); });
     rejected_material_compiles = 1000000;
-    editor.start(&editor, device, &cfg);
+    ASSERT_TRUE(start_editor());
     EXPECT_TRUE(wait_for_frames(0, 3));
     EXPECT_GT(rejected_material_compiles.load(), 0);
     EXPECT_EQ(rendered_a.load(), 0);
@@ -795,12 +791,8 @@ TEST_F(EditorMaterialRenderTest, FailedShaderDoesNotHideOtherObjects)
 
 TEST_F(EditorMaterialRenderTest, SourceRevisionInvalidatesAnUnchangedArrayAddress)
 {
-    editor.add_nanovdb_2(&editor, scene_token, object_token, nanovdb_array);
-    ASSERT_TRUE(pnanovdb_editor_test::map_shader_defaults(
-        editor, compute, scene_token, object_token, "editor/wireframe.slang"));
-    editor.impl->scene_manager->with_object(scene_token, object_token,
-        [](pnanovdb_editor::SceneObject* obj) { tracked_array_a = obj->nanovdb_array(); });
-    editor.start(&editor, device, &cfg);
+    ASSERT_TRUE(add_tracked_grid(object_token, "editor/wireframe.slang", tracked_array_a));
+    ASSERT_TRUE(start_editor());
     ASSERT_TRUE(wait_for_frames(3));
     const int uploads = uploaded_a.load();
     ASSERT_TRUE(wait_for_frames(rendered_a + 2));

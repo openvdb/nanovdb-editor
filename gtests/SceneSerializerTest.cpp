@@ -1210,3 +1210,23 @@ TEST(SceneSerializer, FailedAtomicReplacePreservesDestinationAndCleansTemporary)
 
 } // namespace
 } // namespace pnanovdb_editor
+
+TEST(SceneSerializer, CustomSceneDescriptorsDoNotRetainParameterBuffers)
+{
+    pnanovdb_editor::EditorSceneManager manager;
+    auto& tokens = pnanovdb_editor::EditorToken::getInstance();
+    auto* scene = tokens.getToken("descriptor-lifetime");
+    auto* schema = tokens.getToken(R"({"SceneParams":{"Status":{"type":"string","length":128}}})");
+    ASSERT_TRUE(manager.set_custom_scene_params(scene, schema));
+    const auto* original_type = manager.get_custom_scene_params_data_type(scene);
+    std::weak_ptr<pnanovdb_editor::CustomSceneParams> original_params = manager.get_custom_scene_params(scene);
+
+    ASSERT_TRUE(manager.set_custom_scene_params(scene, schema));
+    EXPECT_TRUE(original_params.expired());
+    EXPECT_EQ(manager.get_custom_scene_params_data_type(scene), original_type);
+
+    manager.clear();
+    ASSERT_EQ(original_type->child_reflect_data_count, 1u);
+    EXPECT_STREQ(original_type->child_reflect_datas[0].name, "Status");
+    EXPECT_EQ(original_type->child_reflect_datas[0].data_type->element_size, 128u);
+}

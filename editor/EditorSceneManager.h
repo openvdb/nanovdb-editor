@@ -18,6 +18,7 @@
 #include "CustomSceneParams.h"
 
 #include <cassert>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -617,10 +618,13 @@ public:
                           pnanovdb_compute_array_t* params_array,
                           const pnanovdb_compute_t* compute);
 
+    // The optional map predicate runs under the scene mutex.
     bool set_custom_scene_params(pnanovdb_editor_token_t* scene,
                                  pnanovdb_editor_token_t* json,
-                                 std::string* error_message = nullptr);
+                                 std::string* error_message = nullptr,
+                                 const std::function<bool(const CustomSceneParams*)>& is_mapped = {});
     std::shared_ptr<CustomSceneParams> get_custom_scene_params(pnanovdb_editor_token_t* scene);
+    const pnanovdb_reflect_data_type_t* get_custom_scene_params_data_type(pnanovdb_editor_token_t* scene);
 
 private:
     void begin_object_lifetime(SceneObject& obj, uint64_t key)
@@ -721,6 +725,9 @@ private:
                        pnanovdb_pipeline_type_t process_pipeline,
                        pnanovdb_pipeline_type_t render_pipeline,
                        std::shared_ptr<pnanovdb_raster_gaussian_data_t>* old_gaussian_owner_out);
+
+    struct CustomSceneParamsType;
+    std::vector<std::shared_ptr<CustomSceneParamsType>> m_custom_scene_param_types;
 
     mutable std::mutex m_mutex; ///< Protects all operations
     uint64_t m_next_object_lifetime_id = 1; ///< Assigned while holding m_mutex
