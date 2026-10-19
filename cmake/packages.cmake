@@ -19,8 +19,8 @@ set(BUILD_STATIC_LIBS ON CACHE BOOL "Build static libraries" FORCE)
 # Core dependencies
 CPMAddPackage(
     NAME nanovdb
-    GITHUB_REPOSITORY areidmeyer/openvdb_public
-    GIT_TAG 3c2a559ab16216a224aa2b5254cc4dd1ca51667d
+    GITHUB_REPOSITORY AcademySoftwareFoundation/openvdb
+    GIT_TAG bc69f25fc0a101fa4a6723243b94d2ebafe55f94
     DOWNLOAD_ONLY YES
 )
 
