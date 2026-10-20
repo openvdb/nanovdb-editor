@@ -483,6 +483,7 @@ bool tree_node_ex(tree_state_t* tree, const char* label, ImGuiTreeNodeFlags flag
     {
         flags |= ImGuiTreeNodeFlags_Selected;
     }
+    flags |= ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
     if (ImGui::TreeNodeEx(label, flags))
     {
         if (ImGui::IsItemClicked())
@@ -554,8 +555,8 @@ void showSceneWindow(pnanovdb_imgui_instance_t* instance, InstanceUserdata* inst
     pnanovdb_compute_token_t* new_scene_name = nullptr;
     pnanovdb_compute_token_t* new_active_scene_name = nullptr;
 
-    const ImGuiTreeNodeFlags parent_flags = ImGuiTreeNodeFlags_SpanAvailWidth;
-    const ImGuiTreeNodeFlags leaf_flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_SpanAvailWidth;
+    const ImGuiTreeNodeFlags parent_flags = ImGuiTreeNodeFlags_None;
+    const ImGuiTreeNodeFlags leaf_flags = ImGuiTreeNodeFlags_Leaf;
     if (ImGui::Begin("Scene", &ptr->show_scene))
     {
         pnanovdb_pipeline_scene_list_t* mapped_scene_list = nullptr;
