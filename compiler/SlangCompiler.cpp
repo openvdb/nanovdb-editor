@@ -262,13 +262,11 @@ bool SlangCompiler::compile(const pnanovdb_compiler_settings_t* settings,
     std::string originalPathString = originalPath.string();
     std::vector<const char*> searchPaths;
     // Include the shader's own directory in the search path.
+    // Disable working directory search by default, as it allows trivial shadowing of headers
 #if 0
     if (!pathError)
     {
-        std::filesystem::path shaderPath(codeFileName);
-        std::filesystem::path shaderPathAbs = std::filesystem::absolute(shaderPath);
-        std::filesystem::path shaderDir = shaderPathAbs.parent_path();
-        searchPaths.push_back(shaderDir.string().c_str());
+        searchPaths.push_back(originalPathString.c_str());
     }
 #endif
     for (size_t i = 0; i < numIncludePaths; i++)
