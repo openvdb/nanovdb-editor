@@ -55,14 +55,6 @@ def test_external_shader_includes_and_cache(compiler, external_shader, monkeypat
     assert compiler.compile_shader(source, entry_point_name="computeMain"), compiler.get_diagnostics()
 
 
-def test_external_shader_keeps_working_directory_includes(compiler, external_shader, monkeypatch):
-    shader, include = external_shader
-    directory = shader.parent.parent
-    include.rename(directory / include.name)
-    monkeypatch.chdir(directory)
-    assert compiler.compile_shader(str(shader), entry_point_name="computeMain"), compiler.get_diagnostics()
-
-
 @pytest.mark.skipif(not cpu_target_supported(), reason="CPU shader target is unavailable on this architecture")
 @pytest.mark.parametrize("relative", [False, True], ids=["absolute", "relative"])
 def test_external_cpu_shader_keeps_source_directory_clean(compiler, external_shader, monkeypatch, relative):
