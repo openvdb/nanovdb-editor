@@ -262,10 +262,13 @@ bool SlangCompiler::compile(const pnanovdb_compiler_settings_t* settings,
     std::string originalPathString = originalPath.string();
     std::vector<const char*> searchPaths;
     // Search the caller's working directory before configured include paths.
+    // Disable working directory search by default, as it allows trivial shadowing of headers
+#if 0
     if (!pathError)
     {
         searchPaths.push_back(originalPathString.c_str());
     }
+#endif
     for (size_t i = 0; i < numIncludePaths; i++)
     {
         searchPaths.push_back(includePaths[i]);
