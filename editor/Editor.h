@@ -51,6 +51,7 @@ struct pnanovdb_editor_impl_t
 
     pnanovdb_camera_t tmp_camera = {};
     pnanovdb_pipeline_params_t tmp_pipeline_params = {};
+    pnanovdb_editor_shader_name_t tmp_editor_shader_name = {};
 };
 
 namespace pnanovdb_editor

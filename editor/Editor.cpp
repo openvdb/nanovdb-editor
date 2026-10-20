@@ -925,6 +925,54 @@ void remove(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_
         cast(name));
 }
 
+static void update_editor_shader_name(const pnanovdb_compute_t* compute, pnanovdb_pipeline_t* pipeline, pnanovdb_pipeline_config_t* pipe_config,
+                                      pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name,
+                                      pnanovdb_editor_token_t** p_shader_path, bool do_set)
+{
+    if (!p_shader_path || !(*p_shader_path))
+    {
+        return;
+    }
+    pnanovdb_pipeline_object_mapped_t* mapped_object = nullptr;
+    if (!pipeline->config_map_params(pipe_config, cast(scene), cast(name),
+        PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_mapped_t), (void**)&mapped_object))
+    {
+        return;
+    }
+    if (pnanovdb_pipeline_stage_render < mapped_object->stage_count)
+    {
+        pnanovdb_pipeline_object_mapped_stage_t* stage = &mapped_object->stages[pnanovdb_pipeline_stage_render];
+        for (pnanovdb_uint64_t pipeline_idx = 0u; pipeline_idx < stage->pipeline_count; pipeline_idx++)
+        {
+            pnanovdb_pipeline_object_mapped_pipeline_t* pipe = &stage->pipelines[pipeline_idx];
+            if (pipe->params_data && pipe->params_data_type)
+            {
+                for (pnanovdb_uint64_t idx = 0u; idx < pipe->params_data_type->child_reflect_data_count; idx++)
+                {
+                    auto reflect_data = &pipe->params_data_type->child_reflect_datas[idx];
+                    if (pnanovdb_reflect_layout_compare(
+                            reflect_data->data_type,
+                            PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_shader_t)))
+                    {
+                        pnanovdb_pipeline_shader_t* shader = (pnanovdb_pipeline_shader_t*)(((uint8_t*)pipe->params_data) + reflect_data->data_offset);
+                        if (do_set)
+                        {
+                            shader->shader_path = (*p_shader_path)->str;
+                        }
+                        else
+                        {
+                            (*p_shader_path) = cast(compute->get_token(shader->shader_path));
+                        }
+                        // only set the first shader path per pipeline
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    pipeline->config_unmap_params(pipe_config, cast(scene), cast(name), PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_mapped_t));
+}
+
 void* map_params(pnanovdb_editor_t* editor,
                  pnanovdb_editor_token_t* scene,
                  pnanovdb_editor_token_t* name,
@@ -939,14 +987,24 @@ void* map_params(pnanovdb_editor_t* editor,
     editor->impl->map_params_mutex.lock();
     editor->impl->map_params_type = data_type;
 
+    void* mapped_ptr = nullptr;
     auto pipeline = &editor->impl->pipeline;
     auto pipe_config = editor->impl->pipeline_config;
-    void* mapped_ptr = nullptr;
-    editor->impl->map_params_status = pipeline->config_map_params(
-        pipe_config, cast(scene), cast(name), editor->impl->map_params_type, &mapped_ptr);
+    if (pnanovdb_reflect_layout_compare(data_type, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t)))
+    {
+        update_editor_shader_name(editor->impl->compute, pipeline, pipe_config, scene, name, &editor->impl->tmp_editor_shader_name.shader_name, false);
+        mapped_ptr = &editor->impl->tmp_editor_shader_name;
+        editor->impl->map_params_status = PNANOVDB_TRUE;
+    }
+    else
+    {
+        auto pipeline = &editor->impl->pipeline;
+        auto pipe_config = editor->impl->pipeline_config;
+        editor->impl->map_params_status = pipeline->config_map_params(
+            pipe_config, cast(scene), cast(name), editor->impl->map_params_type, &mapped_ptr);
+    }
     return mapped_ptr;
 }
-
 
 void unmap_params(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_editor_token_t* name)
 {
@@ -959,7 +1017,15 @@ void unmap_params(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pna
     auto pipe_config = editor->impl->pipeline_config;
     if (editor->impl->map_params_status)
     {
-        pipeline->config_unmap_params(pipe_config, cast(scene), cast(name), editor->impl->map_params_type);
+        if (pnanovdb_reflect_layout_compare(editor->impl->map_params_type, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_editor_shader_name_t)))
+        {
+            update_editor_shader_name(editor->impl->compute,  pipeline, pipe_config, scene, name, &editor->impl->tmp_editor_shader_name.shader_name, true);
+        }
+        else
+        {
+            pipeline->config_unmap_params(pipe_config, cast(scene), cast(name), editor->impl->map_params_type);
+        }
+
         editor->impl->map_params_status = PNANOVDB_FALSE;
     }
 
