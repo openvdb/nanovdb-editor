@@ -48,6 +48,8 @@ struct pnanovdb_pipeline_load_input_t
 
     const pnanovdb_reflect_data_type_t* params_data_type;
     const void* params_data;
+
+    pnanovdb_uint64_t frame_id;
 };
 typedef pnanovdb_pipeline_load_input_t pnanovdb_pipeline_load_input_t;
 
@@ -61,6 +63,8 @@ struct pnanovdb_pipeline_input_t
 
     const pnanovdb_reflect_data_type_t* params_data_type;
     const void* params_data;
+
+    pnanovdb_uint64_t frame_id;
 };
 typedef pnanovdb_pipeline_input_t pnanovdb_pipeline_input_t;
 

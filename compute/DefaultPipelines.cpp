@@ -237,6 +237,7 @@ namespace pnanovdb_pipeline_nanovdb_load
                 compute->destroy_array(array_from_path);
             }
         }
+
         output->buffer_buffers[name_idx] = ptr->nanovdb_buffer;
         output->buffer_sizes[name_idx] = ptr->key_size;
         output->buffer_versions[name_idx] = ptr->key_version;
@@ -246,6 +247,262 @@ namespace pnanovdb_pipeline_nanovdb_load
     {
         static pnanovdb_pipeline_desc_t desc = {};
         desc.name = pnanovdb_get_compute()->get_token("nanovdb_load");
+        desc.get_pipeline_params_type = get_pipeline_params_type;
+        desc.create = create;
+        desc.destroy = destroy;
+        desc.get_requirements = get_requirements;
+        desc.load = load;
+        return &desc;
+    }
+}
+
+namespace pnanovdb_pipeline_nanovdb_load_series
+{
+    struct Instance
+    {
+        pnanovdb_compute_token_t* key_format = nullptr;
+        pnanovdb_uint32_t key_first = 0u;
+        pnanovdb_uint32_t key_last = 0u;
+        pnanovdb_uint32_t key_step = 1u;
+
+        std::vector<pnanovdb_compute_buffer_t*> buffers;
+        std::vector<pnanovdb_uint64_t> buffer_sizes;
+    };
+    PNANOVDB_CAST_PAIR(Instance, pnanovdb_pipeline_instance_t)
+
+    struct pnanovdb_pipeline_nanovdb_load_params_t
+    {
+        const char* buffer_name;
+        const char* format;
+        pnanovdb_uint32_t first;
+        pnanovdb_uint32_t last;
+        pnanovdb_uint32_t step;
+    };
+    static const pnanovdb_pipeline_nanovdb_load_params_t pnanovdb_pipeline_nanovdb_load_params_t_default = {
+        "nanovdb",
+        "", // format
+        0u, // first
+        0u, // last
+        1u, // step
+    };
+    #define PNANOVDB_REFLECT_TYPE pnanovdb_pipeline_nanovdb_load_params_t
+    PNANOVDB_REFLECT_BEGIN()
+    PNANOVDB_REFLECT_POINTER(char, buffer_name, 0, 0)
+    PNANOVDB_REFLECT_POINTER(char, format, 0, 0)
+    PNANOVDB_REFLECT_VALUE(pnanovdb_uint32_t, first, 0, 0)
+    PNANOVDB_REFLECT_VALUE(pnanovdb_uint32_t, last, 0, 0)
+    PNANOVDB_REFLECT_VALUE(pnanovdb_uint32_t, step, 0, 0)
+    PNANOVDB_REFLECT_END(&pnanovdb_pipeline_nanovdb_load_params_t_default)
+    #undef PNANOVDB_REFLECT_TYPE
+
+    void get_pipeline_params_type(const pnanovdb_compute_t* compute,
+                                  const pnanovdb_compiler_t* compiler,
+                                  const pnanovdb_reflect_data_type_t** out_data_type,
+                                  const pnanovdb_reflect_data_type_t** out_metadata_type)
+    {
+        *out_data_type = PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_nanovdb_load_params_t);
+        *out_metadata_type = nullptr;
+    }
+
+    pnanovdb_pipeline_instance_t* create(const pnanovdb_compute_t* compute,
+                                         pnanovdb_compute_queue_t* queue)
+    {
+        auto ptr = new Instance();
+
+        return cast(ptr);
+    }
+
+    void destroy(const pnanovdb_compute_t* compute,
+                 pnanovdb_compute_queue_t* queue,
+                 pnanovdb_pipeline_instance_t* instance)
+    {
+        auto ptr = cast(instance);
+
+        pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
+        pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
+        for (size_t idx = 0u; idx < ptr->buffers.size(); idx++)
+        {
+            if (ptr->buffers[idx])
+            {
+                compute_interface->destroy_buffer(context, ptr->buffers[idx]);
+                ptr->buffers[idx] = nullptr;
+            }
+        }
+        delete ptr;
+    }
+
+    pnanovdb_bool_t get_requirements(pnanovdb_pipeline_requirements_params_t* params,
+                                     pnanovdb_pipeline_requirements_output_t* output)
+    {
+        if (!params->params_data || !params->params_data_type ||
+            !pnanovdb_reflect_layout_compare(params->params_data_type, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_nanovdb_load_params_t)))
+        {
+            *output->p_name_count = 0u;
+            return PNANOVDB_TRUE;
+        }
+        if (!output->names)
+        {
+            *output->p_name_count = 1u;
+            return PNANOVDB_FALSE;
+        }
+        auto ptr = (pnanovdb_pipeline_nanovdb_load_params_t*)params->params_data;
+        if (*output->p_name_count >= 1u) { output->names[0u] = ptr->buffer_name; }
+        if (*output->p_name_count >= 1u)
+        {
+            *output->p_name_count = 1u;
+            return PNANOVDB_TRUE;
+        }
+        return PNANOVDB_FALSE;
+    }
+
+    void load(pnanovdb_pipeline_instance_t* instance,
+              const pnanovdb_compute_t* compute,
+              pnanovdb_compute_queue_t* queue,
+              pnanovdb_pipeline_load_input_t* input,
+              pnanovdb_pipeline_output_t* output)
+    {
+        auto ptr = cast(instance);
+
+        pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
+        pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
+
+        if (!input->params_data || !input->params_data_type ||
+            !pnanovdb_reflect_layout_compare(input->params_data_type, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_nanovdb_load_params_t)))
+        {
+            return;
+        }
+        auto params = (pnanovdb_pipeline_nanovdb_load_params_t*)input->params_data;
+
+        const char* buffer_name = "nanovdb";
+        if (params->buffer_name)
+        {
+            buffer_name = params->buffer_name;
+        }
+
+        pnanovdb_uint64_t name_idx = 0u;
+        for (;name_idx < input->buffer_count;name_idx++)
+        {
+            if (pnanovdb_reflect_string_compare(input->buffer_names[name_idx]->str, buffer_name)==0)
+            {
+                break;
+            }
+        }
+        if (name_idx >= input->buffer_count)
+        {
+            printf("Missing nanovdb buffer\n");
+            return;
+        }
+
+        pnanovdb_compute_token_t* format = compute->get_token(params->format);
+        bool is_dirty =
+            ptr->key_format != format ||
+            ptr->key_first != params->first ||
+            ptr->key_last != params->last ||
+            ptr->key_step != params->step;
+        if (is_dirty)
+        {
+            ptr->key_format = format;
+            ptr->key_first = params->first;
+            ptr->key_last = params->last;
+            ptr->key_step = params->step;
+
+            for (size_t idx = 0u; idx < ptr->buffers.size(); idx++)
+            {
+                if (ptr->buffers[idx])
+                {
+                    compute_interface->destroy_buffer(context, ptr->buffers[idx]);
+                    ptr->buffers[idx] = nullptr;
+                }
+            }
+            ptr->buffers.clear();
+
+            size_t new_size = 1u;
+            if (params->step != 0u)
+            {
+                new_size += (params->last - params->first) / params->step;
+            }
+            if (!params->format)
+            {
+                new_size = 0u;
+            }
+            ptr->buffers.resize(new_size);
+            ptr->buffer_sizes.resize(new_size);
+
+            for (size_t idx = 0u; idx < ptr->buffers.size(); idx++)
+            {
+                pnanovdb_uint32_t frame_idx = params->first + params->step * idx;
+                char vdb_path[4096u] = {};
+                snprintf(vdb_path, 4096, params->format, frame_idx);
+
+                pnanovdb_compute_array_t* array_from_path = compute->load_nanovdb(vdb_path);
+                if (!array_from_path)
+                {
+                    printf("Load failed, skipping [%zu]\n", idx);
+                    continue;
+                }
+
+                pnanovdb_uint64_t res_element_size = array_from_path->element_size;
+                pnanovdb_uint64_t res_size = res_element_size * array_from_path->element_count;
+                const void* res_data = array_from_path->data;
+
+                ptr->buffer_sizes[idx] = res_size;
+
+                static const pnanovdb_uint64_t min_size = 65536u;
+                pnanovdb_uint64_t buf_size = res_size < min_size ? min_size : res_size;
+
+                pnanovdb_compute_buffer_desc_t buf_desc = {};
+                buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_SRC;
+                buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+                buf_desc.structure_stride = 0;
+                buf_desc.size_in_bytes = buf_size;
+                pnanovdb_compute_buffer_t* upload_buffer =
+                    compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &buf_desc);
+
+                buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED |
+                    PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_SRC | PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_DST;
+                buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+                buf_desc.structure_stride = res_element_size;
+                buf_desc.size_in_bytes = buf_size;
+                ptr->buffers[idx] =
+                    compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
+
+                void* mapped_upload = compute_interface->map_buffer(context, upload_buffer);
+                if (res_size < min_size)
+                {
+                    memset(mapped_upload, 0, min_size);
+                }
+                memcpy(mapped_upload, res_data, res_size);
+                compute_interface->unmap_buffer(context, upload_buffer);
+
+                pnanovdb_compute_copy_buffer_params_t copy_params = {};
+                copy_params.num_bytes = buf_size;
+                copy_params.src = compute_interface->register_buffer_as_transient(context, upload_buffer);
+                copy_params.dst = compute_interface->register_buffer_as_transient(context, ptr->buffers[idx]);
+                copy_params.debug_label = "pipeline_nanovdb_load";
+                compute_interface->copy_buffer(context, &copy_params);
+
+                compute_interface->destroy_buffer(context, upload_buffer);
+
+                compute->destroy_array(array_from_path);
+            }
+        }
+
+        output->buffer_buffers[name_idx] = nullptr;
+        output->buffer_sizes[name_idx] = 0llu;
+        output->buffer_versions[name_idx] = 0llu;
+        if (ptr->buffers.size() != 0u)
+        {
+            size_t idx = input->frame_id % ptr->buffers.size();
+            output->buffer_buffers[name_idx] = ptr->buffers[idx];
+            output->buffer_sizes[name_idx] = ptr->buffer_sizes[idx] ;
+            output->buffer_versions[name_idx] = 1llu + idx;
+        }
+    }
+
+    static pnanovdb_pipeline_desc_t* get_desc()
+    {
+        static pnanovdb_pipeline_desc_t desc = {};
+        desc.name = pnanovdb_get_compute()->get_token("nanovdb_load_series");
         desc.get_pipeline_params_type = get_pipeline_params_type;
         desc.create = create;
         desc.destroy = destroy;
@@ -576,5 +833,6 @@ void pnanovdb_pipeline_register_defaults(const pnanovdb_compute_t* compute,
 {
     pnanovdb_get_pipeline()->register_pipeline(registry, pnanovdb_pipeline_no_operation::get_desc());
     pnanovdb_get_pipeline()->register_pipeline(registry, pnanovdb_pipeline_nanovdb_load::get_desc());
+    pnanovdb_get_pipeline()->register_pipeline(registry, pnanovdb_pipeline_nanovdb_load_series::get_desc());
     pnanovdb_get_pipeline()->register_pipeline(registry, pnanovdb_pipeline_nanovdb_render::get_desc());
 }

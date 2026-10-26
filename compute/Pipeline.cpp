@@ -26,6 +26,9 @@ void pnanovdb_pipeline_register_defaults(const pnanovdb_compute_t* compute,
 void pnanovdb_pipeline_register_gaussians(const pnanovdb_compute_t* compute,
                                           const pnanovdb_compiler_t* compiler,
                                           pnanovdb_pipeline_registry_t* registry);
+void pnanovdb_pipeline_register_flow(const pnanovdb_compute_t* compute,
+                                     const pnanovdb_compiler_t* compiler,
+                                     pnanovdb_pipeline_registry_t* registry);
 
 namespace
 {
@@ -55,6 +58,7 @@ pnanovdb_pipeline_registry_t* create_registry(const pnanovdb_compute_t* compute,
 
     pnanovdb_pipeline_register_defaults(compute, compiler, cast(ptr));
     pnanovdb_pipeline_register_gaussians(compute, compiler, cast(ptr));
+    pnanovdb_pipeline_register_flow(compute, compiler, cast(ptr));
 
     return cast(ptr);
 }
@@ -856,6 +860,8 @@ struct Runtime
     std::vector<std::unique_ptr<RuntimePipeline>> pipelines;
 
     pnanovdb_shader_context_t* shader_ctx[shader_count];
+
+    pnanovdb_uint64_t frame_id = 0llu;
 };
 PNANOVDB_CAST_PAIR(Runtime, pnanovdb_pipeline_runtime_t)
 
@@ -1082,6 +1088,10 @@ void update_runtime_main(const pnanovdb_compute_t* compute,
 {
     auto ptr = cast(runtime);
 
+    // establish frame_id
+    pnanovdb_uint64_t frame_id = ptr->frame_id;
+    ptr->frame_id++;
+
     // get camera info
     pnanovdb_compute_token_t* scene = config_get_active_scene(config);
     pnanovdb_compute_token_t* camera_name = config_get_active_camera(config, scene);
@@ -1240,6 +1250,7 @@ void update_runtime_main(const pnanovdb_compute_t* compute,
                 load_input.buffer_names = object_run->buffer_names.data();
                 load_input.params_data_type = pipeline_config.params_data_type;
                 load_input.params_data = pipeline_config.params_data;
+                load_input.frame_id = frame_id;
                 pnanovdb_pipeline_output_t output = {};
                 output.buffer_count = object_run->buffer_buffers.size();
                 output.buffer_buffers = object_run->buffer_buffers.data();
@@ -1286,6 +1297,7 @@ void update_runtime_main(const pnanovdb_compute_t* compute,
                 input.buffer_names = object_run->buffer_names.data();
                 input.params_data_type = pipeline_config.params_data_type;
                 input.params_data = pipeline_config.params_data;
+                input.frame_id = frame_id;
                 pnanovdb_pipeline_output_t output = {};
                 output.buffer_count = object_run->buffer_buffers_tmp.size();
                 output.buffer_buffers = object_run->buffer_buffers_tmp.data();
@@ -1362,6 +1374,7 @@ void update_runtime_main(const pnanovdb_compute_t* compute,
                 input.buffer_names = object_run->buffer_names.data();
                 input.params_data_type = pipeline_config.params_data_type;
                 input.params_data = pipeline_config.params_data;
+                input.frame_id = frame_id;
                 pnanovdb_pipeline_render_target_t target = {};
                 target.color = tmp_color;
                 target.depth = target_in->depth;

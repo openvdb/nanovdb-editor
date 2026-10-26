@@ -652,9 +652,11 @@ void showSceneWindow(pnanovdb_imgui_instance_t* instance, InstanceUserdata* inst
                                 pnanovdb_uint32_t pipeline_type = stage->pipelines[pipeline_idx].pipeline_type;
                                 pnanovdb_pipeline_metadesc_t pipe_desc = {};
                                 const char* pipeline_name = "invalid";
+                                char buf[256u] = {};
                                 if (pipeline->get_pipeline_metadesc(registry, pipeline_type, &pipe_desc))
                                 {
-                                    pipeline_name = pipe_desc.name->str;
+                                    snprintf(buf, 256u, "%s##%zu", pipe_desc.name->str, pipeline_idx);
+                                    pipeline_name = buf;
                                 }
                                 if (tree_node_ex(&ptr->tree_state, pipeline_name, leaf_flags))
                                 {
@@ -1305,15 +1307,15 @@ void properties_buffer(
 
         const char* desc_str = nullptr;
         const char* filter_str = nullptr;
-        if (pnanovdb_reflect_string_compare(mapped_object->buffer_names[selected_buffer_idx]->str, "nanovdb") == 0)
-        {
-            desc_str = "Open NanoVDB File";
-            filter_str = "NanoVDB Files (*.nvdb){.nvdb}";
-        }
-        else if (pnanovdb_reflect_string_compare(mapped_object->buffer_names[selected_buffer_idx]->str, "ply") == 0)
+        if (pnanovdb_reflect_string_compare(mapped_object->buffer_names[selected_buffer_idx]->str, "ply") == 0)
         {
             desc_str = "Open PLY File";
             filter_str = "PLY Files (*.ply){.ply}";
+        }
+        else // NanoVDB files as the default
+        {
+            desc_str = "Open NanoVDB File";
+            filter_str = "NanoVDB Files (*.nvdb){.nvdb}";
         }
         if (desc_str)
         {
