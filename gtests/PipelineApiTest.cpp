@@ -715,3 +715,187 @@ TEST_F(PipelineApiTest, SetCustomSceneParamsReportsErrorsWithoutCrossingAbi)
     // A null error buffer must still be safe (errors are optional).
     EXPECT_EQ(editor.set_custom_scene_params(&editor, scene_token, json_token, nullptr, 0), PNANOVDB_FALSE);
 }
+
+namespace
+{
+
+struct MeshBuildParamsView
+{
+    pnanovdb_uint32_t source_type;
+    pnanovdb_uint32_t resolution;
+    float inflation_radius;
+};
+
+// Unit quad split into two triangles.
+struct QuadMesh
+{
+    std::array<float, 12> positions{ 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 1.f, 1.f, 0.f, 0.f, 1.f, 0.f };
+    std::array<uint32_t, 6> indices{ 0u, 1u, 2u, 0u, 2u, 3u };
+    std::array<float, 12> colors{ 1.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 1.f, 1.f, 1.f, 0.f };
+};
+
+} // namespace
+
+TEST_F(PipelineApiTest, AddMeshConfiguresVoxelBVHPipelines)
+{
+    QuadMesh quad;
+    pnanovdb_compute_array_t* positions =
+        compute.create_array(sizeof(float), quad.positions.size(), quad.positions.data());
+    pnanovdb_compute_array_t* indices = compute.create_array(sizeof(uint32_t), quad.indices.size(), quad.indices.data());
+    pnanovdb_compute_array_t* colors = compute.create_array(sizeof(float), quad.colors.size(), quad.colors.data());
+    ASSERT_NE(positions, nullptr);
+    ASSERT_NE(indices, nullptr);
+    ASSERT_NE(colors, nullptr);
+
+    pnanovdb_editor_token_t* mesh_token = editor.get_token("pipeline_api_mesh");
+    pnanovdb_editor_mesh_desc_t desc{};
+    desc.positions = positions;
+    desc.indices = indices;
+    desc.colors = colors;
+    desc.resolution = 128u;
+    desc.inflation_radius = 0.25f;
+    editor.add_mesh(&editor, scene_token, mesh_token, &desc);
+
+    // The editor holds copies, so the caller's arrays can go away immediately.
+    compute.destroy_array(positions);
+    compute.destroy_array(indices);
+    compute.destroy_array(colors);
+
+    bool found = false;
+    pnanovdb_editor::SceneObjectSourceKind source = pnanovdb_editor::SceneObjectSourceKind::None;
+    bool has_colors = false;
+    editor.impl->scene_manager->with_object(scene_token, mesh_token,
+                                            [&](pnanovdb_editor::SceneObject* obj)
+                                            {
+                                                if (!obj)
+                                                    return;
+                                                found = true;
+                                                source = obj->source_kind();
+                                                auto it = obj->named_arrays().find("colors");
+                                                has_colors = it != obj->named_arrays().end() && it->second &&
+                                                             it->second->element_count == quad.colors.size();
+                                            });
+    ASSERT_TRUE(found);
+    EXPECT_EQ(source, pnanovdb_editor::SceneObjectSourceKind::MeshTriangles);
+    EXPECT_TRUE(has_colors);
+
+    EXPECT_EQ(editor.get_pipeline(&editor, scene_token, mesh_token, pnanovdb_pipeline_stage_process),
+              pnanovdb_pipeline_type_voxelbvh_build);
+    EXPECT_EQ(editor.get_pipeline(&editor, scene_token, mesh_token, pnanovdb_pipeline_stage_render),
+              pnanovdb_pipeline_type_voxelbvh_triangles_render);
+
+    pnanovdb_pipeline_params_t* params =
+        editor.map_pipeline_params(&editor, scene_token, mesh_token, pnanovdb_pipeline_stage_process);
+    ASSERT_NE(params, nullptr);
+    ASSERT_NE(params->data, nullptr);
+    ASSERT_GE(params->size, sizeof(MeshBuildParamsView));
+    const auto* build = static_cast<const MeshBuildParamsView*>(params->data);
+    EXPECT_EQ(build->source_type, (pnanovdb_uint32_t)pnanovdb_pipeline_voxelbvh_source_triangles);
+    EXPECT_EQ(build->resolution, 128u);
+    EXPECT_FLOAT_EQ(build->inflation_radius, 0.25f);
+    editor.unmap_pipeline_params(&editor, scene_token, mesh_token, pnanovdb_pipeline_stage_process);
+
+    editor.remove(&editor, scene_token, mesh_token);
+}
+
+TEST_F(PipelineApiTest, AddMeshWithoutColorsAndReplaceByName)
+{
+    QuadMesh quad;
+    pnanovdb_compute_array_t* positions =
+        compute.create_array(sizeof(float), quad.positions.size(), quad.positions.data());
+    pnanovdb_compute_array_t* indices = compute.create_array(sizeof(uint32_t), quad.indices.size(), quad.indices.data());
+    ASSERT_NE(positions, nullptr);
+    ASSERT_NE(indices, nullptr);
+
+    pnanovdb_editor_token_t* mesh_token = editor.get_token("pipeline_api_mesh_replace");
+    pnanovdb_editor_mesh_desc_t desc{};
+    desc.positions = positions;
+    desc.indices = indices;
+    editor.add_mesh(&editor, scene_token, mesh_token, &desc);
+
+    auto read_state = [&](uint64_t* lifetime_id, bool* has_colors, uint64_t* index_count)
+    {
+        editor.impl->scene_manager->with_object(scene_token, mesh_token,
+                                                [&](pnanovdb_editor::SceneObject* obj)
+                                                {
+                                                    ASSERT_NE(obj, nullptr);
+                                                    *lifetime_id = obj->lifetime_id;
+                                                    *has_colors = obj->named_arrays().count("colors") != 0;
+                                                    *index_count = obj->named_arrays().at("indices")->element_count;
+                                                });
+    };
+
+    uint64_t first_lifetime = 0u;
+    bool has_colors = true;
+    uint64_t index_count = 0u;
+    read_state(&first_lifetime, &has_colors, &index_count);
+    EXPECT_FALSE(has_colors) << "missing colors are left for the build to synthesize";
+    EXPECT_EQ(index_count, quad.indices.size());
+
+    // Adding the same name again replaces the object with a single triangle.
+    pnanovdb_compute_array_t* one_triangle = compute.create_array(sizeof(uint32_t), 3u, quad.indices.data());
+    ASSERT_NE(one_triangle, nullptr);
+    desc.indices = one_triangle;
+    editor.add_mesh(&editor, scene_token, mesh_token, &desc);
+
+    uint64_t second_lifetime = 0u;
+    read_state(&second_lifetime, &has_colors, &index_count);
+    EXPECT_NE(second_lifetime, first_lifetime);
+    EXPECT_EQ(index_count, 3u);
+
+    compute.destroy_array(positions);
+    compute.destroy_array(indices);
+    compute.destroy_array(one_triangle);
+    editor.remove(&editor, scene_token, mesh_token);
+}
+
+TEST_F(PipelineApiTest, AddMeshRejectsInvalidInput)
+{
+    QuadMesh quad;
+    pnanovdb_compute_array_t* positions =
+        compute.create_array(sizeof(float), quad.positions.size(), quad.positions.data());
+    ASSERT_NE(positions, nullptr);
+
+    const std::array<uint32_t, 3> out_of_range{ 0u, 1u, 4u };
+    pnanovdb_compute_array_t* bad_range = compute.create_array(sizeof(uint32_t), 3u, out_of_range.data());
+    pnanovdb_compute_array_t* bad_count = compute.create_array(sizeof(uint32_t), 4u, quad.indices.data());
+    pnanovdb_compute_array_t* indices = compute.create_array(sizeof(uint32_t), quad.indices.size(), quad.indices.data());
+    pnanovdb_compute_array_t* short_colors = compute.create_array(sizeof(float), 3u, quad.colors.data());
+    ASSERT_NE(bad_range, nullptr);
+    ASSERT_NE(bad_count, nullptr);
+    ASSERT_NE(indices, nullptr);
+    ASSERT_NE(short_colors, nullptr);
+
+    pnanovdb_editor_token_t* mesh_token = editor.get_token("pipeline_api_mesh_invalid");
+    auto expect_rejected = [&](const pnanovdb_editor_mesh_desc_t& desc, const char* what)
+    {
+        editor.add_mesh(&editor, scene_token, mesh_token, &desc);
+        bool exists = false;
+        editor.impl->scene_manager->with_object(
+            scene_token, mesh_token, [&](pnanovdb_editor::SceneObject* obj) { exists = obj != nullptr; });
+        EXPECT_FALSE(exists) << what;
+    };
+
+    pnanovdb_editor_mesh_desc_t desc{};
+    desc.positions = positions;
+    desc.indices = bad_range;
+    expect_rejected(desc, "index out of range");
+
+    desc.indices = bad_count;
+    expect_rejected(desc, "index count not a multiple of 3");
+
+    desc.indices = indices;
+    desc.colors = short_colors;
+    expect_rejected(desc, "color count mismatch");
+
+    desc.colors = nullptr;
+    desc.inflation_radius = -1.f;
+    expect_rejected(desc, "negative inflation radius");
+
+    desc.inflation_radius = 0.f;
+    desc.positions = nullptr;
+    expect_rejected(desc, "missing positions");
+
+    for (pnanovdb_compute_array_t* a : { positions, bad_range, bad_count, indices, short_colors })
+        compute.destroy_array(a);
+}

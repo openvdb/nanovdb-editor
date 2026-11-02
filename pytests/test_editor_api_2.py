@@ -294,3 +294,52 @@ class TestEditorAPI2:
             sleep(0.1)
         finally:
             self.compute.destroy_array(image_array)
+
+
+class TestSurfaceMesh:
+    """Scene.add_surface_mesh wiring.
+
+    The editor is never started here, so the async VoxelBVH build does not run.
+    Software-Vulkan CI runners hang inside the triangle build (see test_pipelines.py).
+    """
+
+    QUAD_VERTICES = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]], dtype=np.float32)
+    QUAD_FACES = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.int64)
+
+    def _pipelines(self, scene_token, name):
+        name_token = self.editor.get_token(name)
+        process = self.editor.get_pipeline(scene_token, name_token, nve.PipelineStage.PROCESS)
+        render = self.editor.get_pipeline(scene_token, name_token, nve.PipelineStage.RENDER)
+        return process, render
+
+    def test_add_surface_mesh_configures_pipelines(self):
+        scene = self.editor.scene("mesh_scene")
+        scene_token = self.editor.get_token("mesh_scene")
+        colors = np.array([[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0]], dtype=np.uint8)
+
+        scene.add_surface_mesh("quad", self.QUAD_VERTICES, self.QUAD_FACES, colors, resolution=64)
+        assert self._pipelines(scene_token, "quad") == (9, 6)  # voxelbvh_build, voxelbvh_triangles_render
+
+        # Replacing by name keeps the same pipelines.
+        scene.add_surface_mesh("quad", self.QUAD_VERTICES, self.QUAD_FACES[:1])
+        assert self._pipelines(scene_token, "quad") == (9, 6)
+
+        self.editor.remove(scene_token, self.editor.get_token("quad"))
+
+    @pytest.mark.parametrize(
+        "vertices, faces, colors, kwargs",
+        [
+            (np.zeros((4, 2), np.float32), QUAD_FACES, None, {}),
+            (QUAD_VERTICES, np.zeros((2, 4), np.int64), None, {}),
+            (QUAD_VERTICES, np.array([[0, 1, 4]]), None, {}),
+            (QUAD_VERTICES, np.array([[0, 1, -1]]), None, {}),
+            (QUAD_VERTICES, QUAD_FACES.astype(np.float32), None, {}),
+            (QUAD_VERTICES, QUAD_FACES, np.ones((3, 3), np.float32), {}),
+            (QUAD_VERTICES, QUAD_FACES, None, {"resolution": 0}),
+            (QUAD_VERTICES, QUAD_FACES, None, {"inflation_radius": -1.0}),
+        ],
+    )
+    def test_add_surface_mesh_rejects_invalid_input(self, vertices, faces, colors, kwargs):
+        scene = self.editor.scene("mesh_scene")
+        with pytest.raises(nve.InvalidArgumentError):
+            scene.add_surface_mesh("bad_mesh", vertices, faces, colors, **kwargs)

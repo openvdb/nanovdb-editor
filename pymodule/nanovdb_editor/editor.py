@@ -235,6 +235,18 @@ class EditorGaussianDataDesc(Structure):
     ]
 
 
+class EditorMeshDesc(Structure):
+    """Definition equivalent to pnanovdb_editor_mesh_desc_t."""
+
+    _fields_ = [
+        ("positions", POINTER(pnanovdb_ComputeArray)),
+        ("indices", POINTER(pnanovdb_ComputeArray)),
+        ("colors", POINTER(pnanovdb_ComputeArray)),
+        ("resolution", c_uint32),
+        ("inflation_radius", c_float),
+    ]
+
+
 class pnanovdb_PipelineParams(Structure):
     """Definition equivalent to pnanovdb_pipeline_params_t.
 
@@ -608,6 +620,16 @@ class pnanovdb_Editor(Structure):
                 POINTER(EditorToken),  # name
                 c_uint32,  # process_pipeline
                 c_uint32,  # render_pipeline
+            ),
+        ),
+        (
+            "add_mesh",
+            CFUNCTYPE(
+                None,
+                c_void_p,  # pnanovdb_editor_t*
+                POINTER(EditorToken),  # scene
+                POINTER(EditorToken),  # name
+                POINTER(EditorMeshDesc),  # desc
             ),
         ),
     ]
@@ -1017,6 +1039,15 @@ class Editor:
         """
         add_gaussian_data_4_func = self._editor.contents.add_gaussian_data_4
         add_gaussian_data_4_func(self._editor, scene, name, int(process_pipeline), int(render_pipeline))
+
+    def add_mesh(self, scene, name, desc):
+        """Add or replace a triangle or line mesh described by an ``EditorMeshDesc``.
+
+        The editor copies the arrays, so the caller may destroy them after the call.
+        :meth:`Scene.add_surface_mesh` is the NumPy-level entry point.
+        """
+        add_mesh_func = self._editor.contents.add_mesh
+        add_mesh_func(self._editor, scene, name, pointer(desc))
 
     def update_camera_2(self, scene, camera):
         """Update camera for a scene with token-based API."""
