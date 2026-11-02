@@ -60,6 +60,14 @@ RGBA8 for several ray directions at once
 (`scene.nanovdb_to_rgba8_directions(...)`), and manage scene objects with
 `scene.remove` / `scene.add_grid` / `scene.update_camera` / `scene.add_image2d`.
 
+To show a triangle mesh, pass `(V, 3)` vertices, `(F, 3)` faces and optional
+`(V, 3)` per-vertex colors. The editor builds a VoxelBVH in the render loop and
+ray-traces the triangles:
+
+```py
+scene.add_surface_mesh("bunny", vertices, faces, colors=vertex_colors)
+```
+
 The returned `Grid` is a context manager, and `grid.map(dtype)` hands you a
 live, zero-copy NumPy view of its bytes that is unmapped on block exit:
 

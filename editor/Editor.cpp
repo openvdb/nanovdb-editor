@@ -1719,6 +1719,131 @@ void add_gaussian_data_4(pnanovdb_editor_t* editor,
     run_gaussian_add(editor, scene, name, process_pipeline, render_pipeline, desc_copy);
 }
 
+// Returns nullptr when the mesh is valid, otherwise a description of the first problem.
+static const char* validate_mesh_desc(const pnanovdb_editor_mesh_desc_t& desc)
+{
+    const pnanovdb_compute_array_t* positions = desc.positions;
+    const pnanovdb_compute_array_t* indices = desc.indices;
+    const pnanovdb_compute_array_t* colors = desc.colors;
+
+    if (!positions || !positions->data || !indices || !indices->data)
+        return "positions and indices are required";
+    if (positions->element_size != sizeof(float) || positions->element_count == 0u || positions->element_count % 3u != 0u)
+        return "positions must be float32 with a non-zero multiple of 3 elements";
+
+    const bool is_lines = indices->element_size == 2u * sizeof(uint32_t);
+    if (!is_lines && indices->element_size != sizeof(uint32_t))
+        return "indices must be uint32 (element_size 4) or uint32 pairs (element_size 8)";
+    if (indices->element_count == 0u || (!is_lines && indices->element_count % 3u != 0u))
+        return "triangle indices must have a non-zero multiple of 3 elements";
+
+    if (colors &&
+        (!colors->data || colors->element_size != sizeof(float) || colors->element_count != positions->element_count))
+        return "colors must be float32 with one rgb triple per vertex";
+
+    if (!(desc.inflation_radius >= 0.f))
+        return "inflation_radius must be non-negative";
+
+    const uint64_t vertex_count = positions->element_count / 3u;
+    const uint64_t index_count = is_lines ? 2u * indices->element_count : indices->element_count;
+    const uint32_t* index_data = static_cast<const uint32_t*>(indices->data);
+    for (uint64_t i = 0; i < index_count; ++i)
+    {
+        if (index_data[i] >= vertex_count)
+            return "indices reference a vertex out of range";
+    }
+    return nullptr;
+}
+
+void add_mesh(pnanovdb_editor_t* editor,
+              pnanovdb_editor_token_t* scene,
+              pnanovdb_editor_token_t* name,
+              const pnanovdb_editor_mesh_desc_t* desc)
+{
+    if (!editor || !editor->impl || !scene || !name || !desc)
+    {
+        return;
+    }
+
+    if (const char* error = validate_mesh_desc(*desc))
+    {
+        Console::getInstance().addLog(
+            Console::LogLevel::Error, "add_mesh: rejected '%s': %s", token_to_string_log(name), error);
+        return;
+    }
+
+    const bool is_lines = desc->indices->element_size == 2u * sizeof(uint32_t);
+    const pnanovdb_pipeline_type_t render_pipeline =
+        is_lines ? pnanovdb_pipeline_type_voxelbvh_lines_render : pnanovdb_pipeline_type_voxelbvh_triangles_render;
+    const pnanovdb_pipeline_voxelbvh_source_t source_type =
+        is_lines ? pnanovdb_pipeline_voxelbvh_source_lines : pnanovdb_pipeline_voxelbvh_source_triangles;
+    const pnanovdb_uint32_t resolution = desc->resolution == 0u ?
+                                             pnanovdb_editor::k_default_bvh_resolution :
+                                             pnanovdb_pipeline_voxelbvh_sanitize_resolution(desc->resolution);
+    const float inflation_radius = desc->inflation_radius;
+    const pnanovdb_editor_mesh_desc_t src = *desc;
+
+    run_add_with_render_sync(
+        editor,
+        [=](bool defer_sync)
+        {
+            const pnanovdb_compute_t* compute = editor->impl->compute;
+
+            // A null colors array is bound as missing, and the build synthesizes white.
+            pnanovdb_compute_array_t* indices = compute->duplicate_array(src.indices);
+            pnanovdb_compute_array_t* positions = compute->duplicate_array(src.positions);
+            pnanovdb_compute_array_t* colors = src.colors ? compute->duplicate_array(src.colors) : nullptr;
+            if (!indices || !positions || (src.colors && !colors))
+            {
+                for (pnanovdb_compute_array_t* a : { indices, positions, colors })
+                {
+                    if (a)
+                        compute->destroy_array(a);
+                }
+                Console::getInstance().addLog(Console::LogLevel::Error,
+                                              "add_mesh: failed to duplicate input arrays for '%s'",
+                                              token_to_string_log(name));
+                return;
+            }
+
+            std::shared_ptr<pnanovdb_raster_gaussian_data_t> old_gaussian_owner;
+            if (!editor->impl->scene_manager->add_mesh(scene, name, indices, positions, colors, compute,
+                                                       pnanovdb_pipeline_type_voxelbvh_build, render_pipeline,
+                                                       &old_gaussian_owner))
+            {
+                Console::getInstance().addLog(
+                    Console::LogLevel::Error, "add_mesh: could not add '%s'", token_to_string_log(name));
+                return;
+            }
+            if (old_gaussian_owner)
+            {
+                defer_gaussian_data_destruction(editor->impl, std::move(old_gaussian_owner));
+            }
+
+            editor->impl->scene_manager->with_object(
+                scene, name,
+                [&](SceneObject* obj)
+                {
+                    if (!obj)
+                        return;
+                    auto& params = obj->process_params();
+                    pnanovdb_pipeline_voxelbvh_build_params_set_source_type(&params, source_type);
+                    pnanovdb_pipeline_voxelbvh_build_params_set_inflation_radius(&params, inflation_radius);
+                    pnanovdb_pipeline_voxelbvh_build_params_set_resolution(&params, resolution);
+                    obj->mark_process_dirty();
+                });
+
+            Console::getInstance().addLog(
+                Console::LogLevel::Debug, "add_mesh: scene='%s', name='%s', vertices=%llu, %s=%llu, colors=%s",
+                token_to_string_log(scene), token_to_string_log(name),
+                (unsigned long long)(src.positions->element_count / 3u), is_lines ? "lines" : "triangles",
+                (unsigned long long)(is_lines ? src.indices->element_count : src.indices->element_count / 3u),
+                src.colors ? "given" : "white");
+
+            sync_added_object(editor, scene, name, defer_sync);
+        });
+}
+
 void add_camera_view_2(pnanovdb_editor_t* editor, pnanovdb_editor_token_t* scene, pnanovdb_camera_view_t* camera)
 {
     if (!editor || !editor->impl || !scene || !camera)
@@ -2999,6 +3124,7 @@ PNANOVDB_API pnanovdb_editor_t* pnanovdb_get_editor()
     editor.add_nanovdb_3 = add_nanovdb_3;
     editor.add_gaussian_data_3 = add_gaussian_data_3;
     editor.add_gaussian_data_4 = add_gaussian_data_4;
+    editor.add_mesh = add_mesh;
     editor.set_visible = set_visible;
     editor.get_visible = get_visible;
     editor.add_named_array = add_named_array;

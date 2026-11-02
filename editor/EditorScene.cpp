@@ -810,6 +810,16 @@ bool EditorScene::sync_object_into_view(SceneObject* obj)
                                  (pnanovdb_raster_shader_params_t*)obj->shader_params() };
         m_scene_view.add_gaussian(obj->scene_token, obj->name_token, ctx);
     }
+    else if (render_method == pnanovdb_pipeline_render_method_nanovdb)
+    {
+        // A mesh with bound arrays renders only after its async VoxelBVH build. The placeholder
+        // keeps it in the view until the build publishes the grid.
+        const auto& arrays = obj->resources.named_arrays;
+        const auto positions = arrays.find("positions");
+        const auto indices = arrays.find("indices");
+        if (positions != arrays.end() && positions->second && indices != arrays.end() && indices->second)
+            add_nanovdb_placeholder(obj->scene_token, obj->name_token);
+    }
     return false;
 }
 
