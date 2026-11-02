@@ -1116,6 +1116,10 @@ static void nanovdb_add_nodes_from_ijkl_buffer(const pnanovdb_compute_t* compute
 
     // compute active bbox
     {
+        // The bbox shaders write workgroup_bboxes as RWStructuredBuffer<int4>.
+        buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED;
+        buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+        buf_desc.structure_stride = 4u * sizeof(pnanovdb_int32_t);
         buf_desc.size_in_bytes = 8u * 4u * 256u;
         pnanovdb_compute_buffer_t* workgroup_bbox_buffer =
             compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
@@ -2597,6 +2601,10 @@ void nanovdb_rgba8_from_voxelbvh(const pnanovdb_compute_t* compute,
         pnanovdb_compute_buffer_transient_t* src_nanovdb_transient =
             compute_interface->register_buffer_as_transient(context, src_nanovdb_in);
 
+        // The bbox shaders write workgroup_bboxes as RWStructuredBuffer<int4>.
+        buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_RW_STRUCTURED;
+        buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+        buf_desc.structure_stride = 4u * sizeof(pnanovdb_int32_t);
         buf_desc.size_in_bytes = 8u * 4u * 256u;
         pnanovdb_compute_buffer_t* workgroup_bbox_buffer =
             compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_DEVICE, &buf_desc);
