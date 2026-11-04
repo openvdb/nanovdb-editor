@@ -17,6 +17,7 @@ ConstantBuffer<constants_t> constants;
 StructuredBuffer<uint2> buf;
 StructuredBuffer<uint2> node_mask_in;
 RWStructuredBuffer<uint2> workgroup_counters_out;
+RWStructuredBuffer<uint> debug_out;
 
 uint64_t uint2_to_uint64_t(uint2 v)
 {
@@ -72,7 +73,15 @@ void main(uint3 group_idx : SV_GroupID, uint3 thread_idx : SV_GroupThreadID)
                 {
                     pnanovdb_root_handle_t root = {uint64_t(chunk_idx) << 5u};
 
-                    pnanovdb_uint32_t root_tile_count = pnanovdb_root_get_tile_count(buf, root);
+                    //pnanovdb_uint32_t root_tile_count = pnanovdb_root_get_tile_count(buf, root);
+                    pnanovdb_address_t addr = pnanovdb_address_offset(root.address, PNANOVDB_ROOT_OFF_TABLE_SIZE);
+                    pnanovdb_uint32_t root_tile_count = pnanovdb_read_uint32(buf, addr);
+
+                    //// Induce a bug fix with an event that never happens in real life.
+                    //if (group_idx.x == 65535)
+                    //{
+                    //    debug_out[thread_idx.x] = uint(addr.byte_offset);
+                    //}
 
                     max_current_addr = max(max_current_addr,
                         root.address.byte_offset + PNANOVDB_GRID_TYPE_GET(grid_type, root_size) +

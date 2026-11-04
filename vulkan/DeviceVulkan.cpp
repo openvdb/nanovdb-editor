@@ -11,6 +11,7 @@
 */
 
 #include "CommonVulkan.h"
+#include "vulkan/vulkan_core.h"
 
 #if defined(_WIN32)
 #    include <windows.h> // Required for GetModuleFileNameA
@@ -132,7 +133,7 @@ pnanovdb_compute_device_manager_t* createDeviceManager(pnanovdb_bool_t enableVal
     // create instance
     uint32_t numLayers = 0u;
     const char** layers = nullptr;
-#ifdef _DEBUG
+#ifdef _DEBUG_IT
     const uint32_t numLayers_validation = 1u;
     const char* layers_validation[numLayers_validation] = { "VK_LAYER_KHRONOS_validation" };
     if (enableValidationOnDebugBuild)
@@ -863,6 +864,11 @@ int flushStepA(DeviceQueue* ptr, pnanovdb_compute_semaphore_t* waitSemaphore, pn
     }
 
     VkResult result = loader->vkQueueSubmit(ptr->queueVk, 1u, &submitInfo, ptr->fences[ptr->commandBufferIdx].fence);
+    if (result == VK_ERROR_DEVICE_LOST)
+    {
+        printf("Device lost!!!!\n");
+        exit(1);
+    }
 
     // mark signaled fence value
     ptr->fences[ptr->commandBufferIdx].value = ptr->nextFenceValue;

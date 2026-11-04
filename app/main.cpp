@@ -97,8 +97,13 @@ struct NanoVDBEditorArgs : public argparse::Args
     std::string& shader_name = kwarg("shader", "Shader name to use").set_default("");
 };
 
+void repro_bug(uint32_t device_index);
+
 int main(int argc, char* argv[])
 {
+    repro_bug(0u);
+    return 0;
+
     auto args = argparse::parse<NanoVDBEditorArgs>(argc, argv);
     // args.print();
 
