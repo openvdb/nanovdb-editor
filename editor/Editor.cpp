@@ -10,6 +10,7 @@
 */
 
 #include "Editor.h"
+#include "nanovdb_editor/putil/Compute.h"
 
 PNANOVDB_CAST_PAIR(pnanovdb_editor_token_t, pnanovdb_compute_token_t)
 
@@ -636,9 +637,9 @@ pnanovdb_bool_t load_scene(pnanovdb_editor_t* editor, const char* filepath, pnan
     if (!editor || !editor->impl || !filepath || filepath[0] == '\0')
         return PNANOVDB_FALSE;
 
-    // TODO: add with serialization
-
-    return PNANOVDB_FALSE;
+    auto pipeline = &editor->impl->pipeline;
+    auto pipe_config = editor->impl->pipeline_config;
+    return pipeline->config_load_scene(pipe_config, filepath, overwrite);
 }
 
 pnanovdb_bool_t save_scene(pnanovdb_editor_t* editor, const char* filepath)
@@ -646,9 +647,10 @@ pnanovdb_bool_t save_scene(pnanovdb_editor_t* editor, const char* filepath)
     if (!editor || !editor->impl || !filepath || filepath[0] == '\0')
         return PNANOVDB_FALSE;
 
-    // TODO: add with serialization
-
-    return PNANOVDB_FALSE;
+    auto pipeline = &editor->impl->pipeline;
+    auto pipe_config = editor->impl->pipeline_config;
+    pnanovdb_compute_token_t* scene = pipeline->config_get_active_scene(pipe_config);
+    return pipeline->config_save_scene(pipe_config, scene, filepath);
 }
 
 void add_nanovdb_2(pnanovdb_editor_t* editor,

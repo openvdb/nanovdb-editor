@@ -250,7 +250,6 @@ struct pnanovdb_pipeline_object_mapped_t
 };
 typedef struct pnanovdb_pipeline_object_mapped_t pnanovdb_pipeline_object_mapped_t;
 
-PNANOVDB_REFLECT_STRUCT_OPAQUE_IMPL(pnanovdb_camera_t)
 PNANOVDB_REFLECT_STRUCT_OPAQUE_IMPL(pnanovdb_camera_view_t)
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_pipeline_object_mapped_t
@@ -388,6 +387,14 @@ typedef struct pnanovdb_pipeline_t
 
     pnanovdb_compute_token_t*(PNANOVDB_ABI* config_get_active_scene)(pnanovdb_pipeline_config_t* config);
 
+    pnanovdb_bool_t(PNANOVDB_ABI* config_load_scene)(pnanovdb_pipeline_config_t* config,
+                                                     const char* path,
+                                                     pnanovdb_bool_t overwrite);
+
+    pnanovdb_bool_t(PNANOVDB_ABI* config_save_scene)(pnanovdb_pipeline_config_t* config,
+                                                     pnanovdb_compute_token_t* scene,
+                                                     const char* path);
+
     pnanovdb_pipeline_runtime_t*(PNANOVDB_ABI* create_runtime)(const pnanovdb_compute_t* compute,
                                                                pnanovdb_compute_queue_t* queue);
 
@@ -433,6 +440,8 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(config_set_active_camera, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(config_get_active_camera, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(config_set_active_scene, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(config_get_active_scene, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(config_load_scene, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(config_save_scene, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(create_runtime, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(destroy_runtime, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(update_runtime_main, 0, 0)

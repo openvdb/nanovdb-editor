@@ -996,6 +996,8 @@ void properties_scene(
     pnanovdb_compute_token_t* scene_rename_name = nullptr;
     pnanovdb_compute_token_t* scene_remove_name = nullptr;
     pnanovdb_compute_token_t* new_object_name = nullptr;
+    pnanovdb_compute_token_t* save_name = nullptr;
+    pnanovdb_compute_token_t* load_name = nullptr;
 
     ImGui::SeparatorText("Scene");
     if (ImGui::Button("Remove"))
@@ -1036,6 +1038,16 @@ void properties_scene(
         }
         new_object_name = object_name;
     }
+    if (ImGui::Button("Save"))
+    {
+        std::string file_name = std::string(scene->str) + "_test_save.json";
+        save_name = compute->get_token(file_name.c_str());
+    }
+    if (ImGui::Button("Load"))
+    {
+        std::string file_name = std::string("main") + "_test_save.json";
+        load_name = compute->get_token(file_name.c_str());
+    }
 
     pipeline->config_unmap_params(config, scene, nullptr, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_list_t));
 
@@ -1050,6 +1062,14 @@ void properties_scene(
     if (scene_remove_name)
     {
         pipeline->config_remove(config, scene_remove_name, nullptr);
+    }
+    if (save_name)
+    {
+        pipeline->config_save_scene(config, scene, save_name->str);
+    }
+    if (load_name)
+    {
+        pipeline->config_load_scene(config, load_name->str, PNANOVDB_TRUE);
     }
 }
 

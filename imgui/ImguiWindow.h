@@ -33,37 +33,6 @@ typedef struct ImGuiIO ImGuiIO;
 struct ImDrawData;
 typedef struct ImDrawData ImDrawData;
 
-#define PNANOVDB_REFLECT_TYPE pnanovdb_vec3_t
-PNANOVDB_REFLECT_BEGIN()
-PNANOVDB_REFLECT_VALUE(float, x, 0, 0)
-PNANOVDB_REFLECT_VALUE(float, y, 0, 0)
-PNANOVDB_REFLECT_VALUE(float, z, 0, 0)
-PNANOVDB_REFLECT_END(0)
-#undef PNANOVDB_REFLECT_TYPE
-
-#define PNANOVDB_REFLECT_TYPE pnanovdb_camera_state_t
-PNANOVDB_REFLECT_BEGIN()
-PNANOVDB_REFLECT_VALUE(pnanovdb_vec3_t, position, 0, 0)
-PNANOVDB_REFLECT_VALUE(pnanovdb_vec3_t, eye_direction, 0, 0)
-PNANOVDB_REFLECT_VALUE(pnanovdb_vec3_t, eye_up, 0, 0)
-PNANOVDB_REFLECT_VALUE(float, eye_distance_from_position, 0, 0)
-PNANOVDB_REFLECT_VALUE(float, orthographic_scale, 0, 0)
-PNANOVDB_REFLECT_END(0)
-#undef PNANOVDB_REFLECT_TYPE
-
-#define PNANOVDB_REFLECT_TYPE pnanovdb_camera_config_t
-PNANOVDB_REFLECT_BEGIN()
-PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, is_projection_rh, 0, 0)
-PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, is_orthographic, 0, 0)
-PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, is_reverse_z, 0, 0)
-PNANOVDB_REFLECT_VALUE(float, near_plane, 0, 0)
-PNANOVDB_REFLECT_VALUE(float, far_plane, 0, 0)
-PNANOVDB_REFLECT_VALUE(float, fov_angle_y, 0, 0)
-PNANOVDB_REFLECT_VALUE(float, orthographic_y, 0, 0)
-PNANOVDB_REFLECT_VALUE(float, aspect_ratio, 0, 0)
-PNANOVDB_REFLECT_END(0)
-#undef PNANOVDB_REFLECT_TYPE
-
 typedef struct pnanovdb_imgui_settings_render_t
 {
     const pnanovdb_reflect_data_type_t* data_type;

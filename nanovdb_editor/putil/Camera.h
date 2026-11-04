@@ -14,6 +14,12 @@
 
 #include <nanovdb/PNanoVDB.h>
 
+#ifndef PNANOVDB_CAMERA_REFLECT
+#ifdef NANOVDB_PUTILS_REFLECT_H_HAS_BEEN_INCLUDED
+#define PNANOVDB_CAMERA_REFLECT
+#endif
+#endif
+
 // Forward declaration for token type (defined in Editor.h)
 struct pnanovdb_editor_token_t;
 
@@ -97,6 +103,59 @@ struct pnanovdb_camera_t
     pnanovdb_uint32_t key_translate_active_mask;
 };
 PNANOVDB_STRUCT_TYPEDEF(pnanovdb_camera_t)
+
+#ifdef PNANOVDB_CAMERA_REFLECT
+
+#define PNANOVDB_REFLECT_TYPE pnanovdb_vec3_t
+PNANOVDB_REFLECT_BEGIN()
+PNANOVDB_REFLECT_VALUE(float, x, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, y, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, z, 0, 0)
+PNANOVDB_REFLECT_END(0)
+#undef PNANOVDB_REFLECT_TYPE
+
+#define PNANOVDB_REFLECT_TYPE pnanovdb_camera_state_t
+PNANOVDB_REFLECT_BEGIN()
+PNANOVDB_REFLECT_VALUE(pnanovdb_vec3_t, position, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_vec3_t, eye_direction, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_vec3_t, eye_up, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, eye_distance_from_position, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, orthographic_scale, 0, 0)
+PNANOVDB_REFLECT_END(0)
+#undef PNANOVDB_REFLECT_TYPE
+
+#define PNANOVDB_REFLECT_TYPE pnanovdb_camera_config_t
+PNANOVDB_REFLECT_BEGIN()
+PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, is_projection_rh, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, is_orthographic, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, is_reverse_z, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, near_plane, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, far_plane, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, fov_angle_y, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, orthographic_y, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, aspect_ratio, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, pan_rate, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, tilt_rate, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, zoom_rate, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, key_translation_rate, 0, 0)
+PNANOVDB_REFLECT_VALUE(float, scroll_zoom_rate, 0, 0)
+PNANOVDB_REFLECT_END(0)
+#undef PNANOVDB_REFLECT_TYPE
+
+#define PNANOVDB_REFLECT_TYPE pnanovdb_camera_t
+PNANOVDB_REFLECT_BEGIN()
+PNANOVDB_REFLECT_VALUE(pnanovdb_camera_config_t, config, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_camera_state_t, state, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_int32_t, mouse_x_prev, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_int32_t, mouse_y_prev, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, rotation_active, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, zoom_active, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_bool_t, translate_active, 0, 0)
+PNANOVDB_REFLECT_VALUE(pnanovdb_uint32_t, key_translate_active_mask, 0, 0)
+PNANOVDB_REFLECT_END(0)
+#undef PNANOVDB_REFLECT_TYPE
+
+#endif
 
 PNANOVDB_FORCE_INLINE void pnanovdb_camera_config_default(PNANOVDB_INOUT(pnanovdb_camera_config_t) ptr)
 {
