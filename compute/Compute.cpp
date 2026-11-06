@@ -19,6 +19,12 @@
 #include <unordered_map>
 #include <optional>
 
+#ifdef _WIN32
+#include <malloc.h>
+#else
+#include <stdlib.h>
+#endif
+
 #include "ShaderParamsTypes.h"
 
 // Adding missing NanoVDB load single handle functionality
@@ -1067,7 +1073,11 @@ pnanovdb_compute_array_t* create_array(size_t element_size, pnanovdb_uint64_t el
         alloc_size = 65536u;
     }
     // new char[alloc_size];
+#ifdef _WIN32
+    array->data = _aligned_malloc(alloc_size, 32u);
+#else
     array->data = aligned_alloc(32u, alloc_size);
+#endif
     memset(array->data, 0, 65536u);
     if (data)
     {
@@ -1108,7 +1118,11 @@ void destroy_array(pnanovdb_compute_array_t* array)
 #endif
 
     //delete[] (char*)array->data;
+#ifdef _WIN32
+    _aligned_free(array->data);
+#else
     free(array->data);
+#endif
     array->data = nullptr;
     delete array;
 }
