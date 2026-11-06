@@ -57,6 +57,9 @@ struct Instance
     int32_t property_selected_pipeline_idx = 0;
     int32_t property_selected_pipeline_type = -1;
 
+    pnanovdb_compute_token_t* overwrite_load_name = nullptr;
+    bool show_overwrite = false;
+
     char object_rename_buf[256u] = {};
     char scene_rename_buf[256u] = {};
 };
@@ -1111,7 +1114,30 @@ void properties_scene(
     }
     if (load_name)
     {
-        pipeline->config_load_scene(config, load_name->str, PNANOVDB_TRUE);
+        if (!pipeline->config_load_scene(config, load_name->str, PNANOVDB_FALSE))
+        {
+            ptr->overwrite_load_name = load_name;
+            ptr->show_overwrite = true;
+            ImGui::OpenPopup("Overwrite current scene?");
+        }
+    }
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    if (ImGui::BeginPopupModal("Overwrite current scene?", &ptr->show_overwrite, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::Text("Do you really want to proceed?");
+        ImGui::Separator();
+        if (ImGui::Button("Yes", ImVec2(120, 0)))
+        {
+            pipeline->config_load_scene(config, ptr->overwrite_load_name->str, PNANOVDB_TRUE);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("No", ImVec2(120, 0)))
+        {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
 }
 

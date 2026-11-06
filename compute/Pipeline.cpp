@@ -955,6 +955,31 @@ pnanovdb_bool_t config_load_scene(pnanovdb_pipeline_config_t* config,
     {
         return PNANOVDB_FALSE;
     }
+    const auto scene_name_json = doc_json.find("sceneName");
+    if (scene_name_json != doc_json.end())
+    {
+        scene = compute->get_token(scene_name_json->get_ref<std::string&>().c_str());
+    }
+
+    bool has_collision = false;
+    pnanovdb_pipeline_scene_list_t* mapped_scene_list = nullptr;
+    if(config_map_params(config, scene, nullptr, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_scene_list_t), (void**)&mapped_scene_list))
+    {
+        for (pnanovdb_uint64_t scene_idx = 0u; scene_idx < mapped_scene_list->scene_count; scene_idx++)
+        {
+            if (mapped_scene_list->scenes[scene_idx]->id == scene->id)
+            {
+                has_collision = true;
+            }
+        }
+        config_unmap_params(config, scene, nullptr, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_scene_list_t));
+    }
+    if (has_collision && !overwrite)
+    {
+        return PNANOVDB_FALSE;
+    }
+    // delete scene if existing to make sure load is clean
+    config_remove(config, scene, nullptr);
 
     const auto scene_json = doc_json.find("scene");
     if (scene_json == doc_json.end())
@@ -1197,6 +1222,7 @@ pnanovdb_bool_t config_save_scene(pnanovdb_pipeline_config_t* config,
 {
     nlohmann::ordered_json doc_json;
     doc_json["version"] = 2;
+    doc_json["sceneName"] = scene->str;
 
     nlohmann::ordered_json scene_json = nlohmann::ordered_json::array();
     //scene_json["name"] = token_str(scene);
