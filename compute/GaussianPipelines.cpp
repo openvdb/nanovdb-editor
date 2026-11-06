@@ -50,10 +50,11 @@ namespace pnanovdb_pipeline_gaussian_load
     static const pnanovdb_pipeline_gaussian_load_params_t pnanovdb_pipeline_gaussian_load_params_t_default = {
         0u // unused
     };
-    #define PNANOVDB_REFLECT_TYPE pnanovdb_pipeline_gaussian_load_params_t
-    PNANOVDB_REFLECT_BEGIN()
-    PNANOVDB_REFLECT_END(&pnanovdb_pipeline_gaussian_load_params_t_default)
-    #undef PNANOVDB_REFLECT_TYPE
+    //#define PNANOVDB_REFLECT_TYPE pnanovdb_pipeline_gaussian_load_params_t
+    //PNANOVDB_REFLECT_BEGIN()
+    //PNANOVDB_REFLECT_END(&pnanovdb_pipeline_gaussian_load_params_t_default)
+    //#undef PNANOVDB_REFLECT_TYPE
+    PNANOVDB_REFLECT_STRUCT_OPAQUE_IMPL(pnanovdb_pipeline_gaussian_load_params_t)
 
     void get_pipeline_params_type(const pnanovdb_compute_t* compute,
                                   const pnanovdb_compiler_t* compiler,
