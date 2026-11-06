@@ -1043,13 +1043,52 @@ void properties_scene(
     }
     if (ImGui::Button("Save"))
     {
-        std::string file_name = std::string(scene->str) + "_test_save.json";
-        save_name = compute->get_token(file_name.c_str());
+        std::string default_name = std::string(scene->str) + ".json";
+        IGFD::FileDialogConfig config;
+        config.path = ".";
+        config.fileName = default_name.c_str();
+        config.flags = ImGuiFileDialogFlags_ConfirmOverwrite;
+        const char* desc_str = "Save Scene JSON File";
+        const char* filter_str = "JSON Files (*.json){.json}";
+        ImGuiFileDialog::Instance()->OpenDialog(
+            "SaveSceneFileDlgKey", desc_str, filter_str, config);
+    }
+    if (ImGuiFileDialog::Instance()->IsOpened())
+    {
+        ImVec2 dialog_size = {768.f, 512.f};
+        ImGui::SetNextWindowSize(scaleDialogSize(dialog_size), ImGuiCond_Appearing);
+        if (ImGuiFileDialog::Instance()->Display("SaveSceneFileDlgKey"))
+        {
+            if (ImGuiFileDialog::Instance()->IsOk())
+            {
+                std::string file_name = ImGuiFileDialog::Instance()->GetFilePathName();
+                save_name = compute->get_token(file_name.c_str());
+            }
+            ImGuiFileDialog::Instance()->Close();
+        }
     }
     if (ImGui::Button("Load"))
     {
-        std::string file_name = std::string("main") + "_test_save.json";
-        load_name = compute->get_token(file_name.c_str());
+        IGFD::FileDialogConfig config;
+        config.path = ".";
+        const char* desc_str = "Open Scene JSON File";
+        const char* filter_str = "JSON Files (*.json){.json}";
+        ImGuiFileDialog::Instance()->OpenDialog(
+            "LoadSceneFileDlgKey", desc_str, filter_str, config);
+    }
+    if (ImGuiFileDialog::Instance()->IsOpened())
+    {
+        ImVec2 dialog_size = {768.f, 512.f};
+        ImGui::SetNextWindowSize(scaleDialogSize(dialog_size), ImGuiCond_Appearing);
+        if (ImGuiFileDialog::Instance()->Display("LoadSceneFileDlgKey"))
+        {
+            if (ImGuiFileDialog::Instance()->IsOk())
+            {
+                std::string file_name = ImGuiFileDialog::Instance()->GetFilePathName();
+                load_name = compute->get_token(file_name.c_str());
+            }
+            ImGuiFileDialog::Instance()->Close();
+        }
     }
 
     pipeline->config_unmap_params(config, scene, nullptr, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_list_t));
