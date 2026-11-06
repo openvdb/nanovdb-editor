@@ -29,6 +29,8 @@ thread_local ImGuiContext* ImGuiTLS = nullptr;
 
 #include <ImGuiFileDialog.h>
 
+#include <math.h>
+
 namespace imgui_instance_user
 {
 
