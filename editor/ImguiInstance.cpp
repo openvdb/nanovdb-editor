@@ -29,6 +29,7 @@ thread_local ImGuiContext* ImGuiTLS = nullptr;
 
 #include <ImGuiFileDialog.h>
 
+#define _USE_MATH_DEFINES
 #include <math.h>
 
 namespace imgui_instance_user
