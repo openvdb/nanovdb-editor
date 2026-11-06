@@ -179,7 +179,7 @@ namespace pnanovdb_pipeline_nanovdb_load
             }
 
             std::vector<uint8_t> half_data;
-            if (params->convert_to_half)
+            if (params->convert_to_half && res_size != 0llu)
             {
                 auto buffer = nanovdb::HostBuffer::createFull(res_size, res_data);
                 auto handleSrc = nanovdb::GridHandle<nanovdb::HostBuffer>(std::move(buffer));
