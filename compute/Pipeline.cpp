@@ -933,187 +933,236 @@ static void config_json_to_reflect(const pnanovdb_compute_t* compute, nlohmann::
     }
 }
 
-pnanovdb_bool_t config_load_scene(pnanovdb_pipeline_config_t* config,
-                                  const char* path,
-                                  pnanovdb_bool_t overwrite)
+static void json_to_object(pnanovdb_pipeline_config_t* config, pnanovdb_compute_token_t* scene, nlohmann::ordered_json object_json)
 {
     const pnanovdb_compute_t* compute = cast(config)->registry->compute;
-    pnanovdb_compute_token_t* scene = compute->get_token("loaded_scene");
 
-    std::ifstream input_file(path);
-    nlohmann::ordered_json doc_json;
-    input_file >> doc_json;
+    const auto name_json = object_json.find("name");
+    if (name_json == object_json.end())
+    {
+        return;
+    }
+    std::string name = name_json->get<std::string>();
+    pnanovdb_compute_token_t* object = cast(config)->registry->compute->get_token(name.c_str());
+    config_add(config, scene, object);
+    const auto buffers_json = object_json.find("buffers");
+    if (buffers_json != object_json.end())
+    {
+        for (const auto buffer_it : *buffers_json)
+        {
+            pnanovdb_compute_token_t* path = nullptr;
+            const auto path_json = buffer_it.find("path");
+            if (path_json != buffer_it.end())
+            {
+                std::string path_cpp = path_json->get<std::string>();
+                path = cast(config)->registry->compute->get_token(path_cpp.c_str());
+            }
+            pnanovdb_compute_token_t* buffer_name = nullptr;
+            const auto buffer_name_json = buffer_it.find("name");
+            if (buffer_name_json != buffer_it.end())
+            {
+                std::string buffer_name_cpp = buffer_name_json->get<std::string>();
+                buffer_name = cast(config)->registry->compute->get_token(buffer_name_cpp.c_str());
+            }
+            if (buffer_name && path)
+            {
+                config_set_buffer_path(config, scene, object, buffer_name, path);
+            }
+        }
+    }
+    const auto stages_json = object_json.find("stages");
+    if (stages_json != object_json.end())
+    {
+        for (pnanovdb_uint64_t stage_idx = 0u; stage_idx < 3u; stage_idx++)
+        {
+            const char* stage_name = "unknown";
+            if (stage_idx == pnanovdb_pipeline_stage_load) {stage_name = "load";}
+            if (stage_idx == pnanovdb_pipeline_stage_process) {stage_name = "process";}
+            if (stage_idx == pnanovdb_pipeline_stage_render) {stage_name = "render";}
+            const auto stage_json = stages_json->find(stage_name);
+            if (stage_json == stages_json->end())
+            {
+                continue;
+            }
+            pnanovdb_uint32_t pipe_idx = 0u;
+            for (const auto pipe_it : *stage_json)
+            {
+                const auto pipe_type_json = pipe_it.find("pipeline_type");
+                if (pipe_type_json != pipe_it.end())
+                {
+                    std::string type = pipe_type_json->get<std::string>();
+                    pnanovdb_compute_token_t* pipe_typename = cast(config)->registry->compute->get_token(type.c_str());
+                    pnanovdb_pipeline_type_t pipe_type = 0u;
+                    get_pipeline_type(cast(cast(config)->registry), pipe_typename, &pipe_type);
+                    config_set_pipeline(config, scene, object, (pnanovdb_pipeline_stage_t)stage_idx, pipe_idx, pipe_type);
+                }
+                pipe_idx++;
+            }
+        }
+    }
+    const auto camera_default_json = object_json.find("camera_default");
+    const auto camera_json = object_json.find("camera");
+    if (camera_default_json != object_json.end() || camera_json != object_json.end())
+    {
+        pnanovdb_camera_t camera = {};
+        pnanovdb_camera_init(&camera);
+        pnanovdb_camera_state_default(&camera.state, PNANOVDB_TRUE);
+        pnanovdb_camera_config_default(&camera.config);
+        config_set_camera(config, scene, object, &camera);
 
-    pnanovdb_int32_t version = 0;
-    const auto version_json = doc_json.find("version");
-    try
-    {
-        version = version_json->get<int>();
+        // this makes sure at least some camera is selected
+        config_set_active_camera(config, scene, object);
     }
-    catch(...) {}
-    if (version != 2u)
+
+    pnanovdb_pipeline_object_mapped_t* mapped_object = nullptr;
+    if(!config_map_params(config, scene, object, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_mapped_t), (void**)&mapped_object))
     {
-        return PNANOVDB_FALSE;
+        return;
     }
-    const auto scene_name_json = doc_json.find("sceneName");
-    if (scene_name_json != doc_json.end())
+    if (stages_json != object_json.end())
     {
-        scene = compute->get_token(scene_name_json->get_ref<std::string&>().c_str());
+        for (pnanovdb_uint64_t stage_idx = 0u; stage_idx < 3u && stage_idx < mapped_object->stage_count; stage_idx++)
+        {
+            const char* stage_name = "unknown";
+            if (stage_idx == pnanovdb_pipeline_stage_load) {stage_name = "load";}
+            if (stage_idx == pnanovdb_pipeline_stage_process) {stage_name = "process";}
+            if (stage_idx == pnanovdb_pipeline_stage_render) {stage_name = "render";}
+            const auto stage_json = stages_json->find(stage_name);
+            if (stage_json == stages_json->end())
+            {
+                continue;
+            }
+
+            pnanovdb_pipeline_object_mapped_stage_t* stage = &mapped_object->stages[stage_idx];
+            pnanovdb_uint32_t pipe_idx = 0u;
+            for (const auto pipe_it : *stage_json)
+            {
+                const auto params_json = pipe_it.find("params");
+                if (params_json != pipe_it.end() && pipe_idx < stage->pipeline_count)
+                {
+                    pnanovdb_pipeline_object_mapped_pipeline_t* pipe = &stage->pipelines[pipe_idx];
+                    if (pipe->params_data && pipe->params_data_type)
+                    {
+                        config_json_to_reflect(compute, *params_json, pipe->params_data, pipe->params_data_type);
+                    }
+                }
+                pipe_idx++;
+            }
+        }
     }
+    if (camera_default_json != object_json.end())
+    {
+        config_json_to_reflect(compute, *camera_default_json, mapped_object->camera_default, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_camera_t));
+    }
+    if (camera_json != object_json.end())
+    {
+        config_json_to_reflect(compute, *camera_json, mapped_object->camera, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_camera_t));
+    }
+    config_unmap_params(config, scene, object, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_mapped_t));
+}
+
+static void json_to_scene(pnanovdb_pipeline_config_t* config, pnanovdb_compute_token_t* scene, nlohmann::ordered_json scene_json)
+{
+    // delete scene if existing to make sure load is clean
+    config_remove(config, scene, nullptr);
+
+    const auto objects_json = scene_json.find("objects");
+    if (objects_json == scene_json.end())
+    {
+        return;
+    }
+    for (const auto object_it : *objects_json)
+    {
+        json_to_object(config, scene, object_it);
+    }
+}
+
+static pnanovdb_bool_t json_to_scenes(pnanovdb_pipeline_config_t* config, nlohmann::ordered_json scenes_json, pnanovdb_bool_t overwrite)
+{
+    const pnanovdb_compute_t* compute = cast(config)->registry->compute;
 
     bool has_collision = false;
     pnanovdb_pipeline_scene_list_t* mapped_scene_list = nullptr;
-    if(config_map_params(config, scene, nullptr, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_scene_list_t), (void**)&mapped_scene_list))
+    if(config_map_params(config, nullptr, nullptr, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_scene_list_t), (void**)&mapped_scene_list))
     {
-        for (pnanovdb_uint64_t scene_idx = 0u; scene_idx < mapped_scene_list->scene_count; scene_idx++)
+        for (const auto scene_it : scenes_json)
         {
-            if (mapped_scene_list->scenes[scene_idx]->id == scene->id)
+            const auto name_json = scene_it.find("name");
+            if (name_json == scene_it.end())
             {
-                has_collision = true;
+                continue;
+            }
+            pnanovdb_compute_token_t* scene = compute->get_token(name_json->get_ref<const std::string&>().c_str());
+            // check against old scene list
+            for (pnanovdb_uint64_t scene_idx = 0u; scene_idx < mapped_scene_list->scene_count; scene_idx++)
+            {
+                if (mapped_scene_list->scenes[scene_idx]->id == scene->id)
+                {
+                    has_collision = true;
+                }
             }
         }
-        config_unmap_params(config, scene, nullptr, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_scene_list_t));
+        config_unmap_params(config, nullptr, nullptr, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_scene_list_t));
     }
     if (has_collision && !overwrite)
     {
         return PNANOVDB_FALSE;
     }
-    // delete scene if existing to make sure load is clean
-    config_remove(config, scene, nullptr);
 
-    const auto scene_json = doc_json.find("scene");
-    if (scene_json == doc_json.end())
+    for (const auto scene_it : scenes_json)
     {
+        const auto name_json = scene_it.find("name");
+        if (name_json == scene_it.end())
+        {
+            continue;
+        }
+        pnanovdb_compute_token_t* scene = compute->get_token(name_json->get_ref<const std::string&>().c_str());
+        json_to_scene(config, scene, scene_it);
+    }
+    return PNANOVDB_TRUE;
+}
+
+pnanovdb_bool_t config_load(pnanovdb_pipeline_config_t* config,
+                            const char* path,
+                            pnanovdb_bool_t overwrite)
+{
+    const pnanovdb_compute_t* compute = cast(config)->registry->compute;
+    try
+    {
+        std::ifstream input_file(path);
+        nlohmann::ordered_json doc_json;
+        input_file >> doc_json;
+
+        pnanovdb_int32_t version = 0;
+        const auto version_json = doc_json.find("version");
+        version = version_json->get<int>();
+        if (version != 2u)
+        {
+            return PNANOVDB_FALSE;
+        }
+        pnanovdb_compute_token_t* active_scene = compute->get_token("loaded_scene");
+        const auto scene_name_json = doc_json.find("active_scene");
+        if (scene_name_json != doc_json.end())
+        {
+            active_scene = compute->get_token(scene_name_json->get_ref<std::string&>().c_str());
+        }
+        const auto scenes_json = doc_json.find("scenes");
+        if (scenes_json == doc_json.end())
+        {
+            return PNANOVDB_FALSE;
+        }
+        if (!json_to_scenes(config, *scenes_json, overwrite))
+        {
+            return PNANOVDB_FALSE;
+        }
+        config_set_active_scene(config, active_scene);
+        return PNANOVDB_TRUE;
+    }
+    catch(...)
+    {
+        printf("Exception occurred trying to load %s\n", path);
         return PNANOVDB_FALSE;
     }
-
-    for (const auto object_it : *scene_json)
-    {
-        const auto name_json = object_it.find("name");
-        if (name_json == object_it.end())
-        {
-            continue;
-        }
-        std::string name = name_json->get<std::string>();
-        pnanovdb_compute_token_t* object = cast(config)->registry->compute->get_token(name.c_str());
-        config_add(config, scene, object);
-        const auto buffers_json = object_it.find("buffers");
-        if (buffers_json != object_it.end())
-        {
-            for (const auto buffer_it : *buffers_json)
-            {
-                pnanovdb_compute_token_t* path = nullptr;
-                const auto path_json = buffer_it.find("path");
-                if (path_json != buffer_it.end())
-                {
-                    std::string path_cpp = path_json->get<std::string>();
-                    path = cast(config)->registry->compute->get_token(path_cpp.c_str());
-                }
-                pnanovdb_compute_token_t* buffer_name = nullptr;
-                const auto buffer_name_json = buffer_it.find("name");
-                if (buffer_name_json != buffer_it.end())
-                {
-                    std::string buffer_name_cpp = buffer_name_json->get<std::string>();
-                    buffer_name = cast(config)->registry->compute->get_token(buffer_name_cpp.c_str());
-                }
-                if (buffer_name && path)
-                {
-                    config_set_buffer_path(config, scene, object, buffer_name, path);
-                }
-            }
-        }
-        const auto stages_json = object_it.find("stages");
-        if (stages_json != object_it.end())
-        {
-            for (pnanovdb_uint64_t stage_idx = 0u; stage_idx < 3u; stage_idx++)
-            {
-                const char* stage_name = "unknown";
-                if (stage_idx == pnanovdb_pipeline_stage_load) {stage_name = "load";}
-                if (stage_idx == pnanovdb_pipeline_stage_process) {stage_name = "process";}
-                if (stage_idx == pnanovdb_pipeline_stage_render) {stage_name = "render";}
-                const auto stage_json = stages_json->find(stage_name);
-                if (stage_json == stages_json->end())
-                {
-                    continue;
-                }
-                pnanovdb_uint32_t pipe_idx = 0u;
-                for (const auto pipe_it : *stage_json)
-                {
-                    const auto pipe_type_json = pipe_it.find("pipeline_type");
-                    if (pipe_type_json != pipe_it.end())
-                    {
-                        std::string type = pipe_type_json->get<std::string>();
-                        pnanovdb_compute_token_t* pipe_typename = cast(config)->registry->compute->get_token(type.c_str());
-                        pnanovdb_pipeline_type_t pipe_type = 0u;
-                        get_pipeline_type(cast(cast(config)->registry), pipe_typename, &pipe_type);
-                        config_set_pipeline(config, scene, object, (pnanovdb_pipeline_stage_t)stage_idx, pipe_idx, pipe_type);
-                    }
-                    pipe_idx++;
-                }
-            }
-        }
-        const auto camera_default_json = object_it.find("camera_default");
-        const auto camera_json = object_it.find("camera");
-        if (camera_default_json != object_it.end() || camera_json != object_it.end())
-        {
-            pnanovdb_camera_t camera = {};
-            pnanovdb_camera_init(&camera);
-            pnanovdb_camera_state_default(&camera.state, PNANOVDB_TRUE);
-            pnanovdb_camera_config_default(&camera.config);
-            config_set_camera(config, scene, object, &camera);
-
-            // this makes sure at least some camera is selected
-            config_set_active_camera(config, scene, object);
-        }
-
-        pnanovdb_pipeline_object_mapped_t* mapped_object = nullptr;
-        if(!config_map_params(config, scene, object, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_mapped_t), (void**)&mapped_object))
-        {
-            continue;
-        }
-        if (stages_json != object_it.end())
-        {
-            for (pnanovdb_uint64_t stage_idx = 0u; stage_idx < 3u && stage_idx < mapped_object->stage_count; stage_idx++)
-            {
-                const char* stage_name = "unknown";
-                if (stage_idx == pnanovdb_pipeline_stage_load) {stage_name = "load";}
-                if (stage_idx == pnanovdb_pipeline_stage_process) {stage_name = "process";}
-                if (stage_idx == pnanovdb_pipeline_stage_render) {stage_name = "render";}
-                const auto stage_json = stages_json->find(stage_name);
-                if (stage_json == stages_json->end())
-                {
-                    continue;
-                }
-
-                pnanovdb_pipeline_object_mapped_stage_t* stage = &mapped_object->stages[stage_idx];
-                pnanovdb_uint32_t pipe_idx = 0u;
-                for (const auto pipe_it : *stage_json)
-                {
-                    const auto params_json = pipe_it.find("params");
-                    if (params_json != pipe_it.end() && pipe_idx < stage->pipeline_count)
-                    {
-                        pnanovdb_pipeline_object_mapped_pipeline_t* pipe = &stage->pipelines[pipe_idx];
-                        if (pipe->params_data && pipe->params_data_type)
-                        {
-                            config_json_to_reflect(compute, *params_json, pipe->params_data, pipe->params_data_type);
-                        }
-                    }
-                    pipe_idx++;
-                }
-            }
-        }
-        if (camera_default_json != object_it.end())
-        {
-            config_json_to_reflect(compute, *camera_default_json, mapped_object->camera_default, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_camera_t));
-        }
-        if (camera_json != object_it.end())
-        {
-            config_json_to_reflect(compute, *camera_json, mapped_object->camera, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_camera_t));
-        }
-        config_unmap_params(config, scene, object, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_mapped_t));
-    }
-
-    return PNANOVDB_TRUE;
 }
 
 template <typename float_type>
@@ -1216,96 +1265,118 @@ static nlohmann::ordered_json config_reflect_to_json(void* data, const pnanovdb_
     return json;
 }
 
-pnanovdb_bool_t config_save_scene(pnanovdb_pipeline_config_t* config,
-                                  pnanovdb_compute_token_t* scene,
-                                  const char* path)
+static nlohmann::ordered_json object_to_json(pnanovdb_pipeline_config_t* config, pnanovdb_compute_token_t* scene, pnanovdb_compute_token_t* object)
 {
-    nlohmann::ordered_json doc_json;
-    doc_json["version"] = 2;
-    doc_json["sceneName"] = scene->str;
+    nlohmann::ordered_json object_json;
+    object_json["name"] = token_str(object);
+    pnanovdb_pipeline_object_mapped_t* mapped_object = nullptr;
+    if(!config_map_params(config, scene, object, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_mapped_t), (void**)&mapped_object))
+    {
+        return object_json;
+    }
+    nlohmann::ordered_json buffers_json = nlohmann::ordered_json::array();
+    for (pnanovdb_uint64_t buffer_idx = 0u; buffer_idx < mapped_object->buffer_count; buffer_idx++)
+    {
+        nlohmann::ordered_json buffer_json;
+        buffer_json["name"] = token_str(mapped_object->buffer_names[buffer_idx]);
+        buffer_json["path"] = token_str(mapped_object->buffer_paths[buffer_idx]);
+        buffers_json.push_back(buffer_json);
+    }
+    if (!buffers_json.empty())
+    {
+        object_json["buffers"] = std::move(buffers_json);
+    }
+    nlohmann::ordered_json stages_json;
+    for (pnanovdb_uint64_t stage_idx = 0u; stage_idx < mapped_object->stage_count; stage_idx++)
+    {
+        pnanovdb_pipeline_object_mapped_stage_t* stage = &mapped_object->stages[stage_idx];
+        const char* stage_name = "unknown";
+        if (stage_idx == pnanovdb_pipeline_stage_load) {stage_name = "load";}
+        if (stage_idx == pnanovdb_pipeline_stage_process) {stage_name = "process";}
+        if (stage_idx == pnanovdb_pipeline_stage_render) {stage_name = "render";}
+        nlohmann::ordered_json stage_json = nlohmann::ordered_json::array();
+        for (pnanovdb_uint64_t pipeline_idx = 0u; pipeline_idx < stage->pipeline_count; pipeline_idx++)
+        {
+            pnanovdb_pipeline_object_mapped_pipeline_t* pipe = &stage->pipelines[pipeline_idx];
+            RegistryPipeline* pipeline_reg = cast(config)->registry->pipelines[pipe->pipeline_type].get();
 
-    nlohmann::ordered_json scene_json = nlohmann::ordered_json::array();
-    //scene_json["name"] = token_str(scene);
+            nlohmann::ordered_json pipe_json;
+            pipe_json["pipeline_type"] = token_str(pipeline_reg->desc.name);
 
+            pipe_json["params"] = config_reflect_to_json(pipe->params_data, pipe->params_data_type);
+
+            stage_json.push_back(pipe_json);
+        }
+        if (!stage_json.empty())
+        {
+            stages_json[stage_name] = std::move(stage_json);
+        }
+    }
+    if (!stages_json.empty())
+    {
+        object_json["stages"] = std::move(stages_json);
+    }
+    if (mapped_object->camera_default)
+    {
+        object_json["camera_default"] = config_reflect_to_json(
+            mapped_object->camera_default, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_camera_t));
+    }
+    if (mapped_object->camera)
+    {
+        object_json["camera"] = config_reflect_to_json(
+            mapped_object->camera, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_camera_t));
+    }
+    if (mapped_object->camera_view)
+    {
+        // TODO
+    }
+    if (mapped_object->is_visible)
+    {
+        object_json["is_visible"] = *mapped_object->is_visible;
+    }
+    config_unmap_params(config, scene, object, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_mapped_t));
+    return object_json;
+}
+
+static nlohmann::ordered_json scene_to_json(pnanovdb_pipeline_config_t* config, pnanovdb_compute_token_t* scene)
+{
+    nlohmann::ordered_json scene_json;
+    scene_json["name"] = token_str(scene);
+    scene_json["active_camera"] = token_str(config_get_active_camera(config, scene));
+    nlohmann::ordered_json objects_json = nlohmann::ordered_json::array();
     pnanovdb_pipeline_object_list_t* mapped_object_list = nullptr;
     if(config_map_params(config, scene, nullptr, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_list_t), (void**)&mapped_object_list))
     {
         for (pnanovdb_uint64_t object_idx = 0u; object_idx < mapped_object_list->object_count; object_idx++)
         {
-            nlohmann::ordered_json object_json;
-            object_json["name"] = token_str(mapped_object_list->objects[object_idx]);
-            pnanovdb_pipeline_object_mapped_t* mapped_object = nullptr;
-            if(!config_map_params(config, scene, mapped_object_list->objects[object_idx], PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_mapped_t), (void**)&mapped_object))
-            {
-                continue;
-            }
-            nlohmann::ordered_json buffers_json = nlohmann::ordered_json::array();
-            for (pnanovdb_uint64_t buffer_idx = 0u; buffer_idx < mapped_object->buffer_count; buffer_idx++)
-            {
-                nlohmann::ordered_json buffer_json;
-                buffer_json["name"] = token_str(mapped_object->buffer_names[buffer_idx]);
-                buffer_json["path"] = token_str(mapped_object->buffer_paths[buffer_idx]);
-                buffers_json.push_back(buffer_json);
-            }
-            if (!buffers_json.empty())
-            {
-                object_json["buffers"] = std::move(buffers_json);
-            }
-            nlohmann::ordered_json stages_json;
-            for (pnanovdb_uint64_t stage_idx = 0u; stage_idx < mapped_object->stage_count; stage_idx++)
-            {
-                pnanovdb_pipeline_object_mapped_stage_t* stage = &mapped_object->stages[stage_idx];
-                const char* stage_name = "unknown";
-                if (stage_idx == pnanovdb_pipeline_stage_load) {stage_name = "load";}
-                if (stage_idx == pnanovdb_pipeline_stage_process) {stage_name = "process";}
-                if (stage_idx == pnanovdb_pipeline_stage_render) {stage_name = "render";}
-                nlohmann::ordered_json stage_json = nlohmann::ordered_json::array();
-                for (pnanovdb_uint64_t pipeline_idx = 0u; pipeline_idx < stage->pipeline_count; pipeline_idx++)
-                {
-                    pnanovdb_pipeline_object_mapped_pipeline_t* pipe = &stage->pipelines[pipeline_idx];
-                    RegistryPipeline* pipeline_reg = cast(config)->registry->pipelines[pipe->pipeline_type].get();
-
-                    nlohmann::ordered_json pipe_json;
-                    pipe_json["pipeline_type"] = token_str(pipeline_reg->desc.name);
-
-                    pipe_json["params"] = config_reflect_to_json(pipe->params_data, pipe->params_data_type);
-
-                    stage_json.push_back(pipe_json);
-                }
-                if (!stage_json.empty())
-                {
-                    stages_json[stage_name] = std::move(stage_json);
-                }
-            }
-            if (!stages_json.empty())
-            {
-                object_json["stages"] = std::move(stages_json);
-            }
-            if (mapped_object->camera_default)
-            {
-                object_json["camera_default"] = config_reflect_to_json(
-                    mapped_object->camera_default, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_camera_t));
-            }
-            if (mapped_object->camera)
-            {
-                object_json["camera"] = config_reflect_to_json(
-                    mapped_object->camera, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_camera_t));
-            }
-            if (mapped_object->camera_view)
-            {
-                // TODO
-            }
-            if (mapped_object->is_visible)
-            {
-                object_json["is_visible"] = *mapped_object->is_visible;
-            }
-            config_unmap_params(config, scene, mapped_object_list->objects[object_idx], PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_mapped_t));
-            scene_json.push_back(object_json);
+            nlohmann::ordered_json object_json = object_to_json(config, scene, mapped_object_list->objects[object_idx]);
+            objects_json.push_back(object_json);
         }
         config_unmap_params(config, scene, nullptr, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_list_t));
     }
+    scene_json["objects"] = objects_json;
+    return scene_json;
+}
 
-    doc_json["scene"] = std::move(scene_json);
+pnanovdb_bool_t config_save(pnanovdb_pipeline_config_t* config, const char* path)
+{
+    nlohmann::ordered_json doc_json;
+    doc_json["version"] = 2;
+    doc_json["active_scene"] = token_str(config_get_active_scene(config));
+
+    pnanovdb_pipeline_scene_list_t* mapped_scene_list = nullptr;
+    if(!config_map_params(config, nullptr, nullptr, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_scene_list_t), (void**)&mapped_scene_list))
+    {
+        return PNANOVDB_FALSE;
+    }
+    nlohmann::ordered_json scenes_json = nlohmann::ordered_json::array();
+    for (pnanovdb_uint64_t scene_idx = 0u; scene_idx < mapped_scene_list->scene_count; scene_idx++)
+    {
+        nlohmann::ordered_json scene_json = scene_to_json(config, mapped_scene_list->scenes[scene_idx]);
+        scenes_json.push_back((scene_json));
+    }
+    doc_json["scenes"] = std::move(scenes_json);
+    config_unmap_params(config, nullptr, nullptr, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_scene_list_t));
 
     std::ofstream output_file(path);
     output_file << doc_json.dump(4) << std::endl;
@@ -1500,44 +1571,59 @@ static bool update_runtime_is_dirty(pnanovdb_pipeline_runtime_t* runtime,
 }
 
 static void invalidate_shader_params(const pnanovdb_compute_t* compute,
-                                     pnanovdb_pipeline_config_t* config,
-                                     pnanovdb_compute_token_t* scene,
-                                     pnanovdb_pipeline_object_list_t* mapped_object_list)
+                                     pnanovdb_pipeline_config_t* config)
 {
-    for (pnanovdb_uint64_t object_idx = 0u; object_idx < mapped_object_list->object_count; object_idx++)
+    pnanovdb_pipeline_scene_list_t* mapped_scene_list = nullptr;
+    if(!config_map_params(config, nullptr, nullptr, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_scene_list_t), (void**)&mapped_scene_list))
     {
-        pnanovdb_pipeline_object_mapped_t* mapped_object = nullptr;
-        if(!config_map_params(config, scene, mapped_object_list->objects[object_idx], PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_mapped_t), (void**)&mapped_object))
+        return;
+    }
+    for (pnanovdb_uint64_t scene_idx = 0u; scene_idx < mapped_scene_list->scene_count; scene_idx++)
+    {
+        pnanovdb_compute_token_t* scene = mapped_scene_list->scenes[scene_idx];
+
+        pnanovdb_pipeline_object_list_t* mapped_object_list = nullptr;
+        if(!config_map_params(config, scene, nullptr, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_list_t), (void**)&mapped_object_list))
         {
             continue;
         }
-        for (pnanovdb_uint64_t stage_idx = 0u; stage_idx < mapped_object->stage_count; stage_idx++)
+        for (pnanovdb_uint64_t object_idx = 0u; object_idx < mapped_object_list->object_count; object_idx++)
         {
-            pnanovdb_pipeline_object_mapped_stage_t* stage = &mapped_object->stages[stage_idx];
-            for (pnanovdb_uint64_t pipeline_idx = 0u; pipeline_idx < stage->pipeline_count; pipeline_idx++)
+            pnanovdb_pipeline_object_mapped_t* mapped_object = nullptr;
+            if(!config_map_params(config, scene, mapped_object_list->objects[object_idx], PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_mapped_t), (void**)&mapped_object))
             {
-                pnanovdb_pipeline_object_mapped_pipeline_t* pipe = &stage->pipelines[pipeline_idx];
-                if (pipe->params_data && pipe->params_data_type)
+                continue;
+            }
+            for (pnanovdb_uint64_t stage_idx = 0u; stage_idx < mapped_object->stage_count; stage_idx++)
+            {
+                pnanovdb_pipeline_object_mapped_stage_t* stage = &mapped_object->stages[stage_idx];
+                for (pnanovdb_uint64_t pipeline_idx = 0u; pipeline_idx < stage->pipeline_count; pipeline_idx++)
                 {
-                    for (pnanovdb_uint64_t idx = 0u; idx < pipe->params_data_type->child_reflect_data_count; idx++)
+                    pnanovdb_pipeline_object_mapped_pipeline_t* pipe = &stage->pipelines[pipeline_idx];
+                    if (pipe->params_data && pipe->params_data_type)
                     {
-                        auto reflect_data = &pipe->params_data_type->child_reflect_datas[idx];
-                        if (pnanovdb_reflect_layout_compare(
-                                reflect_data->data_type,
-                                PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_shader_t)))
+                        for (pnanovdb_uint64_t idx = 0u; idx < pipe->params_data_type->child_reflect_data_count; idx++)
                         {
-                            pnanovdb_pipeline_shader_t* shader = (pnanovdb_pipeline_shader_t*)(((uint8_t*)pipe->params_data) + reflect_data->data_offset);
-                            shader->params_data = nullptr;
-                            shader->params_data_type = nullptr;
-                            shader->params_metadata = nullptr;
-                            shader->params_metadata_type = nullptr;
+                            auto reflect_data = &pipe->params_data_type->child_reflect_datas[idx];
+                            if (pnanovdb_reflect_layout_compare(
+                                    reflect_data->data_type,
+                                    PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_shader_t)))
+                            {
+                                pnanovdb_pipeline_shader_t* shader = (pnanovdb_pipeline_shader_t*)(((uint8_t*)pipe->params_data) + reflect_data->data_offset);
+                                shader->params_data = nullptr;
+                                shader->params_data_type = nullptr;
+                                shader->params_metadata = nullptr;
+                                shader->params_metadata_type = nullptr;
+                            }
                         }
                     }
                 }
             }
+            config_unmap_params(config, scene, mapped_object_list->objects[object_idx], PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_mapped_t));
         }
-        config_unmap_params(config, scene, mapped_object_list->objects[object_idx], PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_mapped_t));
+        config_unmap_params(config, scene, nullptr, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_list_t));
     }
+    config_unmap_params(config, nullptr, nullptr, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_scene_list_t));
 }
 
 static void build_new_pipelines(const pnanovdb_compute_t* compute,
@@ -1699,11 +1785,25 @@ void update_runtime_main(const pnanovdb_compute_t* compute,
         }
     }
 
-    // check if cached runtime is valid, rebuild as needed
-    if (update_runtime_is_dirty(runtime, config, scene, mapped_object_list))
+    bool is_dirty = update_runtime_is_dirty(runtime, config, scene, mapped_object_list);
+    // tear down old runtime
+    if (is_dirty)
     {
-        invalidate_shader_params(compute, config, scene, mapped_object_list);
+        // need to release this object list, because we need to invalidate shader params on all scenes
+        config_unmap_params(config, scene, nullptr, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_list_t));
+
+        invalidate_shader_params(compute, config);
         release_runtime_pipelines(compute, queue, ptr);
+
+        // now we can map again for the new scene
+        if(!config_map_params(config, scene, nullptr, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_list_t), (void**)&mapped_object_list))
+        {
+            return;
+        }
+    }
+    // build new runtime
+    if (is_dirty)
+    {
         build_new_pipelines(compute, queue, runtime, config, scene, mapped_object_list);
     }
 
@@ -1966,8 +2066,8 @@ pnanovdb_pipeline_t* pnanovdb_get_pipeline()
     iface.config_get_active_camera = config_get_active_camera;
     iface.config_set_active_scene = config_set_active_scene;
     iface.config_get_active_scene = config_get_active_scene;
-    iface.config_load_scene = config_load_scene;
-    iface.config_save_scene = config_save_scene;
+    iface.config_load = config_load;
+    iface.config_save = config_save;
     iface.create_runtime = create_runtime;
     iface.destroy_runtime = destroy_runtime;
     iface.update_runtime_main = update_runtime_main;

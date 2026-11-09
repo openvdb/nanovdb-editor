@@ -1110,11 +1110,11 @@ void properties_scene(
     }
     if (save_name)
     {
-        pipeline->config_save_scene(config, scene, save_name->str);
+        pipeline->config_save(config, save_name->str);
     }
     if (load_name)
     {
-        if (!pipeline->config_load_scene(config, load_name->str, PNANOVDB_FALSE))
+        if (!pipeline->config_load(config, load_name->str, PNANOVDB_FALSE))
         {
             ptr->overwrite_load_name = load_name;
             ptr->show_overwrite = true;
@@ -1129,7 +1129,7 @@ void properties_scene(
         ImGui::Separator();
         if (ImGui::Button("Yes", ImVec2(120, 0)))
         {
-            pipeline->config_load_scene(config, ptr->overwrite_load_name->str, PNANOVDB_TRUE);
+            pipeline->config_load(config, ptr->overwrite_load_name->str, PNANOVDB_TRUE);
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
