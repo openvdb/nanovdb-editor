@@ -359,7 +359,7 @@ namespace pnanovdb_pipeline_nanovdb_load_series
     static const char* format_list[format_list_count] = {
         "%d",
         "%00d", "%01d", "%02d", "%03d", "%04d", "%05d", "%06d", "%07d", "%08d", "%09d",
-        "%0d", "%1d", "%2d", "%3d", "%4d", "%5d", "%6d", "%7d", "%8d", "%9d",
+        "%0d", "%1d", "%2d", "%3d", "%4d", "%5d", "%6d", "%7d", "%8d", "%9d"
     };
 
     static void replace_frame_idx(char* buf, uint32_t count, const char* format, int32_t frame_idx)
