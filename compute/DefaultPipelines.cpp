@@ -355,6 +355,47 @@ namespace pnanovdb_pipeline_nanovdb_load_series
         return PNANOVDB_FALSE;
     }
 
+    static const uint32_t format_list_count = 21u;
+    const char* format_list[format_list_count] = {
+        "%d",
+        "%00d", "%01d", "%02d", "%03d", "%04d", "%05d", "%06d", "%07d", "%08d", "%09d",
+        "%0d", "%1d", "%2d", "%3d", "%4d", "%5d", "%6d", "%7d", "%8d", "%9d",
+    };
+
+    static void replace_frame_idx(char* buf, uint32_t count, const char* format, uint32_t frame_idx)
+    {
+        if (count == 0u || !format)
+        {
+            return;
+        }
+        uint32_t list_idx = 0u;
+        const char* find_str = nullptr;
+        for (; list_idx < format_list_count; list_idx++)
+        {
+            find_str = strstr(format, format_list[list_idx]);
+            if (find_str)
+            {
+                break;
+            }
+        }
+        if (list_idx < format_list_count)
+        {
+            memset(buf, count, 0);
+            size_t f0_size = find_str - format;
+            size_t f1_size_src = strlen(format_list[list_idx]);
+            size_t f2_size = strlen(format) - f1_size_src - f0_size;
+            if (f0_size < count)
+            {
+                memcpy(buf, format, f0_size);
+                int f1_size_dst = snprintf(buf + f0_size, count - f0_size, format_list[list_idx], frame_idx);
+                if (f0_size + f1_size_dst + f2_size < count)
+                {
+                    memcpy(buf + f0_size + f1_size_dst, format + f0_size + f1_size_src, f2_size);
+                }
+            }
+        }
+    }
+
     void load(pnanovdb_pipeline_instance_t* instance,
               const pnanovdb_compute_t* compute,
               pnanovdb_compute_queue_t* queue,
@@ -432,7 +473,7 @@ namespace pnanovdb_pipeline_nanovdb_load_series
             {
                 pnanovdb_uint32_t frame_idx = params->first + params->step * idx;
                 char vdb_path[4096u] = {};
-                snprintf(vdb_path, 4096, params->format, frame_idx);
+                replace_frame_idx(vdb_path, 4096, params->format, frame_idx);
 
                 pnanovdb_compute_array_t* array_from_path = compute->load_nanovdb(vdb_path);
                 if (!array_from_path)
