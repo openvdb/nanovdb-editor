@@ -274,24 +274,24 @@ namespace pnanovdb_pipeline_nanovdb_load_series
     {
         const char* buffer_name;
         const char* format;
-        pnanovdb_uint32_t first;
-        pnanovdb_uint32_t last;
-        pnanovdb_uint32_t step;
+        pnanovdb_int32_t first;
+        pnanovdb_int32_t last;
+        pnanovdb_int32_t step;
     };
     static const pnanovdb_pipeline_nanovdb_load_params_t pnanovdb_pipeline_nanovdb_load_params_t_default = {
         "nanovdb",
         "", // format
-        0u, // first
-        0u, // last
-        1u, // step
+        0, // first
+        0, // last
+        1, // step
     };
     #define PNANOVDB_REFLECT_TYPE pnanovdb_pipeline_nanovdb_load_params_t
     PNANOVDB_REFLECT_BEGIN()
     PNANOVDB_REFLECT_POINTER(char, buffer_name, 0, 0)
     PNANOVDB_REFLECT_POINTER(char, format, 0, 0)
-    PNANOVDB_REFLECT_VALUE(pnanovdb_uint32_t, first, 0, 0)
-    PNANOVDB_REFLECT_VALUE(pnanovdb_uint32_t, last, 0, 0)
-    PNANOVDB_REFLECT_VALUE(pnanovdb_uint32_t, step, 0, 0)
+    PNANOVDB_REFLECT_VALUE(pnanovdb_int32_t, first, 0, 0)
+    PNANOVDB_REFLECT_VALUE(pnanovdb_int32_t, last, 0, 0)
+    PNANOVDB_REFLECT_VALUE(pnanovdb_int32_t, step, 0, 0)
     PNANOVDB_REFLECT_END(&pnanovdb_pipeline_nanovdb_load_params_t_default)
     #undef PNANOVDB_REFLECT_TYPE
 
@@ -356,18 +356,21 @@ namespace pnanovdb_pipeline_nanovdb_load_series
     }
 
     static const uint32_t format_list_count = 21u;
-    const char* format_list[format_list_count] = {
+    static const char* format_list[format_list_count] = {
         "%d",
         "%00d", "%01d", "%02d", "%03d", "%04d", "%05d", "%06d", "%07d", "%08d", "%09d",
         "%0d", "%1d", "%2d", "%3d", "%4d", "%5d", "%6d", "%7d", "%8d", "%9d",
     };
 
-    static void replace_frame_idx(char* buf, uint32_t count, const char* format, uint32_t frame_idx)
+    static void replace_frame_idx(char* buf, uint32_t count, const char* format, int32_t frame_idx)
     {
         if (count == 0u || !format)
         {
             return;
         }
+        // always clear buf
+        memset(buf, 0, count);
+        // try to find one of the allow format strings
         uint32_t list_idx = 0u;
         const char* find_str = nullptr;
         for (; list_idx < format_list_count; list_idx++)
@@ -378,9 +381,8 @@ namespace pnanovdb_pipeline_nanovdb_load_series
                 break;
             }
         }
-        if (list_idx < format_list_count)
+        if (list_idx < format_list_count) // do format string replacement
         {
-            memset(buf, count, 0);
             size_t f0_size = find_str - format;
             size_t f1_size_src = strlen(format_list[list_idx]);
             size_t f2_size = strlen(format) - f1_size_src - f0_size;
@@ -388,10 +390,19 @@ namespace pnanovdb_pipeline_nanovdb_load_series
             {
                 memcpy(buf, format, f0_size);
                 int f1_size_dst = snprintf(buf + f0_size, count - f0_size, format_list[list_idx], frame_idx);
-                if (f0_size + f1_size_dst + f2_size < count)
+                if (f1_size_dst >= 0 &&
+                    f0_size + f1_size_dst + f2_size < count)
                 {
                     memcpy(buf + f0_size + f1_size_dst, format + f0_size + f1_size_src, f2_size);
                 }
+            }
+        }
+        else // just copy string
+        {
+            size_t f0_size = strlen(format);
+            if (f0_size < count)
+            {
+                memcpy(buf, format, f0_size);
             }
         }
     }
@@ -471,7 +482,7 @@ namespace pnanovdb_pipeline_nanovdb_load_series
 
             for (size_t idx = 0u; idx < ptr->buffers.size(); idx++)
             {
-                pnanovdb_uint32_t frame_idx = params->first + params->step * idx;
+                pnanovdb_int32_t frame_idx = params->first + params->step * pnanovdb_int32_t(idx);
                 char vdb_path[4096u] = {};
                 replace_frame_idx(vdb_path, 4096, params->format, frame_idx);
 
