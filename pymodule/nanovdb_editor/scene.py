@@ -15,7 +15,7 @@ cycle.
 
 import math
 import os
-from ctypes import POINTER, c_float, c_int32, c_uint32, cast
+from ctypes import POINTER, c_float, c_int32, c_uint32, cast, pointer
 from typing import TYPE_CHECKING, Iterator, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -404,6 +404,91 @@ class Scene:
             camera.state.eye_distance_from_position = float(eye_distance)
         self._editor.update_camera_2(self._token, camera)
         return camera
+
+    def add_surface_mesh(
+        self,
+        name: str,
+        vertices,
+        faces,
+        colors=None,
+        *,
+        resolution: int = 512,
+        inflation_radius: float = 0.0,
+    ) -> None:
+        """Add or replace a triangle mesh in this scene.
+
+        The editor builds a VoxelBVH over the triangles in the render loop and
+        ray-traces them with the ``voxelbvh_triangles_render`` pipeline. The
+        build runs asynchronously, so the mesh appears once the editor is
+        showing and the build has finished. In-memory meshes are not written
+        by :meth:`Editor.save_scene`.
+
+        Args:
+            name: Object name for the mesh. Adding the same name replaces it.
+            vertices: ``(V, 3)`` array of vertex positions, converted to float32.
+            faces: ``(F, 3)`` array of vertex indices per triangle, converted to uint32.
+            colors: Optional ``(V, 3)`` per-vertex RGB. Floats are read as ``[0, 1]``
+                and ``uint8`` as ``[0, 255]``. Omitted colors render white.
+            resolution: VoxelBVH build resolution, ``1..4096``. It affects build
+                and render speed, not the rendered geometry.
+            inflation_radius: VoxelBVH inflation radius in world units.
+
+        Raises:
+            InvalidArgumentError: On a bad shape, an out-of-range face index, or a
+                negative ``inflation_radius``.
+        """
+        from .editor import EditorMeshDesc
+
+        np_vertices = np.ascontiguousarray(vertices, dtype=np.float32)
+        if np_vertices.ndim != 2 or np_vertices.shape[1] != 3 or np_vertices.shape[0] == 0:
+            raise InvalidArgumentError("vertices must be a non-empty (V, 3) array")
+        vertex_count = int(np_vertices.shape[0])
+
+        np_faces = np.asarray(faces)
+        if np_faces.ndim != 2 or np_faces.shape[1] != 3 or np_faces.shape[0] == 0:
+            raise InvalidArgumentError("faces must be a non-empty (F, 3) array")
+        if not np.issubdtype(np_faces.dtype, np.integer):
+            raise InvalidArgumentError("faces must have an integer dtype")
+        if np_faces.min() < 0 or np_faces.max() >= vertex_count:
+            raise InvalidArgumentError(f"faces must index vertices in [0, {vertex_count})")
+        np_faces = np.ascontiguousarray(np_faces, dtype=np.uint32)
+
+        np_colors = None
+        if colors is not None:
+            np_colors = np.asarray(colors)
+            if np_colors.shape != (vertex_count, 3):
+                raise InvalidArgumentError(f"colors must have shape ({vertex_count}, 3)")
+            if np_colors.dtype == np.uint8:
+                np_colors = np_colors.astype(np.float32) / 255.0
+            np_colors = np.ascontiguousarray(np_colors, dtype=np.float32)
+
+        if not 1 <= int(resolution) <= 4096:
+            raise InvalidArgumentError("resolution must be in [1, 4096]")
+        if not float(inflation_radius) >= 0.0:
+            raise InvalidArgumentError("inflation_radius must be non-negative")
+
+        compute = self._editor._compute
+        owned = []
+        try:
+            positions_array = compute.create_array(np_vertices)
+            owned.append(positions_array)
+            indices_array = compute.create_array(np_faces)
+            owned.append(indices_array)
+            colors_array = None
+            if np_colors is not None:
+                colors_array = compute.create_array(np_colors)
+                owned.append(colors_array)
+
+            desc = EditorMeshDesc()
+            desc.positions = pointer(positions_array)
+            desc.indices = pointer(indices_array)
+            desc.colors = pointer(colors_array) if colors_array is not None else None
+            desc.resolution = int(resolution)
+            desc.inflation_radius = float(inflation_radius)
+            self._editor.add_mesh(self._token, self._editor.get_token(name), desc)
+        finally:
+            for array in owned:
+                compute.destroy_array(array)
 
     def add_image2d(self, name: str, image_rgba, width: Optional[int] = None, height: Optional[int] = None) -> None:
         """Add a 2D RGBA image to this scene.

@@ -93,6 +93,26 @@ typedef struct pnanovdb_editor_gaussian_data_desc_t
     pnanovdb_compute_array_t* sh_n;
 } pnanovdb_editor_gaussian_data_desc_t;
 
+// In-memory mesh for add_mesh. The editor copies every array, so the caller keeps ownership.
+typedef struct pnanovdb_editor_mesh_desc_t
+{
+    // float32 xyz per vertex: element_size 4, element_count 3*V.
+    pnanovdb_compute_array_t* positions;
+
+    // uint32 vertex indices. Triangles: element_size 4, element_count 3*T.
+    // Lines: element_size 8 (one uint32 pair per segment), element_count E.
+    pnanovdb_compute_array_t* indices;
+
+    // Optional float32 rgb per vertex (element_count 3*V). NULL renders white.
+    pnanovdb_compute_array_t* colors;
+
+    // VoxelBVH build resolution. 0 selects the default (512).
+    pnanovdb_uint32_t resolution;
+
+    // VoxelBVH inflation radius in world units. 0 selects the pipeline default.
+    float inflation_radius;
+} pnanovdb_editor_mesh_desc_t;
+
 typedef struct pnanovdb_editor_shader_name_t
 {
     pnanovdb_editor_token_t* shader_name;
@@ -292,6 +312,15 @@ typedef struct pnanovdb_editor_t
                                             pnanovdb_pipeline_type_t process_pipeline,
                                             pnanovdb_pipeline_type_t render_pipeline);
 
+    // Adds or replaces a triangle or line mesh. The mesh is built into a VoxelBVH asynchronously
+    // by the render loop and rendered with voxelbvh_triangles_render or voxelbvh_lines_render,
+    // chosen from the index layout. Invalid input is logged and leaves the scene unchanged.
+    // In-memory meshes are not written by save_scene.
+    void(PNANOVDB_ABI* add_mesh)(pnanovdb_editor_t* editor,
+                                 pnanovdb_editor_token_t* scene,
+                                 pnanovdb_editor_token_t* name,
+                                 const pnanovdb_editor_mesh_desc_t* desc);
+
 } pnanovdb_editor_t;
 
 #define PNANOVDB_REFLECT_TYPE pnanovdb_editor_t
@@ -346,6 +375,7 @@ PNANOVDB_REFLECT_FUNCTION_POINTER(save_scene, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_pipeline_type, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(get_camera_2, 0, 0)
 PNANOVDB_REFLECT_FUNCTION_POINTER(add_gaussian_data_4, 0, 0)
+PNANOVDB_REFLECT_FUNCTION_POINTER(add_mesh, 0, 0)
 PNANOVDB_REFLECT_END(0)
 PNANOVDB_REFLECT_INTERFACE_IMPL()
 #undef PNANOVDB_REFLECT_TYPE
