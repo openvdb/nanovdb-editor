@@ -24,6 +24,7 @@ RWStructuredBuffer<uint> image_out_deprecated;
 RWTexture2D<float4> texture_out;
 ConstantBuffer<EditorParams> editor_params;
 ConstantBuffer<shader_params_t> shader_params;
+StructuredBuffer<float4> colormap;
 
 float3 cross_product(float3 a, float3 b)
 {
@@ -149,9 +150,16 @@ float4 ray_march_nanovdb_leaf_fetch_float(pnanovdb_grid_type_t grid_type,
             }
         }
         temperature = max(0.f, min(1.f, temperature));
-        float4 c0 = float4(0.1f, 0.1f, 0.1f, 1.f);
-        float4 c1 = float4(1.f, 0.6f, 0.4f, 1.f);
-        color = ((1.f - temperature) * c0 + temperature * c1) * float4(1.f, 1.f, 1.f, value);
+
+        int c0_idx = floor(32.f * temperature - 0.5f);
+        int c1_idx = c0_idx + 1;
+        float w = (32.f * temperature - 0.5f) - float(c0_idx);
+
+        if (c0_idx < 0) c0_idx = 0;
+        if (c1_idx > 31) c1_idx = 31;
+        float4 c0 = colormap[c0_idx];
+        float4 c1 = colormap[c1_idx];
+        color = ((1.f - w) * c0 + w * c1) * float4(1.f, 1.f, 1.f, value);
     }
     return color;
 }

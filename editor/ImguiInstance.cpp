@@ -860,18 +860,21 @@ void showReflectParameter(
         maxv = &maxd;
     }
 
-    ImGuiDataType type = ImGuiDataType_COUNT;
-    switch(reflect_data->data_type->data_type)
+    ImGuiDataType value_type = ImGuiDataType_COUNT;
+    if (reflect_data->reflect_mode == PNANOVDB_REFLECT_MODE_VALUE)
     {
-        case PNANOVDB_REFLECT_TYPE_INT32: type = ImGuiDataType_S32; break;
-        case PNANOVDB_REFLECT_TYPE_UINT32: type = ImGuiDataType_U32; break;
-        case PNANOVDB_REFLECT_TYPE_FLOAT: type = ImGuiDataType_Float; break;
-        case PNANOVDB_REFLECT_TYPE_BOOL32: type = ImGuiDataType_U32; break;
-        case PNANOVDB_REFLECT_TYPE_UINT8: type = ImGuiDataType_U8; break;
-        case PNANOVDB_REFLECT_TYPE_UINT16: type = ImGuiDataType_U16; break;
-        case PNANOVDB_REFLECT_TYPE_UINT64: type = ImGuiDataType_U64; break;
-        case PNANOVDB_REFLECT_TYPE_DOUBLE: type = ImGuiDataType_Double; break;
-        case PNANOVDB_REFLECT_TYPE_INT64: type = ImGuiDataType_S64; break;
+        switch(reflect_data->data_type->data_type)
+        {
+            case PNANOVDB_REFLECT_TYPE_INT32: value_type = ImGuiDataType_S32; break;
+            case PNANOVDB_REFLECT_TYPE_UINT32: value_type = ImGuiDataType_U32; break;
+            case PNANOVDB_REFLECT_TYPE_FLOAT: value_type = ImGuiDataType_Float; break;
+            case PNANOVDB_REFLECT_TYPE_BOOL32: value_type = ImGuiDataType_U32; break;
+            case PNANOVDB_REFLECT_TYPE_UINT8: value_type = ImGuiDataType_U8; break;
+            case PNANOVDB_REFLECT_TYPE_UINT16: value_type = ImGuiDataType_U16; break;
+            case PNANOVDB_REFLECT_TYPE_UINT64: value_type = ImGuiDataType_U64; break;
+            case PNANOVDB_REFLECT_TYPE_DOUBLE: value_type = ImGuiDataType_Double; break;
+            case PNANOVDB_REFLECT_TYPE_INT64: value_type = ImGuiDataType_S64; break;
+        }
     }
 
     if (reflect_data->reflect_mode == PNANOVDB_REFLECT_MODE_POINTER &&
@@ -889,7 +892,7 @@ void showReflectParameter(
             *(const char**)data = str_token->str;
         }
     }
-    else if (type == ImGuiDataType_COUNT)
+    else if (value_type == ImGuiDataType_COUNT)
     {
         ImGui::Text("%s", reflect_data->name);
     }
@@ -899,12 +902,12 @@ void showReflectParameter(
     }
     else if (use_slider)
     {
-        const char* format = type == ImGuiDataType_Float || type == ImGuiDataType_Double ? "%.3f" : nullptr;
-        ImGui::SliderScalar(reflect_data->name, type, data, minv, maxv, format, ImGuiSliderFlags_AlwaysClamp);
+        const char* format = value_type == ImGuiDataType_Float || value_type == ImGuiDataType_Double ? "%.3f" : nullptr;
+        ImGui::SliderScalar(reflect_data->name, value_type, data, minv, maxv, format, ImGuiSliderFlags_AlwaysClamp);
     }
     else
     {
-        ImGui::DragScalar(reflect_data->name, type, data, float(stepd), minv, maxv);
+        ImGui::DragScalar(reflect_data->name, value_type, data, float(stepd), minv, maxv);
     }
 }
 
@@ -1563,7 +1566,8 @@ void properties_pipeline(
                             showShaderParams(compute, shader, pipe->params_metadata, reflect_metadata);
                             ImGui::Unindent();
                         }
-                        else if (reflect_data->data_type->data_type == PNANOVDB_REFLECT_TYPE_STRUCT)
+                        else if (reflect_data->data_type->data_type == PNANOVDB_REFLECT_TYPE_STRUCT &&
+                                 reflect_data->reflect_mode == PNANOVDB_REFLECT_MODE_VALUE)
                         {
                             auto reflect_type2 = reflect_data->data_type;
                             uint8_t* data2 = (uint8_t*)pipe->params_data + reflect_data->data_offset;

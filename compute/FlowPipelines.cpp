@@ -27,16 +27,41 @@ namespace pnanovdb_pipeline_flow_render
     };
     PNANOVDB_CAST_PAIR(Instance, pnanovdb_pipeline_instance_t)
 
+    static const pnanovdb_uint64_t default_point_count = 6u;
+    static const float x_points_default[default_point_count] = {
+        0.000000f,
+        0.050000f,
+        0.15000f,
+        0.600000f,
+        0.850000f,
+        1.000000f
+    };
+    static const pnanovdb_vec4_t rgba_points_default[default_point_count] = {
+        { 0.015400f,    0.017700f,    0.015400f,    0.004902f },
+        { 0.035750f,    0.035750f,    0.035750f,    0.504902f },
+        { 0.035750f,    0.035750f,    0.035750f,    0.504902f },
+        { 1.f,            0.1594125f, 0.0135315f, 0.800000f },
+        { 13.534992f,    2.986956f,  0.125991f,  0.800000f },
+        { 78.08f,       39.04f,     6.1f,       0.700000f },
+    };
     struct pnanovdb_pipeline_nanovdb_render_params_t
     {
         pnanovdb_pipeline_shader_t shader;
+        const float* x_points;
+        pnanovdb_uint64_t x_point_count;
+        const pnanovdb_vec4_t* rgba_points;
+        pnanovdb_uint64_t rgba_point_count;
     };
     static const pnanovdb_pipeline_nanovdb_render_params_t pnanovdb_pipeline_nanovdb_render_params_t_default = {
-        {"editor/flow_raymarch.slang", nullptr, nullptr, nullptr, nullptr} // shader
+        {"editor/flow_raymarch.slang", nullptr, nullptr, nullptr, nullptr}, // shader
+        x_points_default, default_point_count,
+        rgba_points_default, default_point_count
     };
     #define PNANOVDB_REFLECT_TYPE pnanovdb_pipeline_nanovdb_render_params_t
     PNANOVDB_REFLECT_BEGIN()
     PNANOVDB_REFLECT_VALUE(pnanovdb_pipeline_shader_t, shader, 0, 0)
+    PNANOVDB_REFLECT_ARRAY(float, x_points, x_point_count, 0, 0)
+    PNANOVDB_REFLECT_ARRAY(pnanovdb_vec4_t, rgba_points, rgba_point_count, 0, 0)
     PNANOVDB_REFLECT_END(&pnanovdb_pipeline_nanovdb_render_params_t_default)
     #undef PNANOVDB_REFLECT_TYPE
 
@@ -124,6 +149,49 @@ namespace pnanovdb_pipeline_flow_render
             return PNANOVDB_TRUE;
         }
         return PNANOVDB_FALSE;
+    }
+
+    static pnanovdb_vec4_t compute_texel(pnanovdb_uint32_t idx,
+                                         pnanovdb_uint32_t count,
+                                         pnanovdb_pipeline_nanovdb_render_params_t* params)
+    {
+        float u = (float(idx) + 0.5f) * (1.f / float(count));
+
+        pnanovdb_uint32_t beginPtIdx = 0u;
+        pnanovdb_uint32_t endPtIdx = params->x_point_count < params->rgba_point_count ?
+                                     params->x_point_count : params->rgba_point_count;
+
+        pnanovdb_uint32_t xlowIdx = ~0u;
+        float xlowVal = 0.f;
+        pnanovdb_uint32_t xhighIdx = ~0u;
+        float xhighVal = 0.f;
+        for (pnanovdb_uint32_t ptIdx = beginPtIdx; ptIdx < endPtIdx; ptIdx++)
+        {
+            float x = params->x_points[ptIdx];
+            if (x <= u && (x >= xlowVal || xlowIdx == ~0u))
+            {
+                xlowIdx = ptIdx;
+                xlowVal = x;
+            }
+            if (x >= u && (x <= xhighVal || xhighIdx == ~0u))
+            {
+                xhighIdx = ptIdx;
+                xhighVal = x;
+            }
+        }
+
+        pnanovdb_vec4_t a = xlowIdx != ~0u ? params->rgba_points[xlowIdx] : pnanovdb_vec4_t{0.f, 0.f, 0.f, 0.f};
+        pnanovdb_vec4_t b = xhighIdx != ~0u ? params->rgba_points[xhighIdx] : pnanovdb_vec4_t{1.f, 1.f, 1.f, 1.f};
+        float t = (u - xlowVal) / (xhighVal - xlowVal);
+        pnanovdb_vec4_t c = {
+            (1.f - t) * a.x + t * b.x,
+            (1.f - t) * a.y + t * b.y,
+            (1.f - t) * a.z + t * b.z,
+            (1.f - t) * a.w + t * b.w,
+        };
+
+        //c.xyz *= layerParamsIn[layerParamIdx].colorScale;
+        return c;
     }
 
     void render(pnanovdb_pipeline_instance_t* instance,
@@ -287,19 +355,35 @@ namespace pnanovdb_pipeline_flow_render
         image_buf_desc.structure_stride = 4u;
         auto* image_buffer = compute_interface->get_buffer_transient(context, &image_buf_desc);
 
-        pnanovdb_compute_resource_t resources[6u] = {};
+        pnanovdb_compute_buffer_desc_t colormap_buf_desc = {};
+        colormap_buf_desc.size_in_bytes = 32u * 16u;
+        colormap_buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_SRC;
+        colormap_buf_desc.structure_stride = 16u;
+        auto* colormap_buffer = compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &colormap_buf_desc);
+        pnanovdb_vec4_t* mapped_colormap = (pnanovdb_vec4_t*)compute_interface->map_buffer(context, colormap_buffer);
+        for (pnanovdb_uint32_t idx = 0u; idx < 32u; idx++)
+        {
+            mapped_colormap[idx] = compute_texel(idx, 32u, params);
+        }
+        compute_interface->unmap_buffer(context, colormap_buffer);
+        pnanovdb_compute_buffer_transient_t* colormap_transient =
+            compute_interface->register_buffer_as_transient(context, colormap_buffer);
+
+        pnanovdb_compute_resource_t resources[7u] = {};
         resources[0u].buffer_transient = compute_interface->register_buffer_as_transient(context, input->buffer_buffers[smoke_idx]);
         resources[1u].buffer_transient = compute_interface->register_buffer_as_transient(context, input->buffer_buffers[temperature_idx]);
         resources[2u].buffer_transient = image_buffer;
         resources[3u].texture_transient = compute_interface->register_texture_as_transient(context, target->color);
         resources[4u].buffer_transient = constant_transient;
         resources[5u].buffer_transient = shader_params_transient;
+        resources[6u].buffer_transient = colormap_transient;
 
         compute->dispatch_shader(compute_interface, context, ptr->shader_ctx, resources, (target->width + 15u) / 16u,
                                 (target->height + 7u) / 8u, 1u, "flow_render");
 
         compute_interface->destroy_buffer(context, constant_buffer);
         compute_interface->destroy_buffer(context, shader_params_buffer);
+        compute_interface->destroy_buffer(context, colormap_buffer);
     }
 
     static pnanovdb_pipeline_desc_t* get_desc()
