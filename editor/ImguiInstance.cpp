@@ -1044,6 +1044,19 @@ void properties_scene(
         }
         new_object_name = object_name;
     }
+
+    ImGui::SeparatorText("All Scenes");
+
+    if (ImGui::Button("Load"))
+    {
+        IGFD::FileDialogConfig config;
+        config.path = ".";
+        const char* desc_str = "Open Scene JSON File";
+        const char* filter_str = "JSON Files (*.json){.json}";
+        ImGuiFileDialog::Instance()->OpenDialog(
+            "LoadSceneFileDlgKey", desc_str, filter_str, config);
+    }
+    ImGui::SameLine();
     if (ImGui::Button("Save"))
     {
         std::string default_name = std::string(scene->str) + ".json";
@@ -1056,29 +1069,7 @@ void properties_scene(
         ImGuiFileDialog::Instance()->OpenDialog(
             "SaveSceneFileDlgKey", desc_str, filter_str, config);
     }
-    if (ImGuiFileDialog::Instance()->IsOpened())
-    {
-        ImVec2 dialog_size = {768.f, 512.f};
-        ImGui::SetNextWindowSize(scaleDialogSize(dialog_size), ImGuiCond_Appearing);
-        if (ImGuiFileDialog::Instance()->Display("SaveSceneFileDlgKey"))
-        {
-            if (ImGuiFileDialog::Instance()->IsOk())
-            {
-                std::string file_name = ImGuiFileDialog::Instance()->GetFilePathName();
-                save_name = compute->get_token(file_name.c_str());
-            }
-            ImGuiFileDialog::Instance()->Close();
-        }
-    }
-    if (ImGui::Button("Load"))
-    {
-        IGFD::FileDialogConfig config;
-        config.path = ".";
-        const char* desc_str = "Open Scene JSON File";
-        const char* filter_str = "JSON Files (*.json){.json}";
-        ImGuiFileDialog::Instance()->OpenDialog(
-            "LoadSceneFileDlgKey", desc_str, filter_str, config);
-    }
+
     if (ImGuiFileDialog::Instance()->IsOpened())
     {
         ImVec2 dialog_size = {768.f, 512.f};
@@ -1089,6 +1080,20 @@ void properties_scene(
             {
                 std::string file_name = ImGuiFileDialog::Instance()->GetFilePathName();
                 load_name = compute->get_token(file_name.c_str());
+            }
+            ImGuiFileDialog::Instance()->Close();
+        }
+    }
+    if (ImGuiFileDialog::Instance()->IsOpened())
+    {
+        ImVec2 dialog_size = {768.f, 512.f};
+        ImGui::SetNextWindowSize(scaleDialogSize(dialog_size), ImGuiCond_Appearing);
+        if (ImGuiFileDialog::Instance()->Display("SaveSceneFileDlgKey"))
+        {
+            if (ImGuiFileDialog::Instance()->IsOk())
+            {
+                std::string file_name = ImGuiFileDialog::Instance()->GetFilePathName();
+                save_name = compute->get_token(file_name.c_str());
             }
             ImGuiFileDialog::Instance()->Close();
         }
@@ -1614,12 +1619,18 @@ void properties_camera(
         pipeline->config_map_params(config, scene, object_name, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_mapped_t), (void**)&mapped_object);
     }
 
+    pnanovdb_compute_token_t* set_active_camera = nullptr;
     if (mapped_object && mapped_object->camera)
     {
         auto camera = mapped_object->camera;
         auto& state = camera->state;
 
         ImGui::SeparatorText("Camera");
+        if (ImGui::Button("Set Active Camera"))
+        {
+            set_active_camera = object_name;
+        }
+        ImGui::SameLine();
         if (ImGui::Button("Reset"))
         {
             if (mapped_object->camera_default)
@@ -1717,6 +1728,11 @@ void properties_camera(
         pipeline->config_unmap_params(config, scene, object_name, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_mapped_t));
     }
     pipeline->config_unmap_params(config, scene, nullptr, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_list_t));
+
+    if (set_active_camera)
+    {
+        pipeline->config_set_active_camera(config, scene, set_active_camera);
+    }
 }
 
 }

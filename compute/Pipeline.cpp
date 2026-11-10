@@ -1063,6 +1063,8 @@ static void json_to_object(pnanovdb_pipeline_config_t* config, pnanovdb_compute_
 
 static void json_to_scene(pnanovdb_pipeline_config_t* config, pnanovdb_compute_token_t* scene, nlohmann::ordered_json scene_json)
 {
+    const pnanovdb_compute_t* compute = cast(config)->registry->compute;
+
     // delete scene if existing to make sure load is clean
     config_remove(config, scene, nullptr);
 
@@ -1074,6 +1076,13 @@ static void json_to_scene(pnanovdb_pipeline_config_t* config, pnanovdb_compute_t
     for (const auto object_it : *objects_json)
     {
         json_to_object(config, scene, object_it);
+    }
+
+    const auto active_camera_json = scene_json.find("active_camera");
+    if (active_camera_json != scene_json.end())
+    {
+        pnanovdb_compute_token_t* active_camera = compute->get_token(active_camera_json->get_ref<const std::string&>().c_str());
+        config_set_active_camera(config, scene, active_camera);
     }
 }
 
