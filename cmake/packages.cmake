@@ -323,8 +323,8 @@ CPMAddPackage(
 CPMAddPackage(
     NAME ImGuiFileDialog
     GITHUB_REPOSITORY aiekick/ImGuiFileDialog
-    GIT_TAG v0.6.7
-    VERSION 0.6.7
+    GIT_TAG v0.6.8
+    VERSION 0.6.8
     DOWNLOAD_ONLY YES
 )
 
