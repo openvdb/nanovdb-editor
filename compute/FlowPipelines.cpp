@@ -47,6 +47,7 @@ namespace pnanovdb_pipeline_flow_render
     struct pnanovdb_pipeline_nanovdb_render_params_t
     {
         pnanovdb_pipeline_shader_t shader;
+        pnanovdb_uint32_t colormap_resolution;
         const float* x_points;
         pnanovdb_uint64_t x_point_count;
         const pnanovdb_vec4_t* rgba_points;
@@ -54,12 +55,14 @@ namespace pnanovdb_pipeline_flow_render
     };
     static const pnanovdb_pipeline_nanovdb_render_params_t pnanovdb_pipeline_nanovdb_render_params_t_default = {
         {"editor/flow_raymarch.slang", nullptr, nullptr, nullptr, nullptr}, // shader
+        32u,
         x_points_default, default_point_count,
         rgba_points_default, default_point_count
     };
     #define PNANOVDB_REFLECT_TYPE pnanovdb_pipeline_nanovdb_render_params_t
     PNANOVDB_REFLECT_BEGIN()
     PNANOVDB_REFLECT_VALUE(pnanovdb_pipeline_shader_t, shader, 0, 0)
+    PNANOVDB_REFLECT_VALUE(pnanovdb_uint32_t, colormap_resolution, 0, 0)
     PNANOVDB_REFLECT_ARRAY(float, x_points, x_point_count, 0, 0)
     PNANOVDB_REFLECT_ARRAY(pnanovdb_vec4_t, rgba_points, rgba_point_count, 0, 0)
     PNANOVDB_REFLECT_END(&pnanovdb_pipeline_nanovdb_render_params_t_default)
@@ -355,16 +358,30 @@ namespace pnanovdb_pipeline_flow_render
         image_buf_desc.structure_stride = 4u;
         auto* image_buffer = compute_interface->get_buffer_transient(context, &image_buf_desc);
 
-        pnanovdb_compute_buffer_desc_t colormap_buf_desc = {};
-        colormap_buf_desc.size_in_bytes = 32u * 16u;
-        colormap_buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_STRUCTURED | PNANOVDB_COMPUTE_BUFFER_USAGE_COPY_SRC;
-        colormap_buf_desc.structure_stride = 16u;
-        auto* colormap_buffer = compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &colormap_buf_desc);
-        pnanovdb_vec4_t* mapped_colormap = (pnanovdb_vec4_t*)compute_interface->map_buffer(context, colormap_buffer);
-        for (pnanovdb_uint32_t idx = 0u; idx < 32u; idx++)
+        struct colormap_t
         {
-            mapped_colormap[idx] = compute_texel(idx, 32u, params);
+            pnanovdb_uint32_t resolution;
+            pnanovdb_uint32_t pad0;
+            pnanovdb_uint32_t pad1;
+            pnanovdb_uint32_t pad2;
+            pnanovdb_vec4_t rgba[1024u];
+        };
+        colormap_t colormap = {};
+        colormap.resolution = params->colormap_resolution;
+        if (colormap.resolution == 0) {colormap.resolution = 1u;}
+        if (colormap.resolution > 1024u) {colormap.resolution = 1024u;}
+        for (pnanovdb_uint32_t idx = 0u; idx < colormap.resolution; idx++)
+        {
+            colormap.rgba[idx] = compute_texel(idx, colormap.resolution, params);
         }
+
+        pnanovdb_compute_buffer_desc_t colormap_buf_desc = {};
+        colormap_buf_desc.size_in_bytes = sizeof(colormap_t);
+        colormap_buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT;
+        colormap_buf_desc.structure_stride = 0u;
+        auto* colormap_buffer = compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &colormap_buf_desc);
+        void* mapped_colormap = (void*)compute_interface->map_buffer(context, colormap_buffer);
+        memcpy(mapped_colormap, &colormap, sizeof(colormap_t));
         compute_interface->unmap_buffer(context, colormap_buffer);
         pnanovdb_compute_buffer_transient_t* colormap_transient =
             compute_interface->register_buffer_as_transient(context, colormap_buffer);

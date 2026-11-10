@@ -18,13 +18,22 @@ struct shader_params_t
     uint auto_center;
 };
 
+struct colormap_t
+{
+    uint resolution;
+    uint pad0;
+    uint pad1;
+    uint pad2;
+    float4 rgba[1024u];
+};
+
 StructuredBuffer<uint2> buf;
 StructuredBuffer<uint2> buf_temperature;
 RWStructuredBuffer<uint> image_out_deprecated;
 RWTexture2D<float4> texture_out;
 ConstantBuffer<EditorParams> editor_params;
 ConstantBuffer<shader_params_t> shader_params;
-StructuredBuffer<float4> colormap;
+ConstantBuffer<colormap_t> colormap;
 
 float3 cross_product(float3 a, float3 b)
 {
@@ -151,14 +160,14 @@ float4 ray_march_nanovdb_leaf_fetch_float(pnanovdb_grid_type_t grid_type,
         }
         temperature = max(0.f, min(1.f, temperature));
 
-        int c0_idx = floor(32.f * temperature - 0.5f);
+        int c0_idx = int(floor(float(colormap.resolution) * temperature - 0.5f));
         int c1_idx = c0_idx + 1;
-        float w = (32.f * temperature - 0.5f) - float(c0_idx);
+        float w = (float(colormap.resolution) * temperature - 0.5f) - float(c0_idx);
 
         if (c0_idx < 0) c0_idx = 0;
-        if (c1_idx > 31) c1_idx = 31;
-        float4 c0 = colormap[c0_idx];
-        float4 c1 = colormap[c1_idx];
+        if (c1_idx > int(colormap.resolution) - 1) c1_idx = int(colormap.resolution) - 1;
+        float4 c0 = colormap.rgba[c0_idx];
+        float4 c1 = colormap.rgba[c1_idx];
         color = ((1.f - w) * c0 + w * c1) * float4(1.f, 1.f, 1.f, value);
     }
     return color;
