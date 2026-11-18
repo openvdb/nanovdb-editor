@@ -18,12 +18,21 @@
 
 namespace pnanovdb_pipeline_flow_render
 {
+    struct bloom_ctx_t;
+    bloom_ctx_t* bloom_create(const pnanovdb_compute_t* compute, pnanovdb_compute_queue_t* queue);
+    void bloom_destroy(const pnanovdb_compute_t* compute, pnanovdb_compute_queue_t* queue, bloom_ctx_t* ctx);
+    void bloom_update(const pnanovdb_compute_t* compute, pnanovdb_compute_queue_t* queue, bloom_ctx_t* ctx,
+                      int width, int height,
+                      pnanovdb_compute_texture_transient_t* image_in, pnanovdb_compute_texture_transient_t* image_out);
+
     struct Instance
     {
         pnanovdb_shader_context_t* shader_ctx = nullptr;
         const char* shader_path = nullptr;
         std::vector<uint8_t> shader_params_data;
         std::vector<uint8_t> shader_params_metadata;
+
+        bloom_ctx_t* bloom_ctx = nullptr;
     };
     PNANOVDB_CAST_PAIR(Instance, pnanovdb_pipeline_instance_t)
 
@@ -109,6 +118,8 @@ namespace pnanovdb_pipeline_flow_render
     {
         auto ptr = new Instance();
 
+        ptr->bloom_ctx = bloom_create(compute, queue);
+
         return cast(ptr);
     }
 
@@ -117,6 +128,8 @@ namespace pnanovdb_pipeline_flow_render
                  pnanovdb_pipeline_instance_t* instance)
     {
         auto ptr = cast(instance);
+
+        bloom_destroy(compute, queue, ptr->bloom_ctx);
 
         pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
         pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
@@ -386,17 +399,32 @@ namespace pnanovdb_pipeline_flow_render
         pnanovdb_compute_buffer_transient_t* colormap_transient =
             compute_interface->register_buffer_as_transient(context, colormap_buffer);
 
+        pnanovdb_compute_texture_desc_t tex_desc = {};
+        tex_desc.texture_type = PNANOVDB_COMPUTE_TEXTURE_TYPE_2D;
+        tex_desc.usage = PNANOVDB_COMPUTE_TEXTURE_USAGE_TEXTURE | PNANOVDB_COMPUTE_TEXTURE_USAGE_RW_TEXTURE;
+        tex_desc.format = PNANOVDB_COMPUTE_FORMAT_R16G16B16A16_FLOAT;
+        tex_desc.width = target->width;
+        tex_desc.height = target->height;
+        tex_desc.depth = 1u;
+        tex_desc.mip_levels = 1u;
+        pnanovdb_compute_texture_transient_t* color_hdr = compute_interface->get_texture_transient(context, &tex_desc);
+
         pnanovdb_compute_resource_t resources[7u] = {};
         resources[0u].buffer_transient = compute_interface->register_buffer_as_transient(context, input->buffer_buffers[smoke_idx]);
         resources[1u].buffer_transient = compute_interface->register_buffer_as_transient(context, input->buffer_buffers[temperature_idx]);
         resources[2u].buffer_transient = image_buffer;
-        resources[3u].texture_transient = compute_interface->register_texture_as_transient(context, target->color);
+        resources[3u].texture_transient = color_hdr;
         resources[4u].buffer_transient = constant_transient;
         resources[5u].buffer_transient = shader_params_transient;
         resources[6u].buffer_transient = colormap_transient;
 
+        pnanovdb_compute_texture_transient_t* color_out = compute_interface->register_texture_as_transient(context, target->color);
+
         compute->dispatch_shader(compute_interface, context, ptr->shader_ctx, resources, (target->width + 15u) / 16u,
                                 (target->height + 7u) / 8u, 1u, "flow_render");
+
+        bloom_update(compute, queue, ptr->bloom_ctx, target->width, target->height,
+                     color_hdr, color_out);
 
         compute_interface->destroy_buffer(context, constant_buffer);
         compute_interface->destroy_buffer(context, shader_params_buffer);
@@ -413,6 +441,260 @@ namespace pnanovdb_pipeline_flow_render
         desc.get_requirements = get_requirements;
         desc.render = render;
         return &desc;
+    }
+
+    enum bloom_shader
+    {
+        bloom_blur_x_slang,
+        bloom_blur_y_slang,
+        bloom_downsample_slang,
+        bloom_tonemap_slang,
+
+        bloom_shader_count
+    };
+    static const char* bloom_shader_names[bloom_shader_count] = {
+        "editor/bloom_blur_x.slang",
+        "editor/bloom_blur_y.slang",
+        "editor/bloom_downsample.slang",
+        "editor/bloom_tonemap.slang"
+    };
+    struct bloom_ctx_t
+    {
+        pnanovdb_shader_context_t* shader_ctx[bloom_shader_count] = {};
+        pnanovdb_compute_sampler_t* sampler_linear_clamp = nullptr;
+        pnanovdb_compute_sampler_t* sampler_linear_border = nullptr;
+    };
+    bloom_ctx_t* bloom_create(const pnanovdb_compute_t* compute, pnanovdb_compute_queue_t* queue)
+    {
+        pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
+        pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
+
+        auto ptr = new bloom_ctx_t();
+
+        pnanovdb_compiler_settings_t compile_settings = {};
+        pnanovdb_compiler_settings_init(&compile_settings);
+        for (pnanovdb_uint32_t idx = 0u; idx < bloom_shader_count; idx++)
+        {
+            ptr->shader_ctx[idx] = compute->create_shader_context(bloom_shader_names[idx]);
+            if (compute->init_shader(compute, queue, ptr->shader_ctx[idx], &compile_settings) == PNANOVDB_FALSE)
+            {
+                compute->destroy_shader_context(compute, queue, ptr->shader_ctx[idx]);
+                ptr->shader_ctx[idx] = nullptr;
+            }
+        }
+        pnanovdb_compute_sampler_desc_t samplerDesc = {};
+        samplerDesc.filter_mode = PNANOVDB_COMPUTE_SAMPLER_FILTER_MODE_LINEAR;
+        samplerDesc.address_mode_u = PNANOVDB_COMPUTE_SAMPLER_ADDRESS_MODE_CLAMP;
+        samplerDesc.address_mode_v = PNANOVDB_COMPUTE_SAMPLER_ADDRESS_MODE_CLAMP;
+        samplerDesc.address_mode_w = PNANOVDB_COMPUTE_SAMPLER_ADDRESS_MODE_CLAMP;
+        ptr->sampler_linear_clamp = compute_interface->create_sampler(context, &samplerDesc);
+        samplerDesc.address_mode_u = PNANOVDB_COMPUTE_SAMPLER_ADDRESS_MODE_BORDER;
+        samplerDesc.address_mode_v = PNANOVDB_COMPUTE_SAMPLER_ADDRESS_MODE_BORDER;
+        samplerDesc.address_mode_w = PNANOVDB_COMPUTE_SAMPLER_ADDRESS_MODE_BORDER;
+        ptr->sampler_linear_border = compute_interface->create_sampler(context, &samplerDesc);
+        return ptr;
+    }
+    void bloom_destroy(const pnanovdb_compute_t* compute, pnanovdb_compute_queue_t* queue, bloom_ctx_t* ptr)
+    {
+        pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
+        pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
+        for (pnanovdb_uint32_t idx = 0u; idx < bloom_shader_count; idx++)
+        {
+            if (ptr->shader_ctx[idx])
+            {
+                compute->destroy_shader_context(compute, queue, ptr->shader_ctx[idx]);
+                ptr->shader_ctx[idx] = nullptr;
+            }
+        }
+        compute_interface->destroy_sampler(context, ptr->sampler_linear_clamp);
+        compute_interface->destroy_sampler(context, ptr->sampler_linear_border);
+        delete ptr;
+    }
+    pnanovdb_compute_buffer_t* bloom_update_constants(
+        pnanovdb_compute_interface_t* compute_interface,
+        pnanovdb_compute_context_t* context,
+        float weightScale, float sizeScale,
+        pnanovdb_uint32_t width1, pnanovdb_uint32_t height1,
+        pnanovdb_uint32_t width, pnanovdb_uint32_t height,
+        pnanovdb_uint32_t mode, float threshold,
+        float weight, float size)
+    {
+        float width1Inv = 1.f / float(width1);
+        float weights[17u];
+        float sum = 0.f;
+        float k = 1.f / (2.f * sizeScale * sizeScale * size * size);
+        for (int weightIdx = 0; weightIdx < 17u; weightIdx++)
+        {
+            float normOffset = float(weightIdx) * width1Inv;
+
+            weights[weightIdx] = expf(-k * normOffset * normOffset);
+
+            sum += weights[weightIdx];
+        }
+        float sumInv = 1.f / sum;
+        for (int weightIdx = 0; weightIdx < 17u; weightIdx++)
+        {
+            weights[weightIdx] *= sumInv;
+        }
+        struct constants_t
+        {
+            pnanovdb_uint32_t mode;
+            float weight;
+            float threshold;
+            float size;
+            pnanovdb_vec4_t texDimInv;
+            pnanovdb_vec4_t centerWeight;
+            pnanovdb_vec4_t weights[4u];
+        };
+        constants_t constants = {};
+        constants.mode = mode;
+        constants.weight = weightScale * weight;
+        constants.threshold = threshold;
+        constants.size = sizeScale * size;
+        constants.texDimInv = pnanovdb_vec4_t{ 1.f / float(width1), 1.f / float(height1), 1.f / float(width), 1.f / float(height) };
+        constants.centerWeight = pnanovdb_vec4_t{ weights[0u], weights[0u], weights[0u], weights[0u] };
+        constants.weights[0u] = pnanovdb_vec4_t{ weights[1u], weights[2u], weights[3u], weights[4u] };
+        constants.weights[1u] = pnanovdb_vec4_t{ weights[5u], weights[6u], weights[7u], weights[8u] };
+        constants.weights[2u] = pnanovdb_vec4_t{ weights[9u], weights[10u], weights[11u], weights[12u] };
+        constants.weights[3u] = pnanovdb_vec4_t{ weights[13u], weights[14u], weights[15u], weights[16u] };
+
+        // constants
+        pnanovdb_compute_buffer_desc_t buf_desc = {};
+        buf_desc.usage = PNANOVDB_COMPUTE_BUFFER_USAGE_CONSTANT;
+        buf_desc.format = PNANOVDB_COMPUTE_FORMAT_UNKNOWN;
+        buf_desc.structure_stride = 0u;
+        buf_desc.size_in_bytes = sizeof(constants_t);
+        pnanovdb_compute_buffer_t* constant_buffer =
+            compute_interface->create_buffer(context, PNANOVDB_COMPUTE_MEMORY_TYPE_UPLOAD, &buf_desc);
+
+        // copy constants
+        void* mapped_constants = compute_interface->map_buffer(context, constant_buffer);
+        memcpy(mapped_constants, &constants, sizeof(constants_t));
+        compute_interface->unmap_buffer(context, constant_buffer);
+
+        return constant_buffer;
+    }
+    void bloom_update(const pnanovdb_compute_t* compute, pnanovdb_compute_queue_t* queue, bloom_ctx_t* ptr,
+                      int width, int height,
+                      pnanovdb_compute_texture_transient_t* image_in,
+                      pnanovdb_compute_texture_transient_t* image_out)
+    {
+        pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
+        pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
+
+        float weightScale = 0.03f;
+        float sizeScale = 0.15f;
+        float threshold = 0.f;
+        static const pnanovdb_uint32_t level_count = 5;
+        pnanovdb_compute_buffer_t* constant_buffer[level_count] = {};
+        pnanovdb_compute_buffer_transient_t* constant_buffer_transient[level_count] = {};
+        pnanovdb_int32_t widths[level_count] = {};
+        pnanovdb_int32_t heights[level_count] = {};
+        float weights[level_count] = {0.35f, 0.14f, 0.12f, 0.06f, 0.06f};
+        float sizes[level_count] = {0.003f, 0.001f, 0.02f, 0.10f, 0.30f};
+        for (pnanovdb_uint32_t level_idx = 0u; level_idx < level_count; level_idx++)
+        {
+            widths[level_idx] = ((level_idx == 0u ? width : widths[level_idx - 1u]) + 1u) / 2u;
+            heights[level_idx] = ((level_idx == 0u ? height : heights[level_idx - 1u]) + 1u) / 2u;
+
+            float threshold_level = level_idx == 0u ? threshold : 0.f;
+            int width_fine = level_idx == 0u ? width : widths[level_idx - 1u];
+            int height_fine = level_idx == 0u ? height : heights[level_idx - 1u];
+            int width_coarse = widths[level_idx];
+            int height_coarse = heights[level_idx];
+
+	        constant_buffer[level_idx] = bloom_update_constants(
+                compute_interface, context,
+                weightScale, sizeScale,
+                widths[level_idx], heights[level_idx],
+                width_fine, height_fine, level_idx, threshold_level,
+                weights[level_idx], sizes[level_idx]);
+
+            constant_buffer_transient[level_idx] =
+                compute_interface->register_buffer_as_transient(context, constant_buffer[level_idx]);
+        }
+
+        // downsample pass
+        pnanovdb_compute_texture_transient_t* downsample_tex[level_count] = {};
+        pnanovdb_compute_texture_transient_t* temp_tex[level_count] = {};
+        for (pnanovdb_uint32_t level_idx = 0u; level_idx < level_count; level_idx++)
+        {
+            pnanovdb_compute_texture_transient_t* src = level_idx == 0u ? image_in : downsample_tex[level_idx - 1u];
+            pnanovdb_compute_texture_desc_t tex_desc = {};
+            tex_desc.texture_type = PNANOVDB_COMPUTE_TEXTURE_TYPE_2D;
+            tex_desc.usage = PNANOVDB_COMPUTE_TEXTURE_USAGE_TEXTURE | PNANOVDB_COMPUTE_TEXTURE_USAGE_RW_TEXTURE;
+            tex_desc.format = PNANOVDB_COMPUTE_FORMAT_R16G16B16A16_FLOAT;
+            tex_desc.width = widths[level_idx];
+            tex_desc.height = heights[level_idx];
+            tex_desc.depth = 1u;
+            tex_desc.mip_levels = 1u;
+            pnanovdb_compute_texture_transient_t* dst = compute_interface->get_texture_transient(context, &tex_desc);
+            temp_tex[level_idx] = compute_interface->get_texture_transient(context, &tex_desc);
+
+            pnanovdb_compute_resource_t resources[4u] = {};
+            resources[0u].buffer_transient = constant_buffer_transient[level_idx];
+            resources[1u].texture_transient = src;
+            resources[2u].texture_transient = dst;
+            resources[3u].sampler = ptr->sampler_linear_clamp;
+
+            pnanovdb_uint32_t grid_dim_x = (widths[level_idx] + 15u) / 16u;
+            pnanovdb_uint32_t grid_dim_y = (heights[level_idx] + 15u) / 16u;
+            compute->dispatch_shader(compute_interface, context, ptr->shader_ctx[bloom_downsample_slang],
+                                     resources, grid_dim_x, grid_dim_y, 1u, "bloom_downsample");
+
+            downsample_tex[level_idx] = dst;
+        }
+
+        // blur pass
+        for (pnanovdb_uint32_t level_idx = level_count - 1u; level_idx < level_count; level_idx--)
+        {
+            pnanovdb_compute_texture_transient_t* src = downsample_tex[level_idx];
+            pnanovdb_compute_texture_transient_t* dst = temp_tex[level_idx];
+            {
+                pnanovdb_compute_resource_t resources[3u] = {};
+                resources[0u].buffer_transient = constant_buffer_transient[level_idx];
+                resources[1u].texture_transient = src;
+                resources[2u].texture_transient = dst;
+
+                pnanovdb_uint32_t grid_dim_x = (widths[level_idx] + 15u) / 16u;
+                pnanovdb_uint32_t grid_dim_y = (heights[level_idx] + 15u) / 16u;
+                compute->dispatch_shader(compute_interface, context, ptr->shader_ctx[bloom_blur_x_slang],
+                                        resources, grid_dim_x, grid_dim_y, 1u, "bloom_blur_x");
+            }
+            {
+                pnanovdb_compute_resource_t resources[5u] = {};
+                resources[0u].buffer_transient = constant_buffer_transient[level_idx];
+                resources[1u].texture_transient = dst;
+                resources[2u].texture_transient = src;
+                resources[3u].texture_transient = level_idx == level_count - 1u ? dst : downsample_tex[level_idx + 1u];
+                resources[4u].sampler = ptr->sampler_linear_border;
+
+                pnanovdb_uint32_t grid_dim_x = (widths[level_idx] + 15u) / 16u;
+                pnanovdb_uint32_t grid_dim_y = (heights[level_idx] + 15u) / 16u;
+                compute->dispatch_shader(compute_interface, context, ptr->shader_ctx[bloom_blur_y_slang],
+                                        resources, grid_dim_x, grid_dim_y, 1u, "bloom_blur_y");
+            }
+        }
+
+        // tonemap and composite to target
+        {
+            pnanovdb_compute_resource_t resources[5u] = {};
+            resources[0u].buffer_transient = constant_buffer_transient[0u];
+            resources[1u].texture_transient = image_in;
+            resources[2u].texture_transient = image_out;
+            resources[3u].texture_transient = downsample_tex[0u];
+            resources[4u].sampler = ptr->sampler_linear_clamp;
+
+            pnanovdb_uint32_t grid_dim_x = (width + 15u) / 16u;
+            pnanovdb_uint32_t grid_dim_y = (height + 15u) / 16u;
+            compute->dispatch_shader(compute_interface, context, ptr->shader_ctx[bloom_tonemap_slang],
+                                     resources, grid_dim_x, grid_dim_y, 1u, "bloom_tonemap");
+        }
+
+        for (pnanovdb_uint32_t level_idx = 0u; level_idx < level_count; level_idx++)
+        {
+            compute_interface->destroy_buffer(context, constant_buffer[level_idx]);
+        }
     }
 }
 
