@@ -2,13 +2,14 @@
 
 struct constants_t
 {
-	uint mode;
-	float weight;
-	float threshold;
-	float size;
-	float4 texDimInv;
-	float4 centerWeight;
-	float4 weights[4u];
+    uint mode;
+    float weight;
+    float threshold;
+    float size;
+    float4 texDimInv;
+    float4 centerWeight;
+    float4 weights[4u];
+    float4 colorScale;
 };
 
 ConstantBuffer<constants_t> constants;

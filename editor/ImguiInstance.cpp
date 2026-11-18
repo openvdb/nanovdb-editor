@@ -1569,13 +1569,28 @@ void properties_pipeline(
                         else if (reflect_data->data_type->data_type == PNANOVDB_REFLECT_TYPE_STRUCT &&
                                  reflect_data->reflect_mode == PNANOVDB_REFLECT_MODE_VALUE)
                         {
+                            ImGui::Indent();
                             auto reflect_type2 = reflect_data->data_type;
                             uint8_t* data2 = (uint8_t*)pipe->params_data + reflect_data->data_offset;
                             for (pnanovdb_uint64_t idx2 = 0u; idx2 < reflect_type2->child_reflect_data_count; idx2++)
                             {
                                 auto reflect_data2 = &reflect_type2->child_reflect_datas[idx2];
                                 showReflectParameter(compute, data2, reflect_data2, nullptr, nullptr);
+                                if (reflect_data2->data_type->data_type == PNANOVDB_REFLECT_TYPE_STRUCT &&
+                                    reflect_data2->reflect_mode == PNANOVDB_REFLECT_MODE_VALUE)
+                                {
+                                    ImGui::Indent();
+                                    auto reflect_type3 = reflect_data2->data_type;
+                                    uint8_t* data3 = (uint8_t*)data2 + reflect_data2->data_offset;
+                                    for (pnanovdb_uint64_t idx3 = 0u; idx3 < reflect_type3->child_reflect_data_count; idx3++)
+                                    {
+                                        auto reflect_data3 = &reflect_type3->child_reflect_datas[idx3];
+                                        showReflectParameter(compute, data3, reflect_data3, nullptr, nullptr);
+                                    }
+                                    ImGui::Unindent();
+                                }
                             }
+                            ImGui::Unindent();
                         }
                     }
                 }

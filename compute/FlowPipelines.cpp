@@ -18,11 +18,56 @@
 
 namespace pnanovdb_pipeline_flow_render
 {
+    struct bloom_params_t
+    {
+        pnanovdb_vec3_t colorScale;
+        float weightScale;
+        float sizeScale;
+        float threshold;
+        float weight1;
+        float size1;
+        float weight2;
+        float size2;
+        float weight3;
+        float size3;
+        float weight4;
+        float size4;
+        float weight5;
+        float size5;
+    };
+    #define bloom_params_default_init { \
+        {1.f, 1.f, 1.f}, 0.03f, 0.15f, 1.f, \
+        0.35f, 0.003f, \
+        0.14f, 0.001f, \
+        0.12f, 0.02f, \
+        0.06f, 0.10f, \
+        0.06f, 0.30f \
+    }
+    static const bloom_params_t bloom_params_t_default = bloom_params_default_init;
+    #define PNANOVDB_REFLECT_TYPE bloom_params_t
+    PNANOVDB_REFLECT_BEGIN()
+    PNANOVDB_REFLECT_VALUE(pnanovdb_vec3_t, colorScale, 0, 0)
+    PNANOVDB_REFLECT_VALUE(float, weightScale, 0, 0)
+    PNANOVDB_REFLECT_VALUE(float, sizeScale, 0, 0)
+    PNANOVDB_REFLECT_VALUE(float, threshold, 0, 0)
+    PNANOVDB_REFLECT_VALUE(float, weight1, 0, 0)
+    PNANOVDB_REFLECT_VALUE(float, size1, 0, 0)
+    PNANOVDB_REFLECT_VALUE(float, weight2, 0, 0)
+    PNANOVDB_REFLECT_VALUE(float, size2, 0, 0)
+    PNANOVDB_REFLECT_VALUE(float, weight3, 0, 0)
+    PNANOVDB_REFLECT_VALUE(float, size3, 0, 0)
+    PNANOVDB_REFLECT_VALUE(float, weight4, 0, 0)
+    PNANOVDB_REFLECT_VALUE(float, size4, 0, 0)
+    PNANOVDB_REFLECT_VALUE(float, weight5, 0, 0)
+    PNANOVDB_REFLECT_VALUE(float, size5, 0, 0)
+    PNANOVDB_REFLECT_END(&bloom_params_t_default)
+    #undef PNANOVDB_REFLECT_TYPE
+
     struct bloom_ctx_t;
     bloom_ctx_t* bloom_create(const pnanovdb_compute_t* compute, pnanovdb_compute_queue_t* queue);
     void bloom_destroy(const pnanovdb_compute_t* compute, pnanovdb_compute_queue_t* queue, bloom_ctx_t* ctx);
     void bloom_update(const pnanovdb_compute_t* compute, pnanovdb_compute_queue_t* queue, bloom_ctx_t* ctx,
-                      int width, int height,
+                      int width, int height, const bloom_params_t* params,
                       pnanovdb_compute_texture_transient_t* image_in, pnanovdb_compute_texture_transient_t* image_out);
 
     struct Instance
@@ -61,12 +106,14 @@ namespace pnanovdb_pipeline_flow_render
         pnanovdb_uint64_t x_point_count;
         const pnanovdb_vec4_t* rgba_points;
         pnanovdb_uint64_t rgba_point_count;
+        bloom_params_t bloom;
     };
     static const pnanovdb_pipeline_nanovdb_render_params_t pnanovdb_pipeline_nanovdb_render_params_t_default = {
         {"editor/flow_raymarch.slang", nullptr, nullptr, nullptr, nullptr}, // shader
         32u,
         x_points_default, default_point_count,
-        rgba_points_default, default_point_count
+        rgba_points_default, default_point_count,
+        bloom_params_default_init
     };
     #define PNANOVDB_REFLECT_TYPE pnanovdb_pipeline_nanovdb_render_params_t
     PNANOVDB_REFLECT_BEGIN()
@@ -74,6 +121,7 @@ namespace pnanovdb_pipeline_flow_render
     PNANOVDB_REFLECT_VALUE(pnanovdb_uint32_t, colormap_resolution, 0, 0)
     PNANOVDB_REFLECT_ARRAY(float, x_points, x_point_count, 0, 0)
     PNANOVDB_REFLECT_ARRAY(pnanovdb_vec4_t, rgba_points, rgba_point_count, 0, 0)
+    PNANOVDB_REFLECT_VALUE(bloom_params_t, bloom, 0, 0)
     PNANOVDB_REFLECT_END(&pnanovdb_pipeline_nanovdb_render_params_t_default)
     #undef PNANOVDB_REFLECT_TYPE
 
@@ -423,7 +471,7 @@ namespace pnanovdb_pipeline_flow_render
         compute->dispatch_shader(compute_interface, context, ptr->shader_ctx, resources, (target->width + 15u) / 16u,
                                 (target->height + 7u) / 8u, 1u, "flow_render");
 
-        bloom_update(compute, queue, ptr->bloom_ctx, target->width, target->height,
+        bloom_update(compute, queue, ptr->bloom_ctx, target->width, target->height, &params->bloom,
                      color_hdr, color_out);
 
         compute_interface->destroy_buffer(context, constant_buffer);
@@ -517,7 +565,7 @@ namespace pnanovdb_pipeline_flow_render
         pnanovdb_uint32_t width1, pnanovdb_uint32_t height1,
         pnanovdb_uint32_t width, pnanovdb_uint32_t height,
         pnanovdb_uint32_t mode, float threshold,
-        float weight, float size)
+        float weight, float size, pnanovdb_vec3_t colorScale)
     {
         float width1Inv = 1.f / float(width1);
         float weights[17u];
@@ -545,6 +593,7 @@ namespace pnanovdb_pipeline_flow_render
             pnanovdb_vec4_t texDimInv;
             pnanovdb_vec4_t centerWeight;
             pnanovdb_vec4_t weights[4u];
+            pnanovdb_vec4_t colorScale;
         };
         constants_t constants = {};
         constants.mode = mode;
@@ -557,6 +606,7 @@ namespace pnanovdb_pipeline_flow_render
         constants.weights[1u] = pnanovdb_vec4_t{ weights[5u], weights[6u], weights[7u], weights[8u] };
         constants.weights[2u] = pnanovdb_vec4_t{ weights[9u], weights[10u], weights[11u], weights[12u] };
         constants.weights[3u] = pnanovdb_vec4_t{ weights[13u], weights[14u], weights[15u], weights[16u] };
+        constants.colorScale = pnanovdb_vec4_t{ colorScale.x, colorScale.y, colorScale.z, 0.f };
 
         // constants
         pnanovdb_compute_buffer_desc_t buf_desc = {};
@@ -575,23 +625,25 @@ namespace pnanovdb_pipeline_flow_render
         return constant_buffer;
     }
     void bloom_update(const pnanovdb_compute_t* compute, pnanovdb_compute_queue_t* queue, bloom_ctx_t* ptr,
-                      int width, int height,
+                      int width, int height, const bloom_params_t* params,
                       pnanovdb_compute_texture_transient_t* image_in,
                       pnanovdb_compute_texture_transient_t* image_out)
     {
         pnanovdb_compute_interface_t* compute_interface = compute->device_interface.get_compute_interface(queue);
         pnanovdb_compute_context_t* context = compute->device_interface.get_compute_context(queue);
 
-        float weightScale = 0.03f;
-        float sizeScale = 0.15f;
-        float threshold = 0.f;
+        pnanovdb_vec3_t colorScale = params->colorScale;
+        float weightScale = params->weightScale;
+        float sizeScale = params->sizeScale;
+        float threshold = params->threshold;
         static const pnanovdb_uint32_t level_count = 5;
+        float weights[level_count] = {params->weight1, params->weight2, params->weight3, params->weight4, params->weight5};
+        float sizes[level_count] = {params->size1, params->size2, params->size3, params->size4, params->size5};
+
         pnanovdb_compute_buffer_t* constant_buffer[level_count] = {};
         pnanovdb_compute_buffer_transient_t* constant_buffer_transient[level_count] = {};
         pnanovdb_int32_t widths[level_count] = {};
         pnanovdb_int32_t heights[level_count] = {};
-        float weights[level_count] = {0.35f, 0.14f, 0.12f, 0.06f, 0.06f};
-        float sizes[level_count] = {0.003f, 0.001f, 0.02f, 0.10f, 0.30f};
         for (pnanovdb_uint32_t level_idx = 0u; level_idx < level_count; level_idx++)
         {
             widths[level_idx] = ((level_idx == 0u ? width : widths[level_idx - 1u]) + 1u) / 2u;
@@ -608,7 +660,7 @@ namespace pnanovdb_pipeline_flow_render
                 weightScale, sizeScale,
                 widths[level_idx], heights[level_idx],
                 width_fine, height_fine, level_idx, threshold_level,
-                weights[level_idx], sizes[level_idx]);
+                weights[level_idx], sizes[level_idx], colorScale);
 
             constant_buffer_transient[level_idx] =
                 compute_interface->register_buffer_as_transient(context, constant_buffer[level_idx]);

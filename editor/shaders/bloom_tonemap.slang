@@ -2,13 +2,14 @@
 
 struct constants_t
 {
-	uint mode;
-	float weight;
-	float threshold;
-	float size;
-	float4 texDimInv;
-	float4 centerWeight;
-	float4 weights[4u];
+    uint mode;
+    float weight;
+    float threshold;
+    float size;
+    float4 texDimInv;
+    float4 centerWeight;
+    float4 weights[4u];
+    float4 colorScale;
 };
 
 ConstantBuffer<constants_t> constants;
@@ -30,7 +31,7 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
 
 	color.rgb += bloom.rgb;
 
-	//color.rgb *= constants.scale.rgb;
+	color.rgb *= constants.colorScale.rgb;
 
 	color.r = color.r / (1.f + color.r);
 	color.g = color.g / (1.f + color.g);
