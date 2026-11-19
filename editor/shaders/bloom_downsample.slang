@@ -21,18 +21,18 @@ SamplerState sampler_in;
 [shader("compute")][numthreads(16, 16, 1)]
 void main(uint3 dispatchThreadID : SV_DispatchThreadID)
 {
-	int2 idx = int2(dispatchThreadID.xy);
+    int2 idx = int2(dispatchThreadID.xy);
 
-	float4 color = 0.f.xxxx;
+    float4 color = 0.f.xxxx;
 
-	color += 0.25f * color_in.SampleLevel(sampler_in, (float2(idx) + float2(0.f, 0.f)) * constants.texDimInv.xy, 0.0);
-	color += 0.25f * color_in.SampleLevel(sampler_in, (float2(idx) + float2(1.f, 0.f)) * constants.texDimInv.xy, 0.0);
-	color += 0.25f * color_in.SampleLevel(sampler_in, (float2(idx) + float2(0.f, 1.f)) * constants.texDimInv.xy, 0.0);
-	color += 0.25f * color_in.SampleLevel(sampler_in, (float2(idx) + float2(1.f, 1.f)) * constants.texDimInv.xy, 0.0);
+    color += 0.25f * color_in.SampleLevel(sampler_in, (float2(idx) + float2(0.f, 0.f)) * constants.texDimInv.xy, 0.0);
+    color += 0.25f * color_in.SampleLevel(sampler_in, (float2(idx) + float2(1.f, 0.f)) * constants.texDimInv.xy, 0.0);
+    color += 0.25f * color_in.SampleLevel(sampler_in, (float2(idx) + float2(0.f, 1.f)) * constants.texDimInv.xy, 0.0);
+    color += 0.25f * color_in.SampleLevel(sampler_in, (float2(idx) + float2(1.f, 1.f)) * constants.texDimInv.xy, 0.0);
 
-	color.rgb -= constants.threshold;
+    color.rgb -= constants.threshold;
 
-	color.rgb = max(0.f.xxx, color.rgb);
+    color.rgb = max(0.f.xxx, color.rgb);
 
-	color_out[idx] = color;
+    color_out[idx] = color;
 }

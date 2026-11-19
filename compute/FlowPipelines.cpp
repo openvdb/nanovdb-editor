@@ -655,7 +655,7 @@ namespace pnanovdb_pipeline_flow_render
             int width_coarse = widths[level_idx];
             int height_coarse = heights[level_idx];
 
-	        constant_buffer[level_idx] = bloom_update_constants(
+            constant_buffer[level_idx] = bloom_update_constants(
                 compute_interface, context,
                 weightScale, sizeScale,
                 widths[level_idx], heights[level_idx],
