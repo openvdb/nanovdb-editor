@@ -29,6 +29,9 @@ thread_local ImGuiContext* ImGuiTLS = nullptr;
 
 #include <ImGuiFileDialog.h>
 
+#define _USE_MATH_DEFINES
+#include <math.h>
+
 namespace imgui_instance_user
 {
 
@@ -53,6 +56,9 @@ struct Instance
     int32_t property_selected_stage_idx = -1;
     int32_t property_selected_pipeline_idx = 0;
     int32_t property_selected_pipeline_type = -1;
+
+    pnanovdb_compute_token_t* overwrite_load_name = nullptr;
+    bool show_overwrite = false;
 
     char object_rename_buf[256u] = {};
     char scene_rename_buf[256u] = {};
@@ -652,9 +658,11 @@ void showSceneWindow(pnanovdb_imgui_instance_t* instance, InstanceUserdata* inst
                                 pnanovdb_uint32_t pipeline_type = stage->pipelines[pipeline_idx].pipeline_type;
                                 pnanovdb_pipeline_metadesc_t pipe_desc = {};
                                 const char* pipeline_name = "invalid";
+                                char buf[256u] = {};
                                 if (pipeline->get_pipeline_metadesc(registry, pipeline_type, &pipe_desc))
                                 {
-                                    pipeline_name = pipe_desc.name->str;
+                                    snprintf(buf, 256u, "%s##%zu", pipe_desc.name->str, pipeline_idx);
+                                    pipeline_name = buf;
                                 }
                                 if (tree_node_ex(&ptr->tree_state, pipeline_name, leaf_flags))
                                 {
@@ -852,18 +860,21 @@ void showReflectParameter(
         maxv = &maxd;
     }
 
-    ImGuiDataType type = ImGuiDataType_COUNT;
-    switch(reflect_data->data_type->data_type)
+    ImGuiDataType value_type = ImGuiDataType_COUNT;
+    if (reflect_data->reflect_mode == PNANOVDB_REFLECT_MODE_VALUE)
     {
-        case PNANOVDB_REFLECT_TYPE_INT32: type = ImGuiDataType_S32; break;
-        case PNANOVDB_REFLECT_TYPE_UINT32: type = ImGuiDataType_U32; break;
-        case PNANOVDB_REFLECT_TYPE_FLOAT: type = ImGuiDataType_Float; break;
-        case PNANOVDB_REFLECT_TYPE_BOOL32: type = ImGuiDataType_U32; break;
-        case PNANOVDB_REFLECT_TYPE_UINT8: type = ImGuiDataType_U8; break;
-        case PNANOVDB_REFLECT_TYPE_UINT16: type = ImGuiDataType_U16; break;
-        case PNANOVDB_REFLECT_TYPE_UINT64: type = ImGuiDataType_U64; break;
-        case PNANOVDB_REFLECT_TYPE_DOUBLE: type = ImGuiDataType_Double; break;
-        case PNANOVDB_REFLECT_TYPE_INT64: type = ImGuiDataType_S64; break;
+        switch(reflect_data->data_type->data_type)
+        {
+            case PNANOVDB_REFLECT_TYPE_INT32: value_type = ImGuiDataType_S32; break;
+            case PNANOVDB_REFLECT_TYPE_UINT32: value_type = ImGuiDataType_U32; break;
+            case PNANOVDB_REFLECT_TYPE_FLOAT: value_type = ImGuiDataType_Float; break;
+            case PNANOVDB_REFLECT_TYPE_BOOL32: value_type = ImGuiDataType_U32; break;
+            case PNANOVDB_REFLECT_TYPE_UINT8: value_type = ImGuiDataType_U8; break;
+            case PNANOVDB_REFLECT_TYPE_UINT16: value_type = ImGuiDataType_U16; break;
+            case PNANOVDB_REFLECT_TYPE_UINT64: value_type = ImGuiDataType_U64; break;
+            case PNANOVDB_REFLECT_TYPE_DOUBLE: value_type = ImGuiDataType_Double; break;
+            case PNANOVDB_REFLECT_TYPE_INT64: value_type = ImGuiDataType_S64; break;
+        }
     }
 
     if (reflect_data->reflect_mode == PNANOVDB_REFLECT_MODE_POINTER &&
@@ -881,7 +892,7 @@ void showReflectParameter(
             *(const char**)data = str_token->str;
         }
     }
-    else if (type == ImGuiDataType_COUNT)
+    else if (value_type == ImGuiDataType_COUNT)
     {
         ImGui::Text("%s", reflect_data->name);
     }
@@ -891,12 +902,12 @@ void showReflectParameter(
     }
     else if (use_slider)
     {
-        const char* format = type == ImGuiDataType_Float || type == ImGuiDataType_Double ? "%.3f" : nullptr;
-        ImGui::SliderScalar(reflect_data->name, type, data, minv, maxv, format, ImGuiSliderFlags_AlwaysClamp);
+        const char* format = value_type == ImGuiDataType_Float || value_type == ImGuiDataType_Double ? "%.3f" : nullptr;
+        ImGui::SliderScalar(reflect_data->name, value_type, data, minv, maxv, format, ImGuiSliderFlags_AlwaysClamp);
     }
     else
     {
-        ImGui::DragScalar(reflect_data->name, type, data, float(stepd), minv, maxv);
+        ImGui::DragScalar(reflect_data->name, value_type, data, float(stepd), minv, maxv);
     }
 }
 
@@ -994,6 +1005,8 @@ void properties_scene(
     pnanovdb_compute_token_t* scene_rename_name = nullptr;
     pnanovdb_compute_token_t* scene_remove_name = nullptr;
     pnanovdb_compute_token_t* new_object_name = nullptr;
+    pnanovdb_compute_token_t* save_name = nullptr;
+    pnanovdb_compute_token_t* load_name = nullptr;
 
     ImGui::SeparatorText("Scene");
     if (ImGui::Button("Remove"))
@@ -1035,6 +1048,60 @@ void properties_scene(
         new_object_name = object_name;
     }
 
+    ImGui::SeparatorText("All Scenes");
+
+    if (ImGui::Button("Load"))
+    {
+        IGFD::FileDialogConfig config;
+        config.path = ".";
+        const char* desc_str = "Open Scene JSON File";
+        const char* filter_str = "JSON Files (*.json){.json}";
+        ImGuiFileDialog::Instance()->OpenDialog(
+            "LoadSceneFileDlgKey", desc_str, filter_str, config);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Save"))
+    {
+        std::string default_name = std::string(scene->str) + ".json";
+        IGFD::FileDialogConfig config;
+        config.path = ".";
+        config.fileName = default_name.c_str();
+        config.flags = ImGuiFileDialogFlags_ConfirmOverwrite;
+        const char* desc_str = "Save Scene JSON File";
+        const char* filter_str = "JSON Files (*.json){.json}";
+        ImGuiFileDialog::Instance()->OpenDialog(
+            "SaveSceneFileDlgKey", desc_str, filter_str, config);
+    }
+
+    if (ImGuiFileDialog::Instance()->IsOpened())
+    {
+        ImVec2 dialog_size = {768.f, 512.f};
+        ImGui::SetNextWindowSize(scaleDialogSize(dialog_size), ImGuiCond_Appearing);
+        if (ImGuiFileDialog::Instance()->Display("LoadSceneFileDlgKey"))
+        {
+            if (ImGuiFileDialog::Instance()->IsOk())
+            {
+                std::string file_name = ImGuiFileDialog::Instance()->GetFilePathName();
+                load_name = compute->get_token(file_name.c_str());
+            }
+            ImGuiFileDialog::Instance()->Close();
+        }
+    }
+    if (ImGuiFileDialog::Instance()->IsOpened())
+    {
+        ImVec2 dialog_size = {768.f, 512.f};
+        ImGui::SetNextWindowSize(scaleDialogSize(dialog_size), ImGuiCond_Appearing);
+        if (ImGuiFileDialog::Instance()->Display("SaveSceneFileDlgKey"))
+        {
+            if (ImGuiFileDialog::Instance()->IsOk())
+            {
+                std::string file_name = ImGuiFileDialog::Instance()->GetFilePathName();
+                save_name = compute->get_token(file_name.c_str());
+            }
+            ImGuiFileDialog::Instance()->Close();
+        }
+    }
+
     pipeline->config_unmap_params(config, scene, nullptr, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_list_t));
 
     if (new_object_name)
@@ -1048,6 +1115,37 @@ void properties_scene(
     if (scene_remove_name)
     {
         pipeline->config_remove(config, scene_remove_name, nullptr);
+    }
+    if (save_name)
+    {
+        pipeline->config_save(config, save_name->str);
+    }
+    if (load_name)
+    {
+        if (!pipeline->config_load(config, load_name->str, PNANOVDB_FALSE))
+        {
+            ptr->overwrite_load_name = load_name;
+            ptr->show_overwrite = true;
+            ImGui::OpenPopup("Overwrite current scene?");
+        }
+    }
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    if (ImGui::BeginPopupModal("Overwrite current scene?", &ptr->show_overwrite, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::Text("Do you really want to proceed?");
+        ImGui::Separator();
+        if (ImGui::Button("Yes", ImVec2(120, 0)))
+        {
+            pipeline->config_load(config, ptr->overwrite_load_name->str, PNANOVDB_TRUE);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("No", ImVec2(120, 0)))
+        {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
 }
 
@@ -1305,15 +1403,15 @@ void properties_buffer(
 
         const char* desc_str = nullptr;
         const char* filter_str = nullptr;
-        if (pnanovdb_reflect_string_compare(mapped_object->buffer_names[selected_buffer_idx]->str, "nanovdb") == 0)
-        {
-            desc_str = "Open NanoVDB File";
-            filter_str = "NanoVDB Files (*.nvdb){.nvdb}";
-        }
-        else if (pnanovdb_reflect_string_compare(mapped_object->buffer_names[selected_buffer_idx]->str, "ply") == 0)
+        if (pnanovdb_reflect_string_compare(mapped_object->buffer_names[selected_buffer_idx]->str, "ply") == 0)
         {
             desc_str = "Open PLY File";
             filter_str = "PLY Files (*.ply){.ply}";
+        }
+        else // NanoVDB files as the default
+        {
+            desc_str = "Open NanoVDB File";
+            filter_str = "NanoVDB Files (*.nvdb){.nvdb}";
         }
         if (desc_str)
         {
@@ -1468,15 +1566,31 @@ void properties_pipeline(
                             showShaderParams(compute, shader, pipe->params_metadata, reflect_metadata);
                             ImGui::Unindent();
                         }
-                        else if (reflect_data->data_type->data_type == PNANOVDB_REFLECT_TYPE_STRUCT)
+                        else if (reflect_data->data_type->data_type == PNANOVDB_REFLECT_TYPE_STRUCT &&
+                                 reflect_data->reflect_mode == PNANOVDB_REFLECT_MODE_VALUE)
                         {
+                            ImGui::Indent();
                             auto reflect_type2 = reflect_data->data_type;
                             uint8_t* data2 = (uint8_t*)pipe->params_data + reflect_data->data_offset;
                             for (pnanovdb_uint64_t idx2 = 0u; idx2 < reflect_type2->child_reflect_data_count; idx2++)
                             {
                                 auto reflect_data2 = &reflect_type2->child_reflect_datas[idx2];
                                 showReflectParameter(compute, data2, reflect_data2, nullptr, nullptr);
+                                if (reflect_data2->data_type->data_type == PNANOVDB_REFLECT_TYPE_STRUCT &&
+                                    reflect_data2->reflect_mode == PNANOVDB_REFLECT_MODE_VALUE)
+                                {
+                                    ImGui::Indent();
+                                    auto reflect_type3 = reflect_data2->data_type;
+                                    uint8_t* data3 = (uint8_t*)data2 + reflect_data2->data_offset;
+                                    for (pnanovdb_uint64_t idx3 = 0u; idx3 < reflect_type3->child_reflect_data_count; idx3++)
+                                    {
+                                        auto reflect_data3 = &reflect_type3->child_reflect_datas[idx3];
+                                        showReflectParameter(compute, data3, reflect_data3, nullptr, nullptr);
+                                    }
+                                    ImGui::Unindent();
+                                }
                             }
+                            ImGui::Unindent();
                         }
                     }
                 }
@@ -1524,12 +1638,18 @@ void properties_camera(
         pipeline->config_map_params(config, scene, object_name, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_mapped_t), (void**)&mapped_object);
     }
 
+    pnanovdb_compute_token_t* set_active_camera = nullptr;
     if (mapped_object && mapped_object->camera)
     {
         auto camera = mapped_object->camera;
         auto& state = camera->state;
 
         ImGui::SeparatorText("Camera");
+        if (ImGui::Button("Set Active Camera"))
+        {
+            set_active_camera = object_name;
+        }
+        ImGui::SameLine();
         if (ImGui::Button("Reset"))
         {
             if (mapped_object->camera_default)
@@ -1627,6 +1747,11 @@ void properties_camera(
         pipeline->config_unmap_params(config, scene, object_name, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_mapped_t));
     }
     pipeline->config_unmap_params(config, scene, nullptr, PNANOVDB_REFLECT_DATA_TYPE(pnanovdb_pipeline_object_list_t));
+
+    if (set_active_camera)
+    {
+        pipeline->config_set_active_camera(config, scene, set_active_camera);
+    }
 }
 
 }
