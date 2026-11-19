@@ -101,16 +101,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Export fvdb defaults
-        run: |
-          set -euo pipefail
-          source scripts/fvdb_viz_versions.sh
-          {
-            echo "FVDB_VIZ_TORCH_VERSION=${FVDB_VIZ_TORCH_VERSION_DEFAULT}"
-            echo "FVDB_VIZ_TORCH_INDEX_URL=${FVDB_VIZ_TORCH_INDEX_URL_DEFAULT}"
-            echo "FVDB_VIZ_CORE_VERSION=${FVDB_VIZ_CORE_VERSION_DEFAULT}"
-            echo "FVDB_VIZ_CORE_INDEX_URL=${FVDB_VIZ_CORE_INDEX_URL_DEFAULT}"
-          } >> "$GITHUB_ENV"
+      - name: Test dependency selection
+        run: python3 -m unittest discover -s scripts/ci -p test_fvdb_viz_versions.py -v
 
       - name: Prepare wheel directory
         run: |
