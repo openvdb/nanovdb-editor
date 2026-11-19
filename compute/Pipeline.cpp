@@ -850,7 +850,7 @@ void json_to_parameter(const pnanovdb_compute_t* compute, nlohmann::ordered_json
         pnanovdb_compute_token_t* str_tok = compute->get_token(str);
         *(const char**)data = str_tok->str;
     }
-    else
+    else if (reflect_data->reflect_mode == PNANOVDB_REFLECT_MODE_VALUE)
     {
         switch (reflect_data->data_type->data_type)
         {
@@ -898,7 +898,8 @@ static void config_json_to_reflect(const pnanovdb_compute_t* compute, nlohmann::
             // TODO
             //param_json["params"] = config_reflect_to_json(shader->params_data, shader->params_data_type);
         }
-        else if (reflect_data->data_type->data_type == PNANOVDB_REFLECT_TYPE_STRUCT)
+        else if (reflect_data->reflect_mode == PNANOVDB_REFLECT_MODE_VALUE &&
+                 reflect_data->data_type->data_type == PNANOVDB_REFLECT_TYPE_STRUCT)
         {
             auto reflect_type2 = reflect_data->data_type;
             uint8_t* data2 = (uint8_t*)data + reflect_data->data_offset;
@@ -1203,7 +1204,7 @@ nlohmann::ordered_json parameter_to_json(void* mapped_data, const pnanovdb_refle
     {
         json["value"] = *(const char**)data;
     }
-    else
+    else if (reflect_data->reflect_mode == PNANOVDB_REFLECT_MODE_VALUE)
     {
         switch (reflect_data->data_type->data_type)
         {
@@ -1247,7 +1248,8 @@ static nlohmann::ordered_json config_reflect_to_json(void* data, const pnanovdb_
 
             param_json["params"] = config_reflect_to_json(shader->params_data, shader->params_data_type);
         }
-        else if (reflect_data->data_type->data_type == PNANOVDB_REFLECT_TYPE_STRUCT)
+        else if (reflect_data->reflect_mode == PNANOVDB_REFLECT_MODE_VALUE &&
+                 reflect_data->data_type->data_type == PNANOVDB_REFLECT_TYPE_STRUCT)
         {
             auto reflect_type2 = reflect_data->data_type;
             uint8_t* data2 = (uint8_t*)data + reflect_data->data_offset;
@@ -1255,7 +1257,8 @@ static nlohmann::ordered_json config_reflect_to_json(void* data, const pnanovdb_
             {
                 auto reflect_data2 = &reflect_type2->child_reflect_datas[idx2];
                 nlohmann::ordered_json param2_json  = parameter_to_json(data2, reflect_data2);
-                if (reflect_data2->data_type->data_type == PNANOVDB_REFLECT_TYPE_STRUCT)
+                if (reflect_data2->reflect_mode == PNANOVDB_REFLECT_MODE_VALUE &&
+                    reflect_data2->data_type->data_type == PNANOVDB_REFLECT_TYPE_STRUCT)
                 {
                     auto reflect_type3 = reflect_data2->data_type;
                     uint8_t* data3 = (uint8_t*)data2 + reflect_data2->data_offset;
